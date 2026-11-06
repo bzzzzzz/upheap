@@ -1,4 +1,7 @@
 //! Test harness: the real router over an in-memory SQLite database and a manual clock.
+//!
+//! Each test binary uses a different part of the harness, so unused items are expected.
+#![allow(dead_code)]
 
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
@@ -8,10 +11,12 @@ use api::{AppState, CookieSettings};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use domain::{Duration, Timestamp};
+use domain::team::{Membership, Role};
+use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
 use serde_json::Value;
-use service::{ManualClock, Services, Settings};
+use service::{Clock, ManualClock, Services, Settings};
+use store::{ConnectionTrait, DatabaseConnection};
 use tower::ServiceExt;
 
 /// 2027-01-01T12:00:00Z.
@@ -31,6 +36,8 @@ fn init_tracing() {
 pub struct TestApp {
     router: Router,
     pub clock: Arc<ManualClock>,
+    /// The same database the router uses, for fixtures the API can't create yet.
+    db: DatabaseConnection,
 }
 
 /// A response with its body parsed as JSON (`Null` when empty).
@@ -49,7 +56,7 @@ impl TestApp {
             Timestamp::from_millis(START).context("start in range")?,
         ));
         let services = Services::new(
-            db,
+            db.clone(),
             clock.clone(),
             Settings {
                 allow_registration: true,
@@ -63,6 +70,7 @@ impl TestApp {
         Ok(Self {
             router: api::router(AppState { services, cookies }),
             clock,
+            db,
         })
     }
 
@@ -143,5 +151,40 @@ impl TestApp {
             .context("no heap")?
             .to_owned();
         Ok((session, heap))
+    }
+
+    /// Adds `user_id` to `team_id` with `role`.
+    ///
+    /// A fixture until the team member endpoints exist; it writes no audit entry.
+    pub async fn add_member(&self, team_id: &str, user_id: &str, role: Role) -> Result<()> {
+        let membership = Membership {
+            team_id: TeamId::from_uuid(team_id.parse()?),
+            user_id: UserId::from_uuid(user_id.parse()?),
+            role,
+            joined_at: self.clock.now(),
+        };
+        store::teams::insert_membership(&self.db, &membership)
+            .await
+            .context("add member")?;
+        Ok(())
+    }
+
+    /// Archives or unarchives a heap directly in the database.
+    ///
+    /// A fixture until the heap archive endpoints exist; it writes no audit entry.
+    pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {
+        let archived_at = if archived {
+            self.clock.now().as_millis().to_string()
+        } else {
+            "NULL".to_owned()
+        };
+        let id: uuid::Uuid = heap_id.parse()?;
+        self.db
+            .execute_unprepared(&format!(
+                "UPDATE heaps SET archived_at = {archived_at} WHERE id = '{id}'"
+            ))
+            .await
+            .context("set heap archived")?;
+        Ok(())
     }
 }

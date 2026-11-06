@@ -5,8 +5,8 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 
 About 40% of the golden path is built: local accounts, the personal heap, and the ranked list with add, edit,
 close and reopen. Tags, blockers, custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
-started. All 35 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. There is no
-CI yet.
+started. All 38 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
+pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
 
@@ -36,7 +36,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Sign-in rate limiting | TD Auth §4 | ⬜ | |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
-| Testing and CI | TD Testing | 🟡 | Unit and API tests exist; no CI, MySQL run, Playwright or access-control table |
+| Testing and CI | TD Testing | 🟡 | CI and the access-control table are in place; no MySQL run or Playwright |
 
 ## Remaining work
 
@@ -73,9 +73,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
   - [ ] Sign-in rate limiting
 - [ ] **Testing and CI**
-  - [ ] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check
+  - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
   - [ ] Store and service suite on MySQL via testcontainers
-  - [ ] Table-driven access-control test (non-member, member, admin, archived heap)
+  - [x] Table-driven access-control test (non-member, member, admin, archived heap) in
+    `crates/api/tests/access_control.rs`. Members and archiving are set up directly in the database until
+    their endpoints exist.
   - [ ] Playwright golden paths
 
 ## Suggested order
@@ -85,4 +87,4 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 3. Edit item view and list controls (sort, filters, search).
 4. Teams and heaps management.
 5. Custom parameters, which also completes the ranking formula.
-6. CI with the MySQL run, alongside the steps above rather than at the end.
+6. The MySQL run in CI, alongside the steps above rather than at the end.
