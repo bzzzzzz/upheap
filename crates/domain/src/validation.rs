@@ -7,6 +7,8 @@ pub enum ValidationError {
     Empty { field: Field },
     #[error("{field} is longer than {max} characters")]
     TooLong { field: Field, max: usize },
+    #[error("{field} must be at least {min} characters")]
+    TooShort { field: Field, min: usize },
     #[error("email address is not valid")]
     EmailInvalid,
     #[error("password must be at least {min} characters")]
@@ -28,6 +30,8 @@ pub enum Field {
     Description,
     DisplayName,
     Name,
+    /// A search text.
+    Query,
 }
 
 impl Field {
@@ -38,6 +42,7 @@ impl Field {
             Self::Description => "description",
             Self::DisplayName => "display_name",
             Self::Name => "name",
+            Self::Query => "query",
         }
     }
 }

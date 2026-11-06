@@ -1,0 +1,77 @@
+import { useState, type FormEvent } from "react";
+
+import { ProblemText } from "./ProblemText";
+
+export const inputClass =
+  "rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100";
+export const primaryButtonClass =
+  "rounded-md bg-stone-900 px-3 py-1 text-sm font-medium text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900";
+export const quietButtonClass =
+  "rounded px-1.5 py-1 text-sm text-stone-500 hover:text-stone-900 disabled:opacity-40 dark:hover:text-stone-100";
+
+/**
+ * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
+ * `version` (a save, or someone else's edit), the input shows it.
+ */
+export function NameForm({
+  label,
+  value,
+  version,
+  maxLength = 100,
+  pending,
+  error,
+  onSave,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  version: number;
+  maxLength?: number;
+  pending: boolean;
+  error: Error | null;
+  onSave: (name: string) => void;
+  className?: string;
+}) {
+  const [name, setName] = useState(value);
+  const [shownVersion, setShownVersion] = useState(version);
+  if (shownVersion !== version) {
+    setShownVersion(version);
+    setName(value);
+  }
+  // The server trims names, so surrounding spaces alone aren't a change.
+  const changed = name.trim() !== value;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (changed && name.trim() !== "") onSave(name);
+  };
+
+  return (
+    <form onSubmit={submit} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <input
+        aria-label={label}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && changed) {
+            e.preventDefault();
+            setName(value);
+          }
+        }}
+        maxLength={maxLength}
+        className={`${inputClass} min-w-0 flex-1 ${className}`}
+      />
+      {changed && (
+        <>
+          <button type="submit" disabled={pending || name.trim() === ""} className={primaryButtonClass}>
+            Save
+          </button>
+          <button type="button" onClick={() => setName(value)} className={quietButtonClass}>
+            Cancel
+          </button>
+        </>
+      )}
+      <ProblemText error={error} />
+    </form>
+  );
+}

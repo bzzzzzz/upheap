@@ -194,7 +194,13 @@ impl TestApp {
 
     /// Registers a user and returns their session token and personal heap ID.
     pub async fn register(&self, email: &str) -> Result<(String, String)> {
-        let body = serde_json::json!({ "email": email, "display_name": "Tester", "password": "a long test password" });
+        self.register_as(email, "Tester").await
+    }
+
+    /// Registers a user called `display_name` and returns their session token and personal heap ID.
+    pub async fn register_as(&self, email: &str, display_name: &str) -> Result<(String, String)> {
+        let body =
+            serde_json::json!({ "email": email, "display_name": display_name, "password": "a long test password" });
         let response = self
             .send(Method::POST, "/api/v1/auth/register", None, Some(body))
             .await?;
@@ -212,9 +218,8 @@ impl TestApp {
         Ok((session, heap))
     }
 
-    /// Adds `user_id` to `team_id` with `role`.
-    ///
-    /// A fixture until the team member endpoints exist; it writes no audit entry.
+    /// Adds `user_id` to `team_id` with `role` straight in the database, so a test can set up any role in one step.
+    /// It writes no audit entry.
     pub async fn add_member(&self, team_id: &str, user_id: &str, role: Role) -> Result<()> {
         let membership = Membership {
             team_id: TeamId::from_uuid(team_id.parse()?),
@@ -247,9 +252,8 @@ impl TestApp {
             .collect()
     }
 
-    /// Archives or unarchives a heap directly in the database.
-    ///
-    /// A fixture until the heap archive endpoints exist; it writes no audit entry.
+    /// Archives or unarchives a heap straight in the database, without the version change or audit entry of the
+    /// endpoints, so the access-control test can wrap any call in it.
     pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {
         let archived_at = if archived {
             self.clock.now().as_millis().to_string()

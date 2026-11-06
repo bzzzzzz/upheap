@@ -30,8 +30,8 @@ Companion to [technical-design.md](technical-design.md). These are the rules we 
 
 ### Data
 
-1. Nothing is deleted. Use archive columns and state transitions, never `DELETE`, and no `ON DELETE CASCADE`.
-2. Every change and its audit entry are written in one transaction. If the audit write fails, the change fails.
+1. Nothing is deleted. Use archive columns and state transitions, never `DELETE`, and no `ON DELETE CASCADE`. The one exception is a team membership: removing a member or leaving deletes the `team_members` row, and the audit log keeps the history (`member_removed`, `member_left`).
+2. Every change and its audit entry are written in one transaction. If the audit write fails, the change fails. Audit entries belong to a team, so a change to a user, such as their display name, is recorded in each of their teams; a user in no team has nowhere to record it, and the change goes unrecorded.
 3. Use portable SQL only. Anything that works on SQLite but not MySQL, or the reverse, doesn't go in. CI runs on both.
 4. Migrations only go forward and are never edited after release. Each one must be safe on a populated database.
 5. Store UTC everywhere. Timezones only apply at the edges, through the `Time-Zone` header.

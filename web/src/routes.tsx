@@ -1,16 +1,19 @@
 // The URL is the state: the heap and the page live in the route, so links and reloads work.
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
+import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 
 import { isUnauthenticated } from "./api/client";
 import { meQuery } from "./api/queries";
 import { parseListSearch } from "./components/listView";
+import { AccountPage } from "./pages/AccountPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { EditItemPage } from "./pages/EditItemPage";
 import { HeapPage } from "./pages/HeapPage";
 import { TagsPage } from "./pages/TagsPage";
+import { TeamPage } from "./pages/TeamPage";
+import { TeamsPage } from "./pages/TeamsPage";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
@@ -42,7 +45,15 @@ const indexRoute = createRoute({
       throw redirect({ to: "/heaps/$heapId", params: { heapId: heap.id } });
     }
   },
-  component: () => <p className="py-16 text-center text-stone-500">You don't have any heaps yet.</p>,
+  component: () => (
+    <p className="py-16 text-center text-stone-500">
+      You don't have any heaps yet.{" "}
+      <Link to="/teams" className="text-sky-700 hover:underline dark:text-sky-400">
+        Create a team
+      </Link>{" "}
+      to start one.
+    </p>
+  ),
 });
 
 const heapRoute = createRoute({
@@ -93,9 +104,31 @@ const editItemRoute = createRoute({
   },
 });
 
+const teamsRoute = createRoute({ getParentRoute: () => appRoute, path: "/teams", component: TeamsPage });
+
+const teamRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$teamId",
+  component: function TeamRoute() {
+    const { teamId } = teamRoute.useParams();
+    return <TeamPage key={teamId} teamId={teamId} />;
+  },
+});
+
+const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([indexRoute, heapRoute, closedRoute, tagsRoute, editItemRoute]),
+  appRoute.addChildren([
+    indexRoute,
+    heapRoute,
+    closedRoute,
+    tagsRoute,
+    editItemRoute,
+    teamsRoute,
+    teamRoute,
+    accountRoute,
+  ]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

@@ -22,6 +22,12 @@ export type NewTag = Schemas["CreateTagRequest"];
 export type StateMode = Schemas["StateMode"];
 export type BlockedLayout = Schemas["BlockedLayout"];
 export type ListSort = Schemas["ListSort"];
+export type Team = Schemas["Team"];
+export type TeamMember = Schemas["TeamMember"];
+export type Role = Schemas["Role"];
+export type Heap = Schemas["Heap"];
+export type UserMatch = Schemas["UserMatch"];
+export type User = Schemas["User"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,

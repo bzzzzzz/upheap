@@ -8,19 +8,24 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
 import {
   api,
   ensureOk,
   unwrap,
+  type Heap,
   type Item,
   type ItemPatch,
   type ListViewQuery,
   type NewItem,
   type NewTag,
+  type Role,
   type Tag,
   type TagPatch,
+  type Team,
+  type User,
 } from "./client";
 
 export const meQuery = queryOptions({
@@ -39,6 +44,9 @@ const blockerCandidatesKey = (heapId: string) => ["ranked", heapId, "blocker-can
 const closedKey = (heapId: string) => ["closed", heapId] as const;
 const tagsKey = (heapId: string) => ["tags", heapId] as const;
 const itemKey = (itemId: string) => ["item", itemId] as const;
+const teamKey = (teamId: string) => ["team", teamId] as const;
+const heapKey = (heapId: string) => ["heap", heapId] as const;
+const usersKey = (query: string) => ["users", query] as const;
 
 /**
  * The ranked list in one view, kept stable within a session: the first response's `as_of` is sent back on every
@@ -217,5 +225,200 @@ export function useSignOut() {
   return useMutation({
     mutationFn: async () => ensureOk(await api.POST("/api/v1/auth/logout")),
     onSuccess: () => queryClient.clear(),
+  });
+}
+
+export function useUpdateMe() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ user, display_name }: { user: User; display_name: string }) =>
+      unwrap(
+        await api.PATCH("/api/v1/me", {
+          params: { header: { "If-Match": `"${user.version}"` } },
+          body: { display_name },
+        }),
+      ),
+    // Teams list members by name.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+        queryClient.invalidateQueries({ queryKey: ["team"] }),
+      ]),
+  });
+}
+
+export function useTeam(teamId: string) {
+  return useQuery({
+    queryKey: teamKey(teamId),
+    queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team_id}", { params: { path: { team_id: teamId } } })),
+  });
+}
+
+/** Team changes also change what `/me` lists: teams, roles and heaps. */
+function invalidateTeam(queryClient: QueryClient, teamId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: teamKey(teamId) }),
+    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+  ]);
+}
+
+export function useCreateTeam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => unwrap(await api.POST("/api/v1/teams", { body: { name } })),
+    onSuccess: (team) => queryClient.setQueryData(teamKey(team.id), team),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+  });
+}
+
+export function useRenameTeam(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ team, name }: { team: Team; name: string }) =>
+      unwrap(
+        await api.PATCH("/api/v1/teams/{team_id}", {
+          params: { path: { team_id: team.id }, header: { "If-Match": `"${team.version}"` } },
+          body: { name },
+        }),
+      ),
+    onSettled: () => invalidateTeam(queryClient, teamId),
+  });
+}
+
+export function useAddMember(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team_id}/members", {
+          params: { path: { team_id: teamId } },
+          body: { user_id: userId },
+        }),
+      ),
+    onSettled: () => invalidateTeam(queryClient, teamId),
+  });
+}
+
+export function useSetMemberRole(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: Role }) =>
+      unwrap(
+        await api.PATCH("/api/v1/teams/{team_id}/members/{user_id}", {
+          params: { path: { team_id: teamId, user_id: userId } },
+          body: { role },
+        }),
+      ),
+    onSettled: () => invalidateTeam(queryClient, teamId),
+  });
+}
+
+export function useRemoveMember(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) =>
+      ensureOk(
+        await api.DELETE("/api/v1/teams/{team_id}/members/{user_id}", {
+          params: { path: { team_id: teamId, user_id: userId } },
+        }),
+      ),
+    onSettled: () => invalidateTeam(queryClient, teamId),
+  });
+}
+
+/**
+ * Leaves the team, then goes to the Teams view. The team and its heaps are out of reach afterwards, so their cache
+ * entries are dropped, after navigating away: dropping them while the team page still shows would refetch them into
+ * a "not found".
+ */
+export function useLeaveTeam(team: Team) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  return useMutation({
+    mutationFn: async () =>
+      ensureOk(await api.POST("/api/v1/teams/{team_id}/leave", { params: { path: { team_id: team.id } } })),
+    onSuccess: async () => {
+      await navigate({ to: "/teams" });
+      queryClient.removeQueries({ queryKey: teamKey(team.id) });
+      for (const heap of team.heaps) {
+        for (const key of [heapKey(heap.id), rankedKey(heap.id), closedKey(heap.id), tagsKey(heap.id)]) {
+          queryClient.removeQueries({ queryKey: key });
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+    },
+  });
+}
+
+/**
+ * Users with a word of their name starting with `query`, or whose email starts with it once it has an `@` and part of
+ * the domain. Runs once `query` has the 3 characters the server needs.
+ */
+export function useFindUsers(query: string) {
+  const text = query.trim();
+  return useQuery({
+    queryKey: usersKey(text),
+    queryFn: async () => unwrap(await api.GET("/api/v1/users", { params: { query: { query: text } } })),
+    enabled: [...text].length >= 3,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useHeap(heapId: string) {
+  return useQuery({
+    queryKey: heapKey(heapId),
+    queryFn: async () => unwrap(await api.GET("/api/v1/heaps/{heap_id}", { params: { path: { heap_id: heapId } } })),
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateHeap(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team_id}/heaps", { params: { path: { team_id: teamId } }, body: { name } }),
+      ),
+    onSettled: () => invalidateTeam(queryClient, teamId),
+  });
+}
+
+/** Everything that shows a heap's name or archive state. Archiving also changes every item's allowed actions. */
+function invalidateHeapRecord(queryClient: QueryClient, heap: Pick<Heap, "id" | "team_id">) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: heapKey(heap.id) }),
+    invalidateTeam(queryClient, heap.team_id),
+    invalidateHeap(queryClient, heap.id),
+    queryClient.invalidateQueries({ queryKey: tagsKey(heap.id) }),
+  ]);
+}
+
+export function useRenameHeap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, name }: { heap: Heap; name: string }) =>
+      unwrap(
+        await api.PATCH("/api/v1/heaps/{heap_id}", {
+          params: { path: { heap_id: heap.id }, header: { "If-Match": `"${heap.version}"` } },
+          body: { name },
+        }),
+      ),
+    onSettled: (_data, _error, { heap }) => invalidateHeapRecord(queryClient, heap),
+  });
+}
+
+export function useSetHeapArchived() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, archived }: { heap: Heap; archived: boolean }) => {
+      const params = { params: { path: { heap_id: heap.id } } };
+      return unwrap(
+        archived
+          ? await api.POST("/api/v1/heaps/{heap_id}/archive", params)
+          : await api.POST("/api/v1/heaps/{heap_id}/unarchive", params),
+      );
+    },
+    onSettled: (_data, _error, { heap }) => invalidateHeapRecord(queryClient, heap),
   });
 }

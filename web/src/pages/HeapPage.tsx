@@ -86,10 +86,7 @@ export function HeapPage({
   return (
     <main>
       <div className="mt-6 flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">
-          {heap.name}
-          {heap.archived && <span className="ml-2 text-sm font-normal text-stone-500">archived, read-only</span>}
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight">{heap.name}</h1>
         <button
           type="button"
           onClick={() => void list.refresh()}

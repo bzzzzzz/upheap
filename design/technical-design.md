@@ -61,7 +61,7 @@ Tables:
 
 | Table | Key columns |
 | --- | --- |
-| `users` | id, display_name, email, created_at |
+| `users` | id, display_name, email, created_at, version |
 | `password_credentials` | user_id, argon2 hash, updated_at |
 | `identities` | id, user_id, provider, subject (unique per provider) |
 | `sessions` | token_hash (SHA-256 of a random 256-bit token), user_id, created_at, expires_at |
@@ -143,7 +143,7 @@ The score is a deterministic function of item data and time. A stable session th
 
 Setting `blocked_by_item_id` walks the blocker chain inside the write transaction. If the walk reaches the item being blocked, the API returns `422` with a `blocking_cycle` error.
 
-1. Every item and tag write first locks the heap row (`SELECT … FOR UPDATE` on MySQL), before touching any other row, so writes in one heap run one after the other and always take locks in the same order. The walk then reads each link with a locking read, so of two writes that would close a cycle between them, the second sees the first. SQLite allows one writer at a time, so the second of two such writes fails instead.
+1. Every item and tag write first locks the heap row (`SELECT … FOR UPDATE` on MySQL), before touching any other row, so writes in one heap run one after the other and always take locks in the same order. The write checks the heap isn't archived on the row read under that lock, and archiving takes the same lock, so a write never lands in a heap archived while it waited. The walk then reads each link with a locking read, so of two writes that would close a cycle between them, the second sees the first. SQLite allows one writer at a time, so the second of two such writes fails instead.
 2. Only a blocked item has a blocker: the blocker is part of the blocked state, and leaving that state clears it. Sending a blocker for an item that isn't blocked, and isn't moved to blocked in the same request, returns `422` `item_not_blocked`.
 3. The blocker must be an item of the same heap (`blocker_not_in_heap`, which also covers unknown IDs) that isn't closed (`blocker_closed`). Closing a blocker later doesn't unblock what waits for it; the blocked item shows the closed blocker until someone moves it on.
 4. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break the list.
@@ -168,9 +168,9 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | --- | --- |
 | Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/oidc/{provider}/start`, `GET /auth/oidc/{provider}/callback`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/revoke` |
 | Me | `GET /me`, `PATCH /me` (display name), `GET /me/tokens`, `POST /me/tokens/{id}/revoke` |
-| Teams | `GET /teams`, `POST /teams`, `GET /teams/{id}`, `PATCH /teams/{id}`, `GET/POST /teams/{id}/members`, `PATCH/DELETE /teams/{id}/members/{user_id}` (role change, removal), `POST /teams/{id}/leave` |
-| Users | `GET /users?query=` (lookup for adding members, admins only) |
-| Heaps | `GET /teams/{id}/heaps`, `POST /teams/{id}/heaps`, `GET/PATCH /heaps/{id}`, `POST /heaps/{id}/archive`, `POST /heaps/{id}/unarchive` |
+| Teams | `POST /teams`, `GET/PATCH /teams/{id}` (the team with its members and heaps; rename), `POST /teams/{id}/members`, `PATCH/DELETE /teams/{id}/members/{user_id}` (role change, removal), `POST /teams/{id}/leave`. The caller's teams are listed by `GET /me` |
+| Users | `GET /users?query=` (lookup for adding members, for admins of some team) |
+| Heaps | `POST /teams/{id}/heaps`, `GET/PATCH /heaps/{id}` (rename), `POST /heaps/{id}/archive`, `POST /heaps/{id}/unarchive` |
 | Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&sort=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value (custom parameter filters, `param=`, come with custom parameters) |
 | Closed items | `GET /heaps/{id}/items/closed?cursor=` |
 | Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
@@ -180,6 +180,10 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit` (filtered by what the caller may do) |
 
 The `DELETE` on a team member removes the membership. That is the one place where a relationship row goes away, and it is audited. The membership history stays in the audit log.
+
+Team endpoints return the whole team, members and heaps included, with `allowed_actions` on the team, each member and each heap, so a client re-renders the team from one response after any change (promoting someone, for example, changes what can be done with every other admin). Adding a member who is already one answers `200` with the team unchanged; removing someone who isn't a member succeeds. Archiving and unarchiving take no `If-Match`: each says what the heap should end up as, so repeating or racing them is safe.
+
+A display name change is audited once in each of the user's teams, since the audit log is kept per team and that is where teammates see the name. A user in no team has nowhere to record it.
 
 ## Authentication and authorization
 
@@ -208,7 +212,7 @@ The `DELETE` on a team member removes the membership. That is the one place wher
 2. If the caller isn't a member of the owning team, the API returns `404 Not Found`, the same as for a resource that doesn't exist. An outsider can't probe for IDs.
 3. If the caller is a member but lacks the permission (for example, a member trying to configure a heap), the API returns `403 Forbidden`.
 4. Every repository query that loads heap-level data filters by the resolved `heap_id`, so an ID from a different heap can never leak in. For example, a `blocked_by_item_id` or a `tag_id` from another heap is rejected with `422` (`tag_not_in_heap` for tags).
-5. `GET /users?query=` (for adding members) is admin-only, returns only display name and email, and needs at least 3 characters to match.
+5. `GET /users?query=` (for adding members) is for admins of some team, and every user is the admin of their personal team, so in practice any signed-in user can call it. It is therefore built so it can't list addresses: a name matches when one of its words starts with the query, an email matches only when the query has its whole local part, the `@` and at least one character of the domain, and a match shows the email only when the email matched. It needs at least 3 characters (`field_too_short`) and returns at most 10, with IDs and display names.
 
 ### Archived heaps
 
@@ -223,7 +227,7 @@ These checks run in the same transaction as the write, after the permission chec
 
 | Rule | Check | Error code |
 | --- | --- | --- |
-| A team keeps at least one admin | Leaving, demotion and removal count the remaining admins inside the transaction. | `last_admin` |
+| A team keeps at least one admin | Every team write locks the team row before any other read, then reads the memberships, checks the caller's role and counts the remaining admins. On MySQL, a plain read before the lock would fix the transaction's snapshot and hide changes that committed while it waited. | `last_admin` |
 | Reopen within one week | `now − closed_at ≤ 7 × 24h` | `reopen_window_expired` |
 | Closed items are read-only until reopened | Editing anything other than state on a done or won't-do item is refused. | `item_closed` |
 | No blocking cycles | Walk the blocker chain (see [Cycle detection](#cycle-detection)). | `blocking_cycle` |
