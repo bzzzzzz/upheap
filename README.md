@@ -22,7 +22,7 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
 Not yet: custom parameters, saved views, teams beyond the personal one,
-heap archiving, OIDC sign-in, the CLI OAuth flow, sign-in rate limiting, and the MySQL test run in CI.
+heap archiving, OIDC sign-in, the CLI OAuth flow and sign-in rate limiting.
 
 ## Run it
 
@@ -70,6 +70,15 @@ Checks:
 ```sh
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
 (cd web && npm run typecheck && npm run lint && npm run format:check)
+```
+
+The tests use in-memory SQLite. To run the store and API suites on MySQL as CI does, point `TEST_DATABASE_URL` at a
+MySQL server (no database name; each test creates its own):
+
+```sh
+docker run -d --rm --name upheap-test-mysql -e MYSQL_ROOT_PASSWORD=root -p 127.0.0.1:3307:3306 mysql:8.4
+TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3307 cargo test -p store -p api
+docker stop upheap-test-mysql
 ```
 
 After changing the API, regenerate the spec and the TypeScript types, and commit both:

@@ -1,4 +1,6 @@
-//! Test harness: the real router over an in-memory SQLite database and a manual clock.
+//! Test harness: the real router over a fresh database and a manual clock.
+//!
+//! The database is in-memory SQLite, or a new MySQL database when `TEST_DATABASE_URL` is set (`store::testing`).
 //!
 //! Each test binary uses a different part of the harness, so unused items are expected.
 #![allow(dead_code)]
@@ -50,8 +52,7 @@ pub struct TestResponse {
 impl TestApp {
     pub async fn start() -> Result<Self> {
         init_tracing();
-        let db = store::connect("sqlite::memory:").await?;
-        store::run_migrations(&db).await?;
+        let db = store::testing::fresh_database().await?;
         let clock = Arc::new(ManualClock::new(
             Timestamp::from_millis(START).context("start in range")?,
         ));
