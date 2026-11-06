@@ -260,6 +260,11 @@ async fn malformed_views_are_refused() -> Result<()> {
         json!({ "name": "Typo", "view": { "blocked": "floating" } }),
     )
     .await?;
+    let unknown_field = save_view(&app, &session, &heap, json!({ "name": "Typo", "veiw": {} })).await?;
+    let many: Vec<String> = (0..=domain::saved_view::MAX_VIEW_TAGS)
+        .map(|n| uuid::Uuid::from_u128(n as u128).to_string())
+        .collect();
+    let too_many_tags = save_view(&app, &session, &heap, json!({ "name": "All", "view": { "tag": many } })).await?;
 
     // Assert
     expect_that!(blank.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
@@ -267,5 +272,58 @@ async fn malformed_views_are_refused() -> Result<()> {
     expect_that!(unknown_setting.status, eq(StatusCode::BAD_REQUEST));
     expect_that!(unknown_setting.body["code"], eq(&json!("invalid_body")));
     expect_that!(unknown_mode.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(unknown_field.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(unknown_field.body["code"], eq(&json!("invalid_body")));
+    expect_that!(too_many_tags.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(too_many_tags.body["code"], eq(&json!("too_many_tags")));
+    expect_that!(too_many_tags.body["field"], eq(&json!("view.tag")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_view_equal_to_the_saved_one_changes_nothing() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let web = app.new_tag_id(&session, &heap, "web").await?;
+    let saved = save_view(
+        &app,
+        &session,
+        &heap,
+        json!({ "name": "Tagged", "view": { "sort": "due" } }),
+    )
+    .await?;
+    let id = saved.body["id"].as_str().context("view has no id")?.to_owned();
+    let path = format!("/api/v1/views/{id}");
+
+    // Act
+    let tagged = app
+        .patch(
+            &session,
+            &path,
+            &saved.body["version"],
+            json!({ "view": { "sort": "due", "tag": [web, ops, web] } }),
+        )
+        .await?;
+    let same = app
+        .patch(
+            &session,
+            &path,
+            &tagged.body["version"],
+            json!({ "view": { "tag": [ops, web], "sort": "due", "blocked": "hidden" } }),
+        )
+        .await?;
+    let audit = app.audit_entries(&id).await?;
+
+    // Assert
+    let mut sorted = [ops.clone(), web.clone()];
+    sorted.sort();
+    expect_that!(tagged.status, eq(StatusCode::OK));
+    expect_that!(tagged.body["view"]["tag"], eq(&json!(sorted)));
+    expect_that!(same.status, eq(StatusCode::OK));
+    expect_that!(same.body["version"], eq(&tagged.body["version"]));
+    expect_that!(audit.len(), eq(2));
     Ok(())
 }

@@ -240,6 +240,7 @@ async fn ensure_view_tags_in_heap(
     heap_id: HeapId,
     view: &ListView,
 ) -> Result<(), ServiceError> {
+    domain::saved_view::ensure_savable(view)?;
     let heap_tags = store::tags::list_tags(db, heap_id).await?;
     ensure_tags_in_heap(&heap_tags, &view.filter.tags)
 }

@@ -104,6 +104,7 @@ pub(crate) struct SavedViewListDto {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = CreateSavedViewRequest)]
 pub(crate) struct CreateSavedViewDto {
     /// 1 to 100 characters. Need not be unique.
@@ -115,6 +116,7 @@ pub(crate) struct CreateSavedViewDto {
 /// A partial edit. Leave a field out to keep it; a `view` replaces the whole view, with defaults for what it leaves
 /// out.
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = SavedViewPatchRequest)]
 pub(crate) struct SavedViewPatchDto {
     pub name: Option<String>,
@@ -221,13 +223,15 @@ fn to_patch(body: &SavedViewPatchDto) -> Result<SavedViewPatch, ValidationError>
     })
 }
 
-/// A foreign tag can only come from the view's tag filter.
+/// A foreign tag, or too many tags, can only come from the view's tag filter.
 fn name_view_tag_field(error: ServiceError) -> ApiError {
     match error {
-        ServiceError::TagNotInHeap { .. } => ApiError::InField {
-            error,
-            field: "view.tag",
-        },
+        ServiceError::TagNotInHeap { .. } | ServiceError::Invalid(ValidationError::TooManyTags { .. }) => {
+            ApiError::InField {
+                error,
+                field: "view.tag",
+            }
+        }
         other => other.into(),
     }
 }

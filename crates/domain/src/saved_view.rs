@@ -7,7 +7,18 @@
 
 use crate::list_view::ListView;
 use crate::text::Name;
-use crate::{HeapId, SavedViewId, Timestamp, UserId, Version};
+use crate::{HeapId, SavedViewId, Timestamp, UserId, ValidationError, Version};
+
+/// The most tags a saved view can filter by. Keeps the stored view well inside a MySQL `TEXT` column (64 KB).
+pub const MAX_VIEW_TAGS: usize = 200;
+
+/// Refuses a list view with more than [`MAX_VIEW_TAGS`] tags in its filter.
+pub fn ensure_savable(list_view: &ListView) -> Result<(), ValidationError> {
+    if list_view.filter.tags.len() > MAX_VIEW_TAGS {
+        return Err(ValidationError::TooManyTags { max: MAX_VIEW_TAGS });
+    }
+    Ok(())
+}
 
 /// The fields of a new saved view.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +84,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::TagId;
     use crate::list_view::{SortKey, StateMode};
 
     fn sample_view() -> SavedView {
@@ -122,5 +134,22 @@ mod tests {
         };
 
         expect_that!(sample_view().apply_patch(&patch), none());
+    }
+
+    #[gtest]
+    fn a_view_can_filter_by_at_most_the_maximum_number_of_tags() {
+        let with_tags = |count: usize| {
+            let mut view = ListView::default();
+            view.filter.tags = (0..count as u128)
+                .map(|n| TagId::from_uuid(Uuid::from_u128(n)))
+                .collect();
+            view
+        };
+
+        expect_that!(ensure_savable(&with_tags(MAX_VIEW_TAGS)), ok(anything()));
+        expect_that!(
+            ensure_savable(&with_tags(MAX_VIEW_TAGS + 1)),
+            err(eq(&ValidationError::TooManyTags { max: MAX_VIEW_TAGS }))
+        );
     }
 }

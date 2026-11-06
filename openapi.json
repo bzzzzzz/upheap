@@ -2344,7 +2344,8 @@
           "view": {
             "$ref": "#/components/schemas/ListViewInput"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateTagRequest": {
         "type": "object",
@@ -3206,7 +3207,8 @@
               }
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SignInRequest": {
         "type": "object",

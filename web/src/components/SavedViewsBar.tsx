@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import type { SavedView } from "../api/client";
 import { useArchiveSavedView, useCreateSavedView, useSavedViews, useUpdateSavedView } from "../api/queries";
@@ -26,12 +26,22 @@ export function SavedViewsBar({
 }) {
   const views = useSavedViews(heapId);
   const [naming, setNaming] = useState<Naming>(null);
+  // An ID that names no view in use (archived since, say) leaves the URL, so equal lists keep equal URLs. Not while
+  // the list is refetching: a view just created may not be in it yet.
+  const deadId =
+    view.view !== undefined &&
+    views.data !== undefined &&
+    !views.isFetching &&
+    !views.data.views.some((saved) => saved.id === view.view);
+  useEffect(() => {
+    if (deadId) onViewChange({ ...view, view: undefined });
+  }, [deadId, view, onViewChange]);
 
   if (!views.data) {
     return <ProblemText error={views.error} />;
   }
   const selected = views.data.views.find((saved) => saved.id === view.view);
-  // An ID that names no view in use (archived since, say) opens as the default view with changes.
+  // Until the effect above drops an unknown ID, the list shows as the default view.
   const base: ListSearch = selected ? searchFor(selected) : {};
   const changed = !showSameList(view, base);
   const canCreate = views.data.allowed_actions.includes("create");
