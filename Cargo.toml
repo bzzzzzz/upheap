@@ -1,0 +1,60 @@
+[workspace]
+resolver = "3"
+members = ["crates/domain", "crates/store", "crates/service", "crates/api", "crates/server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+domain = { path = "crates/domain" }
+store = { path = "crates/store", default-features = false }
+service = { path = "crates/service" }
+api = { path = "crates/api" }
+
+anyhow = "1"
+argon2 = "0.5"
+axum = { version = "0.8", features = ["macros"] }
+base64 = "0.22"
+googletest = "0.14"
+http-body-util = "0.1"
+jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
+mime_guess = "2"
+proptest = "1"
+rand = "0.9"
+rust-embed = "8"
+sea-orm = { version = "2.0", default-features = false, features = ["macros", "runtime-tokio-rustls", "with-json"] }
+sea-orm-migration = { version = "2.0", default-features = false, features = ["runtime-tokio-rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "request-id", "util", "timeout"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+utoipa = { version = "5", features = ["uuid"] }
+utoipa-axum = "0.2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# argon2 is unusably slow unoptimised; sign-in in debug builds would take seconds.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3

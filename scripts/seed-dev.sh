@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Seeds a local development server with a test account and a few items.
+# Test-only credentials, for local development: dev@example.test / dev-password-123
+set -euo pipefail
+BASE="${BASE:-http://localhost:8137}"
+JAR="$(mktemp)"
+trap 'rm -f "$JAR"' EXIT
+req() { curl -sf -H 'X-CSRF-Protection: 1' -H 'Content-Type: application/json' -c "$JAR" -b "$JAR" "$@"; }
+
+req "$BASE/api/v1/auth/register" -d '{"email":"dev@example.test","display_name":"Dev","password":"dev-password-123"}' >/dev/null \
+  || req "$BASE/api/v1/auth/login" -d '{"email":"dev@example.test","password":"dev-password-123"}' >/dev/null
+HEAP=$(req "$BASE/api/v1/me" | python3 -c 'import json,sys; print(json.load(sys.stdin)["teams"][0]["heaps"][0]["id"])')
+in_days() { python3 -c "import datetime; print(datetime.date.today() + datetime.timedelta(days=$1))"; }
+add() { req "$BASE/api/v1/heaps/$HEAP/items" -d "$1" >/dev/null; }
+add '{"title":"Fix flaky login test","effort":"s","impact":"l"}'
+add "{\"title\":\"Renew TLS certificate\",\"effort\":\"s\",\"impact\":\"xl\",\"due\":{\"date\":\"$(in_days 2)\",\"firm\":true}}"
+add '{"title":"Write onboarding docs","effort":"l","impact":"m"}'
+add "{\"title\":\"Plan Q1 roadmap\",\"effort\":\"m\",\"impact\":\"l\",\"due\":{\"date\":\"$(in_days 20)\",\"firm\":false}}"
+add '{"title":"Tidy up old feature flags"}'
+echo "Seeded heap $HEAP. Sign in at $BASE as dev@example.test."

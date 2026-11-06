@@ -1,0 +1,25 @@
+[package]
+name = "store"
+description = "Persistence: SeaORM entities, migrations and repositories. Converts between rows and domain types."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["sqlite", "mysql"]
+sqlite = ["sea-orm/sqlx-sqlite", "sea-orm-migration/sqlx-sqlite"]
+mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+
+[dependencies]
+domain.workspace = true
+sea-orm.workspace = true
+sea-orm-migration.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
