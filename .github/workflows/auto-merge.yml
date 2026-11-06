@@ -1,0 +1,31 @@
+# Turns on auto-merge for the repository owner's pull requests. GitHub then squash-merges them once the required
+# checks (Rust, Web) pass; branch protection still decides when that is.
+#
+# Only `pull_request`, never `pull_request_target`: for pull requests from forks this trigger gets a read-only
+# token, so even a fork that edits this file can't merge anything.
+
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    # The author is set by GitHub and can't be spoofed. Same-repo branches only, and drafts wait until ready.
+    if: >-
+      github.event.pull_request.user.login == github.repository_owner &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
