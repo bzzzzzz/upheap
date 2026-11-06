@@ -2,8 +2,12 @@
 
 pub mod audit_log;
 pub mod heaps;
+pub mod item_parameter_values;
 pub mod item_tags;
 pub mod items;
+pub mod parameter_options;
+pub mod parameter_tags;
+pub mod parameters;
 pub mod password_credentials;
 pub mod saved_views;
 pub mod sessions;

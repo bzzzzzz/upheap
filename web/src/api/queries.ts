@@ -21,7 +21,11 @@ import {
   type ListViewInput,
   type ListViewQuery,
   type NewItem,
+  type NewParameter,
   type NewTag,
+  type Parameter,
+  type ParameterOption,
+  type ParameterPatch,
   type Role,
   type SavedView,
   type Tag,
@@ -46,6 +50,7 @@ const blockerCandidatesKey = (heapId: string) => ["ranked", heapId, "blocker-can
 const closedKey = (heapId: string) => ["closed", heapId] as const;
 const tagsKey = (heapId: string) => ["tags", heapId] as const;
 const savedViewsKey = (heapId: string) => ["saved-views", heapId] as const;
+const parametersKey = (heapId: string) => ["parameters", heapId] as const;
 const itemKey = (itemId: string) => ["item", itemId] as const;
 const teamKey = (teamId: string) => ["team", teamId] as const;
 const heapKey = (heapId: string) => ["heap", heapId] as const;
@@ -202,6 +207,100 @@ export function useUpdateTag(heapId: string) {
     // Items show tag names, so a rename refreshes them too.
     onSettled: () =>
       Promise.all([queryClient.invalidateQueries({ queryKey: tagsKey(heapId) }), invalidateHeap(queryClient, heapId)]),
+  });
+}
+
+/** The heap's parameters: those in use and the archived ones, each by name. */
+export function useParameters(heapId: string) {
+  return useQuery({
+    queryKey: parametersKey(heapId),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/v1/heaps/{heap_id}/parameters", { params: { path: { heap_id: heapId } } })),
+    staleTime: 30_000,
+  });
+}
+
+/** Parameter changes move items (ranking) and change what they show (labels, switched values). */
+function invalidateParameters(queryClient: QueryClient, heapId: string) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: parametersKey(heapId) }),
+    invalidateHeap(queryClient, heapId),
+  ]);
+}
+
+export function useCreateParameter(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: NewParameter) =>
+      unwrap(await api.POST("/api/v1/heaps/{heap_id}/parameters", { params: { path: { heap_id: heapId } }, body })),
+    onSettled: () => invalidateParameters(queryClient, heapId),
+  });
+}
+
+/** Every change to one parameter that takes its version: name and weight, options, tags. */
+export type ParameterChange =
+  | { kind: "patch"; patch: ParameterPatch }
+  | { kind: "add_option"; label: string }
+  | { kind: "arrange_options"; options: ParameterOption[] }
+  | { kind: "link_tags"; tagIds: string[] };
+
+export function useChangeParameter(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ parameter, change }: { parameter: Parameter; change: ParameterChange }) => {
+      const params = {
+        params: { path: { parameter_id: parameter.id }, header: { "If-Match": `"${parameter.version}"` } },
+      };
+      switch (change.kind) {
+        case "patch":
+          return unwrap(await api.PATCH("/api/v1/parameters/{parameter_id}", { ...params, body: change.patch }));
+        case "add_option":
+          return unwrap(
+            await api.POST("/api/v1/parameters/{parameter_id}/options", { ...params, body: { label: change.label } }),
+          );
+        case "arrange_options":
+          return unwrap(
+            await api.PATCH("/api/v1/parameters/{parameter_id}/options", {
+              ...params,
+              body: { options: change.options },
+            }),
+          );
+        case "link_tags":
+          return unwrap(
+            await api.PUT("/api/v1/parameters/{parameter_id}/tags", { ...params, body: { tag_ids: change.tagIds } }),
+          );
+      }
+    },
+    // Also after a conflict, so the page shows the version someone else saved.
+    onSettled: () => invalidateParameters(queryClient, heapId),
+  });
+}
+
+export function useArchiveParameter(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (parameter: Parameter) =>
+      unwrap(
+        await api.POST("/api/v1/parameters/{parameter_id}/archive", {
+          params: { path: { parameter_id: parameter.id } },
+        }),
+      ),
+    onSettled: () => invalidateParameters(queryClient, heapId),
+  });
+}
+
+/** Archives an option; open items that have it switch to `replacementId`. */
+export function useArchiveOption(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ optionId, replacementId }: { optionId: string; replacementId: string }) =>
+      unwrap(
+        await api.POST("/api/v1/options/{option_id}/archive", {
+          params: { path: { option_id: optionId } },
+          body: { replacement_option_id: replacementId },
+        }),
+      ),
+    onSettled: () => invalidateParameters(queryClient, heapId),
   });
 }
 
@@ -393,6 +492,7 @@ export function useLeaveTeam(team: Team) {
           closedKey(heap.id),
           tagsKey(heap.id),
           savedViewsKey(heap.id),
+          parametersKey(heap.id),
         ]) {
           queryClient.removeQueries({ queryKey: key });
         }
@@ -444,6 +544,7 @@ function invalidateHeapRecord(queryClient: QueryClient, heap: Pick<Heap, "id" | 
     invalidateHeap(queryClient, heap.id),
     queryClient.invalidateQueries({ queryKey: tagsKey(heap.id) }),
     queryClient.invalidateQueries({ queryKey: savedViewsKey(heap.id) }),
+    queryClient.invalidateQueries({ queryKey: parametersKey(heap.id) }),
   ]);
 }
 

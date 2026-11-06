@@ -3,6 +3,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use domain::parameter::ParameterError;
 use domain::permission::{SavedViewAction, SavedViewListAction};
 use domain::saved_view::{NewSavedView, SavedViewPatch};
 use domain::text::Name;
@@ -150,7 +151,7 @@ async fn list_views(
         (status = 201, body = SavedViewDto),
         (status = 404, body = Problem),
         (status = 409, description = "`heap_archived`", body = Problem),
-        (status = 422, description = "`tag_not_in_heap` with `field` `view.tag`, or an invalid name", body = Problem),
+        (status = 422, description = "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name", body = Problem),
     ))]
 async fn create_view(
     State(state): State<AppState>,
@@ -160,13 +161,13 @@ async fn create_view(
 ) -> Result<(StatusCode, Json<SavedViewDto>), ApiError> {
     let fields = NewSavedView {
         name: Name::parse(&body.name).map_err(ServiceError::from)?,
-        list_view: body.view.to_view(),
+        list_view: body.view.to_view().map_err(|e| name_view_field(e.into()))?,
     };
     let entry = state
         .services
         .create_saved_view(principal, HeapId::from_uuid(heap_id), fields)
         .await
-        .map_err(name_view_tag_field)?;
+        .map_err(name_view_field)?;
     Ok((StatusCode::CREATED, Json(SavedViewDto::from(entry))))
 }
 
@@ -177,7 +178,7 @@ async fn create_view(
         (status = 200, body = SavedViewDto),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `saved_view_archived` or `heap_archived`", body = Problem),
-        (status = 422, description = "`tag_not_in_heap` with `field` `view.tag`, or an invalid name", body = Problem),
+        (status = 422, description = "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_view(
@@ -187,12 +188,12 @@ async fn update_view(
     ApiPath(view_id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<SavedViewPatchDto>,
 ) -> Result<Json<SavedViewDto>, ApiError> {
-    let patch = to_patch(&body).map_err(ServiceError::from)?;
+    let patch = to_patch(&body).map_err(|e| name_view_field(e.into()))?;
     let entry = state
         .services
         .update_saved_view(principal, SavedViewId::from_uuid(view_id), patch, expected)
         .await
-        .map_err(name_view_tag_field)?;
+        .map_err(name_view_field)?;
     Ok(Json(SavedViewDto::from(entry)))
 }
 
@@ -219,19 +220,21 @@ async fn archive_view(
 fn to_patch(body: &SavedViewPatchDto) -> Result<SavedViewPatch, ValidationError> {
     Ok(SavedViewPatch {
         name: body.name.as_deref().map(Name::parse).transpose()?,
-        list_view: body.view.as_ref().map(ListViewInputDto::to_view),
+        list_view: body.view.as_ref().map(ListViewInputDto::to_view).transpose()?,
     })
 }
 
-/// A foreign tag, or too many tags, can only come from the view's tag filter.
-fn name_view_tag_field(error: ServiceError) -> ApiError {
-    match error {
-        ServiceError::TagNotInHeap { .. } | ServiceError::Invalid(ValidationError::TooManyTags { .. }) => {
-            ApiError::InField {
-                error,
-                field: "view.tag",
-            }
+/// Names the field of `view` an error comes from: a foreign or excess tag from its tag filter, a foreign or excess
+/// option from its option filter, and a foreign or misplaced sort parameter from `sort_parameter`.
+fn name_view_field(error: ServiceError) -> ApiError {
+    let field = match &error {
+        ServiceError::TagNotInHeap { .. } | ServiceError::Invalid(ValidationError::TooManyTags { .. }) => "view.tag",
+        ServiceError::OptionNotInHeap { .. } | ServiceError::Invalid(ValidationError::TooManyOptions { .. }) => {
+            "view.param"
         }
-        other => other.into(),
-    }
+        ServiceError::Parameter(ParameterError::NotInHeap { .. })
+        | ServiceError::Invalid(ValidationError::SortParameterMismatch) => "view.sort_parameter",
+        _ => return error.into(),
+    };
+    ApiError::InField { error, field }
 }

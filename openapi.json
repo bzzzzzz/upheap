@@ -396,6 +396,16 @@
             }
           },
           {
+            "name": "sort_parameter",
+            "in": "query",
+            "description": "The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "name": "tag",
             "in": "query",
             "description": "Keep items with any of these tags, comma-separated. Tags of the same heap.",
@@ -433,6 +443,21 @@
               "type": "array",
               "items": {
                 "$ref": "#/components/schemas/Size"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "param",
+            "in": "query",
+            "description": "Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with\nany of its options listed. An archived option keeps the items that switched to its replacement.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
               }
             },
             "style": "form",
@@ -483,7 +508,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap`, with `field` `tag`",
+            "description": "`tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -570,7 +595,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, or `tag_not_in_heap`",
+            "description": "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
             "content": {
               "application/json": {
                 "schema": {
@@ -650,6 +675,138 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/heaps/{heap_id}/parameters": {
+      "get": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "The heap's parameters. Any member may list them; only admins change them.",
+        "operationId": "list_parameters",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Adds a parameter to the heap. Admins only.",
+        "operationId": "create_parameter",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateParameterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_name_taken`, `option_label_taken` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -950,7 +1107,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap` with `field` `view.tag`, or an invalid name",
+            "description": "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name",
             "content": {
               "application/json": {
                 "schema": {
@@ -1104,7 +1261,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`",
+            "description": "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1304,6 +1461,582 @@
           },
           "422": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/options/{option_id}/archive": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep\nit. Admins only. Archiving an archived option succeeds.",
+        "operationId": "archive_option",
+        "parameters": [
+          {
+            "name": "option_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveOptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The option's parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`replacement_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/parameters/{parameter_id}": {
+      "patch": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`.",
+        "operationId": "update_parameter",
+        "parameters": [
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParameterPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_name_taken`, `parameter_archived`, `version_conflict` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields or `weight_out_of_range`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/parameters/{parameter_id}/archive": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter\nsucceeds.",
+        "operationId": "archive_parameter",
+        "parameters": [
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_in_use` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/parameters/{parameter_id}/options": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`.",
+        "operationId": "add_option",
+        "parameters": [
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddOptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`option_label_taken` (`field` `label`), `parameter_archived`, `version_conflict` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid label or `too_many_options`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Puts the options in use in a new order, highest priority first, and relabels them. Admins only; send the\nparameter's `version` in `If-Match`.",
+        "operationId": "arrange_options",
+        "parameters": [
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArrangeOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`option_label_taken`, `parameter_archived`, `version_conflict` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid label, or `options_mismatch` when the list isn't every option in use exactly once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/parameters/{parameter_id}/tags": {
+      "put": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`.",
+        "operationId": "link_tags",
+        "parameters": [
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived`, `version_conflict` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` or `too_many_tags`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2116,7 +2849,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap` with `field` `view.tag`, or an invalid name",
+            "description": "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name",
             "content": {
               "application/json": {
                 "schema": {
@@ -2215,6 +2948,78 @@
             "description": "From `GET /users`. New members join as `member`."
           }
         }
+      },
+      "AddOptionRequest": {
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "1 to 50 characters, unique among the parameter's options in use ignoring case. The new option comes last,\nas the lowest priority."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ArchiveOptionRequest": {
+        "type": "object",
+        "properties": {
+          "replacement_option_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Another option of the same parameter, in use. Open items with the archived option switch to it."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ArchivedOption": {
+        "type": "object",
+        "description": "An archived option.",
+        "required": [
+          "id",
+          "label",
+          "archived_at",
+          "replaced_by_option_id"
+        ],
+        "properties": {
+          "archived_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "replaced_by_option_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The option open items switched to. It may be archived too, with a replacement of its own."
+          }
+        }
+      },
+      "ArrangeOptionsRequest": {
+        "type": "object",
+        "required": [
+          "options"
+        ],
+        "properties": {
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OptionArrangement"
+            },
+            "description": "Every option in use, exactly once, in the new order (highest priority first) and with its label."
+          }
+        },
+        "additionalProperties": false
       },
       "BlockedLayout": {
         "type": "string",
@@ -2315,6 +3120,21 @@
               }
             ]
           },
+          "parameter_values": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use.",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "propertyNames": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "tag_ids": {
             "type": [
               "array",
@@ -2330,6 +3150,43 @@
             "type": "string"
           }
         }
+      },
+      "CreateParameterRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 50 characters, unique among the heap's parameters in use ignoring case."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Option labels, highest priority first: at most 50, unique ignoring case."
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags of the same heap to suggest the parameter for."
+          },
+          "weight": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "0 to 100. Defaults to 10, the same as the heap's own weights.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
       },
       "CreateSavedViewRequest": {
         "type": "object",
@@ -2423,6 +3280,7 @@
           "age",
           "deadline",
           "value",
+          "parameter",
           "blocks"
         ]
       },
@@ -2511,6 +3369,7 @@
           "title",
           "state",
           "tags",
+          "parameters",
           "created_at",
           "version",
           "allowed_actions"
@@ -2599,6 +3458,13 @@
               }
             ]
           },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemParameter"
+            },
+            "description": "A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,\nby parameter name."
+          },
           "state": {
             "$ref": "#/components/schemas/ItemState"
           },
@@ -2628,6 +3494,61 @@
           "change_state",
           "reopen"
         ]
+      },
+      "ItemOption": {
+        "type": "object",
+        "description": "The option an item has for a parameter.",
+        "required": [
+          "id",
+          "label",
+          "archived"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean",
+            "description": "Closed items keep archived options; open items switch to the replacement."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "ItemParameter": {
+        "type": "object",
+        "description": "An item's value for one custom parameter.",
+        "required": [
+          "parameter_id",
+          "name",
+          "parameter_archived"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "option": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemOption",
+                "description": "`null` when unset, which ranks as the parameter's lowest-priority option."
+              }
+            ]
+          },
+          "parameter_archived": {
+            "type": "boolean",
+            "description": "Only closed items, and items reopened since, list archived parameters, and only when they have a value."
+          },
+          "parameter_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "ItemPatchRequest": {
         "type": "object",
@@ -2676,6 +3597,21 @@
                 "$ref": "#/components/schemas/Size"
               }
             ]
+          },
+          "parameter_values": {
+            "type": "object",
+            "description": "Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep\ntheir values.",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "propertyNames": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "state": {
             "oneOf": [
@@ -2752,14 +3688,32 @@
           }
         }
       },
+      "LinkTagsRequest": {
+        "type": "object",
+        "required": [
+          "tag_ids"
+        ],
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all."
+          }
+        },
+        "additionalProperties": false
+      },
       "ListSort": {
         "type": "string",
-        "description": "What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or\n`impact` (largest first). Items without the value come last.",
+        "description": "What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),\n`impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).\nItems without the value come last.",
         "enum": [
           "priority",
           "due",
           "effort",
-          "impact"
+          "impact",
+          "parameter"
         ]
       },
       "ListView": {
@@ -2773,7 +3727,8 @@
           "sort",
           "tag",
           "effort",
-          "impact"
+          "impact",
+          "param"
         ],
         "properties": {
           "blocked": {
@@ -2802,8 +3757,24 @@
           "open": {
             "$ref": "#/components/schemas/StateMode"
           },
+          "param": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Options of custom parameters. For each parameter they belong to, keeps items with any of its options listed.\nEmpty doesn't filter."
+          },
           "sort": {
             "$ref": "#/components/schemas/ListSort"
+          },
+          "sort_parameter": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The parameter the list is sorted by, when `sort` is `parameter`."
           },
           "tag": {
             "type": "array",
@@ -2817,7 +3788,7 @@
       },
       "ListViewInput": {
         "type": "object",
-        "description": "A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked\nitems hidden and grouped, by priority, without filters.",
+        "description": "A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked\nitems hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.",
         "properties": {
           "blocked": {
             "oneOf": [
@@ -2871,6 +3842,14 @@
               }
             ]
           },
+          "param": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Options of the same heap's parameters."
+          },
           "sort": {
             "oneOf": [
               {
@@ -2880,6 +3859,14 @@
                 "$ref": "#/components/schemas/ListSort"
               }
             ]
+          },
+          "sort_parameter": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "A parameter of the same heap, when `sort` is `parameter`."
           },
           "tag": {
             "type": "array",
@@ -2954,6 +3941,186 @@
             "description": "1 to 100 characters."
           }
         }
+      },
+      "OptionArrangement": {
+        "type": "object",
+        "description": "One option of a new arrangement.",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Parameter": {
+        "type": "object",
+        "required": [
+          "id",
+          "heap_id",
+          "name",
+          "weight",
+          "options",
+          "archived_options",
+          "tag_ids",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterAction"
+            }
+          },
+          "archived_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds; `null` while the parameter is in use."
+          },
+          "archived_options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArchivedOption"
+            },
+            "description": "Archived options, in the order they were archived."
+          },
+          "heap_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterOption"
+            },
+            "description": "The options in use, highest priority first."
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The tags whose items the parameter is suggested for."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when editing.",
+            "minimum": 0
+          },
+          "weight": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Influence on the ranking next to the heap's other weights, 0 to 100.",
+            "minimum": 0
+          }
+        }
+      },
+      "ParameterAction": {
+        "type": "string",
+        "description": "An action the caller can take on a parameter.",
+        "enum": [
+          "edit",
+          "archive"
+        ]
+      },
+      "ParameterList": {
+        "type": "object",
+        "required": [
+          "heap",
+          "parameters",
+          "archived",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterListAction"
+            }
+          },
+          "archived": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Parameter"
+            },
+            "description": "Archived parameters, by name. Closed items may still show their values."
+          },
+          "heap": {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Parameter"
+            },
+            "description": "The parameters in use, by name."
+          }
+        }
+      },
+      "ParameterListAction": {
+        "type": "string",
+        "description": "An action the caller can take on a heap's parameters.",
+        "enum": [
+          "create"
+        ]
+      },
+      "ParameterOption": {
+        "type": "object",
+        "description": "An option in use.",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "ParameterPatchRequest": {
+        "type": "object",
+        "description": "A partial edit. Leave a field out to keep it.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "weight": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
       },
       "Problem": {
         "type": "object",
@@ -3577,6 +4744,10 @@
     {
       "name": "views",
       "description": "A heap's saved views"
+    },
+    {
+      "name": "parameters",
+      "description": "A heap's custom parameters and their options"
     }
   ]
 }

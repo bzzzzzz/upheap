@@ -12,6 +12,7 @@ mod heaps;
 mod items;
 mod list_view;
 mod me;
+mod parameters;
 mod request_id;
 mod tags;
 mod teams;
@@ -65,6 +66,7 @@ pub struct CookieSettings {
         (name = "heaps", description = "Creating, renaming and archiving heaps"),
         (name = "users", description = "Finding users to add to a team"),
         (name = "views", description = "A heap's saved views"),
+        (name = "parameters", description = "A heap's custom parameters and their options"),
     )
 )]
 struct ApiDoc;
@@ -91,6 +93,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(heaps::routes())
         .merge(users::routes())
         .merge(views::routes())
+        .merge(parameters::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)

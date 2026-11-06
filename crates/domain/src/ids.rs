@@ -34,3 +34,5 @@ id_type!(HeapId);
 id_type!(ItemId);
 id_type!(TagId);
 id_type!(SavedViewId);
+id_type!(ParameterId);
+id_type!(OptionId);

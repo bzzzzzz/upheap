@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 
-import type { BlockedLayout, ListSort, StateMode } from "../api/client";
-import { useTags } from "../api/queries";
+import type { BlockedLayout, StateMode } from "../api/client";
+import { useParameters, useTags } from "../api/queries";
 import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import {
   DEFAULT_MODES,
@@ -42,6 +42,7 @@ export function ListControls({
   /** Changing it moves focus into the open panel and scrolls it into view. */
   panelFocus: number;
 }) {
+  const parameters = useParameters(heapId);
   const searchRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const filtersId = useId();
@@ -92,11 +93,8 @@ export function ListControls({
         <label className="inline-flex items-center gap-1 text-sm text-stone-500">
           <span>Sort</span>
           <select
-            value={view.sort ?? "priority"}
-            onChange={(e) => {
-              const sort = e.target.value as ListSort;
-              onChange({ ...view, sort: sort === "priority" ? undefined : sort });
-            }}
+            value={view.sort === "parameter" ? `parameter:${view.sort_parameter}` : (view.sort ?? "priority")}
+            onChange={(e) => onChange({ ...view, ...sortFrom(e.target.value) })}
             className="rounded border border-stone-300 bg-white px-1 py-1 text-stone-900 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
           >
             {SORTS.map((sort) => (
@@ -104,6 +102,17 @@ export function ListControls({
                 {SORT_LABELS[sort]}
               </option>
             ))}
+            {parameters.data?.parameters.map((parameter) => (
+              <option key={parameter.id} value={`parameter:${parameter.id}`}>
+                By {parameter.name}
+              </option>
+            ))}
+            {view.sort === "parameter" &&
+              !parameters.data?.parameters.some((parameter) => parameter.id === view.sort_parameter) && (
+                <option value={`parameter:${view.sort_parameter}`}>
+                  By {archivedName(parameters.data?.archived, view.sort_parameter) ?? "a parameter no longer in use"}
+                </option>
+              )}
           </select>
         </label>
         <PanelButton
@@ -232,6 +241,18 @@ function Choice<T extends string>({
   );
 }
 
+/** The sort params for a value of the sort select: a fixed sort, or `parameter:<id>`. */
+function sortFrom(value: string): Pick<ListSearch, "sort" | "sort_parameter"> {
+  if (value.startsWith("parameter:")) {
+    return { sort: "parameter", sort_parameter: value.slice("parameter:".length) };
+  }
+  const sort = SORTS.find((s) => s === value);
+  return { sort: sort === "priority" ? undefined : sort, sort_parameter: undefined };
+}
+
+const archivedName = (archived: { id: string; name: string }[] | undefined, id: string | undefined) =>
+  archived?.find((parameter) => parameter.id === id)?.name;
+
 /** Toggles `value` in a comma-separated list param. */
 const toggled = (raw: string | undefined, value: string) => {
   const values = splitList(raw);
@@ -248,7 +269,9 @@ function FiltersPanel({
   onChange: (view: ListSearch) => void;
 }) {
   const tags = useTags(heapId);
+  const parameters = useParameters(heapId);
   const chosenTags = splitList(view.tag);
+  const chosenOptions = splitList(view.param);
   return (
     <>
       <PanelRow label="Tags (any)">
@@ -276,10 +299,23 @@ function FiltersPanel({
           ))}
         </PanelRow>
       ))}
+      {parameters.data?.parameters.map((parameter) => (
+        <PanelRow key={parameter.id} label={`${parameter.name} (any)`}>
+          {parameter.options.map((option) => (
+            <Toggle
+              key={option.id}
+              pressed={chosenOptions.includes(option.id)}
+              onClick={() => onChange({ ...view, param: toggled(view.param, option.id) })}
+            >
+              {option.label}
+            </Toggle>
+          ))}
+        </PanelRow>
+      ))}
       {filterCount(view) > 0 && (
         <button
           type="button"
-          onClick={() => onChange({ ...view, tag: undefined, effort: undefined, impact: undefined })}
+          onClick={() => onChange({ ...view, tag: undefined, effort: undefined, impact: undefined, param: undefined })}
           className="self-start text-xs text-stone-500 underline hover:text-stone-900 dark:hover:text-stone-100"
         >
           Clear filters

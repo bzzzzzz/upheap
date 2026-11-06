@@ -9,6 +9,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
 use domain::item::ItemError;
+use domain::parameter::ParameterError;
 use domain::team::TeamError;
 use serde::Serialize;
 use service::ServiceError;
@@ -195,6 +196,16 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("name"),
             ..simple(StatusCode::CONFLICT, "tag_name_taken", Category::Conflict)
         },
+        ServiceError::Parameter(error) => classify_parameter(error, simple),
+        ServiceError::ParameterNameTaken { .. } => Classified {
+            field: Some("name"),
+            ..simple(StatusCode::CONFLICT, "parameter_name_taken", Category::Conflict)
+        },
+        ServiceError::ParameterInUse { .. } => simple(StatusCode::CONFLICT, "parameter_in_use", Category::Conflict),
+        ServiceError::OptionNotInHeap { .. } => Classified {
+            field: Some("param"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "option_not_in_heap", Category::Caller)
+        },
         ServiceError::PasswordHashing(_) => unexpected(),
         ServiceError::Store(store) => match StoreErrorKind::of(store) {
             StoreErrorKind::Unavailable => Classified {
@@ -209,6 +220,55 @@ fn classify_service(err: &ServiceError) -> Classified {
     }
 }
 
+fn classify_parameter(
+    err: &ParameterError,
+    simple: impl Fn(StatusCode, &'static str, Category) -> Classified,
+) -> Classified {
+    let (status, code, field, category) = match err {
+        ParameterError::Archived { .. } => (StatusCode::CONFLICT, "parameter_archived", None, Category::Conflict),
+        ParameterError::TooManyOptions { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "too_many_options",
+            Some("options"),
+            Category::Caller,
+        ),
+        ParameterError::OptionLabelTaken { .. } => (
+            StatusCode::CONFLICT,
+            "option_label_taken",
+            Some("options"),
+            Category::Conflict,
+        ),
+        ParameterError::OptionsMismatch { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "options_mismatch",
+            Some("options"),
+            Category::Caller,
+        ),
+        ParameterError::ReplacementRequired { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "replacement_required",
+            Some("replacement_option_id"),
+            Category::Caller,
+        ),
+        ParameterError::NotInHeap { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "parameter_not_in_heap",
+            Some("parameter_values"),
+            Category::Caller,
+        ),
+        ParameterError::OptionNotInParameter { .. } => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "option_not_in_parameter",
+            Some("parameter_values"),
+            Category::Caller,
+        ),
+    };
+    Classified {
+        field,
+        ..simple(status, code, category)
+    }
+}
+
 fn classify_validation(err: &ValidationError) -> Classified {
     let (code, field) = match err {
         ValidationError::Empty { field } => ("field_empty", Some(field.as_str())),
@@ -220,6 +280,9 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::DueDateInvalid => ("due_date_invalid", Some("due")),
         ValidationError::TimestampOutOfRange => ("timestamp_out_of_range", None),
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
+        ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),
+        ValidationError::WeightTooLarge { .. } => ("weight_out_of_range", Some("weight")),
+        ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
     };
     Classified {
         status: StatusCode::UNPROCESSABLE_ENTITY,

@@ -2,6 +2,7 @@
 
 use crate::heap::Heap;
 use crate::item::Item;
+use crate::parameter::Parameter;
 use crate::saved_view::SavedView;
 use crate::team::{Membership, Role, admin_remains};
 use crate::{Timestamp, UserId};
@@ -125,6 +126,43 @@ pub fn allowed_saved_view_list_actions(heap: &Heap, role: Role) -> Vec<SavedView
         return Vec::new();
     }
     vec![SavedViewListAction::Create]
+}
+
+/// An action a client may offer on a custom parameter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParameterAction {
+    /// Rename it, change its weight, add, rename, reorder and archive options, and link it to tags.
+    Edit,
+    /// Take it out of use. Refused while an open item has a value for it.
+    Archive,
+}
+
+/// An action a client may offer on a heap's list of custom parameters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParameterListAction {
+    /// Add a parameter.
+    Create,
+}
+
+/// What `role` can do with `parameter` in `heap`. Empty for archived parameters and archived heaps.
+pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
+    if parameter.is_archived() || !can_configure(heap, role) {
+        return Vec::new();
+    }
+    vec![ParameterAction::Edit, ParameterAction::Archive]
+}
+
+/// What `role` can do with the parameters of `heap`. Empty for archived heaps.
+pub fn allowed_parameter_list_actions(heap: &Heap, role: Role) -> Vec<ParameterListAction> {
+    if !can_configure(heap, role) {
+        return Vec::new();
+    }
+    vec![ParameterListAction::Create]
+}
+
+/// Parameters are heap configuration, which only admins change (Off Roles). Nothing in an archived heap changes.
+const fn can_configure(heap: &Heap, role: Role) -> bool {
+    !heap.is_archived() && Permission::ConfigureHeap.is_granted_to(role)
 }
 
 /// An action a client may offer on a team.

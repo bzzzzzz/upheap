@@ -2,9 +2,9 @@
 //! saved view stores. Both use the same names and values, so a client can turn a saved view into a list query
 //! field by field.
 
-use domain::TagId;
 use domain::item::Size;
 use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
+use domain::{OptionId, ParameterId, TagId, ValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -68,9 +68,10 @@ impl From<BlockedLayout> for BlockedLayoutDto {
     }
 }
 
-/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or
-/// `impact` (largest first). Items without the value come last.
-#[derive(Clone, Copy, Serialize, Deserialize, ToSchema)]
+/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
+/// `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
+/// Items without the value come last.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = ListSort)]
 pub(crate) enum SortDto {
@@ -78,15 +79,20 @@ pub(crate) enum SortDto {
     Due,
     Effort,
     Impact,
+    Parameter,
 }
 
-impl From<SortDto> for SortKey {
-    fn from(sort: SortDto) -> Self {
-        match sort {
-            SortDto::Priority => Self::Priority,
-            SortDto::Due => Self::Due,
-            SortDto::Effort => Self::Effort,
-            SortDto::Impact => Self::Impact,
+impl SortDto {
+    /// The sort, with `parameter` exactly when sorting by a custom parameter.
+    pub fn to_key(self, parameter: Option<Uuid>) -> Result<SortKey, ValidationError> {
+        let parameter = parameter.map(ParameterId::from_uuid);
+        match (self, parameter) {
+            (Self::Priority, None) => Ok(SortKey::Priority),
+            (Self::Due, None) => Ok(SortKey::Due),
+            (Self::Effort, None) => Ok(SortKey::Effort),
+            (Self::Impact, None) => Ok(SortKey::Impact),
+            (Self::Parameter, Some(parameter)) => Ok(SortKey::Parameter(parameter)),
+            _ => Err(ValidationError::SortParameterMismatch),
         }
     }
 }
@@ -98,6 +104,7 @@ impl From<SortKey> for SortDto {
             SortKey::Due => Self::Due,
             SortKey::Effort => Self::Effort,
             SortKey::Impact => Self::Impact,
+            SortKey::Parameter(_) => Self::Parameter,
         }
     }
 }
@@ -111,12 +118,17 @@ pub(crate) struct ListViewDto {
     pub blocked: StateModeDto,
     pub blocked_layout: BlockedLayoutDto,
     pub sort: SortDto,
+    /// The parameter the list is sorted by, when `sort` is `parameter`.
+    pub sort_parameter: Option<Uuid>,
     /// Keeps items with any of these tags. Empty doesn't filter.
     pub tag: Vec<Uuid>,
     /// Keeps items with any of these efforts. Empty doesn't filter.
     pub effort: Vec<SizeDto>,
     /// Keeps items with any of these impacts. Empty doesn't filter.
     pub impact: Vec<SizeDto>,
+    /// Options of custom parameters. For each parameter they belong to, keeps items with any of its options listed.
+    /// Empty doesn't filter.
+    pub param: Vec<Uuid>,
 }
 
 impl From<&ListView> for ListViewDto {
@@ -128,15 +140,17 @@ impl From<&ListView> for ListViewDto {
             blocked: view.blocked.into(),
             blocked_layout: view.blocked_layout.into(),
             sort: view.sort.into(),
+            sort_parameter: view.sort.parameter().map(|id| *id.as_uuid()),
             tag: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
             effort: sizes(&view.filter.effort),
             impact: sizes(&view.filter.impact),
+            param: view.filter.options.iter().map(|id| *id.as_uuid()).collect(),
         }
     }
 }
 
 /// A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
-/// items hidden and grouped, by priority, without filters.
+/// items hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
 #[derive(Clone, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ListViewInput)]
@@ -146,6 +160,8 @@ pub(crate) struct ListViewInputDto {
     pub blocked: Option<StateModeDto>,
     pub blocked_layout: Option<BlockedLayoutDto>,
     pub sort: Option<SortDto>,
+    /// A parameter of the same heap, when `sort` is `parameter`.
+    pub sort_parameter: Option<Uuid>,
     /// Tags of the same heap. Keeps items with any of them.
     #[serde(default)]
     pub tag: Vec<Uuid>,
@@ -153,24 +169,30 @@ pub(crate) struct ListViewInputDto {
     pub effort: Vec<SizeDto>,
     #[serde(default)]
     pub impact: Vec<SizeDto>,
+    /// Options of the same heap's parameters.
+    #[serde(default)]
+    pub param: Vec<Uuid>,
 }
 
 impl ListViewInputDto {
-    /// The view, with defaults for what was left out. Duplicates in the lists collapse.
-    pub fn to_view(&self) -> ListView {
+    /// The view, with defaults for what was left out. Duplicates in the lists collapse. Fails when
+    /// `sort_parameter` doesn't go with `sort`.
+    pub fn to_view(&self) -> Result<ListView, ValidationError> {
         let default = ListView::default();
-        ListView {
+        let sort = self.sort.unwrap_or(SortDto::Priority).to_key(self.sort_parameter)?;
+        Ok(ListView {
             open: self.open.map_or(default.open, Into::into),
             in_progress: self.in_progress.map_or(default.in_progress, Into::into),
             blocked: self.blocked.map_or(default.blocked, Into::into),
             blocked_layout: self.blocked_layout.map_or(default.blocked_layout, Into::into),
-            sort: self.sort.map_or(default.sort, Into::into),
+            sort,
             filter: ListFilter {
-                // Not capped: every tag must belong to the heap, which the service checks in memory.
+                // Not capped: every tag and option must belong to the heap, which the service checks in memory.
                 tags: self.tag.iter().copied().map(TagId::from_uuid).collect(),
                 effort: self.effort.iter().copied().map(Size::from).collect(),
                 impact: self.impact.iter().copied().map(Size::from).collect(),
+                options: self.param.iter().copied().map(OptionId::from_uuid).collect(),
             },
-        }
+        })
     }
 }

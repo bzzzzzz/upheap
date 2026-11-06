@@ -1,18 +1,20 @@
 //! Items and the tags on them. Every query is scoped by heap where the caller knows the heap.
 //!
 //! An item's tags are rows in `item_tags`. Removing a tag sets `removed_at` rather than deleting the row, and
-//! adding it again clears it. Every function that returns an item returns it with its current tags.
+//! adding it again clears it. Its custom parameter values are rows in `item_parameter_values`; clearing one sets
+//! `option_id` to `NULL`. Every function that returns an item returns it with its current tags and values, except
+//! the summaries.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Size, StateKind, Title};
-use domain::{HeapId, ItemId, TagId, Timestamp, Version};
+use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
-use crate::entities::{item_tags, items};
+use crate::entities::{item_parameter_values, item_tags, items};
 
 const TABLE: &str = "items";
 
@@ -26,10 +28,11 @@ pub struct ClosedCursor {
     pub id: ItemId,
 }
 
-/// Inserts a new item with its tags. The caller has checked the tags belong to the item's heap.
+/// Inserts a new item with its tags and values. The caller has checked they belong to the item's heap.
 pub async fn insert_item(db: &impl ConnectionTrait, item: &Item) -> Result<(), StoreError> {
     items::Entity::insert(to_row(item)?).exec_without_returning(db).await?;
-    add_tags(db, item.id, &item.tags, item.created_at).await
+    add_tags(db, item.id, &item.tags, item.created_at).await?;
+    sync_values(db, item.id, &item.parameters).await
 }
 
 pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
@@ -39,6 +42,7 @@ pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<I
     };
     let mut items = [item];
     attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
     let [item] = items;
     Ok(Some(item))
 }
@@ -101,6 +105,7 @@ pub async fn list_items_in_states(
         .map(to_item)
         .collect::<Result<Vec<_>, _>>()?;
     attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
     Ok(items)
 }
 
@@ -134,11 +139,12 @@ pub async fn list_closed_items(
         .map(to_item)
         .collect::<Result<Vec<_>, _>>()?;
     attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
     Ok(items)
 }
 
-/// Writes `item` and its tags if the stored row still has version `expected`, and returns it with its new
-/// version. Tags it no longer has are marked removed at `now`.
+/// Writes `item` with its tags and values if the stored row still has version `expected`, and returns it with its
+/// new version. Tags it no longer has are marked removed at `now`, and values it no longer has are cleared.
 ///
 /// Returns `None` when the stored version differs, meaning someone else wrote first; nothing is written then.
 pub async fn update_item(
@@ -165,7 +171,83 @@ pub async fn update_item(
         return Ok(None);
     }
     sync_tags(db, item.id, &item.tags, now).await?;
+    sync_values(db, item.id, &item.parameters).await?;
     Ok(Some(saved))
+}
+
+/// Makes the item's set values exactly `values`: writes the new and changed ones and clears the others.
+async fn sync_values(
+    db: &impl ConnectionTrait,
+    item_id: ItemId,
+    values: &BTreeMap<ParameterId, OptionId>,
+) -> Result<(), StoreError> {
+    let item = id_to_db(item_id.as_uuid());
+    let stored: HashMap<String, Option<String>> = item_parameter_values::Entity::find()
+        .filter(item_parameter_values::Column::ItemId.eq(item.as_str()))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|row| (row.parameter_id, row.option_id))
+        .collect();
+    let wanted: HashMap<String, String> = values
+        .iter()
+        .map(|(p, o)| (id_to_db(p.as_uuid()), id_to_db(o.as_uuid())))
+        .collect();
+    for (parameter, current) in &stored {
+        let target = wanted.get(parameter).cloned();
+        if *current == target {
+            continue;
+        }
+        item_parameter_values::Entity::update_many()
+            .col_expr(item_parameter_values::Column::OptionId, target.into())
+            .filter(item_parameter_values::Column::ItemId.eq(item.as_str()))
+            .filter(item_parameter_values::Column::ParameterId.eq(parameter.as_str()))
+            .exec(db)
+            .await?;
+    }
+    for (parameter, option) in wanted.iter().filter(|(p, _)| !stored.contains_key(*p)) {
+        let row = item_parameter_values::ActiveModel {
+            item_id: Set(item.clone()),
+            parameter_id: Set(parameter.clone()),
+            option_id: Set(Some(option.clone())),
+        };
+        item_parameter_values::Entity::insert(row)
+            .exec_without_returning(db)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Fills in each item's set values.
+async fn attach_values(db: &impl ConnectionTrait, items: &mut [Item]) -> Result<(), StoreError> {
+    let index: HashMap<String, usize> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| (id_to_db(item.id.as_uuid()), i))
+        .collect();
+    let keys: Vec<&String> = index.keys().collect();
+    for chunk in keys.chunks(IN_LIST_CHUNK) {
+        let rows = item_parameter_values::Entity::find()
+            .filter(item_parameter_values::Column::ItemId.is_in(chunk.iter().map(|k| k.as_str())))
+            .filter(item_parameter_values::Column::OptionId.is_not_null())
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: "item_parameter_values",
+                id: &row.item_id,
+            };
+            let Some(option) = row.option_id.as_deref() else {
+                continue;
+            };
+            let parameter = ParameterId::from_uuid(read.uuid(&row.parameter_id)?);
+            let option = OptionId::from_uuid(read.uuid(option)?);
+            if let Some(&i) = index.get(&row.item_id) {
+                items[i].parameters.insert(parameter, option);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Makes the item's active tags exactly `tags`: adds the missing ones and marks the others removed.
@@ -318,8 +400,9 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         effort: size(row.effort)?,
         impact: size(row.impact)?,
         due,
-        // Filled in by `attach_tags`; the row alone doesn't hold them.
+        // Filled in by `attach_tags` and `attach_values`; the row alone doesn't hold them.
         tags: BTreeSet::new(),
+        parameters: BTreeMap::new(),
         created_at: read.timestamp(row.created_at)?,
         version: read.version(row.version)?,
     })

@@ -10,7 +10,7 @@ use domain::item::Size;
 use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
 use domain::saved_view::SavedView;
 use domain::text::Name;
-use domain::{HeapId, SavedViewId, TagId, Timestamp, UserId, Version};
+use domain::{HeapId, OptionId, ParameterId, SavedViewId, TagId, Timestamp, UserId, Version};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -130,12 +130,18 @@ struct StoredListView {
     blocked: String,
     blocked_layout: String,
     sort: String,
+    /// Set exactly when `sort` is `parameter`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sort_parameter: Option<Uuid>,
     #[serde(default)]
     tags: Vec<Uuid>,
     #[serde(default)]
     effort: Vec<String>,
     #[serde(default)]
     impact: Vec<String>,
+    /// Options of custom parameters.
+    #[serde(default)]
+    options: Vec<Uuid>,
 }
 
 impl From<&ListView> for StoredListView {
@@ -147,9 +153,11 @@ impl From<&ListView> for StoredListView {
             blocked: view.blocked.code().to_owned(),
             blocked_layout: view.blocked_layout.code().to_owned(),
             sort: view.sort.code().to_owned(),
+            sort_parameter: view.sort.parameter().map(|id| *id.as_uuid()),
             tags: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
             effort: sizes(&view.filter.effort),
             impact: sizes(&view.filter.impact),
+            options: view.filter.options.iter().map(|id| *id.as_uuid()).collect(),
         }
     }
 }
@@ -167,11 +175,13 @@ impl StoredListView {
             in_progress: parse_code(&self.in_progress, StateMode::from_code)?,
             blocked: parse_code(&self.blocked, StateMode::from_code)?,
             blocked_layout: parse_code(&self.blocked_layout, BlockedLayout::from_code)?,
-            sort: parse_code(&self.sort, SortKey::from_code)?,
+            sort: SortKey::from_parts(&self.sort, self.sort_parameter.map(ParameterId::from_uuid))
+                .ok_or_else(|| format!("unknown sort {:?} with parameter {:?}", self.sort, self.sort_parameter))?,
             filter: ListFilter {
                 tags: self.tags.iter().copied().map(TagId::from_uuid).collect(),
                 effort: sizes(&self.effort)?,
                 impact: sizes(&self.impact)?,
+                options: self.options.iter().copied().map(OptionId::from_uuid).collect(),
             },
         })
     }
@@ -194,11 +204,12 @@ mod tests {
             in_progress: StateMode::Hidden,
             blocked: StateMode::Shown,
             blocked_layout: BlockedLayout::Mixed,
-            sort: SortKey::Impact,
+            sort: SortKey::Parameter(ParameterId::from_uuid(Uuid::from_u128(9))),
             filter: ListFilter {
                 tags: BTreeSet::from([TagId::from_uuid(Uuid::from_u128(7))]),
                 effort: BTreeSet::from([Size::S, Size::Xl]),
                 impact: BTreeSet::from([Size::M]),
+                options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(8))]),
             },
         };
 

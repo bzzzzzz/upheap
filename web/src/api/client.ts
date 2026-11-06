@@ -30,6 +30,12 @@ export type UserMatch = Schemas["UserMatch"];
 export type User = Schemas["User"];
 export type SavedView = Schemas["SavedView"];
 export type ListViewInput = Schemas["ListViewInput"];
+export type Parameter = Schemas["Parameter"];
+export type ParameterList = Schemas["ParameterList"];
+export type ParameterOption = Schemas["ParameterOption"];
+export type ItemParameter = Schemas["ItemParameter"];
+export type NewParameter = Schemas["CreateParameterRequest"];
+export type ParameterPatch = Schemas["ParameterPatchRequest"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,

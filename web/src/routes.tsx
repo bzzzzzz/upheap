@@ -11,6 +11,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { EditItemPage } from "./pages/EditItemPage";
 import { HeapPage } from "./pages/HeapPage";
+import { ParametersPage } from "./pages/ParametersPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TeamsPage } from "./pages/TeamsPage";
@@ -95,6 +96,15 @@ const tagsRoute = createRoute({
   },
 });
 
+const parametersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/heaps/$heapId/parameters",
+  component: function ParametersRoute() {
+    const { heapId } = parametersRoute.useParams();
+    return <ParametersPage heapId={heapId} />;
+  },
+});
+
 const editItemRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/heaps/$heapId/items/$itemId",
@@ -124,6 +134,7 @@ const routeTree = rootRoute.addChildren([
     heapRoute,
     closedRoute,
     tagsRoute,
+    parametersRoute,
     editItemRoute,
     teamsRoute,
     teamRoute,

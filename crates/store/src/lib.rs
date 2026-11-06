@@ -11,6 +11,7 @@ mod error;
 pub mod heaps;
 pub mod items;
 mod migration;
+pub mod parameters;
 pub mod saved_views;
 pub mod sessions;
 pub mod tags;

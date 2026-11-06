@@ -1,7 +1,8 @@
 use domain::item::ItemError;
+use domain::parameter::ParameterError;
 use domain::permission::Permission;
 use domain::team::TeamError;
-use domain::{HeapId, ItemId, SavedViewId, TagId, UserId, ValidationError, Version};
+use domain::{HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -49,6 +50,16 @@ pub enum ServiceError {
     SavedViewArchived { view_id: SavedViewId },
     #[error("this heap already has a tag called {name:?}")]
     TagNameTaken { name: String },
+    #[error(transparent)]
+    Parameter(#[from] ParameterError),
+    #[error("this heap already has a parameter called {name:?}")]
+    ParameterNameTaken { name: String },
+    /// A parameter is archived only when no open item has a value for it.
+    #[error("{items} open items still have a value for parameter {parameter_id}; clear them first")]
+    ParameterInUse { parameter_id: ParameterId, items: usize },
+    /// A list filter names an option that isn't an option of the heap's parameters.
+    #[error("option {option_id} is not an option of this heap's parameters")]
+    OptionNotInHeap { option_id: OptionId },
     #[error("password hashing failed: {0}")]
     PasswordHashing(String),
     #[error("storage failed")]

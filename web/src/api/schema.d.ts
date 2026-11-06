@@ -127,6 +127,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}/parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The heap's parameters. Any member may list them; only admins change them. */
+        get: operations["list_parameters"];
+        put?: never;
+        /** Adds a parameter to the heap. Admins only. */
+        post: operations["create_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/heaps/{heap_id}/tags": {
         parameters: {
             query?: never;
@@ -230,6 +248,101 @@ export interface paths {
         head?: never;
         /** Changes the signed-in user's display name. Send the user's `version` in `If-Match`. */
         patch: operations["update_me"];
+        trace?: never;
+    };
+    "/api/v1/options/{option_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep
+         *     it. Admins only. Archiving an archived option succeeds.
+         */
+        post: operations["archive_option"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/parameters/{parameter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`. */
+        patch: operations["update_parameter"];
+        trace?: never;
+    };
+    "/api/v1/parameters/{parameter_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter
+         *     succeeds.
+         */
+        post: operations["archive_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/parameters/{parameter_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`. */
+        post: operations["add_option"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Puts the options in use in a new order, highest priority first, and relabels them. Admins only; send the
+         *     parameter's `version` in `If-Match`.
+         */
+        patch: operations["arrange_options"];
+        trace?: never;
+    };
+    "/api/v1/parameters/{parameter_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`. */
+        put: operations["link_tags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tags/{tag_id}": {
@@ -422,6 +535,40 @@ export interface components {
              */
             user_id: string;
         };
+        AddOptionRequest: {
+            /**
+             * @description 1 to 50 characters, unique among the parameter's options in use ignoring case. The new option comes last,
+             *     as the lowest priority.
+             */
+            label: string;
+        };
+        ArchiveOptionRequest: {
+            /**
+             * Format: uuid
+             * @description Another option of the same parameter, in use. Open items with the archived option switch to it.
+             */
+            replacement_option_id?: string | null;
+        };
+        /** @description An archived option. */
+        ArchivedOption: {
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            archived_at: number;
+            /** Format: uuid */
+            id: string;
+            label: string;
+            /**
+             * Format: uuid
+             * @description The option open items switched to. It may be archived too, with a replacement of its own.
+             */
+            replaced_by_option_id: string;
+        };
+        ArrangeOptionsRequest: {
+            /** @description Every option in use, exactly once, in the new order (highest priority first) and with its label. */
+            options: components["schemas"]["OptionArrangement"][];
+        };
         /**
          * @description Where shown blocked items go.
          * @enum {string}
@@ -449,9 +596,26 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /** @description An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use. */
+            parameter_values?: {
+                [key: string]: string;
+            } | null;
             /** @description Tags of the same heap, at most 50. */
             tag_ids?: string[] | null;
             title: string;
+        };
+        CreateParameterRequest: {
+            /** @description 1 to 50 characters, unique among the heap's parameters in use ignoring case. */
+            name: string;
+            /** @description Option labels, highest priority first: at most 50, unique ignoring case. */
+            options?: string[];
+            /** @description Tags of the same heap to suggest the parameter for. */
+            tag_ids?: string[];
+            /**
+             * Format: int32
+             * @description 0 to 100. Defaults to 10, the same as the heap's own weights.
+             */
+            weight?: number | null;
         };
         CreateSavedViewRequest: {
             /** @description 1 to 100 characters. Need not be unique. */
@@ -489,7 +653,7 @@ export interface components {
             firm: boolean;
         };
         /** @enum {string} */
-        Factor: "age" | "deadline" | "value" | "blocks";
+        Factor: "age" | "deadline" | "value" | "parameter" | "blocks";
         Heap: {
             allowed_actions: components["schemas"]["HeapAction"][];
             /**
@@ -544,6 +708,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             impact?: null | components["schemas"]["Size"];
+            /**
+             * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
+             *     by parameter name.
+             */
+            parameters: components["schemas"]["ItemParameter"][];
             state: components["schemas"]["ItemState"];
             /** @description By name. */
             tags: components["schemas"]["ItemTag"][];
@@ -559,6 +728,23 @@ export interface components {
          * @enum {string}
          */
         ItemAction: "edit" | "change_state" | "reopen";
+        /** @description The option an item has for a parameter. */
+        ItemOption: {
+            /** @description Closed items keep archived options; open items switch to the replacement. */
+            archived: boolean;
+            /** Format: uuid */
+            id: string;
+            label: string;
+        };
+        /** @description An item's value for one custom parameter. */
+        ItemParameter: {
+            name: string;
+            option?: null | components["schemas"]["ItemOption"];
+            /** @description Only closed items, and items reopened since, list archived parameters, and only when they have a value. */
+            parameter_archived: boolean;
+            /** Format: uuid */
+            parameter_id: string;
+        };
         /** @description A partial edit. Leave a field out to keep it; send `null` to clear it. */
         ItemPatchRequest: {
             /**
@@ -572,6 +758,13 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /**
+             * @description Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep
+             *     their values.
+             */
+            parameter_values?: {
+                [key: string]: string | null;
+            };
             state?: null | components["schemas"]["ItemState"];
             /** @description Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused. */
             tag_ids?: string[];
@@ -595,12 +788,17 @@ export interface components {
             id: string;
             name: string;
         };
+        LinkTagsRequest: {
+            /** @description Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all. */
+            tag_ids: string[];
+        };
         /**
-         * @description What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or
-         *     `impact` (largest first). Items without the value come last.
+         * @description What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
+         *     `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
+         *     Items without the value come last.
          * @enum {string}
          */
-        ListSort: "priority" | "due" | "effort" | "impact";
+        ListSort: "priority" | "due" | "effort" | "impact" | "parameter";
         /** @description A list view with every setting spelled out, as a saved view returns it. */
         ListView: {
             blocked: components["schemas"]["StateMode"];
@@ -611,13 +809,23 @@ export interface components {
             impact: components["schemas"]["Size"][];
             in_progress: components["schemas"]["StateMode"];
             open: components["schemas"]["StateMode"];
+            /**
+             * @description Options of custom parameters. For each parameter they belong to, keeps items with any of its options listed.
+             *     Empty doesn't filter.
+             */
+            param: string[];
             sort: components["schemas"]["ListSort"];
+            /**
+             * Format: uuid
+             * @description The parameter the list is sorted by, when `sort` is `parameter`.
+             */
+            sort_parameter?: string | null;
             /** @description Keeps items with any of these tags. Empty doesn't filter. */
             tag: string[];
         };
         /**
          * @description A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
-         *     items hidden and grouped, by priority, without filters.
+         *     items hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
          */
         ListViewInput: {
             blocked?: null | components["schemas"]["StateMode"];
@@ -626,7 +834,14 @@ export interface components {
             impact?: components["schemas"]["Size"][];
             in_progress?: null | components["schemas"]["StateMode"];
             open?: null | components["schemas"]["StateMode"];
+            /** @description Options of the same heap's parameters. */
+            param?: string[];
             sort?: null | components["schemas"]["ListSort"];
+            /**
+             * Format: uuid
+             * @description A parameter of the same heap, when `sort` is `parameter`.
+             */
+            sort_parameter?: string | null;
             /** @description Tags of the same heap. Keeps items with any of them. */
             tag?: string[];
         };
@@ -650,6 +865,71 @@ export interface components {
         NameRequest: {
             /** @description 1 to 100 characters. */
             name: string;
+        };
+        /** @description One option of a new arrangement. */
+        OptionArrangement: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+        };
+        Parameter: {
+            allowed_actions: components["schemas"]["ParameterAction"][];
+            /**
+             * Format: int64
+             * @description UTC milliseconds; `null` while the parameter is in use.
+             */
+            archived_at?: number | null;
+            /** @description Archived options, in the order they were archived. */
+            archived_options: components["schemas"]["ArchivedOption"][];
+            /** Format: uuid */
+            heap_id: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description The options in use, highest priority first. */
+            options: components["schemas"]["ParameterOption"][];
+            /** @description The tags whose items the parameter is suggested for. */
+            tag_ids: string[];
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when editing.
+             */
+            version: number;
+            /**
+             * Format: int32
+             * @description Influence on the ranking next to the heap's other weights, 0 to 100.
+             */
+            weight: number;
+        };
+        /**
+         * @description An action the caller can take on a parameter.
+         * @enum {string}
+         */
+        ParameterAction: "edit" | "archive";
+        ParameterList: {
+            allowed_actions: components["schemas"]["ParameterListAction"][];
+            /** @description Archived parameters, by name. Closed items may still show their values. */
+            archived: components["schemas"]["Parameter"][];
+            heap: components["schemas"]["HeapSummary"];
+            /** @description The parameters in use, by name. */
+            parameters: components["schemas"]["Parameter"][];
+        };
+        /**
+         * @description An action the caller can take on a heap's parameters.
+         * @enum {string}
+         */
+        ParameterListAction: "create";
+        /** @description An option in use. */
+        ParameterOption: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+        };
+        /** @description A partial edit. Leave a field out to keep it. */
+        ParameterPatchRequest: {
+            name?: string | null;
+            /** Format: int32 */
+            weight?: number | null;
         };
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
@@ -1115,12 +1395,19 @@ export interface operations {
                 blocked_layout?: components["schemas"]["BlockedLayout"];
                 /** @description What each group is sorted by. Ties keep priority order. Defaults to `priority`. */
                 sort?: components["schemas"]["ListSort"];
+                /** @description The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`. */
+                sort_parameter?: string;
                 /** @description Keep items with any of these tags, comma-separated. Tags of the same heap. */
                 tag?: string[];
                 /** @description Keep items with any of these efforts, comma-separated. */
                 effort?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these impacts, comma-separated. */
                 impact?: components["schemas"]["Size"][];
+                /**
+                 * @description Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
+                 *     any of its options listed. An archived option keeps the items that switched to its replacement.
+                 */
+                param?: string[];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
@@ -1158,7 +1445,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap`, with `field` `tag` */
+            /** @description `tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1212,7 +1499,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, or `tag_not_in_heap` */
+            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1251,6 +1538,94 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_parameters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParameterRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_name_taken`, `option_label_taken` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1445,7 +1820,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap` with `field` `view.tag`, or an invalid name */
+            /** @description `tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1533,7 +1908,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
+            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1666,6 +2041,396 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_option: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchiveOptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The option's parameter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `replacement_required` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_parameter: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParameterPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_name_taken`, `parameter_archived`, `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields or `weight_out_of_range` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_in_use` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_option: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddOptionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `option_label_taken` (`field` `label`), `parameter_archived`, `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An invalid label or `too_many_options` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    arrange_options: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArrangeOptionsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `option_label_taken`, `parameter_archived`, `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An invalid label, or `options_mismatch` when the list isn't every option in use exactly once */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    link_tags: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkTagsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived`, `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap` or `too_many_tags` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2205,7 +2970,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap` with `field` `view.tag`, or an invalid name */
+            /** @description `tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name */
             422: {
                 headers: {
                     [name: string]: unknown;
