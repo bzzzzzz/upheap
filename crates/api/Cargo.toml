@@ -27,7 +27,8 @@ anyhow.workspace = true
 domain.workspace = true
 googletest.workspace = true
 http-body-util.workspace = true
-store.workspace = true
+# The tests run on in-memory SQLite, so they need its driver even when built without the server.
+store = { workspace = true, features = ["sqlite"] }
 tracing-subscriber.workspace = true
 
 [lints]

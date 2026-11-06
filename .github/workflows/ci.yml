@@ -1,0 +1,88 @@
+# Checks every pull request. The rules come from design/engineering-principles.md:
+# rustfmt and clippy are law, the OpenAPI file and the web types are generated and must not drift, and the web
+# app lints with no warnings.
+
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: "1.95"
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: OpenAPI spec is up to date
+        run: |
+          cargo run --quiet --locked -p server -- openapi > openapi.json
+          git diff --exit-code -- openapi.json || {
+            echo "::error file=openapi.json::openapi.json is out of date. Regenerate it with: cargo run -q -p server -- openapi > openapi.json"
+            exit 1
+          }
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: API types are up to date
+        run: |
+          npm run gen:api
+          git diff --exit-code -- src/api/schema.d.ts || {
+            echo "::error file=web/src/api/schema.d.ts::API types are out of date. Regenerate them with: cd web && npm run gen:api"
+            exit 1
+          }
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Build
+        run: npm run build
