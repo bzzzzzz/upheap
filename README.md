@@ -84,3 +84,7 @@ crates/api      axum routes, DTOs, OpenAPI, sessions, problem+json
 crates/server   the binary: config, startup, embedded web app
 web/            React app (TypeScript), generated API types only
 ```
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
