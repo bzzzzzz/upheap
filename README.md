@@ -11,7 +11,10 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - Local accounts: register, sign in, sign out. Registering creates your personal team and heap.
 - The ranked list: items ordered by age, deadline proximity and value per effort (placeholder formula `V1`),
   with the top reasons for each position. The order stays stable within a session (`as_of`) and edited items
-  move with an animation. In-progress items are pinned; blocked items are collapsed.
+  move with an animation.
+- List view controls: each state pinned, shown or hidden (in progress pinned and blocked hidden by default),
+  blocked items grouped or mixed in, sort by priority, due, effort or impact, filters by tag, effort and impact,
+  and text search (press `/`). The view lives in the URL; the search text doesn't.
 - Adding items (press `N`), inline edits of title, effort, impact, due date and state, closing, and
   reopening within a week from the Closed view.
 - Edit item: every field, tags, state and blocker in one form, opened from the list or from Closed. A closed

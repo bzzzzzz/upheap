@@ -40,7 +40,7 @@ export function AppLayout() {
             <Link
               to="/heaps/$heapId"
               params={{ heapId }}
-              activeOptions={{ exact: true }}
+              activeOptions={{ exact: true, includeSearch: false }}
               className="text-stone-500 hover:text-stone-900 data-[status=active]:font-medium data-[status=active]:text-stone-900 dark:hover:text-stone-100 dark:data-[status=active]:text-stone-100"
             >
               Open

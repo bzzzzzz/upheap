@@ -46,6 +46,11 @@ pub enum ApiError {
     /// A state-changing request came without the CSRF header.
     CsrfHeaderMissing,
     NoSuchRoute,
+    /// A service error caused by one query parameter, which the problem names as its `field`.
+    InQuery {
+        error: ServiceError,
+        param: &'static str,
+    },
 }
 
 impl From<ServiceError> for ApiError {
@@ -106,6 +111,10 @@ fn classify(err: &ApiError) -> Classified {
     };
     match err {
         ApiError::BadRequest { code, detail } => simple(StatusCode::BAD_REQUEST, code, detail, Category::Caller),
+        ApiError::InQuery { error, param } => Classified {
+            field: Some(param),
+            ..classify_service(error)
+        },
         ApiError::VersionRequired => simple(
             StatusCode::PRECONDITION_REQUIRED,
             "version_required",

@@ -19,6 +19,14 @@ export type ItemTag = Schemas["ItemTag"];
 export type ItemRef = Schemas["ItemRef"];
 export type TagPatch = Schemas["TagPatchRequest"];
 export type NewTag = Schemas["CreateTagRequest"];
+export type StateMode = Schemas["StateMode"];
+export type BlockedLayout = Schemas["BlockedLayout"];
+export type ListSort = Schemas["ListSort"];
+/** The list view parameters of the ranked list, without `as_of`. */
+export type ListViewQuery = Omit<
+  NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,
+  "as_of"
+>;
 type Problem = Schemas["Problem"];
 
 /** A failed API call. Branch on `code`, never on `message`. */
@@ -49,7 +57,12 @@ const standardHeaders: Middleware = {
   },
 };
 
-export const api = createClient<paths>({ baseUrl: window.location.origin, credentials: "same-origin" });
+export const api = createClient<paths>({
+  baseUrl: window.location.origin,
+  credentials: "same-origin",
+  // List parameters are comma-separated (`tag=a,b`), as the spec declares with `explode: false`.
+  querySerializer: { array: { style: "form", explode: false } },
+});
 api.use(standardHeaders);
 
 /** Returns the response data, or throws an `ApiProblem`. */

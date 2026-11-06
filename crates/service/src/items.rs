@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
+use domain::list_view::{Group, ListView};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
@@ -40,24 +41,26 @@ pub struct ItemView {
 #[derive(Debug)]
 pub struct RankedEntry {
     pub view: ItemView,
-    /// 1-based position within its group.
+    /// 1-based position within its group, in the order the group is listed.
     pub position: u32,
     pub contributors: Vec<Contributor>,
 }
 
-/// The heap's non-closed items, ranked at `as_of` and grouped by state.
+/// The heap's non-closed items, ranked at `as_of`, then filtered, grouped and sorted by a [`ListView`].
 #[derive(Debug)]
 pub struct RankedList {
     pub heap: Heap,
     pub role: Role,
     /// The time the ranking used. Clients send it back to keep the order stable.
     pub as_of: Timestamp,
-    /// In-progress items, pinned above the rest.
+    /// Items in pinned states, shown above the rest.
     pub pinned: Vec<RankedEntry>,
-    /// Open items.
+    /// Items in shown states, including blocked items mixed in.
     pub ranked: Vec<RankedEntry>,
-    /// Blocked items, which clients hide by default.
+    /// Shown blocked items, when they're grouped.
     pub blocked: Vec<RankedEntry>,
+    /// Items the filters keep but whose state is hidden.
+    pub hidden_count: u32,
 }
 
 #[derive(Debug)]
@@ -69,15 +72,17 @@ pub struct ClosedPage {
 }
 
 impl Services {
-    /// Ranks every non-closed item of the heap.
+    /// Ranks every non-closed item of the heap, then shows them as `view` says.
     ///
     /// `requested_as_of` freezes the time input so the order stays stable within a session. It's ignored when
-    /// it's in the future or more than [`MAX_AS_OF_AGE`] old, and the current time is used instead.
+    /// it's in the future or more than [`MAX_AS_OF_AGE`] old, and the current time is used instead. Every tag in
+    /// the view's filter must belong to the heap, or it fails with [`ServiceError::TagNotInHeap`].
     pub async fn list_ranked(
         &self,
         principal: Principal,
         heap_id: HeapId,
         requested_as_of: Option<Timestamp>,
+        view: &ListView,
     ) -> Result<RankedList, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let now = self.now();
@@ -87,7 +92,16 @@ impl Services {
         let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
         let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
+        if let Some(&tag_id) = view
+            .filter
+            .tags
+            .iter()
+            .find(|id| !heap_tags.iter().any(|tag| tag.id == **id))
+        {
+            return Err(ServiceError::TagNotInHeap { tag_id });
+        }
 
+        // Every item is ranked, because a blocker inherits from what it blocks even when that is left out below.
         let ranking = {
             let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
             rank(CURRENT_FORMULA, &access.heap.policy, &inputs, as_of)
@@ -97,17 +111,24 @@ impl Services {
 
         let role = access.membership.role;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
+        let mut hidden_count = 0_u32;
         for entry in ranking {
             let Some(index) = items.iter().position(|item| item.id == entry.item_id) else {
                 continue;
             };
             let item = items.swap_remove(index);
-            let group = match item.state.kind() {
-                StateKind::InProgress => &mut pinned,
-                StateKind::Blocked => &mut blocked,
-                StateKind::Open | StateKind::Done | StateKind::WontDo => &mut ranked,
+            if !view.filter.matches(&item) {
+                continue;
+            }
+            let group = match view.group_of(item.state.kind()) {
+                Some(Group::Pinned) => &mut pinned,
+                Some(Group::Ranked) => &mut ranked,
+                Some(Group::Blocked) => &mut blocked,
+                None => {
+                    hidden_count = hidden_count.saturating_add(1);
+                    continue;
+                }
             };
-            let position = u32::try_from(group.len() + 1).unwrap_or(u32::MAX);
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
             let tags = select_tags(&heap_tags, &item.tags);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
@@ -118,9 +139,19 @@ impl Services {
                     blocked_by,
                     allowed_actions,
                 },
-                position,
+                position: 0,
                 contributors: entry.contributors,
             });
+        }
+        for (group, entries) in [
+            (Group::Pinned, &mut pinned),
+            (Group::Ranked, &mut ranked),
+            (Group::Blocked, &mut blocked),
+        ] {
+            view.sort(group, entries, |entry| &entry.view.item);
+            for (index, entry) in entries.iter_mut().enumerate() {
+                entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
+            }
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -131,6 +162,7 @@ impl Services {
             pinned,
             ranked,
             blocked,
+            hidden_count,
         })
     }
 

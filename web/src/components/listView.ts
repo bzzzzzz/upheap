@@ -1,0 +1,109 @@
+// The list view lives in the URL, so a view can be bookmarked, shared and kept on reload. The search params are
+// the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
+import type { BlockedLayout, ItemState, ListSort, ListViewQuery, RankedItem, Size, StateMode } from "../api/client";
+import { SIZES } from "./labels";
+
+export type ListSearch = {
+  open?: StateMode;
+  in_progress?: StateMode;
+  blocked?: StateMode;
+  blocked_layout?: BlockedLayout;
+  sort?: ListSort;
+  /** Tag IDs, comma-separated. */
+  tag?: string;
+  /** Sizes, comma-separated. */
+  effort?: string;
+  impact?: string;
+};
+
+/** The states whose place in the list the user picks. */
+export type ShownState = Extract<ItemState, "open" | "in_progress" | "blocked">;
+export const SHOWN_STATES: readonly ShownState[] = ["open", "in_progress", "blocked"];
+
+/** What the server does when a parameter is left out, so controls show the effective value. */
+export const DEFAULT_MODES: Record<ShownState, StateMode> = { open: "shown", in_progress: "pinned", blocked: "hidden" };
+
+export const STATE_MODES: readonly StateMode[] = ["pinned", "shown", "hidden"];
+export const MODE_LABELS: Record<StateMode, string> = { pinned: "Pinned", shown: "Shown", hidden: "Hidden" };
+
+export const SORTS: readonly ListSort[] = ["priority", "due", "effort", "impact"];
+export const SORT_LABELS: Record<ListSort, string> = {
+  priority: "Priority",
+  due: "Due soonest",
+  effort: "Smallest effort",
+  impact: "Largest impact",
+};
+
+const oneOf =
+  <T extends string>(values: readonly T[]) =>
+  (raw: unknown): T | undefined =>
+    values.includes(raw as T) ? (raw as T) : undefined;
+
+const mode = oneOf(STATE_MODES);
+const layout = oneOf<BlockedLayout>(["grouped", "mixed"]);
+const sort = oneOf(SORTS);
+const list = (raw: unknown) => (typeof raw === "string" && raw !== "" ? raw : undefined);
+
+/**
+ * Keeps only the known list view params of a URL, and drops values that equal the server's defaults, so equal
+ * views have equal URLs and query keys. Unknown sizes are dropped too; tag IDs go to the server, which refuses
+ * malformed or foreign ones (the page then offers to reset the view).
+ */
+export function parseListSearch(raw: Record<string, unknown>): ListSearch {
+  const modeOf = (state: ShownState) => {
+    const value = mode(raw[state]);
+    return value === DEFAULT_MODES[state] ? undefined : value;
+  };
+  const sizes = (value: unknown) => joinList(splitList(list(value)).filter((size) => SIZES.includes(size as Size)));
+  const blockedLayout = layout(raw.blocked_layout);
+  const sortBy = sort(raw.sort);
+  const search: ListSearch = {
+    open: modeOf("open"),
+    in_progress: modeOf("in_progress"),
+    blocked: modeOf("blocked"),
+    blocked_layout: blockedLayout === "grouped" ? undefined : blockedLayout,
+    sort: sortBy === "priority" ? undefined : sortBy,
+    tag: joinList(splitList(list(raw.tag))),
+    effort: sizes(raw.effort),
+    impact: sizes(raw.impact),
+  };
+  // Unset keys stay out of the URL.
+  return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as ListSearch;
+}
+
+export const splitList = (raw: string | undefined): string[] => (raw ? raw.split(",").filter(Boolean) : []);
+export const joinList = (values: readonly string[]): string | undefined =>
+  values.length > 0 ? values.join(",") : undefined;
+
+/** The API query for a view from [`parseListSearch`]. */
+export function toListQuery(search: ListSearch): ListViewQuery {
+  const query: ListViewQuery = {
+    open: search.open,
+    in_progress: search.in_progress,
+    blocked: search.blocked,
+    blocked_layout: search.blocked_layout,
+    sort: search.sort,
+    tag: splitList(search.tag),
+    effort: splitList(search.effort) as Size[],
+    impact: splitList(search.impact) as Size[],
+  };
+  // Left-out keys keep the query key, and so the cache, the same for equal views.
+  return Object.fromEntries(
+    Object.entries(query).filter(([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0)),
+  ) as ListViewQuery;
+}
+
+/** How many filters are on. */
+export const filterCount = (search: ListSearch) =>
+  splitList(search.tag).length + splitList(search.effort).length + splitList(search.impact).length;
+
+/**
+ * The text search, the one filter the client runs: every word must appear in the title or description, ignoring
+ * case. Matches keep the order the server sent.
+ */
+export function matchesSearch(entry: RankedItem, text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = `${entry.item.title}\n${entry.item.description ?? ""}`.toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}

@@ -123,7 +123,12 @@ The score is a deterministic function of item data and time. A stable session th
 
 1. The ranked list endpoint returns every open item in the heap in one response, with no pagination. This is fine at the expected size of a few thousand items.
 2. The client does text search itself, over the titles and descriptions it already has. It keeps the matches in their ranked order and filters as the user types, without a request per keystroke.
-3. Filters by state, tag and parameter value stay on the server, because they change which items are pinned and how they are grouped.
+3. Filters by state, tag and parameter value stay on the server, because they change which items are pinned and how they are grouped. Ranking always runs over every non-closed item, since a blocker inherits from what it blocks even when that item is filtered out or hidden; the view then picks, groups and sorts the result.
+   - Each non-closed state is `pinned`, `shown` or `hidden` (`open=`, `in_progress=`, `blocked=`; by default in progress is pinned and blocked is hidden). Shown blocked items get their own group or are mixed in (`blocked_layout=`). The response counts what hidden states leave out (`hidden_count`).
+   - These defaults are the product's defaults, so every client starts from the same list. Before this, the response always carried blocked items and the web app hid them; the change was made before any release, when the web app was the only client.
+   - `tag=`, `effort=` and `impact=` take comma-separated values and keep items with any of them. A malformed value is `400` `invalid_query`; a tag of another heap is `422` `tag_not_in_heap` with `field` `tag`.
+   - `sort=` is `priority`, `due` (soonest first), `effort` (smallest first) or `impact` (largest first). Items without the value come last, and ties keep priority order. Grouped blocked items always stay in priority order (Req Views: List items §3). `position` is the place in the returned group.
+   - The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text: it changes on every keystroke and is a momentary narrowing rather than part of the view. Saved views will store the URL's view.
 4. If heaps grow beyond this size, search moves to the server with per-database full-text indexes. Clients would then call `GET /heaps/{id}/items?q=`.
 
 ### Time and timezones
@@ -166,7 +171,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Teams | `GET /teams`, `POST /teams`, `GET /teams/{id}`, `PATCH /teams/{id}`, `GET/POST /teams/{id}/members`, `PATCH/DELETE /teams/{id}/members/{user_id}` (role change, removal), `POST /teams/{id}/leave` |
 | Users | `GET /users?query=` (lookup for adding members, admins only) |
 | Heaps | `GET /teams/{id}/heaps`, `POST /teams/{id}/heaps`, `GET/PATCH /heaps/{id}`, `POST /heaps/{id}/archive`, `POST /heaps/{id}/unarchive` |
-| Ranked list | `GET /heaps/{id}/items?as_of=&state=&tag=&param=&sort=` returns pinned items, all ranked items, and the `as_of` value |
+| Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&sort=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value (custom parameter filters, `param=`, come with custom parameters) |
 | Closed items | `GET /heaps/{id}/items/closed?cursor=` |
 | Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
 | Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |

@@ -8,6 +8,7 @@ pub mod due;
 pub mod heap;
 pub mod ids;
 pub mod item;
+pub mod list_view;
 pub mod permission;
 pub mod ranking;
 pub mod tag;

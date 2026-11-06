@@ -35,9 +35,15 @@ async fn block(app: &TestApp, session: &str, item: &Value, blocker: &Value) -> R
     Ok(saved.body)
 }
 
+/// The ranked list with blocked items shown, which are hidden by default.
 async fn ranked(app: &TestApp, session: &str, heap: &str) -> Result<Value> {
     let list = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/items"), Some(session), None)
+        .send(
+            Method::GET,
+            &format!("/api/v1/heaps/{heap}/items?blocked=shown"),
+            Some(session),
+            None,
+        )
         .await?;
     anyhow::ensure!(list.status == StatusCode::OK, "list failed: {}", list.body);
     Ok(list.body)
