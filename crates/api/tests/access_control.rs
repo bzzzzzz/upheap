@@ -44,6 +44,8 @@ enum Target {
     OpenItem,
     ClosedItem,
     Tag,
+    /// A saved view of the shared heap, with its version for `If-Match`.
+    SavedView,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
     /// The shared team, with its version for `If-Match`.
@@ -72,7 +74,9 @@ enum RequestBody {
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
-    /// A team or heap name.
+    /// A saved view that shows blocked items.
+    NewView,
+    /// A team, heap or saved view name.
     Name,
     /// The user from [`Target::NewUser`].
     AddMember,
@@ -335,6 +339,38 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::RenameTag,
             StatusCode::OK,
         ),
+        row(
+            Method::GET,
+            "/heaps/{heap_id}/views",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/heaps/{heap_id}/views",
+            edit,
+            Target::Heap,
+            RequestBody::NewView,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/views/{view_id}",
+            edit,
+            Target::SavedView,
+            RequestBody::Name,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/views/{view_id}/archive",
+            edit,
+            Target::SavedView,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
     ]
 }
 
@@ -511,6 +547,21 @@ impl World {
         Ok((id, created.body["version"].to_string()))
     }
 
+    /// Saves a view of the shared heap as the admin and returns its ID and version.
+    async fn create_saved_view(&self) -> Result<(String, String)> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/heaps/{}/views", self.heap),
+                Some(&self.admin.session),
+                Some(json!({ "name": "Target" })),
+            )
+            .await?;
+        let id = created.body["id"].as_str().context("view has no id")?.to_owned();
+        Ok((id, created.body["version"].to_string()))
+    }
+
     /// Registers a new user and returns their session and ID.
     async fn new_user(&self) -> Result<(String, String)> {
         let email = format!("{}@example.test", self.unique_name("user"));
@@ -590,6 +641,7 @@ impl World {
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
+            RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
             RequestBody::Name => Some(json!({ "name": self.unique_name("name") })),
             RequestBody::AddMember => Some(json!({ "user_id": user })),
             RequestBody::Promote => Some(json!({ "role": "admin" })),
@@ -652,6 +704,11 @@ impl World {
             Target::Tag => {
                 let (id, version) = self.create_tag().await?;
                 path = path.replace("{tag_id}", &id);
+                if_match = Some(version);
+            }
+            Target::SavedView => {
+                let (id, version) = self.create_saved_view().await?;
+                path = path.replace("{view_id}", &id);
                 if_match = Some(version);
             }
             Target::FreshSession => {

@@ -3,8 +3,8 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use domain::item::{Description, ItemPatch, NewItem, Size, StateKind, Title};
-use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
+use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
+use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
 use domain::{HeapId, ItemId, TagId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
@@ -23,6 +23,7 @@ use crate::dto::{
 };
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, ApiQuery, ClientTimeZone, CurrentUser, IfMatch};
+use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -66,81 +67,17 @@ pub(crate) struct RankedQuery {
 
 impl RankedQuery {
     fn to_view(&self) -> ListView {
-        let default = ListView::default();
-        ListView {
-            open: self.open.map_or(default.open, Into::into),
-            in_progress: self.in_progress.map_or(default.in_progress, Into::into),
-            blocked: self.blocked.map_or(default.blocked, Into::into),
-            blocked_layout: self.blocked_layout.map_or(default.blocked_layout, Into::into),
-            sort: self.sort.map_or(default.sort, Into::into),
-            filter: ListFilter {
-                // Not capped: every tag must belong to the heap, which bounds the set.
-                tags: self.tag.iter().copied().map(TagId::from_uuid).collect(),
-                effort: self.effort.iter().copied().map(Size::from).collect(),
-                impact: self.impact.iter().copied().map(Size::from).collect(),
-            },
+        ListViewInputDto {
+            open: self.open,
+            in_progress: self.in_progress,
+            blocked: self.blocked,
+            blocked_layout: self.blocked_layout,
+            sort: self.sort,
+            tag: self.tag.clone(),
+            effort: self.effort.clone(),
+            impact: self.impact.clone(),
         }
-    }
-}
-
-/// Where items in one state go in the list.
-#[derive(Clone, Copy, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = StateMode)]
-pub(crate) enum StateModeDto {
-    Pinned,
-    Shown,
-    Hidden,
-}
-
-impl From<StateModeDto> for StateMode {
-    fn from(mode: StateModeDto) -> Self {
-        match mode {
-            StateModeDto::Pinned => Self::Pinned,
-            StateModeDto::Shown => Self::Shown,
-            StateModeDto::Hidden => Self::Hidden,
-        }
-    }
-}
-
-/// Where shown blocked items go.
-#[derive(Clone, Copy, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = BlockedLayout)]
-pub(crate) enum BlockedLayoutDto {
-    Grouped,
-    Mixed,
-}
-
-impl From<BlockedLayoutDto> for BlockedLayout {
-    fn from(layout: BlockedLayoutDto) -> Self {
-        match layout {
-            BlockedLayoutDto::Grouped => Self::Grouped,
-            BlockedLayoutDto::Mixed => Self::Mixed,
-        }
-    }
-}
-
-/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or
-/// `impact` (largest first). Items without the value come last.
-#[derive(Clone, Copy, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = ListSort)]
-pub(crate) enum SortDto {
-    Priority,
-    Due,
-    Effort,
-    Impact,
-}
-
-impl From<SortDto> for SortKey {
-    fn from(sort: SortDto) -> Self {
-        match sort {
-            SortDto::Priority => Self::Priority,
-            SortDto::Due => Self::Due,
-            SortDto::Effort => Self::Effort,
-            SortDto::Impact => Self::Impact,
-        }
+        .to_view()
     }
 }
 
@@ -279,7 +216,7 @@ async fn list_ranked(
         .list_ranked(principal, HeapId::from_uuid(heap_id), as_of, &query.to_view())
         .await
         .map_err(|error| match error {
-            ServiceError::TagNotInHeap { .. } => ApiError::InQuery { error, param: "tag" },
+            ServiceError::TagNotInHeap { .. } => ApiError::InField { error, field: "tag" },
             other => other.into(),
         })?;
     let as_of = list.as_of;

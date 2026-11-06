@@ -52,6 +52,7 @@ Companion to [requirements.md](requirements.md).
 | Leave a team | ✓ | ✓ (not the last admin) |
 | Add and edit items | ✓ | ✓ |
 | Add and edit tags | ✓ | ✓ |
+| Save, change and archive a heap's views | ✓ | ✓ |
 | Rename the team | | ✓ |
 | Add users to the team and remove them | | ✓ |
 | Make a member an admin, demote an admin | | ✓ |

@@ -19,7 +19,7 @@ pub enum ValidationError {
     DueDateInvalid,
     #[error("timestamp is out of range")]
     TimestampOutOfRange,
-    #[error("an item can have at most {max} tags")]
+    #[error("at most {max} tags are allowed")]
     TooManyTags { max: usize },
 }
 

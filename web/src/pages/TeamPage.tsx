@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import type { Heap, Team, TeamMember } from "../api/client";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../api/queries";
 import { inputClass, NameForm, primaryButtonClass, quietButtonClass } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
+import { useConfirmation } from "../components/useConfirmation";
 
 const sectionTitle = "mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase";
 const listClass =
@@ -313,29 +314,4 @@ function LeaveTeam({ team }: { team: Team }) {
       <ProblemText error={leave.error} />
     </div>
   );
-}
-
-/**
- * A two-step action: the button asks, then Confirm or Cancel replace it. Cancel puts focus back on the button, which
- * the confirmation had replaced, so keyboard users don't land at the top of the page.
- */
-function useConfirmation() {
-  const [confirming, setConfirming] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (!confirming && refocus.current) {
-      refocus.current = false;
-      buttonRef.current?.focus();
-    }
-  }, [confirming]);
-  return {
-    confirming,
-    buttonRef,
-    ask: () => setConfirming(true),
-    cancel: () => {
-      refocus.current = true;
-      setConfirming(false);
-    },
-  };
 }

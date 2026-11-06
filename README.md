@@ -25,10 +25,12 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
   the priority of what it blocks (with a small boost), shown as "Blocks …" in its reasons.
 - Teams: create teams, add members by name or email, make admins, remove members or leave; a team always keeps an
   admin. Admins create, rename, archive and unarchive heaps; an archived heap is read-only.
+- Saved views: name the list view you're looking at (states, sort, filters) and the whole team gets it as a link
+  above the list. Change one and save the change into it or as a new view; archive views nobody needs.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
-Not yet: custom parameters, saved views, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
+Not yet: custom parameters, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
 limiting.
 
 ## Run it

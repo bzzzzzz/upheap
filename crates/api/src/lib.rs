@@ -10,11 +10,13 @@ mod extract;
 mod health;
 mod heaps;
 mod items;
+mod list_view;
 mod me;
 mod request_id;
 mod tags;
 mod teams;
 mod users;
+mod views;
 
 use std::time::Duration;
 
@@ -53,7 +55,7 @@ pub struct CookieSettings {
     info(title = "Upheap API", description = "A todo list that ranks itself."),
     modifiers(&SessionCookieScheme),
     // Only used in query parameters, which don't register their schemas.
-    components(schemas(items::StateModeDto, items::BlockedLayoutDto, items::SortDto)),
+    components(schemas(list_view::StateModeDto, list_view::BlockedLayoutDto, list_view::SortDto)),
     tags(
         (name = "auth", description = "Registration and sign-in"),
         (name = "me", description = "The signed-in user"),
@@ -62,6 +64,7 @@ pub struct CookieSettings {
         (name = "teams", description = "Teams and their members"),
         (name = "heaps", description = "Creating, renaming and archiving heaps"),
         (name = "users", description = "Finding users to add to a team"),
+        (name = "views", description = "A heap's saved views"),
     )
 )]
 struct ApiDoc;
@@ -87,6 +90,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(teams::routes())
         .merge(heaps::routes())
         .merge(users::routes())
+        .merge(views::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)

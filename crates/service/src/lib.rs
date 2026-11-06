@@ -11,6 +11,7 @@ mod error;
 pub mod heaps;
 pub mod items;
 pub mod me;
+pub mod saved_views;
 pub mod tags;
 pub mod teams;
 

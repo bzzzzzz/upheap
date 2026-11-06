@@ -162,6 +162,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The heap's saved views that are in use, by name. */
+        get: operations["list_views"];
+        put?: never;
+        /** Saves a view of the heap, shared with everyone in the team. */
+        post: operations["create_view"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{item_id}": {
         parameters: {
             query?: never;
@@ -359,6 +377,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`. */
+        patch: operations["update_view"];
+        trace?: never;
+    };
+    "/api/v1/views/{view_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds. */
+        post: operations["archive_view"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -400,6 +452,11 @@ export interface components {
             /** @description Tags of the same heap, at most 50. */
             tag_ids?: string[] | null;
             title: string;
+        };
+        CreateSavedViewRequest: {
+            /** @description 1 to 100 characters. Need not be unique. */
+            name: string;
+            view?: components["schemas"]["ListViewInput"];
         };
         CreateTagRequest: {
             description?: string | null;
@@ -544,6 +601,35 @@ export interface components {
          * @enum {string}
          */
         ListSort: "priority" | "due" | "effort" | "impact";
+        /** @description A list view with every setting spelled out, as a saved view returns it. */
+        ListView: {
+            blocked: components["schemas"]["StateMode"];
+            blocked_layout: components["schemas"]["BlockedLayout"];
+            /** @description Keeps items with any of these efforts. Empty doesn't filter. */
+            effort: components["schemas"]["Size"][];
+            /** @description Keeps items with any of these impacts. Empty doesn't filter. */
+            impact: components["schemas"]["Size"][];
+            in_progress: components["schemas"]["StateMode"];
+            open: components["schemas"]["StateMode"];
+            sort: components["schemas"]["ListSort"];
+            /** @description Keeps items with any of these tags. Empty doesn't filter. */
+            tag: string[];
+        };
+        /**
+         * @description A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
+         *     items hidden and grouped, by priority, without filters.
+         */
+        ListViewInput: {
+            blocked?: null | components["schemas"]["StateMode"];
+            blocked_layout?: null | components["schemas"]["BlockedLayout"];
+            effort?: components["schemas"]["Size"][];
+            impact?: components["schemas"]["Size"][];
+            in_progress?: null | components["schemas"]["StateMode"];
+            open?: null | components["schemas"]["StateMode"];
+            sort?: null | components["schemas"]["ListSort"];
+            /** @description Tags of the same heap. Keeps items with any of them. */
+            tag?: string[];
+        };
         Me: {
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
@@ -614,6 +700,52 @@ export interface components {
         };
         /** @enum {string} */
         Role: "admin" | "member";
+        SavedView: {
+            allowed_actions: components["schemas"]["SavedViewAction"][];
+            /**
+             * Format: int64
+             * @description When the view was archived (UTC milliseconds); `null` while it is in use.
+             */
+            archived_at?: number | null;
+            /** Format: uuid */
+            created_by: string;
+            /** Format: uuid */
+            heap_id: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when editing.
+             */
+            version: number;
+            /** @description What the view shows. The fields are the query parameters of `GET /heaps/{heap_id}/items`. */
+            view: components["schemas"]["ListView"];
+        };
+        /**
+         * @description An action the caller can take on a saved view.
+         * @enum {string}
+         */
+        SavedViewAction: "edit" | "archive";
+        SavedViewList: {
+            allowed_actions: components["schemas"]["SavedViewListAction"][];
+            heap: components["schemas"]["HeapSummary"];
+            /** @description The views in use, by name. Archived views are left out. */
+            views: components["schemas"]["SavedView"][];
+        };
+        /**
+         * @description An action the caller can take on a heap's saved views.
+         * @enum {string}
+         */
+        SavedViewListAction: "create";
+        /**
+         * @description A partial edit. Leave a field out to keep it; a `view` replaces the whole view, with defaults for what it leaves
+         *     out.
+         */
+        SavedViewPatchRequest: {
+            name?: string | null;
+            view?: null | components["schemas"]["ListViewInput"];
+        };
         SignInRequest: {
             email: string;
             password: string;
@@ -1235,6 +1367,86 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_views: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSavedViewRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap` with `field` `view.tag`, or an invalid name */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1941,6 +2153,107 @@ export interface operations {
             };
             /** @description `field_too_short` */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_view: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `saved_view_archived` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap` with `field` `view.tag`, or an invalid name */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_view: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -7,11 +7,12 @@ import { AddItemForm } from "../components/AddItemForm";
 import { blockerCandidatesFor } from "../components/blockerCandidates";
 import { ItemRow } from "../components/ItemRow";
 import { ListControls, type Panel } from "../components/ListControls";
+import { SavedViewsBar } from "../components/SavedViewsBar";
 import { filterCount, matchesSearch, toListQuery, type ListSearch } from "../components/listView";
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
- * page only narrows it further by the search text.
+ * page only narrows it further by the search text. Saved views are links that put their settings in the URL.
  */
 export function HeapPage({
   heapId,
@@ -48,11 +49,14 @@ export function HeapPage({
     />
   );
 
+  const savedViews = <SavedViewsBar heapId={heapId} view={view} onViewChange={onViewChange} />;
+
   if (list.isError) {
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
       <main>
+        {badView && savedViews}
         {badView && controls}
         <div className="py-16 text-center">
           <p role="alert" className="text-red-700 dark:text-red-400">
@@ -96,6 +100,8 @@ export function HeapPage({
           Refresh order
         </button>
       </div>
+
+      {savedViews}
 
       <AddItemForm heapId={heapId} disabled={heap.archived} />
 

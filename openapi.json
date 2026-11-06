@@ -845,6 +845,128 @@
         ]
       }
     },
+    "/api/v1/heaps/{heap_id}/views": {
+      "get": {
+        "tags": [
+          "views"
+        ],
+        "summary": "The heap's saved views that are in use, by name.",
+        "operationId": "list_views",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedViewList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "views"
+        ],
+        "summary": "Saves a view of the heap, shared with everyone in the team.",
+        "operationId": "create_view",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSavedViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` with `field` `view.tag`, or an invalid name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/items/{item_id}": {
       "get": {
         "tags": [
@@ -1924,6 +2046,159 @@
           }
         ]
       }
+    },
+    "/api/v1/views/{view_id}": {
+      "patch": {
+        "tags": [
+          "views"
+        ],
+        "summary": "Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`.",
+        "operationId": "update_view",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedViewPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `saved_view_archived` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` with `field` `view.tag`, or an invalid name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/views/{view_id}/archive": {
+      "post": {
+        "tags": [
+          "views"
+        ],
+        "summary": "Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds.",
+        "operationId": "archive_view",
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2055,6 +2330,22 @@
             "type": "string"
           }
         }
+      },
+      "CreateSavedViewRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 100 characters. Need not be unique."
+          },
+          "view": {
+            "$ref": "#/components/schemas/ListViewInput"
+          }
+        },
+        "additionalProperties": false
       },
       "CreateTagRequest": {
         "type": "object",
@@ -2471,6 +2762,136 @@
           "impact"
         ]
       },
+      "ListView": {
+        "type": "object",
+        "description": "A list view with every setting spelled out, as a saved view returns it.",
+        "required": [
+          "open",
+          "in_progress",
+          "blocked",
+          "blocked_layout",
+          "sort",
+          "tag",
+          "effort",
+          "impact"
+        ],
+        "properties": {
+          "blocked": {
+            "$ref": "#/components/schemas/StateMode"
+          },
+          "blocked_layout": {
+            "$ref": "#/components/schemas/BlockedLayout"
+          },
+          "effort": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Size"
+            },
+            "description": "Keeps items with any of these efforts. Empty doesn't filter."
+          },
+          "impact": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Size"
+            },
+            "description": "Keeps items with any of these impacts. Empty doesn't filter."
+          },
+          "in_progress": {
+            "$ref": "#/components/schemas/StateMode"
+          },
+          "open": {
+            "$ref": "#/components/schemas/StateMode"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/ListSort"
+          },
+          "tag": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Keeps items with any of these tags. Empty doesn't filter."
+          }
+        }
+      },
+      "ListViewInput": {
+        "type": "object",
+        "description": "A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked\nitems hidden and grouped, by priority, without filters.",
+        "properties": {
+          "blocked": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StateMode"
+              }
+            ]
+          },
+          "blocked_layout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedLayout"
+              }
+            ]
+          },
+          "effort": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Size"
+            }
+          },
+          "impact": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Size"
+            }
+          },
+          "in_progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StateMode"
+              }
+            ]
+          },
+          "open": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StateMode"
+              }
+            ]
+          },
+          "sort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ListSort"
+              }
+            ]
+          },
+          "tag": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags of the same heap. Keeps items with any of them."
+          }
+        },
+        "additionalProperties": false
+      },
       "Me": {
         "type": "object",
         "required": [
@@ -2671,6 +3092,123 @@
           "admin",
           "member"
         ]
+      },
+      "SavedView": {
+        "type": "object",
+        "required": [
+          "id",
+          "heap_id",
+          "name",
+          "view",
+          "created_by",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedViewAction"
+            }
+          },
+          "archived_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "When the view was archived (UTC milliseconds); `null` while it is in use."
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "heap_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when editing.",
+            "minimum": 0
+          },
+          "view": {
+            "$ref": "#/components/schemas/ListView",
+            "description": "What the view shows. The fields are the query parameters of `GET /heaps/{heap_id}/items`."
+          }
+        }
+      },
+      "SavedViewAction": {
+        "type": "string",
+        "description": "An action the caller can take on a saved view.",
+        "enum": [
+          "edit",
+          "archive"
+        ]
+      },
+      "SavedViewList": {
+        "type": "object",
+        "required": [
+          "heap",
+          "views",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedViewListAction"
+            }
+          },
+          "heap": {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SavedView"
+            },
+            "description": "The views in use, by name. Archived views are left out."
+          }
+        }
+      },
+      "SavedViewListAction": {
+        "type": "string",
+        "description": "An action the caller can take on a heap's saved views.",
+        "enum": [
+          "create"
+        ]
+      },
+      "SavedViewPatchRequest": {
+        "type": "object",
+        "description": "A partial edit. Leave a field out to keep it; a `view` replaces the whole view, with defaults for what it leaves\nout.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "view": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ListViewInput"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "SignInRequest": {
         "type": "object",
@@ -3035,6 +3573,10 @@
     {
       "name": "users",
       "description": "Finding users to add to a team"
+    },
+    {
+      "name": "views",
+      "description": "A heap's saved views"
     }
   ]
 }

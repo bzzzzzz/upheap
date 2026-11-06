@@ -51,7 +51,7 @@ Conventions:
 
 - **IDs** are UUIDv7, stored as `CHAR(36)`. They are sortable by creation time and safe to expose.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`. This avoids differences between the SQLite and MySQL date types. No timezone is stored anywhere (see [Time and timezones](#time-and-timezones)).
-- **Structured data** (audit diffs, saved view filters) is serialized JSON in `TEXT` and never queried inside the database.
+- **Structured data** (audit diffs, saved list views) is serialized JSON in `TEXT` and never queried inside the database.
 - **Archiving** uses a nullable `archived_at`. There are no hard deletes.
 - **Foreign keys** never cascade. They use `ON DELETE RESTRICT`, so even an accidental `DELETE` fails instead of removing related rows.
 - **Optimistic concurrency:** mutable rows carry a `version` integer. Updates require the expected version and fail with `409 Conflict` otherwise.
@@ -77,7 +77,7 @@ Tables:
 | `parameter_options` | id, parameter_id, label, position, archived_at, replaced_by_option_id |
 | `parameter_tags` | parameter_id, tag_id |
 | `item_parameter_values` | item_id, parameter_id, option_id |
-| `saved_views` | id, heap_id, name, filter (JSON text), created_by, version |
+| `saved_views` | id, heap_id, name, list_view (JSON text), created_by, created_at, archived_at, version |
 | `audit_log` | id, team_id, heap_id (nullable), actor_user_id, action, entity_type, entity_id, diff (JSON text), created_at |
 
 Notes:
@@ -128,7 +128,7 @@ The score is a deterministic function of item data and time. A stable session th
    - These defaults are the product's defaults, so every client starts from the same list. Before this, the response always carried blocked items and the web app hid them; the change was made before any release, when the web app was the only client.
    - `tag=`, `effort=` and `impact=` take comma-separated values and keep items with any of them. A malformed value is `400` `invalid_query`; a tag of another heap is `422` `tag_not_in_heap` with `field` `tag`.
    - `sort=` is `priority`, `due` (soonest first), `effort` (smallest first) or `impact` (largest first). Items without the value come last, and ties keep priority order. Grouped blocked items always stay in priority order (Req Views: List items §3). `position` is the place in the returned group.
-   - The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text: it changes on every keystroke and is a momentary narrowing rather than part of the view. Saved views will store the URL's view.
+   - The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text: it changes on every keystroke and is a momentary narrowing rather than part of the view. Saved views store the URL's view: the same settings, under the query parameters' names, so a client turns a saved view into a list query field by field. The web app adds `view=<id>` to the URL when a list is opened from a saved view, and keeps it while the settings are changed, so it can offer to save the change into that view.
 4. If heaps grow beyond this size, search moves to the server with per-database full-text indexes. Clients would then call `GET /heaps/{id}/items?q=`.
 
 ### Time and timezones
@@ -176,12 +176,14 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
 | Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |
 | Parameters | `GET/POST /heaps/{id}/parameters`, `PATCH /parameters/{id}`, `POST /parameters/{id}/archive`, `POST/PATCH /parameters/{id}/options`, `POST /options/{id}/archive` (with replacement), `PUT /parameters/{id}/tags` |
-| Saved views | `GET/POST /heaps/{id}/views`, `PATCH /views/{id}` |
+| Saved views | `GET/POST /heaps/{id}/views` (the views in use, by name; save one), `PATCH /views/{id}` (rename, or replace the whole view), `POST /views/{id}/archive` |
 | Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit` (filtered by what the caller may do) |
 
 The `DELETE` on a team member removes the membership. That is the one place where a relationship row goes away, and it is audited. The membership history stays in the audit log.
 
 Team endpoints return the whole team, members and heaps included, with `allowed_actions` on the team, each member and each heap, so a client re-renders the team from one response after any change (promoting someone, for example, changes what can be done with every other admin). Adding a member who is already one answers `200` with the team unchanged; removing someone who isn't a member succeeds. Archiving and unarchiving take no `If-Match`: each says what the heap should end up as, so repeating or racing them is safe.
+
+Saved views belong to the heap, not to whoever saved them: every member sees them, and can change and archive them, as with tags. They are archived rather than deleted, and an archived view is left out of the list and refuses edits (`saved_view_archived`); there is no unarchive, since saving the view again is as quick. Archiving takes no `If-Match`, like archiving a heap. A view may filter only by tags of its heap (`tag_not_in_heap` with `field` `view.tag`), and by at most 200 of them (`too_many_tags`), which keeps the stored view well inside a MySQL `TEXT` column. Request bodies refuse unknown fields (`invalid_body`), so a misspelt field fails instead of saving nothing. If the URL names a view that is no longer in use, the web app drops `view` from it. Names need not be unique. Writes lock the heap and then the view, and read the view under its lock, for the MySQL snapshot reason given under [Rules that depend on state](#rules-that-depend-on-state).
 
 A display name change is audited once in each of the user's teams, since the audit log is kept per team and that is where teammates see the name. A user in no team has nowhere to record it.
 
@@ -201,7 +203,7 @@ A display name change is audited once in each of the user's teams, since the aud
 
 ### Permissions as code
 
-1. The roles table in [offering.md](offering.md#roles-and-permissions) is implemented as one typed enum in `domain`, for example `Permission::EditItem`, `Permission::ConfigureHeap` and `Permission::ManageMembers`. Each permission also maps to a function that says whether a given role grants it. One permission can back more than one row of the table when the rows always grant the same roles: `EditItems` covers both "Add and edit items" and "Add and edit tags". If those rows ever diverge, they get separate permissions.
+1. The roles table in [offering.md](offering.md#roles-and-permissions) is implemented as one typed enum in `domain`, for example `Permission::EditItem`, `Permission::ConfigureHeap` and `Permission::ManageMembers`. Each permission also maps to a function that says whether a given role grants it. One permission can back more than one row of the table when the rows always grant the same roles: `EditItems` covers "Add and edit items", "Add and edit tags" and "Save, change and archive a heap's views". If those rows ever diverge, they get separate permissions.
 2. Every service use case declares the permission it requires and checks it first, before it reads or writes anything else.
 3. `allowed_actions` in responses comes from the same functions. The checks and what clients display therefore can't drift apart.
 4. Handlers never check permissions. They pass the `Principal` to the service.
@@ -235,6 +237,7 @@ These checks run in the same transaction as the write, after the permission chec
 | Archiving an option requires a replacement | The replacement must be an active option of the same parameter. | `replacement_required` |
 | A parameter is archived only when unused | No non-terminal item has a value for it. | `parameter_in_use` |
 | Tag names are unique per heap | Compared ignoring case, backed by a unique index on `(heap_id, name_key)`. | `tag_name_taken` |
+| Archived saved views can't change | Checked on the view as read under its row lock. | `saved_view_archived` |
 | Stale writes | `version` in `If-Match` must match. | `version_conflict` |
 
 ### Non-web client tokens

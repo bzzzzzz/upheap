@@ -22,6 +22,23 @@ pub enum StateMode {
     Hidden,
 }
 
+impl StateMode {
+    pub const ALL: [Self; 3] = [Self::Pinned, Self::Shown, Self::Hidden];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Pinned => "pinned",
+            Self::Shown => "shown",
+            Self::Hidden => "hidden",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.code() == code)
+    }
+}
+
 /// Where shown blocked items go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockedLayout {
@@ -29,6 +46,22 @@ pub enum BlockedLayout {
     Grouped,
     /// Mixed in with the open items, in the list's sort order.
     Mixed,
+}
+
+impl BlockedLayout {
+    pub const ALL: [Self; 2] = [Self::Grouped, Self::Mixed];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Grouped => "grouped",
+            Self::Mixed => "mixed",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|layout| layout.code() == code)
+    }
 }
 
 /// What a group of the list is sorted by. Ties keep priority order.
@@ -42,6 +75,24 @@ pub enum SortKey {
     Effort,
     /// Largest impact first; items without an impact last.
     Impact,
+}
+
+impl SortKey {
+    pub const ALL: [Self; 4] = [Self::Priority, Self::Due, Self::Effort, Self::Impact];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Priority => "priority",
+            Self::Due => "due",
+            Self::Effort => "effort",
+            Self::Impact => "impact",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|key| key.code() == code)
+    }
 }
 
 /// The groups of the ranked list.
@@ -192,6 +243,23 @@ mod tests {
             sort,
             ..ListView::default()
         }
+    }
+
+    #[gtest]
+    fn codes_read_back_as_the_same_value() {
+        expect_that!(
+            StateMode::ALL.map(|m| StateMode::from_code(m.code())),
+            eq(StateMode::ALL.map(Some))
+        );
+        expect_that!(
+            BlockedLayout::ALL.map(|l| BlockedLayout::from_code(l.code())),
+            eq(BlockedLayout::ALL.map(Some))
+        );
+        expect_that!(
+            SortKey::ALL.map(|k| SortKey::from_code(k.code())),
+            eq(SortKey::ALL.map(Some))
+        );
+        expect_that!(SortKey::from_code("rank"), none());
     }
 
     #[gtest]

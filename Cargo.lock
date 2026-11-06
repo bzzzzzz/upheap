@@ -2858,6 +2858,7 @@ dependencies = [
  "googletest",
  "sea-orm",
  "sea-orm-migration",
+ "serde",
  "serde_json",
  "store",
  "thiserror",
