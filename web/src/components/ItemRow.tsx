@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useState, type KeyboardEvent } from "react";
 
@@ -162,21 +163,31 @@ export function ItemRow({
           </p>
         )}
       </div>
-      <label className="shrink-0 self-start">
-        <span className="sr-only">State</span>
-        <select
-          value={item.state}
-          disabled={!canChangeState}
-          onChange={(e) => save({ state: e.target.value as ItemState })}
-          className="rounded border border-stone-300 bg-white px-1 py-0.5 text-sm disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900"
+      <div className="flex shrink-0 items-center gap-3 self-start">
+        <Link
+          to="/heaps/$heapId/items/$itemId"
+          params={{ heapId, itemId: item.id }}
+          aria-label={`Edit ${item.title}`}
+          className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
         >
-          {STATES.map((state) => (
-            <option key={state} value={state}>
-              {STATE_LABELS[state]}
-            </option>
-          ))}
-        </select>
-      </label>
+          Edit
+        </Link>
+        <label>
+          <span className="sr-only">State</span>
+          <select
+            value={item.state}
+            disabled={!canChangeState}
+            onChange={(e) => save({ state: e.target.value as ItemState })}
+            className="rounded border border-stone-300 bg-white px-1 py-0.5 text-sm disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900"
+          >
+            {STATES.map((state) => (
+              <option key={state} value={state}>
+                {STATE_LABELS[state]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
     </motion.li>
   );
 }

@@ -7,6 +7,7 @@ import { meQuery } from "./api/queries";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
+import { EditItemPage } from "./pages/EditItemPage";
 import { HeapPage } from "./pages/HeapPage";
 import { TagsPage } from "./pages/TagsPage";
 
@@ -71,9 +72,18 @@ const tagsRoute = createRoute({
   },
 });
 
+const editItemRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/heaps/$heapId/items/$itemId",
+  component: function EditItemRoute() {
+    const { heapId, itemId } = editItemRoute.useParams();
+    return <EditItemPage key={itemId} heapId={heapId} itemId={itemId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([indexRoute, heapRoute, closedRoute, tagsRoute]),
+  appRoute.addChildren([indexRoute, heapRoute, closedRoute, tagsRoute, editItemRoute]),
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

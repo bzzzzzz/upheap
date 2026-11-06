@@ -8,28 +8,8 @@ use common::{TestApp, TestResponse};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
-const CSRF: (&str, &str) = ("x-csrf-protection", "1");
-
-/// Creates an item and returns its body.
-async fn create_item(app: &TestApp, session: &str, heap: &str, body: Value) -> Result<Value> {
-    let created = app
-        .send(
-            Method::POST,
-            &format!("/api/v1/heaps/{heap}/items"),
-            Some(session),
-            Some(body),
-        )
-        .await?;
-    anyhow::ensure!(
-        created.status == StatusCode::CREATED,
-        "create item failed: {}",
-        created.body
-    );
-    Ok(created.body)
-}
-
 async fn titled(app: &TestApp, session: &str, heap: &str, title: &str) -> Result<Value> {
-    create_item(app, session, heap, json!({ "title": title })).await
+    app.new_item(session, heap, json!({ "title": title })).await
 }
 
 fn id(item: &Value) -> Result<&str> {
@@ -38,14 +18,8 @@ fn id(item: &Value) -> Result<&str> {
 
 /// Sends a `PATCH` for `item` at its current version.
 async fn patch(app: &TestApp, session: &str, item: &Value, body: Value) -> Result<TestResponse> {
-    app.send_with(
-        Method::PATCH,
-        &format!("/api/v1/items/{}", id(item)?),
-        Some(session),
-        Some(body),
-        &[CSRF, ("if-match", &item["version"].to_string())],
-    )
-    .await
+    app.patch(session, &format!("/api/v1/items/{}", id(item)?), &item["version"], body)
+        .await
 }
 
 /// Blocks `item` on `blocker` and returns the saved item.
@@ -77,13 +51,13 @@ async fn a_blocker_takes_on_the_priority_of_what_it_blocks() -> Result<()> {
     let (session, heap) = app.register("ada@example.test").await?;
     titled(&app, &session, &heap, "Tidy docs").await?;
     let blocker = titled(&app, &session, &heap, "Upgrade database").await?;
-    let urgent = create_item(
-        &app,
-        &session,
-        &heap,
-        json!({ "title": "Ship release", "due": { "date": "2020-01-01", "firm": true } }),
-    )
-    .await?;
+    let urgent = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Ship release", "due": { "date": "2020-01-01", "firm": true } }),
+        )
+        .await?;
 
     // Act
     let blocked = block(&app, &session, &urgent, &blocker).await?;
