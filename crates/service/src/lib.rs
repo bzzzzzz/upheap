@@ -10,6 +10,7 @@ mod clock;
 mod error;
 pub mod items;
 pub mod me;
+pub mod tags;
 
 use std::sync::Arc;
 

@@ -37,6 +37,7 @@ enum Target {
     Heap,
     OpenItem,
     ClosedItem,
+    Tag,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
 }
@@ -49,6 +50,9 @@ enum RequestBody {
     SignIn,
     NewItem,
     Rename,
+    /// A tag name no other request used, since names are unique per heap.
+    NewTag,
+    RenameTag,
 }
 
 struct Endpoint {
@@ -162,6 +166,30 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::Empty,
             StatusCode::OK,
         ),
+        row(
+            Method::GET,
+            "/heaps/{heap_id}/tags",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/heaps/{heap_id}/tags",
+            edit,
+            Target::Heap,
+            RequestBody::NewTag,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/tags/{tag_id}",
+            edit,
+            Target::Tag,
+            RequestBody::RenameTag,
+            StatusCode::OK,
+        ),
     ]
 }
 
@@ -242,7 +270,8 @@ struct World {
     member: Account,
     outsider: Account,
     heap: String,
-    registrations: AtomicU32,
+    /// Counter for names that must be unique: emails and tag names.
+    unique_names: AtomicU32,
 }
 
 impl World {
@@ -273,7 +302,7 @@ impl World {
                 session: outsider_session,
             },
             heap,
-            registrations: AtomicU32::new(0),
+            unique_names: AtomicU32::new(0),
         })
     }
 
@@ -317,6 +346,25 @@ impl World {
         Ok((id, done.body["version"].to_string()))
     }
 
+    /// Creates a tag as the admin and returns its ID and version.
+    async fn create_tag(&self) -> Result<(String, String)> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/heaps/{}/tags", self.heap),
+                Some(&self.admin.session),
+                Some(json!({ "name": self.unique_name("target") })),
+            )
+            .await?;
+        let id = created.body["id"].as_str().context("tag has no id")?.to_owned();
+        Ok((id, created.body["version"].to_string()))
+    }
+
+    fn unique_name(&self, prefix: &str) -> String {
+        format!("{prefix}{}", self.unique_names.fetch_add(1, Ordering::Relaxed))
+    }
+
     async fn sign_in(&self, account: &Account) -> Result<String> {
         let response = self
             .app
@@ -334,12 +382,14 @@ impl World {
         match body {
             RequestBody::Empty => None,
             RequestBody::Registration => {
-                let n = self.registrations.fetch_add(1, Ordering::Relaxed);
-                Some(json!({ "email": format!("new{n}@example.test"), "display_name": "New", "password": PASSWORD }))
+                let email = format!("{}@example.test", self.unique_name("new"));
+                Some(json!({ "email": email, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
             RequestBody::NewItem => Some(json!({ "title": "New" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
+            RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
+            RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
         }
     }
 
@@ -354,6 +404,11 @@ impl World {
             Target::OpenItem | Target::ClosedItem => {
                 let (id, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item_id}", &id);
+                if_match = Some(version);
+            }
+            Target::Tag => {
+                let (id, version) = self.create_tag().await?;
+                path = path.replace("{tag_id}", &id);
                 if_match = Some(version);
             }
             Target::FreshSession => {

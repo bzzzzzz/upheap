@@ -1,5 +1,6 @@
 import { useClosedItems, useReopenItem } from "../api/queries";
 import { STATE_LABELS } from "../components/labels";
+import { TagChips } from "../components/TagChips";
 
 /** Done and won't-do items, most recently closed first. */
 export function ClosedPage({ heapId }: { heapId: string }) {
@@ -30,7 +31,10 @@ export function ClosedPage({ heapId }: { heapId: string }) {
               className="flex items-center gap-3 border-b border-stone-200 py-3 last:border-b-0 dark:border-stone-800"
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-stone-600 dark:text-stone-300">{item.title}</p>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <p className="font-medium text-stone-600 dark:text-stone-300">{item.title}</p>
+                  <TagChips tags={item.tags} />
+                </div>
                 <p className="text-xs text-stone-500">
                   {STATE_LABELS[item.state]} · {item.closed_label}
                 </p>

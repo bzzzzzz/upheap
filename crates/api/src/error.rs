@@ -147,6 +147,14 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Item(ItemError::ReopenWindowExpired { .. }) => {
             simple(StatusCode::CONFLICT, "reopen_window_expired", Category::Conflict)
         }
+        ServiceError::TagNotInHeap { .. } => Classified {
+            field: Some("tag_ids"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_heap", Category::Caller)
+        },
+        ServiceError::TagNameTaken { .. } => Classified {
+            field: Some("name"),
+            ..simple(StatusCode::CONFLICT, "tag_name_taken", Category::Conflict)
+        },
         ServiceError::PasswordHashing(_) => unexpected(),
         ServiceError::Store(store) => match StoreErrorKind::of(store) {
             StoreErrorKind::Unavailable => Classified {
@@ -170,6 +178,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::PasswordTooLong { .. } => ("password_too_long", Some("password")),
         ValidationError::DueDateInvalid => ("due_date_invalid", Some("due")),
         ValidationError::TimestampOutOfRange => ("timestamp_out_of_range", None),
+        ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
     };
     Classified {
         status: StatusCode::UNPROCESSABLE_ENTITY,

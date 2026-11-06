@@ -8,6 +8,8 @@ pub enum AuditAction {
     HeapCreated,
     ItemCreated,
     ItemUpdated,
+    TagCreated,
+    TagUpdated,
 }
 
 impl AuditAction {
@@ -19,6 +21,8 @@ impl AuditAction {
             Self::HeapCreated => "heap_created",
             Self::ItemCreated => "item_created",
             Self::ItemUpdated => "item_updated",
+            Self::TagCreated => "tag_created",
+            Self::TagUpdated => "tag_updated",
         }
     }
 }
@@ -30,6 +34,7 @@ pub enum EntityType {
     Team,
     Heap,
     Item,
+    Tag,
 }
 
 impl EntityType {
@@ -39,6 +44,7 @@ impl EntityType {
             Self::Team => "team",
             Self::Heap => "heap",
             Self::Item => "item",
+            Self::Tag => "tag",
         }
     }
 }

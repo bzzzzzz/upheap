@@ -255,7 +255,7 @@
             }
           },
           "422": {
-            "description": "",
+            "description": "Invalid fields, or `tag_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -351,6 +351,128 @@
         ]
       }
     },
+    "/api/v1/heaps/{heap_id}/tags": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "The heap's tags, by name.",
+        "operationId": "list_tags",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Adds a tag to the heap.",
+        "operationId": "create_tag",
+        "parameters": [
+          {
+            "name": "heap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tag_name_taken` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/items/{item_id}": {
       "get": {
         "tags": [
@@ -427,7 +549,7 @@
           {
             "name": "If-Match",
             "in": "header",
-            "description": "The `version` of the item being edited, for example `\"3\"`.",
+            "description": "The `version` of the item or tag being edited, for example `\"3\"`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -488,7 +610,7 @@
             }
           },
           "422": {
-            "description": "",
+            "description": "Invalid fields, or `tag_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -535,7 +657,7 @@
           {
             "name": "If-Match",
             "in": "header",
-            "description": "The `version` of the item being edited, for example `\"3\"`.",
+            "description": "The `version` of the item or tag being edited, for example `\"3\"`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -613,6 +735,102 @@
           },
           "401": {
             "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tags/{tag_id}": {
+      "patch": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Renames a tag or changes its description. Send the tag's `version` in `If-Match`.",
+        "operationId": "update_tag",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of the item or tag being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tag_name_taken`, `version_conflict` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -723,8 +941,37 @@
               }
             ]
           },
+          "tag_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags of the same heap, at most 50."
+          },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "CreateTagRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 50 characters, unique in the heap ignoring case."
           }
         }
       },
@@ -820,6 +1067,7 @@
           "heap_id",
           "title",
           "state",
+          "tags",
           "created_at",
           "version",
           "allowed_actions"
@@ -900,6 +1148,13 @@
           "state": {
             "$ref": "#/components/schemas/ItemState"
           },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemTag"
+            },
+            "description": "By name."
+          },
           "title": {
             "type": "string"
           },
@@ -970,6 +1225,14 @@
               }
             ]
           },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused."
+          },
           "title": {
             "type": [
               "string",
@@ -988,6 +1251,23 @@
           "done",
           "wont_do"
         ]
+      },
+      "ItemTag": {
+        "type": "object",
+        "description": "A tag on an item: enough to show it.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "Me": {
         "type": "object",
@@ -1163,6 +1443,105 @@
           "xl"
         ]
       },
+      "Tag": {
+        "type": "object",
+        "required": [
+          "id",
+          "heap_id",
+          "name",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagAction"
+            }
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "heap_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when editing.",
+            "minimum": 0
+          }
+        }
+      },
+      "TagAction": {
+        "type": "string",
+        "description": "An action the caller can take on a tag.",
+        "enum": [
+          "edit"
+        ]
+      },
+      "TagList": {
+        "type": "object",
+        "required": [
+          "heap",
+          "tags",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagListAction"
+            }
+          },
+          "heap": {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "description": "By name."
+          }
+        }
+      },
+      "TagListAction": {
+        "type": "string",
+        "description": "An action the caller can take on a heap's tag list.",
+        "enum": [
+          "create"
+        ]
+      },
+      "TagPatchRequest": {
+        "type": "object",
+        "description": "A partial edit. Leave a field out to keep it; send `null` to clear the description.",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "TeamSummary": {
         "type": "object",
         "required": [
@@ -1232,6 +1611,10 @@
     {
       "name": "items",
       "description": "Items and the ranked list"
+    },
+    {
+      "name": "tags",
+      "description": "A heap's tags"
     }
   ]
 }

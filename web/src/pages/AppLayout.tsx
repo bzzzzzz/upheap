@@ -52,6 +52,13 @@ export function AppLayout() {
             >
               Closed
             </Link>
+            <Link
+              to="/heaps/$heapId/tags"
+              params={{ heapId }}
+              className="text-stone-500 hover:text-stone-900 data-[status=active]:font-medium data-[status=active]:text-stone-900 dark:hover:text-stone-100 dark:data-[status=active]:text-stone-100"
+            >
+              Tags
+            </Link>
           </nav>
         )}
         <span className="ml-auto text-sm text-stone-500">{me?.user.display_name}</span>

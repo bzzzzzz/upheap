@@ -1,14 +1,17 @@
 //! Item use cases: the ranked list, the closed list, adding and editing.
 
+use std::collections::BTreeSet;
+
 use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
 use domain::item::{Item, ItemPatch, NewItem, StateKind};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
+use domain::tag::Tag;
 use domain::team::Role;
-use domain::{Duration, HeapId, ItemId, Timestamp, Version};
+use domain::{Duration, HeapId, ItemId, TagId, Timestamp, Version};
 use store::audit::NewAuditEntry;
-use store::{StoreError, TransactionTrait};
+use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 pub use store::items::ClosedCursor;
 
@@ -22,10 +25,12 @@ pub const MAX_AS_OF_AGE: Duration = Duration::from_hours(24);
 /// Largest page of closed items.
 pub const MAX_CLOSED_PAGE: u64 = 200;
 
-/// An item with what the caller may do with it.
+/// An item with its tags and what the caller may do with it.
 #[derive(Debug)]
 pub struct ItemView {
     pub item: Item,
+    /// The item's tags, by name.
+    pub tags: Vec<Tag>,
     pub allowed_actions: Vec<ItemAction>,
 }
 
@@ -79,6 +84,7 @@ impl Services {
             .unwrap_or(now);
         let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
         let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
+        let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
 
         let inputs: Vec<ItemForRanking> = items.iter().map(ItemForRanking::from).collect();
         let ranking = rank(CURRENT_FORMULA, &access.heap.policy, &inputs, as_of);
@@ -97,8 +103,13 @@ impl Services {
             };
             let position = u32::try_from(group.len() + 1).unwrap_or(u32::MAX);
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
+            let tags = select_tags(&heap_tags, &item.tags);
             group.push(RankedEntry {
-                view: ItemView { item, allowed_actions },
+                view: ItemView {
+                    item,
+                    tags,
+                    allowed_actions,
+                },
                 position,
                 contributors: entry.contributors,
             });
@@ -139,13 +150,19 @@ impl Services {
             })
             .flatten();
 
+        let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
             .into_iter()
             .map(|item| {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
-                ItemView { item, allowed_actions }
+                let tags = select_tags(&heap_tags, &item.tags);
+                ItemView {
+                    item,
+                    tags,
+                    allowed_actions,
+                }
             })
             .collect();
         Ok(ClosedPage {
@@ -155,7 +172,8 @@ impl Services {
         })
     }
 
-    /// Adds an open item to the heap.
+    /// Adds an open item to the heap. Every tag must belong to the heap, or it fails with
+    /// [`ServiceError::TagNotInHeap`].
     pub async fn create_item(
         &self,
         principal: Principal,
@@ -165,6 +183,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap(&txn, principal, heap_id, Permission::EditItems).await?;
         ensure_active(&access.heap)?;
+        let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
 
         let now = self.now();
         let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, fields, now);
@@ -182,7 +201,11 @@ impl Services {
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
-        Ok(ItemView { item, allowed_actions })
+        Ok(ItemView {
+            item,
+            tags,
+            allowed_actions,
+        })
     }
 
     pub async fn find_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
@@ -191,10 +214,16 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, self.now());
-        Ok(ItemView { item, allowed_actions })
+        let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
+        Ok(ItemView {
+            item,
+            tags,
+            allowed_actions,
+        })
     }
 
-    /// Applies a partial edit if the item is still at version `expected`.
+    /// Applies a partial edit if the item is still at version `expected`. New tags must belong to the item's
+    /// heap, or it fails with [`ServiceError::TagNotInHeap`].
     ///
     /// A patch that changes nothing succeeds and returns the item unchanged, without an audit entry.
     pub async fn update_item(
@@ -217,21 +246,28 @@ impl Services {
             });
         }
 
+        if let Some(tags) = &patch.tags {
+            load_heap_tags(&txn, current.heap_id, tags).await?;
+        }
+
         let now = self.now();
         let role = access.membership.role;
         let Some(edited) = current.apply_patch(&patch, now)? else {
             let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
+            let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
             return Ok(ItemView {
                 item: current,
+                tags,
                 allowed_actions,
             });
         };
-        let saved = store::items::update_item(&txn, &edited, expected)
-            .await?
-            .ok_or(ServiceError::VersionConflict {
-                expected,
-                current: expected.next(),
-            })?;
+        let saved =
+            store::items::update_item(&txn, &edited, expected, now)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected,
+                    current: expected.next(),
+                })?;
         let entry = self.item_audit_entry(
             &access.heap,
             principal,
@@ -241,12 +277,14 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        let tags = load_heap_tags(&txn, saved.heap_id, &saved.tags).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
         let allowed_actions = allowed_item_actions(&saved, &access.heap, role, now);
         Ok(ItemView {
             item: saved,
+            tags,
             allowed_actions,
         })
     }
@@ -272,4 +310,24 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// The tags `ids` names, by name. Fails with [`ServiceError::TagNotInHeap`] if any of them isn't a tag of
+/// `heap_id`, which also covers IDs that don't exist at all.
+async fn load_heap_tags(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    ids: &BTreeSet<TagId>,
+) -> Result<Vec<Tag>, ServiceError> {
+    let tags = store::tags::list_tags_in_heap(db, heap_id, ids).await?;
+    let found: BTreeSet<TagId> = tags.iter().map(|t| t.id).collect();
+    if let Some(&tag_id) = ids.difference(&found).next() {
+        return Err(ServiceError::TagNotInHeap { tag_id });
+    }
+    Ok(tags)
+}
+
+/// The tags among `heap_tags` (already sorted by name) that are in `ids`, in the same order.
+fn select_tags(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> Vec<Tag> {
+    heap_tags.iter().filter(|tag| ids.contains(&tag.id)).cloned().collect()
 }

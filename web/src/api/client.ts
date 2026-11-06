@@ -13,6 +13,11 @@ export type Size = Schemas["Size"];
 export type ItemState = Schemas["ItemState"];
 export type ItemPatch = Schemas["ItemPatchRequest"];
 export type NewItem = Schemas["CreateItemRequest"];
+export type Tag = Schemas["Tag"];
+export type TagList = Schemas["TagList"];
+export type ItemTag = Schemas["ItemTag"];
+export type TagPatch = Schemas["TagPatchRequest"];
+export type NewTag = Schemas["CreateTagRequest"];
 type Problem = Schemas["Problem"];
 
 /** A failed API call. Branch on `code`, never on `message`. */

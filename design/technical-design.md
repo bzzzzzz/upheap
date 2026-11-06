@@ -71,8 +71,8 @@ Tables:
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
 | `heaps` | id, team_id, name, age_weight, deadline_weight, value_weight, archived_at, version |
 | `items` | id, heap_id, title, description, state, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
-| `tags` | id, heap_id, name (unique per heap), description, version |
-| `item_tags` | item_id, tag_id |
+| `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
+| `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
 | `parameters` | id, heap_id, name, weight, archived_at, version |
 | `parameter_options` | id, parameter_id, label, position, archived_at, replaced_by_option_id |
 | `parameter_tags` | parameter_id, tag_id |
@@ -86,6 +86,8 @@ Notes:
 - The age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
 - The application can only insert into `audit_log`. There is no update or delete code path for it.
+- Tag names are unique per heap ignoring case. The check runs on `name_key` rather than the column collation, because MySQL compares case-insensitively by default and SQLite doesn't.
+- Taking a tag off an item sets `item_tags.removed_at` instead of deleting the row, so relationship rows follow the no-`DELETE` rule too. The change is audited as an `item_updated` entry whose diff lists the tag IDs before and after. Team membership is the one exception (see [Resources](#resources-initial-set)).
 
 ## Ranking
 
@@ -185,7 +187,7 @@ The `DELETE` on a team member removes the membership. That is the one place wher
 
 ### Permissions as code
 
-1. The roles table in [offering.md](offering.md#roles-and-permissions) is implemented as one typed enum in `domain`, for example `Permission::EditItem`, `Permission::ConfigureHeap` and `Permission::ManageMembers`. Each permission also maps to a function that says whether a given role grants it.
+1. The roles table in [offering.md](offering.md#roles-and-permissions) is implemented as one typed enum in `domain`, for example `Permission::EditItem`, `Permission::ConfigureHeap` and `Permission::ManageMembers`. Each permission also maps to a function that says whether a given role grants it. One permission can back more than one row of the table when the rows always grant the same roles: `EditItems` covers both "Add and edit items" and "Add and edit tags". If those rows ever diverge, they get separate permissions.
 2. Every service use case declares the permission it requires and checks it first, before it reads or writes anything else.
 3. `allowed_actions` in responses comes from the same functions. The checks and what clients display therefore can't drift apart.
 4. Handlers never check permissions. They pass the `Principal` to the service.
@@ -195,7 +197,7 @@ The `DELETE` on a team member removes the membership. That is the one place wher
 1. Every resource resolves to exactly one team: heap → team; item, tag, parameter, option and view → heap → team. The service resolves the owning team first, then loads the caller's membership in that team.
 2. If the caller isn't a member of the owning team, the API returns `404 Not Found`, the same as for a resource that doesn't exist. An outsider can't probe for IDs.
 3. If the caller is a member but lacks the permission (for example, a member trying to configure a heap), the API returns `403 Forbidden`.
-4. Every repository query that loads heap-level data filters by the resolved `heap_id`, so an ID from a different heap can never leak in. For example, a `blocked_by_item_id` or a `tag_id` from another heap is rejected with `422`.
+4. Every repository query that loads heap-level data filters by the resolved `heap_id`, so an ID from a different heap can never leak in. For example, a `blocked_by_item_id` or a `tag_id` from another heap is rejected with `422` (`tag_not_in_heap` for tags).
 5. `GET /users?query=` (for adding members) is admin-only, returns only display name and email, and needs at least 3 characters to match.
 
 ### Archived heaps
@@ -217,6 +219,7 @@ These checks run in the same transaction as the write, after the permission chec
 | No blocking cycles | Walk the blocker chain (see [Cycle detection](#cycle-detection)). | `blocking_cycle` |
 | Archiving an option requires a replacement | The replacement must be an active option of the same parameter. | `replacement_required` |
 | A parameter is archived only when unused | No non-terminal item has a value for it. | `parameter_in_use` |
+| Tag names are unique per heap | Compared ignoring case, backed by a unique index on `(heap_id, name_key)`. | `tag_name_taken` |
 | Stale writes | `version` in `If-Match` must match. | `version_conflict` |
 
 ### Non-web client tokens

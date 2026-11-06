@@ -16,7 +16,7 @@ use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
 use serde_json::Value;
 use service::{Clock, ManualClock, Services, Settings};
-use store::{ConnectionTrait, DatabaseConnection};
+use store::{ConnectionTrait, DatabaseConnection, Statement};
 use tower::ServiceExt;
 
 /// 2027-01-01T12:00:00Z.
@@ -167,6 +167,25 @@ impl TestApp {
             .await
             .context("add member")?;
         Ok(())
+    }
+
+    /// The audit entries about `entity_id`, oldest first, as `(action, diff)`.
+    ///
+    /// Read straight from the database until the audit endpoints exist.
+    pub async fn audit_entries(&self, entity_id: &str) -> Result<Vec<(String, Value)>> {
+        let id: uuid::Uuid = entity_id.parse()?;
+        let sql = format!("SELECT action, diff FROM audit_log WHERE entity_id = '{id}' ORDER BY created_at, id");
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?;
+        rows.into_iter()
+            .map(|row| {
+                let action: String = row.try_get("", "action")?;
+                let diff: String = row.try_get("", "diff")?;
+                Ok((action, serde_json::from_str(&diff)?))
+            })
+            .collect()
     }
 
     /// Archives or unarchives a heap directly in the database.

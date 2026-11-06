@@ -4,7 +4,8 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
-use domain::{HeapId, ItemId, Timestamp, ValidationError};
+use domain::tag::parse_tag_set;
+use domain::{HeapId, ItemId, TagId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
@@ -15,7 +16,8 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::dto::{
-    DueInputDto, HeapSummaryDto, ItemDto, RankedItemDto, SizeDto, StateDto, double_option, to_item_dto, to_ranked_dto,
+    DueInputDto, HeapSummaryDto, IfMatchHeader, ItemDto, RankedItemDto, SizeDto, StateDto, double_option, non_null,
+    to_item_dto, to_ranked_dto,
 };
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, ApiQuery, ClientTimeZone, CurrentUser, IfMatch};
@@ -77,6 +79,8 @@ pub(crate) struct CreateItemDto {
     pub effort: Option<SizeDto>,
     pub impact: Option<SizeDto>,
     pub due: Option<DueInputDto>,
+    /// Tags of the same heap, at most 50.
+    pub tag_ids: Option<Vec<Uuid>>,
 }
 
 /// A partial edit. Leave a field out to keep it; send `null` to clear it.
@@ -96,6 +100,10 @@ pub(crate) struct ItemPatchDto {
     #[serde(default, deserialize_with = "double_option")]
     #[schema(value_type = Option<DueInputDto>, nullable)]
     pub due: Option<Option<DueInputDto>>,
+    /// Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused.
+    #[serde(default, deserialize_with = "non_null")]
+    #[schema(value_type = Vec<Uuid>, required = false)]
+    pub tag_ids: Option<Vec<Uuid>>,
     pub state: Option<StateDto>,
 }
 
@@ -115,6 +123,7 @@ impl ItemPatchDto {
                 Some(None) => Some(None),
                 Some(Some(due)) => Some(Some(due.to_due(tz)?)),
             },
+            tags: self.tag_ids.as_deref().map(to_tag_set).transpose()?,
             state: self.state.map(StateKind::from),
         })
     }
@@ -178,7 +187,7 @@ async fn list_closed(
 /// Adds an item. Only the title is required.
 #[utoipa::path(post, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
     params(("heap_id" = Uuid, Path), TimeZoneHeader), request_body = CreateItemDto,
-    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, body = Problem)))]
+    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, or `tag_not_in_heap`", body = Problem)))]
 async fn create_item(
     State(state): State<AppState>,
     CurrentUser(principal): CurrentUser,
@@ -214,7 +223,7 @@ async fn get_item(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived`", body = Problem),
-        (status = 422, body = Problem),
+        (status = 422, description = "Invalid fields, or `tag_not_in_heap`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_item(
@@ -271,7 +280,12 @@ fn to_new_item(body: &CreateItemDto, tz: &TimeZone) -> Result<NewItem, Validatio
         effort: body.effort.map(Into::into),
         impact: body.impact.map(Into::into),
         due: body.due.as_ref().map(|due| due.to_due(tz)).transpose()?,
+        tags: to_tag_set(body.tag_ids.as_deref().unwrap_or_default())?,
     })
+}
+
+fn to_tag_set(ids: &[Uuid]) -> Result<std::collections::BTreeSet<TagId>, ValidationError> {
+    parse_tag_set(ids.iter().copied().map(TagId::from_uuid))
 }
 
 fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
@@ -300,14 +314,4 @@ struct TimeZoneHeader {
     /// The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.
     #[param(rename = "Time-Zone")]
     time_zone: Option<String>,
-}
-
-/// The `If-Match` request header, documented once.
-#[derive(IntoParams)]
-#[into_params(parameter_in = Header)]
-#[allow(dead_code)]
-struct IfMatchHeader {
-    /// The `version` of the item being edited, for example `"3"`.
-    #[param(rename = "If-Match")]
-    if_match: String,
 }
