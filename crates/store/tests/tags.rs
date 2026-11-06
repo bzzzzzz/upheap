@@ -1,6 +1,7 @@
 //! Tag storage rules that the service's own checks would otherwise hide.
 //!
-//! Runs on in-memory SQLite. The MySQL run in CI (not set up yet) is what proves the `utf8mb4_bin` key.
+//! Runs on in-memory SQLite, or on MySQL with `TEST_DATABASE_URL` set; the MySQL run in CI is what proves the
+//! `utf8mb4_bin` key.
 
 use anyhow::{Context, Result};
 use domain::heap::{Heap, HeapPolicy};
@@ -13,8 +14,7 @@ use store::{DatabaseConnection, StoreError};
 use uuid::Uuid;
 
 async fn heap_in_new_database() -> Result<(DatabaseConnection, HeapId)> {
-    let db = store::connect("sqlite::memory:").await?;
-    store::run_migrations(&db).await?;
+    let db = store::testing::fresh_database().await?;
     let now = Timestamp::from_millis(0).context("in range")?;
     let team = Team {
         id: TeamId::from_uuid(Uuid::now_v7()),

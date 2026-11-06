@@ -1,12 +1,12 @@
 # Implementation progress
 
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
-[technical-design.md](technical-design.md). Last reviewed 2026-11-05.
+[technical-design.md](technical-design.md). Last reviewed 2026-11-06.
 
 About 50% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
 and reopen, tags, and blockers. Custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
-started. All 72 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
-pull request.
+started. All 72 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
 
@@ -24,7 +24,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Add item | Req Views: Add item | 🟡 | Tags, created by typing a new name; no linked parameters |
 | Edit item view | Req Views: Edit item | ⬜ | Description can't be edited and tags can't be added in the UI after creation; the API allows both |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; no tag filter yet (List view controls) |
-| Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; checked by hand on MySQL 8.4 |
+| Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
 | Saved views | Req Heaps §4 | ⬜ | |
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ⬜ | `Permission` enum exists, but no use case checks the admin-only permissions |
@@ -36,7 +36,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Sign-in rate limiting | TD Auth §4 | ⬜ | |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
-| Testing and CI | TD Testing | 🟡 | CI and the access-control table are in place; no MySQL run or Playwright |
+| Testing and CI | TD Testing | 🟡 | CI runs the store and API suites on SQLite and MySQL; the access-control table is in place; no Playwright |
 
 ## Remaining work
 
@@ -75,7 +75,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] Sign-in rate limiting
 - [ ] **Testing and CI**
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
-  - [ ] Store and service suite on MySQL via testcontainers
+  - [x] Store and API suites on MySQL in CI (`TEST_DATABASE_URL`, a database per test, `store::testing`)
   - [x] Table-driven access-control test (non-member, member, admin, archived heap) in
     `crates/api/tests/access_control.rs`. Members and archiving are set up directly in the database until
     their endpoints exist.
@@ -83,7 +83,6 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. The MySQL run in CI. A manual run found that the tags migration failed on MySQL, so this shouldn't wait.
-2. Edit item view and list controls (sort, filters including tags, search).
-3. Teams and heaps management.
-4. Custom parameters, which also completes the ranking formula and links parameters to tags.
+1. Edit item view and list controls (sort, filters including tags, search).
+2. Teams and heaps management.
+3. Custom parameters, which also completes the ranking formula and links parameters to tags.

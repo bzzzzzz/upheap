@@ -14,6 +14,8 @@ mod migration;
 pub mod sessions;
 pub mod tags;
 pub mod teams;
+#[cfg(feature = "testing")]
+pub mod testing;
 pub mod users;
 
 use std::time::Duration;
