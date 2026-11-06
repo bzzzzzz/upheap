@@ -1,5 +1,5 @@
 import type { ItemRef } from "../api/client";
-import { STATE_LABELS } from "./labels";
+import { isClosed, STATE_LABELS } from "./labels";
 
 /**
  * Picks the item a blocked item waits for. `candidates` are the heap's other non-closed items; the server refuses
@@ -31,7 +31,7 @@ export function BlockerSelect({
         {options.map((item) => (
           <option key={item.id} value={item.id}>
             {item.title}
-            {item.state === "done" || item.state === "wont_do" ? ` (${STATE_LABELS[item.state].toLowerCase()})` : ""}
+            {isClosed(item.state) ? ` (${STATE_LABELS[item.state].toLowerCase()})` : ""}
           </option>
         ))}
       </select>

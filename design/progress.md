@@ -3,9 +3,9 @@
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
 [technical-design.md](technical-design.md). Last reviewed 2026-11-06.
 
-About 50% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
-and reopen, tags, and blockers. Custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
-started. All 72 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+About 55% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
+and reopen, the Edit item view, tags, and blockers. Custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
+started. All 77 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -22,7 +22,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Main list view | Req Views: List items | 🟡 | Pinned and blocked groups, inline edits, `N` shortcut; no state config, sort, search or filters |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
 | Add item | Req Views: Add item | 🟡 | Tags, created by typing a new name; no linked parameters |
-| Edit item view | Req Views: Edit item | ⬜ | Description can't be edited and tags can't be added in the UI after creation; the API allows both |
+| Edit item view | Req Views: Edit item | 🟡 | Every field, tags, state and blocker in one save; a closed item is reopened and edited in the same save. No parameters yet |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; no tag filter yet (List view controls) |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
@@ -50,8 +50,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] `blocked_by_item_id` column; a blocker from another heap is rejected with 422
   - [x] Cycle detection inside the write transaction (`blocking_cycle`)
   - [x] Blocker inheritance in `rank()` (memoized walk, 1.1 boost)
-  - [x] Pick the blocking item (in the list row for now; moves to Edit item when that view exists)
-- [ ] **Edit item view**: every field including description, tags, parameters and state
+  - [x] Pick the blocking item, in the list row and in Edit item
+- [ ] **Edit item view**
+  - [x] Every field including description, tags, state and blocker, saved as one patch (one version, one audit entry)
+  - [x] Opened from the list (Edit) and from Closed (the title); a closed item can be reopened and edited in one save
+  - [ ] Custom parameters, once they exist
 - [ ] **List view controls**
   - [ ] Per-state pinned / shown / hidden; blocked items mixed in or grouped
   - [ ] Sort by a single parameter (`sort=`)
@@ -83,6 +86,6 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Edit item view and list controls (sort, filters including tags, search).
+1. List view controls (sort, filters including tags, search).
 2. Teams and heaps management.
 3. Custom parameters, which also completes the ranking formula and links parameters to tags.

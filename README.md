@@ -14,6 +14,8 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
   move with an animation. In-progress items are pinned; blocked items are collapsed.
 - Adding items (press `N`), inline edits of title, effort, impact, due date and state, closing, and
   reopening within a week from the Closed view.
+- Edit item: every field, tags, state and blocker in one form, opened from the list or from Closed. A closed
+  item can be reopened and edited in the same save.
 - Tags: per-heap tags on items, a tag picker, and a Manage tags view for renaming and describing them. Tags
   can be removed from an item but never deleted.
 - Blockers: a blocked item can wait for another item in its heap. Cycles are refused, and a blocker inherits

@@ -4,54 +4,9 @@ mod common;
 
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
-use common::{TestApp, TestResponse};
+use common::TestApp;
 use googletest::prelude::*;
 use serde_json::{Value, json};
-
-const CSRF: (&str, &str) = ("x-csrf-protection", "1");
-
-async fn create_tag(app: &TestApp, session: &str, heap: &str, name: &str) -> Result<TestResponse> {
-    app.send(
-        Method::POST,
-        &format!("/api/v1/heaps/{heap}/tags"),
-        Some(session),
-        Some(json!({ "name": name })),
-    )
-    .await
-}
-
-/// Creates a tag and returns its ID.
-async fn tag_id(app: &TestApp, session: &str, heap: &str, name: &str) -> Result<String> {
-    let created = create_tag(app, session, heap, name).await?;
-    anyhow::ensure!(
-        created.status == StatusCode::CREATED,
-        "create tag failed: {}",
-        created.body
-    );
-    Ok(created.body["id"].as_str().context("tag has no id")?.to_owned())
-}
-
-async fn create_item(app: &TestApp, session: &str, heap: &str, body: Value) -> Result<TestResponse> {
-    app.send(
-        Method::POST,
-        &format!("/api/v1/heaps/{heap}/items"),
-        Some(session),
-        Some(body),
-    )
-    .await
-}
-
-/// Sends a `PATCH` to `path` with `version` in `If-Match`.
-async fn patch(app: &TestApp, session: &str, path: &str, version: &Value, body: Value) -> Result<TestResponse> {
-    app.send_with(
-        Method::PATCH,
-        path,
-        Some(session),
-        Some(body),
-        &[CSRF, ("if-match", &version.to_string())],
-    )
-    .await
-}
 
 fn tag_names(item: &Value) -> Vec<&str> {
     item["tags"]
@@ -66,17 +21,17 @@ async fn items_carry_their_tags_by_name() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let ops = tag_id(&app, &session, &heap, "ops").await?;
-    let backend = tag_id(&app, &session, &heap, "Backend").await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let backend = app.new_tag_id(&session, &heap, "Backend").await?;
 
     // Act
-    let created = create_item(
-        &app,
-        &session,
-        &heap,
-        json!({ "title": "Rotate keys", "tag_ids": [ops, backend, ops] }),
-    )
-    .await?;
+    let created = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate keys", "tag_ids": [ops, backend, ops] }),
+        )
+        .await?;
     let list = app
         .send(
             Method::GET,
@@ -109,29 +64,19 @@ async fn tag_names_are_unique_per_heap_ignoring_case() -> Result<()> {
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
     let (other_session, other_heap) = app.register("bob@example.test").await?;
-    tag_id(&app, &session, &heap, "Infra").await?;
-    let ops = create_tag(&app, &session, &heap, "ops").await?;
+    app.new_tag_id(&session, &heap, "Infra").await?;
+    let ops = app.create_tag(&session, &heap, "ops").await?;
     let ops_path = format!("/api/v1/tags/{}", ops.body["id"].as_str().unwrap_or_default());
 
     // Act
-    let same_heap = create_tag(&app, &session, &heap, "  infra ").await?;
-    let other_heap = create_tag(&app, &other_session, &other_heap, "Infra").await?;
-    let rename_onto = patch(
-        &app,
-        &session,
-        &ops_path,
-        &ops.body["version"],
-        json!({ "name": "INFRA" }),
-    )
-    .await?;
-    let recase_self = patch(
-        &app,
-        &session,
-        &ops_path,
-        &ops.body["version"],
-        json!({ "name": "Ops" }),
-    )
-    .await?;
+    let same_heap = app.create_tag(&session, &heap, "  infra ").await?;
+    let other_heap = app.create_tag(&other_session, &other_heap, "Infra").await?;
+    let rename_onto = app
+        .patch(&session, &ops_path, &ops.body["version"], json!({ "name": "INFRA" }))
+        .await?;
+    let recase_self = app
+        .patch(&session, &ops_path, &ops.body["version"], json!({ "name": "Ops" }))
+        .await?;
 
     // Assert
     expect_that!(same_heap.status, eq(StatusCode::CONFLICT));
@@ -150,19 +95,21 @@ async fn renaming_a_tag_renames_it_on_every_item() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let tag = create_tag(&app, &session, &heap, "infra").await?;
+    let tag = app.create_tag(&session, &heap, "infra").await?;
     let tag_id = tag.body["id"].as_str().unwrap_or_default();
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task", "tag_ids": [tag_id] })).await?;
+    let item = app
+        .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [tag_id] }))
+        .await?;
 
     // Act
-    let renamed = patch(
-        &app,
-        &session,
-        &format!("/api/v1/tags/{tag_id}"),
-        &tag.body["version"],
-        json!({ "name": "platform", "description": "Shared services" }),
-    )
-    .await?;
+    let renamed = app
+        .patch(
+            &session,
+            &format!("/api/v1/tags/{tag_id}"),
+            &tag.body["version"],
+            json!({ "name": "platform", "description": "Shared services" }),
+        )
+        .await?;
     let reloaded = app
         .send(
             Method::GET,
@@ -184,44 +131,36 @@ async fn tags_can_be_removed_from_an_item_and_added_back() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let ops = tag_id(&app, &session, &heap, "ops").await?;
-    let docs = tag_id(&app, &session, &heap, "docs").await?;
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task", "tag_ids": [ops] })).await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let docs = app.new_tag_id(&session, &heap, "docs").await?;
+    let item = app
+        .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
+        .await?;
     let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
 
     // Act
-    let swapped = patch(
-        &app,
-        &session,
-        &path,
-        &item.body["version"],
-        json!({ "tag_ids": [docs] }),
-    )
-    .await?;
-    let cleared = patch(
-        &app,
-        &session,
-        &path,
-        &swapped.body["version"],
-        json!({ "tag_ids": [] }),
-    )
-    .await?;
-    let restored = patch(
-        &app,
-        &session,
-        &path,
-        &cleared.body["version"],
-        json!({ "tag_ids": [ops, docs] }),
-    )
-    .await?;
-    let unchanged = patch(
-        &app,
-        &session,
-        &path,
-        &restored.body["version"],
-        json!({ "tag_ids": [docs, ops] }),
-    )
-    .await?;
+    let swapped = app
+        .patch(&session, &path, &item.body["version"], json!({ "tag_ids": [docs] }))
+        .await?;
+    let cleared = app
+        .patch(&session, &path, &swapped.body["version"], json!({ "tag_ids": [] }))
+        .await?;
+    let restored = app
+        .patch(
+            &session,
+            &path,
+            &cleared.body["version"],
+            json!({ "tag_ids": [ops, docs] }),
+        )
+        .await?;
+    let unchanged = app
+        .patch(
+            &session,
+            &path,
+            &restored.body["version"],
+            json!({ "tag_ids": [docs, ops] }),
+        )
+        .await?;
 
     // Assert
     expect_that!(tag_names(&swapped.body), elements_are![eq(&"docs")]);
@@ -238,27 +177,24 @@ async fn tags_from_another_heap_are_refused() -> Result<()> {
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
     let (other_session, other_heap) = app.register("bob@example.test").await?;
-    let foreign = tag_id(&app, &other_session, &other_heap, "theirs").await?;
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task" })).await?;
+    let foreign = app.new_tag_id(&other_session, &other_heap, "theirs").await?;
+    let item = app.create_item(&session, &heap, json!({ "title": "Task" })).await?;
     let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
 
     // Act
-    let on_create = create_item(&app, &session, &heap, json!({ "title": "x", "tag_ids": [foreign] })).await?;
-    let on_edit = patch(
-        &app,
-        &session,
-        &path,
-        &item.body["version"],
-        json!({ "tag_ids": [foreign] }),
-    )
-    .await?;
-    let unknown = create_item(
-        &app,
-        &session,
-        &heap,
-        json!({ "title": "x", "tag_ids": ["00000000-0000-7000-8000-000000000000"] }),
-    )
-    .await?;
+    let on_create = app
+        .create_item(&session, &heap, json!({ "title": "x", "tag_ids": [foreign] }))
+        .await?;
+    let on_edit = app
+        .patch(&session, &path, &item.body["version"], json!({ "tag_ids": [foreign] }))
+        .await?;
+    let unknown = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "x", "tag_ids": ["00000000-0000-7000-8000-000000000000"] }),
+        )
+        .await?;
 
     // Assert
     for response in [&on_create, &on_edit, &unknown] {
@@ -275,13 +211,19 @@ async fn closed_items_keep_their_tags_until_reopened() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let ops = tag_id(&app, &session, &heap, "ops").await?;
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task", "tag_ids": [ops] })).await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let item = app
+        .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
+        .await?;
     let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
-    let done = patch(&app, &session, &path, &item.body["version"], json!({ "state": "done" })).await?;
+    let done = app
+        .patch(&session, &path, &item.body["version"], json!({ "state": "done" }))
+        .await?;
 
     // Act
-    let retag = patch(&app, &session, &path, &done.body["version"], json!({ "tag_ids": [] })).await?;
+    let retag = app
+        .patch(&session, &path, &done.body["version"], json!({ "tag_ids": [] }))
+        .await?;
     let closed = app
         .send(
             Method::GET,
@@ -304,13 +246,14 @@ async fn taking_a_tag_off_an_item_is_audited() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let ops = tag_id(&app, &session, &heap, "ops").await?;
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task", "tag_ids": [ops] })).await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let item = app
+        .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
+        .await?;
     let item_id = item.body["id"].as_str().unwrap_or_default().to_owned();
 
     // Act
-    patch(
-        &app,
+    app.patch(
         &session,
         &format!("/api/v1/items/{item_id}"),
         &item.body["version"],
@@ -334,12 +277,16 @@ async fn null_tag_ids_are_refused_rather_than_ignored() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let ops = tag_id(&app, &session, &heap, "ops").await?;
-    let item = create_item(&app, &session, &heap, json!({ "title": "Task", "tag_ids": [ops] })).await?;
+    let ops = app.new_tag_id(&session, &heap, "ops").await?;
+    let item = app
+        .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
+        .await?;
     let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
 
     // Act
-    let null = patch(&app, &session, &path, &item.body["version"], json!({ "tag_ids": null })).await?;
+    let null = app
+        .patch(&session, &path, &item.body["version"], json!({ "tag_ids": null }))
+        .await?;
 
     // Assert
     expect_that!(null.status, eq(StatusCode::BAD_REQUEST));

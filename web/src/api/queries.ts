@@ -32,6 +32,7 @@ export const useMe = () => useQuery(meQuery);
 const rankedKey = (heapId: string) => ["ranked", heapId] as const;
 const closedKey = (heapId: string) => ["closed", heapId] as const;
 const tagsKey = (heapId: string) => ["tags", heapId] as const;
+const itemKey = (itemId: string) => ["item", itemId] as const;
 
 /**
  * The ranked list, kept stable within a session: the first response's `as_of` is sent back on every refetch,
@@ -73,10 +74,25 @@ export function useClosedItems(heapId: string) {
   });
 }
 
+/**
+ * One item, for the Edit item view. It's fetched when the view opens and after each save, but not in the background
+ * (focus, reconnect or an interval), because a newer version resets the form and would drop what the user typed.
+ */
+export function useItem(itemId: string) {
+  return useQuery({
+    queryKey: itemKey(itemId),
+    queryFn: async () => unwrap(await api.GET("/api/v1/items/{item_id}", { params: { path: { item_id: itemId } } })),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
 function invalidateHeap(queryClient: QueryClient, heapId: string) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: rankedKey(heapId) }),
     queryClient.invalidateQueries({ queryKey: closedKey(heapId) }),
+    // Any open item may show a changed blocker or tag, so every cached item is refetched.
+    queryClient.invalidateQueries({ queryKey: ["item"] }),
   ]);
 }
 

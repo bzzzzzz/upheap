@@ -21,6 +21,9 @@ use service::{Clock, ManualClock, Services, Settings};
 use store::{ConnectionTrait, DatabaseConnection, Statement};
 use tower::ServiceExt;
 
+/// The header every write from the app carries.
+pub const CSRF: (&str, &str) = ("x-csrf-protection", "1");
+
 /// 2027-01-01T12:00:00Z.
 pub const START: i64 = 1_798_804_800_000;
 
@@ -83,8 +86,7 @@ impl TestApp {
         session: Option<&str>,
         body: Option<Value>,
     ) -> Result<TestResponse> {
-        self.send_with(method, path, session, body, &[("x-csrf-protection", "1")])
-            .await
+        self.send_with(method, path, session, body, &[CSRF]).await
     }
 
     pub async fn send_with(
@@ -132,6 +134,62 @@ impl TestApp {
             body,
             session_cookie,
         })
+    }
+
+    /// Creates an item in `heap` from `body`, whatever the outcome.
+    pub async fn create_item(&self, session: &str, heap: &str, body: Value) -> Result<TestResponse> {
+        self.send(
+            Method::POST,
+            &format!("/api/v1/heaps/{heap}/items"),
+            Some(session),
+            Some(body),
+        )
+        .await
+    }
+
+    /// Creates an item that must succeed, and returns its body.
+    pub async fn new_item(&self, session: &str, heap: &str, body: Value) -> Result<Value> {
+        let created = self.create_item(session, heap, body).await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create item failed: {}",
+            created.body
+        );
+        Ok(created.body)
+    }
+
+    /// Creates a tag named `name` in `heap`, whatever the outcome.
+    pub async fn create_tag(&self, session: &str, heap: &str, name: &str) -> Result<TestResponse> {
+        self.send(
+            Method::POST,
+            &format!("/api/v1/heaps/{heap}/tags"),
+            Some(session),
+            Some(serde_json::json!({ "name": name })),
+        )
+        .await
+    }
+
+    /// Creates a tag that must succeed, and returns its ID.
+    pub async fn new_tag_id(&self, session: &str, heap: &str, name: &str) -> Result<String> {
+        let created = self.create_tag(session, heap, name).await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create tag failed: {}",
+            created.body
+        );
+        Ok(created.body["id"].as_str().context("tag has no id")?.to_owned())
+    }
+
+    /// Sends a `PATCH` to `path` with `version` (as the API returns it) in `If-Match`.
+    pub async fn patch(&self, session: &str, path: &str, version: &Value, body: Value) -> Result<TestResponse> {
+        self.send_with(
+            Method::PATCH,
+            path,
+            Some(session),
+            Some(body),
+            &[CSRF, ("if-match", &version.to_string())],
+        )
+        .await
     }
 
     /// Registers a user and returns their session token and personal heap ID.

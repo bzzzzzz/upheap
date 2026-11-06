@@ -72,13 +72,15 @@ export function TagPicker({
     } else if (event.key === "ArrowUp" && open) {
       event.preventDefault();
       setHighlight((highlight - 1 + optionCount) % optionCount);
-    } else if (event.key === "Enter" && query !== "") {
-      // Enter picks a tag here instead of submitting the item.
+    } else if (event.key === "Enter" && query !== "" && !event.metaKey && !event.ctrlKey) {
+      // Enter picks a tag here instead of submitting the item. With ⌘ or Ctrl it's left to the form.
       event.preventDefault();
       choose(highlight);
     } else if (event.key === "Backspace" && text === "" && value.length > 0 && !busy) {
       onChange(value.slice(0, -1));
-    } else if (event.key === "Escape") {
+    } else if (event.key === "Escape" && text !== "") {
+      // Handled here, so a form around the picker doesn't treat it as cancel.
+      event.preventDefault();
       setText("");
     }
   };
