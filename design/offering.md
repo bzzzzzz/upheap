@@ -37,7 +37,7 @@ Companion to [requirements.md](requirements.md).
 
 1. Items, tags and heaps can't be deleted.
 2. An item that won't be done is closed with the **won't do** state instead.
-3. Tags can be renamed and their descriptions edited, but not removed.
+3. Tags can be renamed and their descriptions edited, but not deleted. A tag can be taken off an item, which is recorded in the audit log like any other item edit.
 4. Heaps are archived instead of removed.
 5. Custom parameters and their options are archived instead of removed:
    - Archiving an option requires the admin to pick a replacement option. Items in a non-terminal state (open, in progress, blocked) switch to the replacement. Items in a terminal state (done, won't do) keep the archived option.

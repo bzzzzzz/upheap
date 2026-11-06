@@ -89,7 +89,7 @@ It answers questions like:
 
 **Manage tags.** A supporting view.
 
-1. Any team member can create and rename tags and edit their descriptions. Tags can't be deleted.
+1. Any team member can create and rename tags and edit their descriptions. Tags can't be deleted, but a tag can be taken off any item.
 
 **Manage parameters.** A supporting view, for team admins only.
 

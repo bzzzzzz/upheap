@@ -90,6 +90,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The heap's tags, by name. */
+        get: operations["list_tags"];
+        put?: never;
+        /** Adds a tag to the heap. */
+        post: operations["create_tag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{item_id}": {
         parameters: {
             query?: never;
@@ -141,6 +159,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames a tag or changes its description. Send the tag's `version` in `If-Match`. */
+        patch: operations["update_tag"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -167,7 +202,14 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /** @description Tags of the same heap, at most 50. */
+            tag_ids?: string[] | null;
             title: string;
+        };
+        CreateTagRequest: {
+            description?: string | null;
+            /** @description 1 to 50 characters, unique in the heap ignoring case. */
+            name: string;
         };
         /** @description A due time, ready to show. */
         Due: {
@@ -227,6 +269,8 @@ export interface components {
             id: string;
             impact?: null | components["schemas"]["Size"];
             state: components["schemas"]["ItemState"];
+            /** @description By name. */
+            tags: components["schemas"]["ItemTag"][];
             title: string;
             /**
              * Format: int32
@@ -246,6 +290,8 @@ export interface components {
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
             state?: null | components["schemas"]["ItemState"];
+            /** @description Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused. */
+            tag_ids?: string[];
             title?: string | null;
         };
         /**
@@ -253,6 +299,12 @@ export interface components {
          * @enum {string}
          */
         ItemState: "open" | "in_progress" | "blocked" | "done" | "wont_do";
+        /** @description A tag on an item: enough to show it. */
+        ItemTag: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         Me: {
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
@@ -310,6 +362,41 @@ export interface components {
          * @enum {string}
          */
         Size: "s" | "m" | "l" | "xl";
+        Tag: {
+            allowed_actions: components["schemas"]["TagAction"][];
+            description?: string | null;
+            /** Format: uuid */
+            heap_id: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when editing.
+             */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on a tag.
+         * @enum {string}
+         */
+        TagAction: "edit";
+        TagList: {
+            allowed_actions: components["schemas"]["TagListAction"][];
+            heap: components["schemas"]["HeapSummary"];
+            /** @description By name. */
+            tags: components["schemas"]["Tag"][];
+        };
+        /**
+         * @description An action the caller can take on a heap's tag list.
+         * @enum {string}
+         */
+        TagListAction: "create";
+        /** @description A partial edit. Leave a field out to keep it; send `null` to clear the description. */
+        TagPatchRequest: {
+            description?: string | null;
+            name?: string | null;
+        };
         TeamSummary: {
             heaps: components["schemas"]["HeapSummary"][];
             /** Format: uuid */
@@ -504,6 +591,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Invalid fields, or `tag_not_in_heap` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -551,6 +639,85 @@ export interface operations {
             };
         };
     };
+    list_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTagRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_name_taken` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_item: {
         parameters: {
             query?: never;
@@ -587,7 +754,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description The `version` of the item being edited, for example `"3"`. */
+                /** @description The `version` of the item or tag being edited, for example `"3"`. */
                 "If-Match": string;
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
                 "Time-Zone"?: string | null;
@@ -628,6 +795,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Invalid fields, or `tag_not_in_heap` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -651,7 +819,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description The `version` of the item being edited, for example `"3"`. */
+                /** @description The `version` of the item or tag being edited, for example `"3"`. */
                 "If-Match": string;
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
                 "Time-Zone"?: string | null;
@@ -709,6 +877,68 @@ export interface operations {
             };
             /** @description `unauthenticated` */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_tag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of the item or tag being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_name_taken`, `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { Size } from "../api/client";
+import type { ItemTag, Size } from "../api/client";
 import { useCreateItem } from "../api/queries";
 import { SizeSelect } from "./SizeSelect";
+import { TagPicker } from "./TagPicker";
 
 /** The fastest path in the app: type a title, press Enter, type the next one. `n` focuses it. */
 export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: boolean }) {
@@ -15,6 +16,7 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
   const [dueDate, setDueDate] = useState("");
   const [dueFirm, setDueFirm] = useState(false);
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState<ItemTag[]>([]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -39,6 +41,7 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
         effort,
         impact,
         due: dueDate ? { date: dueDate, firm: dueFirm } : null,
+        tag_ids: tags.map((tag) => tag.id),
       },
       {
         onSuccess: () => {
@@ -48,6 +51,7 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
           setImpact(null);
           setDueDate("");
           setDueFirm(false);
+          setTags([]);
           titleRef.current?.focus();
         },
       },
@@ -113,6 +117,7 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
               Exact deadline
             </label>
           </div>
+          <TagPicker heapId={heapId} value={tags} onChange={setTags} disabled={disabled} />
           <label className="flex flex-col gap-1 text-xs text-stone-500">
             Description
             <textarea

@@ -17,6 +17,8 @@ pub enum ValidationError {
     DueDateInvalid,
     #[error("timestamp is out of range")]
     TimestampOutOfRange,
+    #[error("an item can have at most {max} tags")]
+    TooManyTags { max: usize },
 }
 
 /// The input field a [`ValidationError`] is about.

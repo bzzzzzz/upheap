@@ -5,6 +5,7 @@ import { ApiProblem, type ItemPatch, type ItemState, type RankedItem } from "../
 import { useUpdateItem } from "../api/queries";
 import { STATE_LABELS, STATES } from "./labels";
 import { SizeSelect } from "./SizeSelect";
+import { TagChips } from "./TagChips";
 
 /** One ranked item. Controls appear only for actions the server allows. */
 export function ItemRow({ entry, heapId, compact = false }: { entry: RankedItem; heapId: string; compact?: boolean }) {
@@ -73,6 +74,14 @@ export function ItemRow({ entry, heapId, compact = false }: { entry: RankedItem;
               {item.due.label}
             </span>
           )}
+          <TagChips
+            tags={item.tags}
+            onRemove={
+              canEdit
+                ? (removed) => save({ tag_ids: item.tags.filter((t) => t.id !== removed.id).map((t) => t.id) })
+                : undefined
+            }
+          />
         </div>
         {!compact && contributors.length > 0 && (
           <p className="mt-0.5 text-xs text-stone-500">{contributors.map((c) => c.label).join(" · ")}</p>

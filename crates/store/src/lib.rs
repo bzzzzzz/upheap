@@ -12,13 +12,14 @@ pub mod heaps;
 pub mod items;
 mod migration;
 pub mod sessions;
+pub mod tags;
 pub mod teams;
 pub mod users;
 
 use std::time::Duration;
 
 use sea_orm::{ConnectOptions, Database};
-pub use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, TransactionTrait};
+pub use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, Statement, TransactionTrait};
 use sea_orm_migration::MigratorTrait;
 
 pub use error::StoreError;

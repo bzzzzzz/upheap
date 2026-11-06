@@ -1,8 +1,10 @@
 //! Items and their state machine.
 
+use std::collections::BTreeSet;
+
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
-use crate::{Duration, HeapId, ItemId, Timestamp, Version};
+use crate::{Duration, HeapId, ItemId, TagId, Timestamp, Version};
 
 /// A closed item can be reopened for exactly 7 × 24 hours after it was closed, independent of timezones.
 pub const REOPEN_WINDOW: Duration = Duration::from_days(7);
@@ -183,6 +185,8 @@ pub struct NewItem {
     pub effort: Option<Size>,
     pub impact: Option<Size>,
     pub due: Option<Due>,
+    /// Tags of the item's heap. The service checks they belong to it.
+    pub tags: BTreeSet<TagId>,
 }
 
 /// A partial edit. An outer `None` leaves the field unchanged; `Some(None)` clears it.
@@ -193,6 +197,8 @@ pub struct ItemPatch {
     pub effort: Option<Option<Size>>,
     pub impact: Option<Option<Size>>,
     pub due: Option<Option<Due>>,
+    /// Replaces the whole set of tags.
+    pub tags: Option<BTreeSet<TagId>>,
     pub state: Option<StateKind>,
 }
 
@@ -204,6 +210,7 @@ impl ItemPatch {
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
+            || self.tags.is_some()
     }
 }
 
@@ -219,6 +226,7 @@ pub struct Item {
     /// `None` when unset, which ranks as the smallest impact.
     pub impact: Option<Size>,
     pub due: Option<Due>,
+    pub tags: BTreeSet<TagId>,
     pub created_at: Timestamp,
     pub version: Version,
 }
@@ -235,6 +243,7 @@ impl Item {
             effort: fields.effort,
             impact: fields.impact,
             due: fields.due,
+            tags: fields.tags,
             created_at: now,
             version: Version::INITIAL,
         }
@@ -270,6 +279,7 @@ impl Item {
             effort: patch.effort.unwrap_or(self.effort),
             impact: patch.impact.unwrap_or(self.impact),
             due: patch.due.unwrap_or(self.due),
+            tags: patch.tags.clone().unwrap_or_else(|| self.tags.clone()),
             state,
             ..self.clone()
         };
@@ -321,6 +331,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            tags: BTreeSet::new(),
         };
         Item::new(
             ItemId::from_uuid(Uuid::nil()),
@@ -404,6 +415,23 @@ mod tests {
 
         expect_that!(
             closed.apply_patch(&rename, at(2)),
+            err(eq(&ItemError::Closed { item_id: closed.id }))
+        );
+    }
+
+    #[gtest]
+    fn retagging_a_closed_item_fails() {
+        let closed = sample_item()
+            .apply_patch(&closing_patch(), at(1))
+            .expect("ok")
+            .expect("changed");
+        let retag = ItemPatch {
+            tags: Some(BTreeSet::from([TagId::from_uuid(Uuid::nil())])),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            closed.apply_patch(&retag, at(2)),
             err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }

@@ -9,7 +9,17 @@ import {
 } from "@tanstack/react-query";
 import { useRef } from "react";
 
-import { api, ensureOk, unwrap, type Item, type ItemPatch, type NewItem } from "./client";
+import {
+  api,
+  ensureOk,
+  unwrap,
+  type Item,
+  type ItemPatch,
+  type NewItem,
+  type NewTag,
+  type Tag,
+  type TagPatch,
+} from "./client";
 
 export const meQuery = queryOptions({
   queryKey: ["me"],
@@ -21,6 +31,7 @@ export const useMe = () => useQuery(meQuery);
 
 const rankedKey = (heapId: string) => ["ranked", heapId] as const;
 const closedKey = (heapId: string) => ["closed", heapId] as const;
+const tagsKey = (heapId: string) => ["tags", heapId] as const;
 
 /**
  * The ranked list, kept stable within a session: the first response's `as_of` is sent back on every refetch,
@@ -103,6 +114,40 @@ export function useReopenItem(heapId: string) {
         }),
       ),
     onSettled: () => invalidateHeap(queryClient, heapId),
+  });
+}
+
+export function useTags(heapId: string) {
+  return useQuery({
+    queryKey: tagsKey(heapId),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/v1/heaps/{heap_id}/tags", { params: { path: { heap_id: heapId } } })),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateTag(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: NewTag) =>
+      unwrap(await api.POST("/api/v1/heaps/{heap_id}/tags", { params: { path: { heap_id: heapId } }, body })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: tagsKey(heapId) }),
+  });
+}
+
+export function useUpdateTag(heapId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ tag, patch }: { tag: Tag; patch: TagPatch }) =>
+      unwrap(
+        await api.PATCH("/api/v1/tags/{tag_id}", {
+          params: { path: { tag_id: tag.id }, header: { "If-Match": `"${tag.version}"` } },
+          body: patch,
+        }),
+      ),
+    // Items show tag names, so a rename refreshes them too.
+    onSettled: () =>
+      Promise.all([queryClient.invalidateQueries({ queryKey: tagsKey(heapId) }), invalidateHeap(queryClient, heapId)]),
   });
 }
 

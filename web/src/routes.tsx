@@ -8,6 +8,7 @@ import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
+import { TagsPage } from "./pages/TagsPage";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
@@ -61,7 +62,19 @@ const closedRoute = createRoute({
   },
 });
 
-const routeTree = rootRoute.addChildren([loginRoute, appRoute.addChildren([indexRoute, heapRoute, closedRoute])]);
+const tagsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/heaps/$heapId/tags",
+  component: function TagsRoute() {
+    const { heapId } = tagsRoute.useParams();
+    return <TagsPage heapId={heapId} />;
+  },
+});
+
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  appRoute.addChildren([indexRoute, heapRoute, closedRoute, tagsRoute]),
+]);
 
 export function createAppRouter(queryClient: QueryClient) {
   return createRouter({ routeTree, context: { queryClient }, defaultPreload: "intent" });

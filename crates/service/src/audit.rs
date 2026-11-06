@@ -1,6 +1,7 @@
 //! Building audit entries and diffs.
 
 use domain::item::{Due, Item};
+use domain::tag::Tag;
 use serde_json::{Map, Value, json};
 
 /// The fields of a newly created item, for its `item_created` entry.
@@ -10,8 +11,20 @@ pub(crate) fn describe_new_item(item: &Item) -> Value {
 
 /// Changed fields between two versions of an item, as `{"field": {"before": …, "after": …}}`.
 pub(crate) fn diff_items(before: &Item, after: &Item) -> Value {
-    let before = item_fields(before);
-    let after = item_fields(after);
+    diff_fields(item_fields(before), item_fields(after))
+}
+
+/// The fields of a newly created tag, for its `tag_created` entry.
+pub(crate) fn describe_new_tag(tag: &Tag) -> Value {
+    Value::Object(tag_fields(tag))
+}
+
+/// Changed fields between two versions of a tag.
+pub(crate) fn diff_tags(before: &Tag, after: &Tag) -> Value {
+    diff_fields(tag_fields(before), tag_fields(after))
+}
+
+fn diff_fields(before: Map<String, Value>, after: Map<String, Value>) -> Value {
     let changes = after
         .into_iter()
         .filter_map(|(field, new)| {
@@ -34,5 +47,18 @@ fn item_fields(item: &Item) -> Map<String, Value> {
     fields.insert("effort".into(), json!(item.effort.map(|s| s.code())));
     fields.insert("impact".into(), json!(item.impact.map(|s| s.code())));
     fields.insert("due".into(), json!(due(item.due)));
+    // Tag IDs rather than names: names change, and the audit entry must still say which tag it was.
+    let tags: Vec<String> = item.tags.iter().map(ToString::to_string).collect();
+    fields.insert("tags".into(), json!(tags));
+    fields
+}
+
+fn tag_fields(tag: &Tag) -> Map<String, Value> {
+    let mut fields = Map::new();
+    fields.insert("name".into(), json!(tag.name.as_str()));
+    fields.insert(
+        "description".into(),
+        json!(tag.description.as_ref().map(|d| d.as_str())),
+    );
     fields
 }

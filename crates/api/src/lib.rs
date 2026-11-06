@@ -11,6 +11,7 @@ mod health;
 mod items;
 mod me;
 mod request_id;
+mod tags;
 
 use std::time::Duration;
 
@@ -52,6 +53,7 @@ pub struct CookieSettings {
         (name = "auth", description = "Registration and sign-in"),
         (name = "me", description = "The signed-in user"),
         (name = "items", description = "Items and the ranked list"),
+        (name = "tags", description = "A heap's tags"),
     )
 )]
 struct ApiDoc;
@@ -73,6 +75,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(auth::routes())
         .merge(me::routes())
         .merge(items::routes())
+        .merge(tags::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)

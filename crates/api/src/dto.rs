@@ -7,12 +7,13 @@ use domain::heap::Heap;
 use domain::item::{Due, Size, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
+use domain::tag::Tag;
 use domain::team::Role;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
 use service::items::{ItemView, RankedEntry};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 /// Effort or impact.
@@ -104,6 +105,23 @@ impl From<ItemAction> for ItemActionDto {
     }
 }
 
+/// A tag on an item: enough to show it.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = ItemTag)]
+pub(crate) struct ItemTagDto {
+    pub id: Uuid,
+    pub name: String,
+}
+
+impl From<&Tag> for ItemTagDto {
+    fn from(tag: &Tag) -> Self {
+        Self {
+            id: *tag.id.as_uuid(),
+            name: tag.name.as_str().to_owned(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = Role)]
@@ -168,6 +186,8 @@ pub(crate) struct ItemDto {
     /// `null` when unset.
     pub impact: Option<SizeDto>,
     pub due: Option<DueDto>,
+    /// By name.
+    pub tags: Vec<ItemTagDto>,
     /// UTC milliseconds.
     pub created_at: i64,
     /// UTC milliseconds; set exactly when the item is closed.
@@ -266,6 +286,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 overdue: view.overdue,
             }
         }),
+        tags: view.tags.iter().map(ItemTagDto::from).collect(),
         created_at: item.created_at.as_millis(),
         closed_at: closed_at.map(Timestamp::as_millis),
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),
@@ -280,6 +301,28 @@ pub(crate) fn to_ranked_dto(entry: RankedEntry, as_of: Timestamp, tz: &TimeZone)
         contributors: entry.contributors.into_iter().map(ContributorDto::from).collect(),
         item: to_item_dto(entry.view, as_of, tz),
     }
+}
+
+/// The `If-Match` request header, documented once.
+#[derive(IntoParams)]
+#[into_params(parameter_in = Header)]
+#[allow(dead_code)]
+pub(crate) struct IfMatchHeader {
+    /// The `version` of the item or tag being edited, for example `"3"`.
+    #[param(rename = "If-Match")]
+    if_match: String,
+}
+
+/// Deserializes a field that can be absent (leave unchanged) or a value, and refuses `null`, for fields where
+/// "clear" is spelled differently (an empty list). Without this, `null` would silently mean "unchanged".
+pub(crate) fn non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer)?
+        .map(Some)
+        .ok_or_else(|| serde::de::Error::custom("must not be null; send [] to clear"))
 }
 
 /// Deserializes a field that can be absent (leave unchanged), `null` (clear) or a value (set).

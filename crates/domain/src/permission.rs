@@ -32,7 +32,7 @@ impl Permission {
 /// An action a client may offer on an item.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemAction {
-    /// Change the title, description, effort, impact or due time.
+    /// Change the title, description, effort, impact, due time or tags.
     Edit,
     /// Move between non-closed states, or close.
     ChangeState,
@@ -52,4 +52,39 @@ pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp
         return vec![ItemAction::Reopen];
     }
     Vec::new()
+}
+
+/// An action a client may offer on a tag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TagAction {
+    /// Rename it or change its description.
+    Edit,
+}
+
+/// An action a client may offer on a heap's tag list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TagListAction {
+    /// Add a tag.
+    Create,
+}
+
+/// What `role` can do with any tag of `heap`. Empty for archived heaps.
+pub fn allowed_tag_actions(heap: &Heap, role: Role) -> Vec<TagAction> {
+    if !can_edit_tags(heap, role) {
+        return Vec::new();
+    }
+    vec![TagAction::Edit]
+}
+
+/// What `role` can do with the tag list of `heap`. Empty for archived heaps.
+pub fn allowed_tag_list_actions(heap: &Heap, role: Role) -> Vec<TagListAction> {
+    if !can_edit_tags(heap, role) {
+        return Vec::new();
+    }
+    vec![TagListAction::Create]
+}
+
+/// Tags are edited under the same permission as items: the roles table grants both to every member.
+const fn can_edit_tags(heap: &Heap, role: Role) -> bool {
+    !heap.is_archived() && Permission::EditItems.is_granted_to(role)
 }

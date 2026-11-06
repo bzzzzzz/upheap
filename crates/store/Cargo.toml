@@ -21,5 +21,10 @@ thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+anyhow.workspace = true
+googletest.workspace = true
+tokio.workspace = true
+
 [lints]
 workspace = true

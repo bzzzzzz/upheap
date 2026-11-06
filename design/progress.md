@@ -3,9 +3,9 @@
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
 [technical-design.md](technical-design.md). Last reviewed 2026-11-05.
 
-About 40% of the golden path is built: local accounts, the personal heap, and the ranked list with add, edit,
-close and reopen. Tags, blockers, custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
-started. All 38 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
+About 45% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
+and reopen, and tags. Blockers, custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
+started. All 54 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
 pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -21,9 +21,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Ranking: age, deadline, value per effort | Req Priority §1–4, 6–10 | 🟡 | Placeholder formula `V1`; no custom parameters or blocker boost |
 | Main list view | Req Views: List items | 🟡 | Pinned and blocked groups, inline edits, `N` shortcut; no state config, sort, search or filters |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
-| Add item | Req Views: Add item | 🟡 | No tags or linked parameters |
-| Edit item view | Req Views: Edit item | ⬜ | Description can't be edited after creation |
-| Tags and Manage tags | Req Items §5, Manage tags | ⬜ | No tables or endpoints |
+| Add item | Req Views: Add item | 🟡 | Tags, created by typing a new name; no linked parameters |
+| Edit item view | Req Views: Edit item | ⬜ | Description can't be edited and tags can't be added in the UI after creation; the API allows both |
+| Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; no tag filter yet (List view controls) |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ⬜ | The blocked state exists without `blocked_by_item_id` |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
 | Saved views | Req Heaps §4 | ⬜ | |
@@ -40,11 +40,12 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Remaining work
 
-- [ ] **Tags**
-  - [ ] `tags` and `item_tags` tables, name unique per heap
-  - [ ] `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}`; no delete
-  - [ ] Tags in Add item; typing a new name creates the tag
-  - [ ] Manage tags view
+- [x] **Tags**
+  - [x] `tags` and `item_tags` tables, name unique per heap ignoring case
+  - [x] `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}`; no delete. Items take `tag_ids` on create and edit.
+  - [x] Take a tag off an item from the list (audited as `item_updated`)
+  - [x] Tags in Add item; typing a new name creates the tag
+  - [x] Manage tags view
 - [ ] **Blockers**
   - [ ] `blocked_by_item_id` column; a blocker from another heap is rejected with 422
   - [ ] Cycle detection inside the write transaction (`blocking_cycle`)
@@ -82,9 +83,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Tags. Add item, saved views and parameter links all build on them.
-2. Blockers, with cycle detection and inherited priority.
-3. Edit item view and list controls (sort, filters, search).
-4. Teams and heaps management.
-5. Custom parameters, which also completes the ranking formula.
-6. The MySQL run in CI, alongside the steps above rather than at the end.
+1. Blockers, with cycle detection and inherited priority.
+2. Edit item view and list controls (sort, filters including tags, search).
+3. Teams and heaps management.
+4. Custom parameters, which also completes the ranking formula and links parameters to tags.
+5. The MySQL run in CI, alongside the steps above rather than at the end.
