@@ -62,7 +62,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The heap's non-closed items, ranked, with the reasons for each position. */
+        /**
+         * The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
+         *     item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
+         */
         get: operations["list_ranked"];
         put?: never;
         /** Adds an item. Only the title is required. */
@@ -180,6 +183,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Where shown blocked items go.
+         * @enum {string}
+         */
+        BlockedLayout: "grouped" | "mixed";
         ClosedItems: {
             heap: components["schemas"]["HeapSummary"];
             /** @description Most recently closed first. */
@@ -320,6 +328,12 @@ export interface components {
             id: string;
             name: string;
         };
+        /**
+         * @description What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or
+         *     `impact` (largest first). Items without the value come last.
+         * @enum {string}
+         */
+        ListSort: "priority" | "due" | "effort" | "impact";
         Me: {
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
@@ -353,12 +367,17 @@ export interface components {
              * @description The time the ranking used (UTC milliseconds). Send it back as `as_of` to keep the order stable.
              */
             as_of: number;
-            /** @description Blocked items, highest priority first. Hidden by default. */
+            /** @description Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden. */
             blocked: components["schemas"]["RankedItem"][];
             heap: components["schemas"]["HeapSummary"];
-            /** @description In-progress items, pinned above the rest. */
+            /**
+             * Format: int32
+             * @description How many items the filters keep but are left out because their state is hidden.
+             */
+            hidden_count: number;
+            /** @description Items in pinned states (in progress by default), above the rest. */
             pinned: components["schemas"]["RankedItem"][];
-            /** @description Open items, highest priority first. */
+            /** @description Items in shown states, including blocked items when they're mixed in. */
             ranked: components["schemas"]["RankedItem"][];
         };
         RegisterRequest: {
@@ -377,6 +396,11 @@ export interface components {
          * @enum {string}
          */
         Size: "s" | "m" | "l" | "xl";
+        /**
+         * @description Where items in one state go in the list.
+         * @enum {string}
+         */
+        StateMode: "pinned" | "shown" | "hidden";
         Tag: {
             allowed_actions: components["schemas"]["TagAction"][];
             description?: string | null;
@@ -533,6 +557,22 @@ export interface operations {
             query?: {
                 /** @description The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time. */
                 as_of?: number;
+                /** @description Where open items go. Defaults to `shown`. */
+                open?: components["schemas"]["StateMode"];
+                /** @description Where in-progress items go. Defaults to `pinned`. */
+                in_progress?: components["schemas"]["StateMode"];
+                /** @description Where blocked items go. Defaults to `hidden`. */
+                blocked?: components["schemas"]["StateMode"];
+                /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
+                blocked_layout?: components["schemas"]["BlockedLayout"];
+                /** @description What each group is sorted by. Ties keep priority order. Defaults to `priority`. */
+                sort?: components["schemas"]["ListSort"];
+                /** @description Keep items with any of these tags, comma-separated. Tags of the same heap. */
+                tag?: string[];
+                /** @description Keep items with any of these efforts, comma-separated. */
+                effort?: components["schemas"]["Size"][];
+                /** @description Keep items with any of these impacts, comma-separated. */
+                impact?: components["schemas"]["Size"][];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
@@ -553,7 +593,25 @@ export interface operations {
                     "application/json": components["schemas"]["RankedList"];
                 };
             };
+            /** @description `invalid_query` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap`, with `field` `tag` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -49,6 +49,8 @@ pub struct CookieSettings {
 #[openapi(
     info(title = "Upheap API", description = "A todo list that ranks itself."),
     modifiers(&SessionCookieScheme),
+    // Only used in query parameters, which don't register their schemas.
+    components(schemas(items::StateModeDto, items::BlockedLayoutDto, items::SortDto)),
     tags(
         (name = "auth", description = "Registration and sign-in"),
         (name = "me", description = "The signed-in user"),

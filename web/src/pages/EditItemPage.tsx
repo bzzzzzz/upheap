@@ -10,7 +10,7 @@ import {
   type ItemTag,
   type Size,
 } from "../api/client";
-import { useItem, useRankedList, useUpdateItem } from "../api/queries";
+import { useBlockerCandidates, useItem, useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "../components/BlockerSelect";
 import { blockerCandidatesFor } from "../components/blockerCandidates";
 import { isClosed, STATE_LABELS, STATES } from "../components/labels";
@@ -30,7 +30,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
 /** Every field of one item in a single form. Saving sends one patch with only the changed fields. */
 export function EditItemPage({ heapId, itemId }: { heapId: string; itemId: string }) {
   const item = useItem(itemId);
-  const list = useRankedList(heapId);
+  const candidates = useBlockerCandidates(heapId);
   const update = useUpdateItem(heapId);
   const leave = useLeave(heapId);
 
@@ -54,7 +54,6 @@ export function EditItemPage({ heapId, itemId }: { heapId: string; itemId: strin
     return <Navigate to="/heaps/$heapId/items/$itemId" params={{ heapId: item.data.heap_id, itemId }} replace />;
   }
 
-  const entries = list.data ? [...list.data.pinned, ...list.data.ranked, ...list.data.blocked] : [];
   const current = item.data;
   // After a save the item's new state decides which list to go back to, so a reopened item lands in the open list.
   const save = (patch: ItemPatch) =>
@@ -67,7 +66,7 @@ export function EditItemPage({ heapId, itemId }: { heapId: string; itemId: strin
       <EditItemForm
         key={`${item.data.id}:${item.data.version}`}
         item={item.data}
-        blockerCandidates={blockerCandidatesFor(entries)(itemId)}
+        blockerCandidates={blockerCandidatesFor(candidates.data ?? [])(itemId)}
         saving={update.isPending}
         error={update.error}
         onSave={save}

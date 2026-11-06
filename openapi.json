@@ -121,7 +121,7 @@
         "tags": [
           "items"
         ],
-        "summary": "The heap's non-closed items, ranked, with the reasons for each position.",
+        "summary": "The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed\nitem; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.",
         "operationId": "list_ranked",
         "parameters": [
           {
@@ -142,6 +142,94 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "open",
+            "in": "query",
+            "description": "Where open items go. Defaults to `shown`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "in_progress",
+            "in": "query",
+            "description": "Where in-progress items go. Defaults to `pinned`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "blocked",
+            "in": "query",
+            "description": "Where blocked items go. Defaults to `hidden`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "blocked_layout",
+            "in": "query",
+            "description": "Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BlockedLayout"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "What each group is sorted by. Ties keep priority order. Defaults to `priority`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ListSort"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "description": "Keep items with any of these tags, comma-separated. Tags of the same heap.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "effort",
+            "in": "query",
+            "description": "Keep items with any of these efforts, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Size"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Keep items with any of these impacts, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Size"
+              }
+            },
+            "style": "form",
+            "explode": false
           },
           {
             "name": "Time-Zone",
@@ -167,8 +255,28 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_query`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap`, with `field` `tag`",
             "content": {
               "application/json": {
                 "schema": {
@@ -850,6 +958,14 @@
   },
   "components": {
     "schemas": {
+      "BlockedLayout": {
+        "type": "string",
+        "description": "Where shown blocked items go.",
+        "enum": [
+          "grouped",
+          "mixed"
+        ]
+      },
       "ClosedItems": {
         "type": "object",
         "required": [
@@ -1310,6 +1426,16 @@
           }
         }
       },
+      "ListSort": {
+        "type": "string",
+        "description": "What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or\n`impact` (largest first). Items without the value come last.",
+        "enum": [
+          "priority",
+          "due",
+          "effort",
+          "impact"
+        ]
+      },
       "Me": {
         "type": "object",
         "required": [
@@ -1399,7 +1525,8 @@
           "as_of",
           "pinned",
           "ranked",
-          "blocked"
+          "blocked",
+          "hidden_count"
         ],
         "properties": {
           "as_of": {
@@ -1412,24 +1539,30 @@
             "items": {
               "$ref": "#/components/schemas/RankedItem"
             },
-            "description": "Blocked items, highest priority first. Hidden by default."
+            "description": "Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden."
           },
           "heap": {
             "$ref": "#/components/schemas/HeapSummary"
+          },
+          "hidden_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items the filters keep but are left out because their state is hidden.",
+            "minimum": 0
           },
           "pinned": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RankedItem"
             },
-            "description": "In-progress items, pinned above the rest."
+            "description": "Items in pinned states (in progress by default), above the rest."
           },
           "ranked": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RankedItem"
             },
-            "description": "Open items, highest priority first."
+            "description": "Items in shown states, including blocked items when they're mixed in."
           }
         }
       },
@@ -1482,6 +1615,15 @@
           "m",
           "l",
           "xl"
+        ]
+      },
+      "StateMode": {
+        "type": "string",
+        "description": "Where items in one state go in the list.",
+        "enum": [
+          "pinned",
+          "shown",
+          "hidden"
         ]
       },
       "Tag": {

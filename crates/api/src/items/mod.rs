@@ -3,11 +3,13 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
+use domain::item::{Description, ItemPatch, NewItem, Size, StateKind, Title};
+use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
 use domain::tag::parse_tag_set;
 use domain::{HeapId, ItemId, TagId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
-use serde::{Deserialize, Serialize};
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Deserializer, Serialize};
 use service::ServiceError;
 use service::items::ClosedCursor;
 use utoipa::{IntoParams, ToSchema};
@@ -31,11 +33,128 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(reopen_item))
 }
 
+/// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
+/// pinned, open items shown, blocked items hidden, by priority.
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(crate) struct RankedQuery {
     /// The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time.
     pub as_of: Option<i64>,
+    /// Where open items go. Defaults to `shown`.
+    pub open: Option<StateModeDto>,
+    /// Where in-progress items go. Defaults to `pinned`.
+    pub in_progress: Option<StateModeDto>,
+    /// Where blocked items go. Defaults to `hidden`.
+    pub blocked: Option<StateModeDto>,
+    /// Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.
+    pub blocked_layout: Option<BlockedLayoutDto>,
+    /// What each group is sorted by. Ties keep priority order. Defaults to `priority`.
+    pub sort: Option<SortDto>,
+    /// Keep items with any of these tags, comma-separated. Tags of the same heap.
+    #[serde(default, deserialize_with = "comma_separated")]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub tag: Vec<Uuid>,
+    /// Keep items with any of these efforts, comma-separated.
+    #[serde(default, deserialize_with = "comma_separated")]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub effort: Vec<SizeDto>,
+    /// Keep items with any of these impacts, comma-separated.
+    #[serde(default, deserialize_with = "comma_separated")]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub impact: Vec<SizeDto>,
+}
+
+impl RankedQuery {
+    fn to_view(&self) -> ListView {
+        let default = ListView::default();
+        ListView {
+            open: self.open.map_or(default.open, Into::into),
+            in_progress: self.in_progress.map_or(default.in_progress, Into::into),
+            blocked: self.blocked.map_or(default.blocked, Into::into),
+            blocked_layout: self.blocked_layout.map_or(default.blocked_layout, Into::into),
+            sort: self.sort.map_or(default.sort, Into::into),
+            filter: ListFilter {
+                // Not capped: every tag must belong to the heap, which bounds the set.
+                tags: self.tag.iter().copied().map(TagId::from_uuid).collect(),
+                effort: self.effort.iter().copied().map(Size::from).collect(),
+                impact: self.impact.iter().copied().map(Size::from).collect(),
+            },
+        }
+    }
+}
+
+/// Where items in one state go in the list.
+#[derive(Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = StateMode)]
+pub(crate) enum StateModeDto {
+    Pinned,
+    Shown,
+    Hidden,
+}
+
+impl From<StateModeDto> for StateMode {
+    fn from(mode: StateModeDto) -> Self {
+        match mode {
+            StateModeDto::Pinned => Self::Pinned,
+            StateModeDto::Shown => Self::Shown,
+            StateModeDto::Hidden => Self::Hidden,
+        }
+    }
+}
+
+/// Where shown blocked items go.
+#[derive(Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = BlockedLayout)]
+pub(crate) enum BlockedLayoutDto {
+    Grouped,
+    Mixed,
+}
+
+impl From<BlockedLayoutDto> for BlockedLayout {
+    fn from(layout: BlockedLayoutDto) -> Self {
+        match layout {
+            BlockedLayoutDto::Grouped => Self::Grouped,
+            BlockedLayoutDto::Mixed => Self::Mixed,
+        }
+    }
+}
+
+/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first) or
+/// `impact` (largest first). Items without the value come last.
+#[derive(Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ListSort)]
+pub(crate) enum SortDto {
+    Priority,
+    Due,
+    Effort,
+    Impact,
+}
+
+impl From<SortDto> for SortKey {
+    fn from(sort: SortDto) -> Self {
+        match sort {
+            SortDto::Priority => Self::Priority,
+            SortDto::Due => Self::Due,
+            SortDto::Effort => Self::Effort,
+            SortDto::Impact => Self::Impact,
+        }
+    }
+}
+
+/// A comma-separated query value, such as `tag=a,b`. An empty value is an empty list.
+fn comma_separated<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let raw = String::deserialize(deserializer)?;
+    raw.split(',')
+        .filter(|part| !part.is_empty())
+        .map(|part| T::deserialize(part.to_owned().into_deserializer()))
+        .collect()
 }
 
 #[derive(Serialize, ToSchema)]
@@ -44,12 +163,14 @@ pub(crate) struct RankedListDto {
     pub heap: HeapSummaryDto,
     /// The time the ranking used (UTC milliseconds). Send it back as `as_of` to keep the order stable.
     pub as_of: i64,
-    /// In-progress items, pinned above the rest.
+    /// Items in pinned states (in progress by default), above the rest.
     pub pinned: Vec<RankedItemDto>,
-    /// Open items, highest priority first.
+    /// Items in shown states, including blocked items when they're mixed in.
     pub ranked: Vec<RankedItemDto>,
-    /// Blocked items, highest priority first. Hidden by default.
+    /// Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden.
     pub blocked: Vec<RankedItemDto>,
+    /// How many items the filters keep but are left out because their state is hidden.
+    pub hidden_count: u32,
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -136,10 +257,11 @@ impl ItemPatchDto {
     }
 }
 
-/// The heap's non-closed items, ranked, with the reasons for each position.
+/// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
+/// item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
 #[utoipa::path(get, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
     params(("heap_id" = Uuid, Path), RankedQuery, TimeZoneHeader),
-    responses((status = 200, body = RankedListDto), (status = 404, body = Problem)))]
+    responses((status = 200, body = RankedListDto), (status = 400, description = "`invalid_query`", body = Problem), (status = 404, body = Problem), (status = 422, description = "`tag_not_in_heap`, with `field` `tag`", body = Problem)))]
 async fn list_ranked(
     State(state): State<AppState>,
     CurrentUser(principal): CurrentUser,
@@ -154,8 +276,12 @@ async fn list_ranked(
         .map_err(ServiceError::from)?;
     let list = state
         .services
-        .list_ranked(principal, HeapId::from_uuid(heap_id), as_of)
-        .await?;
+        .list_ranked(principal, HeapId::from_uuid(heap_id), as_of, &query.to_view())
+        .await
+        .map_err(|error| match error {
+            ServiceError::TagNotInHeap { .. } => ApiError::InQuery { error, param: "tag" },
+            other => other.into(),
+        })?;
     let as_of = list.as_of;
     let group = |entries: Vec<_>| entries.into_iter().map(|e| to_ranked_dto(e, as_of, &tz)).collect();
     Ok(Json(RankedListDto {
@@ -164,6 +290,7 @@ async fn list_ranked(
         pinned: group(list.pinned),
         ranked: group(list.ranked),
         blocked: group(list.blocked),
+        hidden_count: list.hidden_count,
     }))
 }
 

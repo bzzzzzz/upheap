@@ -1,0 +1,338 @@
+//! How the ranked list is shown: which states are pinned, shown or hidden, which items the filters keep, and what
+//! the list is sorted by.
+//!
+//! Ranking always runs over every non-closed item, because a blocker inherits the priority of what it blocks even
+//! when that item is hidden or filtered out. These rules then pick and order what the caller sees, so filtering
+//! keeps the relative priority order of the items that match.
+
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
+
+use crate::TagId;
+use crate::item::{Item, Size, StateKind};
+
+/// Where items in one state go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateMode {
+    /// In the pinned group above the rest.
+    Pinned,
+    /// In the main list (blocked items may have their own group, see [`BlockedLayout`]).
+    Shown,
+    /// Left out. The response counts them, so clients can say that something is hidden.
+    Hidden,
+}
+
+/// Where shown blocked items go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockedLayout {
+    /// Their own group, by priority.
+    Grouped,
+    /// Mixed in with the open items, in the list's sort order.
+    Mixed,
+}
+
+/// What a group of the list is sorted by. Ties keep priority order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SortKey {
+    /// Combined priority, highest first.
+    Priority,
+    /// Soonest due first; items without a due time last.
+    Due,
+    /// Smallest effort first; items without an effort last.
+    Effort,
+    /// Largest impact first; items without an impact last.
+    Impact,
+}
+
+/// The groups of the ranked list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Group {
+    Pinned,
+    Ranked,
+    Blocked,
+}
+
+/// Which items to keep. An empty set doesn't filter.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListFilter {
+    /// Keep items with at least one of these tags.
+    pub tags: BTreeSet<TagId>,
+    /// Keep items with one of these efforts.
+    pub effort: BTreeSet<Size>,
+    /// Keep items with one of these impacts.
+    pub impact: BTreeSet<Size>,
+}
+
+impl ListFilter {
+    pub fn matches(&self, item: &Item) -> bool {
+        let tags = self.tags.is_empty() || !self.tags.is_disjoint(&item.tags);
+        tags && within(&self.effort, item.effort) && within(&self.impact, item.impact)
+    }
+}
+
+fn within(allowed: &BTreeSet<Size>, size: Option<Size>) -> bool {
+    allowed.is_empty() || size.is_some_and(|size| allowed.contains(&size))
+}
+
+/// The caller's view of the list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListView {
+    pub open: StateMode,
+    pub in_progress: StateMode,
+    pub blocked: StateMode,
+    pub blocked_layout: BlockedLayout,
+    pub filter: ListFilter,
+    pub sort: SortKey,
+}
+
+impl Default for ListView {
+    /// In-progress items pinned, open items shown, blocked items hidden, by priority (Req Views: List items §2).
+    fn default() -> Self {
+        Self {
+            open: StateMode::Shown,
+            in_progress: StateMode::Pinned,
+            blocked: StateMode::Hidden,
+            blocked_layout: BlockedLayout::Grouped,
+            filter: ListFilter::default(),
+            sort: SortKey::Priority,
+        }
+    }
+}
+
+impl ListView {
+    /// The group an item in `state` goes to, or `None` when its state is hidden or closed.
+    pub fn group_of(&self, state: StateKind) -> Option<Group> {
+        let (mode, shown_group) = match state {
+            StateKind::Open => (self.open, Group::Ranked),
+            StateKind::InProgress => (self.in_progress, Group::Ranked),
+            StateKind::Blocked => (
+                self.blocked,
+                match self.blocked_layout {
+                    BlockedLayout::Grouped => Group::Blocked,
+                    BlockedLayout::Mixed => Group::Ranked,
+                },
+            ),
+            StateKind::Done | StateKind::WontDo => return None,
+        };
+        match mode {
+            StateMode::Pinned => Some(Group::Pinned),
+            StateMode::Shown => Some(shown_group),
+            StateMode::Hidden => None,
+        }
+    }
+
+    /// Sorts `group`, which is in priority order, by [`Self::sort`]. The sort is stable, so ties keep priority
+    /// order. Grouped blocked items always stay in priority order (Req Views: List items §3).
+    pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item) {
+        let key = self.sort;
+        if key != SortKey::Priority && group != Group::Blocked {
+            entries.sort_by(|a, b| compare(key, item(a), item(b)));
+        }
+    }
+}
+
+fn compare(key: SortKey, a: &Item, b: &Item) -> Ordering {
+    match key {
+        SortKey::Priority => Ordering::Equal,
+        SortKey::Due => missing_last(a.due.map(|d| d.at), b.due.map(|d| d.at), Ord::cmp),
+        SortKey::Effort => missing_last(a.effort, b.effort, Ord::cmp),
+        SortKey::Impact => missing_last(a.impact, b.impact, |a, b| b.cmp(a)),
+    }
+}
+
+/// Orders by `order`, with `None` after every value.
+fn missing_last<T>(a: Option<T>, b: Option<T>, order: impl Fn(&T, &T) -> Ordering) -> Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => order(&a, &b),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::item::{Due, NewItem, Title};
+    use crate::{HeapId, ItemId, Timestamp};
+
+    fn tag(n: u128) -> TagId {
+        TagId::from_uuid(Uuid::from_u128(n))
+    }
+
+    fn item(n: u128) -> Item {
+        let fields = NewItem {
+            title: Title::parse(&format!("Item {n}")).expect("valid"),
+            description: None,
+            effort: None,
+            impact: None,
+            due: None,
+            tags: BTreeSet::new(),
+        };
+        let created = Timestamp::from_millis(0).expect("in range");
+        Item::new(
+            ItemId::from_uuid(Uuid::from_u128(n)),
+            HeapId::from_uuid(Uuid::nil()),
+            fields,
+            created,
+        )
+    }
+
+    fn sorted(view: &ListView, items: &[Item]) -> Vec<u128> {
+        let mut items = items.to_vec();
+        view.sort(Group::Ranked, &mut items, |item| item);
+        items.iter().map(|item| item.id.as_uuid().as_u128()).collect()
+    }
+
+    fn by(sort: SortKey) -> ListView {
+        ListView {
+            sort,
+            ..ListView::default()
+        }
+    }
+
+    #[gtest]
+    fn by_default_in_progress_is_pinned_open_is_shown_and_blocked_is_hidden() {
+        let view = ListView::default();
+
+        expect_that!(view.group_of(StateKind::InProgress), some(eq(Group::Pinned)));
+        expect_that!(view.group_of(StateKind::Open), some(eq(Group::Ranked)));
+        expect_that!(view.group_of(StateKind::Blocked), none());
+        expect_that!(view.group_of(StateKind::Done), none());
+    }
+
+    #[gtest]
+    fn shown_blocked_items_are_grouped_or_mixed_in() {
+        let grouped = ListView {
+            blocked: StateMode::Shown,
+            ..ListView::default()
+        };
+        let mixed = ListView {
+            blocked_layout: BlockedLayout::Mixed,
+            ..grouped.clone()
+        };
+
+        expect_that!(grouped.group_of(StateKind::Blocked), some(eq(Group::Blocked)));
+        expect_that!(mixed.group_of(StateKind::Blocked), some(eq(Group::Ranked)));
+    }
+
+    #[gtest]
+    fn pinned_blocked_items_are_pinned_whatever_the_layout() {
+        let view = ListView {
+            blocked: StateMode::Pinned,
+            blocked_layout: BlockedLayout::Mixed,
+            ..ListView::default()
+        };
+
+        expect_that!(view.group_of(StateKind::Blocked), some(eq(Group::Pinned)));
+    }
+
+    #[gtest]
+    fn the_tag_filter_keeps_items_with_any_of_its_tags() {
+        let filter = ListFilter {
+            tags: BTreeSet::from([tag(1), tag(2)]),
+            ..ListFilter::default()
+        };
+        let mut second = item(1);
+        second.tags = BTreeSet::from([tag(2), tag(3)]);
+        let mut other = item(2);
+        other.tags = BTreeSet::from([tag(3)]);
+
+        expect_that!(filter.matches(&second), eq(true));
+        expect_that!(filter.matches(&other), eq(false));
+        expect_that!(filter.matches(&item(3)), eq(false));
+    }
+
+    #[gtest]
+    fn a_size_filter_drops_items_without_that_size() {
+        let filter = ListFilter {
+            effort: BTreeSet::from([Size::S]),
+            ..ListFilter::default()
+        };
+        let mut small = item(1);
+        small.effort = Some(Size::S);
+        let mut large = item(2);
+        large.effort = Some(Size::L);
+
+        expect_that!(filter.matches(&small), eq(true));
+        expect_that!(filter.matches(&large), eq(false));
+        expect_that!(filter.matches(&item(3)), eq(false));
+    }
+
+    #[gtest]
+    fn an_empty_filter_keeps_everything() {
+        expect_that!(ListFilter::default().matches(&item(1)), eq(true));
+    }
+
+    #[gtest]
+    fn sorting_by_priority_keeps_the_order() {
+        let items = [item(3), item(1), item(2)];
+
+        expect_that!(
+            sorted(&by(SortKey::Priority), &items),
+            elements_are![eq(&3), eq(&1), eq(&2)]
+        );
+    }
+
+    #[gtest]
+    fn sorting_by_due_puts_the_soonest_first_and_undated_items_last() {
+        let due = |n, day: i64| {
+            let mut item = item(n);
+            item.due = Some(Due {
+                at: Timestamp::from_millis(day * 86_400_000).expect("in range"),
+                firm: false,
+            });
+            item
+        };
+        let items = [item(1), due(2, 9), due(3, 4), item(4)];
+
+        expect_that!(
+            sorted(&by(SortKey::Due), &items),
+            elements_are![eq(&3), eq(&2), eq(&1), eq(&4)]
+        );
+    }
+
+    #[gtest]
+    fn sorting_by_effort_puts_the_smallest_first_and_ties_keep_priority_order() {
+        let sized = |n, size| {
+            let mut item = item(n);
+            item.effort = Some(size);
+            item
+        };
+        let items = [sized(1, Size::L), item(2), sized(3, Size::S), sized(4, Size::L)];
+
+        expect_that!(
+            sorted(&by(SortKey::Effort), &items),
+            elements_are![eq(&3), eq(&1), eq(&4), eq(&2)]
+        );
+    }
+
+    #[gtest]
+    fn grouped_blocked_items_stay_in_priority_order() {
+        let mut items = vec![item(1), item(2)];
+        items[1].effort = Some(Size::S);
+
+        by(SortKey::Effort).sort(Group::Blocked, &mut items, |item| item);
+
+        let ids: Vec<u128> = items.iter().map(|item| item.id.as_uuid().as_u128()).collect();
+        expect_that!(ids, elements_are![eq(&1), eq(&2)]);
+    }
+
+    #[gtest]
+    fn sorting_by_impact_puts_the_largest_first_and_unset_last() {
+        let sized = |n, size| {
+            let mut item = item(n);
+            item.impact = Some(size);
+            item
+        };
+        let items = [item(1), sized(2, Size::S), sized(3, Size::Xl)];
+
+        expect_that!(
+            sorted(&by(SortKey::Impact), &items),
+            elements_are![eq(&3), eq(&2), eq(&1)]
+        );
+    }
+}

@@ -4,6 +4,7 @@ import { createRootRouteWithContext, createRoute, createRouter, Outlet, redirect
 
 import { isUnauthenticated } from "./api/client";
 import { meQuery } from "./api/queries";
+import { parseListSearch } from "./components/listView";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
@@ -47,10 +48,21 @@ const indexRoute = createRoute({
 const heapRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/heaps/$heapId",
+  validateSearch: parseListSearch,
   component: function HeapRoute() {
     const { heapId } = heapRoute.useParams();
-    // A new key per heap resets the session-stable ranking time.
-    return <HeapPage key={heapId} heapId={heapId} />;
+    const view = heapRoute.useSearch();
+    const navigate = heapRoute.useNavigate();
+    // A new key per heap resets the session-stable ranking time. View changes replace the history entry, so Back
+    // leaves the list instead of stepping through filter clicks.
+    return (
+      <HeapPage
+        key={heapId}
+        heapId={heapId}
+        view={view}
+        onViewChange={(next) => void navigate({ search: parseListSearch(next), replace: true })}
+      />
+    );
   },
 });
 
