@@ -3,7 +3,7 @@
 use domain::heap::{Heap, HeapPolicy};
 use domain::text::Name;
 use domain::{HeapId, TeamId, Timestamp};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
@@ -31,6 +31,22 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
 pub async fn find_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<Heap>, StoreError> {
     let row = heaps::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
     row.map(to_heap).transpose()
+}
+
+/// Locks the heap's row until the transaction ends, so writes that must see the whole heap at once, such as the
+/// blocking-cycle check, run one at a time per heap.
+///
+/// Every item and tag write takes this lock before touching any other row. Their audit entries reference the heap,
+/// so a write that locked an item first and the heap second could deadlock with one that went the other way.
+///
+/// MySQL takes a row lock (`FOR UPDATE`). SQLite has no row locks and allows one writer at a time anyway: a second
+/// transaction that read before the first committed fails on its write instead of overwriting it.
+pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<(), StoreError> {
+    heaps::Entity::find_by_id(id_to_db(id.as_uuid()))
+        .lock_exclusive()
+        .one(db)
+        .await?;
+    Ok(())
 }
 
 /// Every heap of the given teams, archived ones included, ordered by name.

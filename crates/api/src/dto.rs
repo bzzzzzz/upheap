@@ -4,7 +4,7 @@
 
 use domain::due::{describe_date, describe_due};
 use domain::heap::Heap;
-use domain::item::{Due, Size, StateKind};
+use domain::item::{Due, ItemSummary, Size, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
@@ -122,6 +122,25 @@ impl From<&Tag> for ItemTagDto {
     }
 }
 
+/// Another item, named where this one refers to it.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = ItemRef)]
+pub(crate) struct ItemRefDto {
+    pub id: Uuid,
+    pub title: String,
+    pub state: StateDto,
+}
+
+impl From<ItemSummary> for ItemRefDto {
+    fn from(item: ItemSummary) -> Self {
+        Self {
+            id: *item.id.as_uuid(),
+            title: item.title.as_str().to_owned(),
+            state: item.state.kind().into(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = Role)]
@@ -181,6 +200,9 @@ pub(crate) struct ItemDto {
     pub title: String,
     pub description: Option<String>,
     pub state: StateDto,
+    /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be
+    /// closed: finishing a blocker doesn't unblock what waits for it.
+    pub blocked_by: Option<ItemRefDto>,
     /// `null` when unset.
     pub effort: Option<SizeDto>,
     /// `null` when unset.
@@ -216,6 +238,8 @@ pub(crate) enum FactorDto {
     Age,
     Deadline,
     Value,
+    /// Priority taken on from an item this one blocks.
+    Blocks,
 }
 
 impl From<Contributor> for ContributorDto {
@@ -224,6 +248,7 @@ impl From<Contributor> for ContributorDto {
             Factor::Age => FactorDto::Age,
             Factor::Deadline => FactorDto::Deadline,
             Factor::Value => FactorDto::Value,
+            Factor::Blocks => FactorDto::Blocks,
         };
         Self {
             factor,
@@ -273,6 +298,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         title: item.title.as_str().to_owned(),
         description: item.description.map(|d| d.as_str().to_owned()),
         state: item.state.kind().into(),
+        blocked_by: view.blocked_by.map(ItemRefDto::from),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
         due: item.due.map(|due| {

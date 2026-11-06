@@ -16,6 +16,7 @@ export type NewItem = Schemas["CreateItemRequest"];
 export type Tag = Schemas["Tag"];
 export type TagList = Schemas["TagList"];
 export type ItemTag = Schemas["ItemTag"];
+export type ItemRef = Schemas["ItemRef"];
 export type TagPatch = Schemas["TagPatchRequest"];
 export type NewTag = Schemas["CreateTagRequest"];
 type Problem = Schemas["Problem"];

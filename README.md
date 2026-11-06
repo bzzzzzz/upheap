@@ -14,10 +14,14 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
   move with an animation. In-progress items are pinned; blocked items are collapsed.
 - Adding items (press `N`), inline edits of title, effort, impact, due date and state, closing, and
   reopening within a week from the Closed view.
+- Tags: per-heap tags on items, a tag picker, and a Manage tags view for renaming and describing them. Tags
+  can be removed from an item but never deleted.
+- Blockers: a blocked item can wait for another item in its heap. Cycles are refused, and a blocker inherits
+  the priority of what it blocks (with a small boost), shown as "Blocks …" in its reasons.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
-Not yet: tags, custom parameters, blockers and blocker inheritance, saved views, teams beyond the personal one,
+Not yet: custom parameters, saved views, teams beyond the personal one,
 heap archiving, OIDC sign-in, the CLI OAuth flow, sign-in rate limiting, and the MySQL test run in CI.
 
 ## Run it

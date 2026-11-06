@@ -57,6 +57,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap(&txn, principal, heap_id, Permission::EditItems).await?;
         ensure_active(&access.heap)?;
+        store::heaps::lock_heap(&txn, heap_id).await?;
         ensure_name_free(&txn, heap_id, &fields.name, None).await?;
 
         let now = self.now();
@@ -98,6 +99,7 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&txn, principal, current.heap_id, Permission::EditItems).await?;
         ensure_active(&access.heap)?;
+        store::heaps::lock_heap(&txn, current.heap_id).await?;
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,

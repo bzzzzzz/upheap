@@ -68,11 +68,15 @@ fn restrict(
 /// The lowercased name, compared byte for byte on every backend.
 fn name_key_column(backend: DbBackend) -> ColumnDef {
     // Lowercasing can lengthen a few characters, so the key gets room to spare.
-    let mut column = string_len(Tags::NameKey, 200);
     if backend == DbBackend::MySql {
-        column.extra("CHARACTER SET utf8mb4 COLLATE utf8mb4_bin");
+        // The character set and collation belong right after the type in MySQL, before `NOT NULL`, so they're
+        // part of a custom type rather than an `extra` clause, which comes last.
+        return ColumnDef::new(Tags::NameKey)
+            .custom(Alias::new("varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"))
+            .not_null()
+            .to_owned();
     }
-    column
+    string_len(Tags::NameKey, 200)
 }
 
 #[async_trait::async_trait]

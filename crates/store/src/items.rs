@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use domain::item::{Description, Due, Item, ItemState, Size, StateKind, Title};
+use domain::item::{Description, Due, Item, ItemState, ItemSummary, Size, StateKind, Title};
 use domain::{HeapId, ItemId, TagId, Timestamp, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -41,6 +41,47 @@ pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<I
     attach_tags(db, &mut items).await?;
     let [item] = items;
     Ok(Some(item))
+}
+
+/// The items among `ids` that belong to `heap_id`, in no particular order. IDs from other heaps, or unknown ones,
+/// are left out.
+pub async fn list_item_summaries(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    ids: impl IntoIterator<Item = ItemId>,
+) -> Result<Vec<ItemSummary>, StoreError> {
+    let ids: Vec<String> = ids.into_iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut summaries = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = items::Entity::find()
+            .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+            .filter(items::Column::Id.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            summaries.push(ItemSummary::from(&to_item(row)?));
+        }
+    }
+    Ok(summaries)
+}
+
+/// The item `id` of `heap_id`, without its tags, or `None` when the heap has no such item.
+///
+/// It's a locking read (`FOR SHARE` on MySQL), which sees the latest committed row rather than the transaction's
+/// snapshot, so a check that walks the blocker chain after [`crate::heaps::lock_heap`] sees writes that committed
+/// while it waited for the lock. SQLite has no row locks and needs none (see `lock_heap`).
+pub async fn find_item_summary_locking(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    id: ItemId,
+) -> Result<Option<ItemSummary>, StoreError> {
+    items::Entity::find_by_id(id_to_db(id.as_uuid()))
+        .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .lock_shared()
+        .one(db)
+        .await?
+        .map(|row| to_item(row).map(|item| ItemSummary::from(&item)))
+        .transpose()
 }
 
 /// Every item of `heap_id` in one of `states`, oldest first.
@@ -234,6 +275,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         due_firm: Set(item.due.map(|d| d.firm)),
         created_at: Set(item.created_at.as_millis()),
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
+        blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
     })
 }
 
@@ -244,7 +286,12 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
     };
     let kind =
         StateKind::from_code(&row.state).ok_or_else(|| read.corrupt(format!("unknown state {:?}", row.state)))?;
-    let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?)
+    let blocked_by = row
+        .blocked_by_item_id
+        .as_deref()
+        .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+        .transpose()?;
+    let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, blocked_by)
         .map_err(|e| read.corrupt(e.to_string()))?;
     let due = match (row.due_at, row.due_firm) {
         (None, None) => None,

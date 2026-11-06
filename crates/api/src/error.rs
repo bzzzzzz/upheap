@@ -147,6 +147,26 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Item(ItemError::ReopenWindowExpired { .. }) => {
             simple(StatusCode::CONFLICT, "reopen_window_expired", Category::Conflict)
         }
+        ServiceError::Item(ItemError::NotBlocked { .. }) => Classified {
+            field: Some("blocked_by_item_id"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "item_not_blocked", Category::Caller)
+        },
+        ServiceError::BlockerNotInHeap { .. } => Classified {
+            field: Some("blocked_by_item_id"),
+            ..simple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "blocker_not_in_heap",
+                Category::Caller,
+            )
+        },
+        ServiceError::BlockerClosed { .. } => Classified {
+            field: Some("blocked_by_item_id"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "blocker_closed", Category::Caller)
+        },
+        ServiceError::BlockingCycle { .. } => Classified {
+            field: Some("blocked_by_item_id"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "blocking_cycle", Category::Caller)
+        },
         ServiceError::TagNotInHeap { .. } => Classified {
             field: Some("tag_ids"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_heap", Category::Caller)

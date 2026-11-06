@@ -103,9 +103,9 @@ fn rank(formula: FormulaVersion, policy: &HeapPolicy, items: &[ItemForRanking], 
 1. The service loads the heap's policy, all non-closed items, their parameter values, and the blocking edges, then calls `rank`. Heaps are expected to hold at most a few thousand open items, so ranking them in memory on each request is cheap. A per-heap cache invalidated on write can be added if measurements call for it.
 2. Each factor (age, deadline proximity, value per effort, each custom parameter) produces a weighted component. The final score is a combination of these. The exact formula is still open and lives behind one function, so changing it doesn't affect the API.
    - **Formula versioning:** each formula is a named version (`FormulaVersion::V1`, …). The server uses one version at a time, set in code, not stored per heap. Tests pin expected orderings per version, so a formula change shows up as an explicit test update. Because scores are never stored, switching versions needs no migration.
-3. **Blocker inheritance:** the blocking edges form a forest, because cycles are rejected on write. Each item's effective score is the maximum of its own score and the effective scores of the items it blocks (plus the optional boost). This is computed with a memoized walk over the graph, so it is linear in the number of items.
+3. **Blocker inheritance:** the blocking edges form a forest, because cycles are rejected on write. Each item's effective score is the maximum of its own score and the effective scores of the items it blocks, times a boost (1.1 in `V1`). This is computed with a memoized walk over the graph, so it is linear in the number of items. Equal scores go to the item that blocks the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
 4. **Contributors** are the largest weighted components, returned with a label and a relative share (for example "Deadline in a few days" or "Blocks *Migrate auth*"). Scores themselves are never returned.
-5. **Ties** are broken by `created_at`, oldest first. The ID is the final tie-breaker, which makes the order fully deterministic.
+5. **Ties** that the chain length (point 3) doesn't settle are broken by `created_at`, oldest first. The ID is the final tie-breaker, which makes the order fully deterministic.
 
 ### Session-stable order
 
@@ -137,6 +137,11 @@ The score is a deterministic function of item data and time. A stable session th
 ### Cycle detection
 
 Setting `blocked_by_item_id` walks the blocker chain inside the write transaction. If the walk reaches the item being blocked, the API returns `422` with a `blocking_cycle` error.
+
+1. Every item and tag write first locks the heap row (`SELECT … FOR UPDATE` on MySQL), before touching any other row, so writes in one heap run one after the other and always take locks in the same order. The walk then reads each link with a locking read, so of two writes that would close a cycle between them, the second sees the first. SQLite allows one writer at a time, so the second of two such writes fails instead.
+2. Only a blocked item has a blocker: the blocker is part of the blocked state, and leaving that state clears it. Sending a blocker for an item that isn't blocked, and isn't moved to blocked in the same request, returns `422` `item_not_blocked`.
+3. The blocker must be an item of the same heap (`blocker_not_in_heap`, which also covers unknown IDs) that isn't closed (`blocker_closed`). Closing a blocker later doesn't unblock what waits for it; the blocked item shows the closed blocker until someone moves it on.
+4. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break the list.
 
 ## API
 
@@ -217,6 +222,7 @@ These checks run in the same transaction as the write, after the permission chec
 | Reopen within one week | `now − closed_at ≤ 7 × 24h` | `reopen_window_expired` |
 | Closed items are read-only until reopened | Editing anything other than state on a done or won't-do item is refused. | `item_closed` |
 | No blocking cycles | Walk the blocker chain (see [Cycle detection](#cycle-detection)). | `blocking_cycle` |
+| A blocker is an open item of the same heap, on a blocked item | Checked with the cycle walk. | `blocker_not_in_heap`, `blocker_closed`, `item_not_blocked` |
 | Archiving an option requires a replacement | The replacement must be an active option of the same parameter. | `replacement_required` |
 | A parameter is archived only when unused | No non-terminal item has a value for it. | `parameter_in_use` |
 | Tag names are unique per heap | Compared ignoring case, backed by a unique index on `(heap_id, name_key)`. | `tag_name_taken` |
