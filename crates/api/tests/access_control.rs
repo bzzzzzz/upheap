@@ -28,6 +28,8 @@ enum Access {
     SignedIn,
     /// Members of the heap's team holding `permission`. Writes are refused while the heap is archived.
     Heap { permission: Permission, writes: bool },
+    /// Members of the team holding `permission`.
+    Team { permission: Permission },
 }
 
 /// What a request needs to exist before it is sent.
@@ -35,11 +37,28 @@ enum Access {
 enum Target {
     Nothing,
     Heap,
+    /// The shared heap, with its version for `If-Match`.
+    HeapVersion,
+    /// A heap of its own, so archiving it leaves the shared heap alone.
+    FreshHeap,
     OpenItem,
     ClosedItem,
     Tag,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
+    /// The shared team, with its version for `If-Match`.
+    Team,
+    /// A new user, added to the shared team as a member, in `{user_id}`.
+    ExtraMember,
+    /// A new user who isn't in the shared team yet, for the request body.
+    NewUser,
+    /// A team of its own with a second admin, which the admin and the member of the shared team also belong to, so
+    /// they can leave it without leaving the shared team or being its last admin.
+    FreshTeam,
+    /// The caller's own user, with its version for `If-Match`.
+    Me,
+    /// A lookup text in the query string.
+    UserQuery,
 }
 
 /// The body a request carries.
@@ -53,6 +72,12 @@ enum RequestBody {
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
+    /// A team or heap name.
+    Name,
+    /// The user from [`Target::NewUser`].
+    AddMember,
+    Promote,
+    DisplayName,
 }
 
 struct Endpoint {
@@ -67,8 +92,8 @@ struct Endpoint {
 }
 
 fn endpoints() -> Vec<Endpoint> {
-    use Access::{Heap, Public, SignedIn};
-    use Permission::{EditItems, ViewHeap};
+    use Access::{Heap, Public, SignedIn, Team};
+    use Permission::{EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
         writes: false,
@@ -77,6 +102,11 @@ fn endpoints() -> Vec<Endpoint> {
         permission: EditItems,
         writes: true,
     };
+    let manage_heap = |writes| Heap {
+        permission: ManageHeaps,
+        writes,
+    };
+    let team = |permission| Team { permission };
     let row = |method, path, access, target, body, success| Endpoint {
         method,
         path,
@@ -115,6 +145,121 @@ fn endpoints() -> Vec<Endpoint> {
             "/me",
             SignedIn,
             Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/me",
+            SignedIn,
+            Target::Me,
+            RequestBody::DisplayName,
+            StatusCode::OK,
+        ),
+        // Every user is the admin of their personal team, so every signed-in caller here may look users up. The
+        // refusal for a user who is no team's admin is tested in `teams.rs`.
+        row(
+            Method::GET,
+            "/users",
+            SignedIn,
+            Target::UserQuery,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Name,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::GET,
+            "/teams/{team_id}",
+            team(ViewTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team_id}",
+            team(ManageTeam),
+            Target::Team,
+            RequestBody::Name,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team_id}/members",
+            team(ManageTeam),
+            Target::NewUser,
+            RequestBody::AddMember,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team_id}/members/{user_id}",
+            team(ManageTeam),
+            Target::ExtraMember,
+            RequestBody::Promote,
+            StatusCode::OK,
+        ),
+        row(
+            Method::DELETE,
+            "/teams/{team_id}/members/{user_id}",
+            team(ManageTeam),
+            Target::ExtraMember,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team_id}/leave",
+            team(LeaveTeam),
+            Target::FreshTeam,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team_id}/heaps",
+            team(ManageHeaps),
+            Target::Nothing,
+            RequestBody::Name,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::GET,
+            "/heaps/{heap_id}",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/heaps/{heap_id}",
+            manage_heap(true),
+            Target::HeapVersion,
+            RequestBody::Name,
+            StatusCode::OK,
+        ),
+        // Archiving and unarchiving say what the heap should end up as, so they succeed on an archived heap too.
+        row(
+            Method::POST,
+            "/heaps/{heap_id}/archive",
+            manage_heap(false),
+            Target::FreshHeap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/heaps/{heap_id}/unarchive",
+            manage_heap(false),
+            Target::FreshHeap,
             RequestBody::Empty,
             StatusCode::OK,
         ),
@@ -236,15 +381,16 @@ impl Outcome {
 fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outcome {
     let (permission, writes) = match endpoint.access {
         Access::Public => return Outcome::success(endpoint.success),
-        Access::SignedIn | Access::Heap { .. } if matches!(caller, Caller::Anonymous) => {
+        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } if matches!(caller, Caller::Anonymous) => {
             return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated");
         }
         Access::SignedIn => return Outcome::success(endpoint.success),
         Access::Heap { permission, writes } => (permission, writes),
+        Access::Team { permission } => (permission, false),
     };
     let role = match caller {
         Caller::Anonymous => return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated"),
-        // Non-members can't tell a heap they may not see from one that doesn't exist.
+        // Non-members can't tell a heap or team they may not see from one that doesn't exist.
         Caller::Outsider => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
         Caller::Member => Role::Member,
         Caller::Admin => Role::Admin,
@@ -269,6 +415,7 @@ struct World {
     admin: Account,
     member: Account,
     outsider: Account,
+    team: String,
     heap: String,
     /// Counter for names that must be unique: emails and tag names.
     unique_names: AtomicU32,
@@ -282,10 +429,12 @@ impl World {
         let (outsider_session, _) = app.register("outsider@example.test").await?;
 
         let admin_me = app.send(Method::GET, "/api/v1/me", Some(&admin_session), None).await?;
-        let team = admin_me.body["teams"][0]["id"].as_str().context("admin has no team")?;
-        let member_me = app.send(Method::GET, "/api/v1/me", Some(&member_session), None).await?;
-        let member_id = member_me.body["user"]["id"].as_str().context("member has no id")?;
-        app.add_member(team, member_id, Role::Member).await?;
+        let team = admin_me.body["teams"][0]["id"]
+            .as_str()
+            .context("admin has no team")?
+            .to_owned();
+        let member_id = user_id(&app, &member_session).await?;
+        app.add_member(&team, &member_id, Role::Member).await?;
 
         Ok(Self {
             app,
@@ -301,6 +450,7 @@ impl World {
                 email: "outsider@example.test".to_owned(),
                 session: outsider_session,
             },
+            team,
             heap,
             unique_names: AtomicU32::new(0),
         })
@@ -361,6 +511,55 @@ impl World {
         Ok((id, created.body["version"].to_string()))
     }
 
+    /// Registers a new user and returns their session and ID.
+    async fn new_user(&self) -> Result<(String, String)> {
+        let email = format!("{}@example.test", self.unique_name("user"));
+        let (session, _) = self.app.register(&email).await?;
+        let id = user_id(&self.app, &session).await?;
+        Ok((session, id))
+    }
+
+    /// Adds a new user to the shared team as a member and returns their ID.
+    async fn new_member(&self) -> Result<String> {
+        let (_, id) = self.new_user().await?;
+        self.app.add_member(&self.team, &id, Role::Member).await?;
+        Ok(id)
+    }
+
+    /// A new team whose admins are a new user and the shared team's admin, with the shared team's member in it.
+    async fn new_team(&self) -> Result<String> {
+        let (owner, _) = self.new_user().await?;
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                "/api/v1/teams",
+                Some(&owner),
+                Some(json!({ "name": "Fresh" })),
+            )
+            .await?;
+        let team = created.body["id"].as_str().context("team has no id")?.to_owned();
+        let admin_id = user_id(&self.app, &self.admin.session).await?;
+        let member_id = user_id(&self.app, &self.member.session).await?;
+        self.app.add_member(&team, &admin_id, Role::Admin).await?;
+        self.app.add_member(&team, &member_id, Role::Member).await?;
+        Ok(team)
+    }
+
+    /// A new heap in the shared team, created by its admin.
+    async fn new_heap(&self) -> Result<String> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{}/heaps", self.team),
+                Some(&self.admin.session),
+                Some(json!({ "name": "Fresh" })),
+            )
+            .await?;
+        Ok(created.body["id"].as_str().context("heap has no id")?.to_owned())
+    }
+
     fn unique_name(&self, prefix: &str) -> String {
         format!("{prefix}{}", self.unique_names.fetch_add(1, Ordering::Relaxed))
     }
@@ -378,7 +577,8 @@ impl World {
         response.session_cookie.context("sign-in set no cookie")
     }
 
-    fn body(&self, body: RequestBody) -> Option<Value> {
+    /// The body for `body`. `user` is the user [`Target::NewUser`] made.
+    fn body(&self, body: RequestBody, user: Option<&str>) -> Option<Value> {
         match body {
             RequestBody::Empty => None,
             RequestBody::Registration => {
@@ -390,6 +590,10 @@ impl World {
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
+            RequestBody::Name => Some(json!({ "name": self.unique_name("name") })),
+            RequestBody::AddMember => Some(json!({ "user_id": user })),
+            RequestBody::Promote => Some(json!({ "role": "admin" })),
+            RequestBody::DisplayName => Some(json!({ "display_name": self.unique_name("Name") })),
         }
     }
 
@@ -397,10 +601,49 @@ impl World {
     async fn call(&self, endpoint: &Endpoint, caller: Caller, archived: bool) -> Result<TestResponse> {
         let account = self.account(caller);
         let mut session = account.map(|a| a.session.clone());
-        let mut path = endpoint.path.replace("{heap_id}", &self.heap);
+        let mut path = endpoint
+            .path
+            .replace("{heap_id}", &self.heap)
+            .replace("{team_id}", &self.team);
         let mut if_match = None;
+        let mut new_user = None;
         match endpoint.target {
             Target::Nothing | Target::Heap => {}
+            Target::HeapVersion => {
+                let heap = self
+                    .app
+                    .send(
+                        Method::GET,
+                        &format!("/api/v1/heaps/{}", self.heap),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                if_match = Some(heap.body["version"].to_string());
+            }
+            Target::FreshHeap => path = endpoint.path.replace("{heap_id}", &self.new_heap().await?),
+            Target::Team => {
+                let team = self
+                    .app
+                    .send(
+                        Method::GET,
+                        &format!("/api/v1/teams/{}", self.team),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                if_match = Some(team.body["version"].to_string());
+            }
+            Target::ExtraMember => path = path.replace("{user_id}", &self.new_member().await?),
+            Target::NewUser => new_user = Some(self.new_user().await?.1),
+            Target::FreshTeam => path = endpoint.path.replace("{team_id}", &self.new_team().await?),
+            Target::Me => {
+                if let Some(session) = &session {
+                    let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
+                    if_match = Some(me.body["user"]["version"].to_string());
+                }
+            }
+            Target::UserQuery => path.push_str("?query=example"),
             Target::OpenItem | Target::ClosedItem => {
                 let (id, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item_id}", &id);
@@ -432,7 +675,7 @@ impl World {
                 endpoint.method.clone(),
                 &format!("/api/v1{path}"),
                 session.as_deref(),
-                self.body(endpoint.body),
+                self.body(endpoint.body, new_user.as_deref()),
                 &headers,
             )
             .await;
@@ -441,6 +684,11 @@ impl World {
         }
         response
     }
+}
+
+async fn user_id(app: &TestApp, session: &str) -> Result<String> {
+    let me = app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
+    Ok(me.body["user"]["id"].as_str().context("user has no id")?.to_owned())
 }
 
 #[gtest]

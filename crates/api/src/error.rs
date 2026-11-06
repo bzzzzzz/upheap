@@ -9,6 +9,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
 use domain::item::ItemError;
+use domain::team::TeamError;
 use serde::Serialize;
 use service::ServiceError;
 use store_error::StoreErrorKind;
@@ -180,6 +181,13 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("tag_ids"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_heap", Category::Caller)
         },
+        ServiceError::Team(TeamError::LastAdmin { .. }) => {
+            simple(StatusCode::CONFLICT, "last_admin", Category::Conflict)
+        }
+        ServiceError::UserNotFound { .. } => Classified {
+            field: Some("user_id"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "user_not_found", Category::Caller)
+        },
         ServiceError::TagNameTaken { .. } => Classified {
             field: Some("name"),
             ..simple(StatusCode::CONFLICT, "tag_name_taken", Category::Conflict)
@@ -202,6 +210,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
     let (code, field) = match err {
         ValidationError::Empty { field } => ("field_empty", Some(field.as_str())),
         ValidationError::TooLong { field, .. } => ("field_too_long", Some(field.as_str())),
+        ValidationError::TooShort { field, .. } => ("field_too_short", Some(field.as_str())),
         ValidationError::EmailInvalid => ("email_invalid", Some("email")),
         ValidationError::PasswordTooShort { .. } => ("password_too_short", Some("password")),
         ValidationError::PasswordTooLong { .. } => ("password_too_long", Some("password")),

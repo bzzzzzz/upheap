@@ -16,7 +16,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 pub use store::items::ClosedCursor;
 
-use crate::access::{authorize_heap, ensure_active};
+use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_item, diff_items};
 use crate::{Principal, ServiceError, Services};
 
@@ -223,9 +223,7 @@ impl Services {
         fields: NewItem,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let access = authorize_heap(&txn, principal, heap_id, Permission::EditItems).await?;
-        ensure_active(&access.heap)?;
-        store::heaps::lock_heap(&txn, heap_id).await?;
+        let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
 
         let now = self.now();
@@ -286,9 +284,7 @@ impl Services {
         let current = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap(&txn, principal, current.heap_id, Permission::EditItems).await?;
-        ensure_active(&access.heap)?;
-        store::heaps::lock_heap(&txn, current.heap_id).await?;
+        let access = authorize_heap_write(&txn, principal, current.heap_id, Permission::EditItems).await?;
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,

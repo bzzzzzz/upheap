@@ -1,6 +1,7 @@
 use domain::item::ItemError;
 use domain::permission::Permission;
-use domain::{HeapId, ItemId, TagId, ValidationError, Version};
+use domain::team::TeamError;
+use domain::{HeapId, ItemId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -38,6 +39,11 @@ pub enum ServiceError {
     /// The blocker already waits, directly or through others, for the item being blocked.
     #[error("item {item_id} already waits for this item, so it can't block it")]
     BlockingCycle { item_id: ItemId },
+    #[error(transparent)]
+    Team(#[from] TeamError),
+    /// The user to add to a team doesn't exist.
+    #[error("there is no user {user_id}")]
+    UserNotFound { user_id: UserId },
     #[error("this heap already has a tag called {name:?}")]
     TagNameTaken { name: String },
     #[error("password hashing failed: {0}")]

@@ -23,11 +23,13 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
   can be removed from an item but never deleted.
 - Blockers: a blocked item can wait for another item in its heap. Cycles are refused, and a blocker inherits
   the priority of what it blocks (with a small boost), shown as "Blocks …" in its reasons.
+- Teams: create teams, add members by name or email, make admins, remove members or leave; a team always keeps an
+  admin. Admins create, rename, archive and unarchive heaps; an archived heap is read-only.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
-Not yet: custom parameters, saved views, teams beyond the personal one,
-heap archiving, OIDC sign-in, the CLI OAuth flow and sign-in rate limiting.
+Not yet: custom parameters, saved views, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
+limiting.
 
 ## Run it
 

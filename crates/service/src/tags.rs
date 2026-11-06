@@ -8,7 +8,7 @@ use domain::{HeapId, TagId, Timestamp, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
-use crate::access::{authorize_heap, ensure_active};
+use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_tag, diff_tags};
 use crate::{Principal, ServiceError, Services};
 
@@ -55,9 +55,7 @@ impl Services {
         fields: NewTag,
     ) -> Result<TagView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let access = authorize_heap(&txn, principal, heap_id, Permission::EditItems).await?;
-        ensure_active(&access.heap)?;
-        store::heaps::lock_heap(&txn, heap_id).await?;
+        let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         ensure_name_free(&txn, heap_id, &fields.name, None).await?;
 
         let now = self.now();
@@ -97,9 +95,7 @@ impl Services {
         let current = store::tags::find_tag(&txn, tag_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap(&txn, principal, current.heap_id, Permission::EditItems).await?;
-        ensure_active(&access.heap)?;
-        store::heaps::lock_heap(&txn, current.heap_id).await?;
+        let access = authorize_heap_write(&txn, principal, current.heap_id, Permission::EditItems).await?;
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,

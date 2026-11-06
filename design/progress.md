@@ -3,9 +3,10 @@
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
 [technical-design.md](technical-design.md). Last reviewed 2026-11-06.
 
-About 55% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
-and reopen, the Edit item view, tags, blockers, and the list view controls (state modes, sort, filters, search).
-Custom parameters, teams, saved views, OIDC and CLI sign-in are not started. All 102 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+About 65% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
+renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, and the
+list view controls (state modes, sort, filters, search). Custom parameters, saved views, OIDC and CLI sign-in are not
+started. All 126 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -15,7 +16,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Area | Spec | Status | Notes |
 | --- | --- | :---: | --- |
 | Local accounts: register, sign in, sign out | Off Auth §2–3 | ✅ | argon2id, hashed session tokens, CSRF header |
-| Personal team and heap on registration | Off Teams §3 | ✅ | The only team and heap a user can reach today |
+| Personal team and heap on registration | Off Teams §3 | ✅ | |
 | Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue |
 | Reopen within one week | Req Items §7 | ✅ | 7×24h, enforced on the server |
 | Ranking: age, deadline, value per effort | Req Priority §1–4, 6–10 | 🟡 | Placeholder formula `V1` with blocker inheritance; no custom parameters |
@@ -27,8 +28,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
 | Saved views | Req Heaps §4 | ⬜ | |
-| Teams, members, roles | Req Heaps §2–3, Off Teams | ⬜ | `Permission` enum exists, but no use case checks the admin-only permissions |
-| Heap create, archive, unarchive | Off Teams §4, 9 | ⬜ | The `heap_archived` write guard exists |
+| Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
+| Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
 | Audit log: viewing entries | Off Audit §4 | ⬜ | No read endpoint or UI |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
@@ -62,11 +63,12 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] Server-side filters by tag, effort and impact (comma-separated, any of); ranking still runs over every item
   - [x] Client-side text search over title and description
   - [ ] Sort and filter by custom parameters, once they exist
-- [ ] **Teams and heaps**
-  - [ ] Team endpoints: create, members, roles, leave (`last_admin` rule)
-  - [ ] `GET /users?query=` for admins
-  - [ ] Heap create, archive, unarchive; heap switcher in the UI
-  - [ ] `PATCH /me` for display name
+- [x] **Teams and heaps**
+  - [x] Team endpoints: create, rename, members, roles, leave (`last_admin` rule)
+  - [x] `GET /users?query=` for admins
+  - [x] Heap create, rename, archive, unarchive; heap switcher in the UI
+  - [x] `PATCH /me` for display name
+  - [ ] Invitations by email or link, and IdP group membership (offering: a later iteration)
 - [ ] **Custom parameters**
   - [ ] Parameter, option and tag-link tables
   - [ ] Admin endpoints; archiving with replacement (`replacement_required`, `parameter_in_use`)
@@ -82,12 +84,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
   - [x] Store and API suites on MySQL in CI (`TEST_DATABASE_URL`, a database per test, `store::testing`)
   - [x] Table-driven access-control test (non-member, member, admin, archived heap) in
-    `crates/api/tests/access_control.rs`. Members and archiving are set up directly in the database until
-    their endpoints exist.
+    `crates/api/tests/access_control.rs`, covering heap- and team-scoped endpoints
   - [ ] Playwright golden paths
 
 ## Suggested order
 
-1. Teams and heaps management.
-2. Custom parameters, which also completes the ranking formula and links parameters to tags.
-3. Saved views, which store the list view that now lives in the URL.
+1. Custom parameters, which also completes the ranking formula and links parameters to tags.
+2. Saved views, which store the list view that now lives in the URL.
+3. Audit log reading, now that team and heap changes are audited too.

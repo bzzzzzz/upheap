@@ -52,9 +52,10 @@ Companion to [requirements.md](requirements.md).
 | Leave a team | ✓ | ✓ (not the last admin) |
 | Add and edit items | ✓ | ✓ |
 | Add and edit tags | ✓ | ✓ |
+| Rename the team | | ✓ |
 | Add users to the team and remove them | | ✓ |
 | Make a member an admin, demote an admin | | ✓ |
-| Create, archive and unarchive heaps | | ✓ |
+| Create, rename, archive and unarchive heaps | | ✓ |
 | Configure a heap (parameters, weights, ranking policy) | | ✓ |
 | Archive parameters and options | | ✓ |
 

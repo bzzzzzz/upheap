@@ -55,6 +55,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_heap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames the heap. Admins only; send the heap's `version` in `If-Match`. */
+        patch: operations["update_heap"];
+        trace?: never;
+    };
+    "/api/v1/heaps/{heap_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archives the heap, making it read-only for everyone. Admins only. Archiving an archived heap succeeds. */
+        post: operations["archive_heap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/heaps/{heap_id}/items": {
         parameters: {
             query?: never;
@@ -111,6 +145,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Makes an archived heap writable again. Admins only. Unarchiving an active heap succeeds. */
+        post: operations["unarchive_heap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/items/{item_id}": {
         parameters: {
             query?: never;
@@ -159,7 +210,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Changes the signed-in user's display name. Send the user's `version` in `If-Match`. */
+        patch: operations["update_me"];
         trace?: never;
     };
     "/api/v1/tags/{tag_id}": {
@@ -179,10 +231,145 @@ export interface paths {
         patch: operations["update_tag"];
         trace?: never;
     };
+    "/api/v1/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Creates a team with the caller as its admin. The team starts without heaps. */
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team with its members and heaps. */
+        get: operations["get_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames the team. Admins only; send the team's `version` in `If-Match`. */
+        patch: operations["update_team"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/heaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds a heap to the team. Admins only. */
+        post: operations["create_heap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Leaves the team. The last admin can't leave until another member is an admin. */
+        post: operations["leave_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds an existing user to the team as a member. Admins only. Answers `200` with the team unchanged when they are
+         *     already a member.
+         */
+        post: operations["add_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Takes a user out of the team. Admins only. Removing someone who isn't a member succeeds. */
+        delete: operations["remove_member"];
+        options?: never;
+        head?: never;
+        /** Makes a member an admin, or an admin a member. Admins only. */
+        patch: operations["update_member"];
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Users with a word of their display name starting with `query`, or, when `query` is the start of an email address
+         *     with at least its local part, `@` and one character of the domain, users whose email starts with it. Only for
+         *     admins of some team, to add members.
+         */
+        get: operations["find_users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddMemberRequest: {
+            /**
+             * Format: uuid
+             * @description From `GET /users`. New members join as `member`.
+             */
+            user_id: string;
+        };
         /**
          * @description Where shown blocked items go.
          * @enum {string}
@@ -246,6 +433,29 @@ export interface components {
         };
         /** @enum {string} */
         Factor: "age" | "deadline" | "value" | "blocks";
+        Heap: {
+            allowed_actions: components["schemas"]["HeapAction"][];
+            /**
+             * Format: int64
+             * @description When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
+             */
+            archived_at?: number | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            team_id: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when renaming.
+             */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on a heap.
+         * @enum {string}
+         */
+        HeapAction: "rename" | "archive" | "unarchive";
         HeapSummary: {
             archived: boolean;
             /** Format: uuid */
@@ -337,6 +547,23 @@ export interface components {
         Me: {
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
+        };
+        MePatchRequest: {
+            /** @description 1 to 100 characters. */
+            display_name: string;
+        };
+        /**
+         * @description An action the caller can take on one member.
+         * @enum {string}
+         */
+        MemberAction: "promote" | "demote" | "remove";
+        MemberPatchRequest: {
+            role: components["schemas"]["Role"];
+        };
+        /** @description A team or heap name. */
+        NameRequest: {
+            /** @description 1 to 100 characters. */
+            name: string;
         };
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
@@ -436,6 +663,42 @@ export interface components {
             description?: string | null;
             name?: string | null;
         };
+        /** @description A team with its members and heaps, as the caller sees it. */
+        Team: {
+            allowed_actions: components["schemas"]["TeamAction"][];
+            /** @description By name, archived ones included. */
+            heaps: components["schemas"]["Heap"][];
+            /** Format: uuid */
+            id: string;
+            /** @description In the order they joined. */
+            members: components["schemas"]["TeamMember"][];
+            name: string;
+            /** @description The caller's role. */
+            role: components["schemas"]["Role"];
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when renaming.
+             */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on a team.
+         * @enum {string}
+         */
+        TeamAction: "rename" | "add_member" | "create_heap" | "leave";
+        TeamMember: {
+            allowed_actions: components["schemas"]["MemberAction"][];
+            display_name: string;
+            email: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            joined_at: number;
+            role: components["schemas"]["Role"];
+            /** Format: uuid */
+            user_id: string;
+        };
         TeamSummary: {
             heaps: components["schemas"]["HeapSummary"][];
             /** Format: uuid */
@@ -449,6 +712,23 @@ export interface components {
             email: string;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when changing the display name.
+             */
+            version: number;
+        };
+        /** @description Only what an admin needs to pick the right person. */
+        UserMatch: {
+            display_name: string;
+            /** @description Only when the query matched the start of the email, so a lookup by name never reveals addresses. */
+            email?: string | null;
+            /** Format: uuid */
+            id: string;
+        };
+        UserMatches: {
+            /** @description Up to 10, by display name. */
+            users: components["schemas"]["UserMatch"][];
         };
     };
     responses: never;
@@ -543,6 +823,142 @@ export interface operations {
             };
             /** @description Invalid email, name or password */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_heap: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -791,6 +1207,43 @@ export interface operations {
             };
         };
     };
+    unarchive_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_item: {
         parameters: {
             query?: never;
@@ -827,7 +1280,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description The `version` of the item or tag being edited, for example `"3"`. */
+                /** @description The `version` of what is being edited, for example `"3"`. */
                 "If-Match": string;
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
                 "Time-Zone"?: string | null;
@@ -892,7 +1345,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description The `version` of the item or tag being edited, for example `"3"`. */
+                /** @description The `version` of what is being edited, for example `"3"`. */
                 "If-Match": string;
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
                 "Time-Zone"?: string | null;
@@ -959,11 +1412,72 @@ export interface operations {
             };
         };
     };
+    update_me: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MePatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     update_tag: {
         parameters: {
             query?: never;
             header: {
-                /** @description The `version` of the item or tag being edited, for example `"3"`. */
+                /** @description The `version` of what is being edited, for example `"3"`. */
                 "If-Match": string;
             };
             path: {
@@ -1012,6 +1526,421 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NameRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    leave_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the team */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Already a member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `user_not_found` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    find_users: {
+        parameters: {
+            query: {
+                /**
+                 * @description The start of a word of the display name, or the start of an email address up to at least `@` and one more
+                 *     character. Ignores case. At least 3 characters.
+                 */
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserMatches"];
+                };
+            };
+            /** @description The caller is no team's admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_too_short` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

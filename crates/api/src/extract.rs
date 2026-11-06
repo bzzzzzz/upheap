@@ -117,7 +117,7 @@ impl<S: Send + Sync> FromRequestParts<S> for IfMatch {
             .map(|v| Self(Version::new(v)))
             .ok_or(ApiError::BadRequest {
                 code: "invalid_if_match",
-                detail: "If-Match must hold the item's version, for example \"3\"".to_owned(),
+                detail: "If-Match must hold the version being edited, for example \"3\"".to_owned(),
             })
     }
 }

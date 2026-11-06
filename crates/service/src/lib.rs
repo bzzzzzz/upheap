@@ -8,11 +8,13 @@ mod audit;
 pub mod auth;
 mod clock;
 mod error;
+pub mod heaps;
 pub mod items;
 pub mod me;
 pub mod tags;
+pub mod teams;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use domain::{Duration, Timestamp, UserId};
 use store::DatabaseConnection;
@@ -43,6 +45,8 @@ pub struct Services {
     db: DatabaseConnection,
     clock: Arc<dyn Clock>,
     settings: Arc<Settings>,
+    /// Counts IDs made in the same millisecond, so they still sort in the order they were made.
+    id_context: Arc<Mutex<uuid::ContextV7>>,
 }
 
 impl Services {
@@ -51,6 +55,7 @@ impl Services {
             db,
             clock,
             settings: Arc::new(settings),
+            id_context: Arc::new(Mutex::new(uuid::ContextV7::new())),
         }
     }
 
@@ -64,10 +69,12 @@ impl Services {
         store::ping(&self.db).await.map_err(ServiceError::from)
     }
 
-    /// A new UUIDv7 whose time part comes from the injected clock, so IDs sort with `created_at`.
+    /// A new UUIDv7 whose time part comes from the injected clock, so IDs sort with `created_at`. IDs made in the
+    /// same millisecond by this process sort in the order they were made, so audit entries of one use case, and of
+    /// writes in quick succession, read back in order.
     fn new_id(&self, now: Timestamp) -> Uuid {
         let millis = u64::try_from(now.as_millis()).unwrap_or(0);
-        let ts = uuid::Timestamp::from_unix(uuid::NoContext, millis / 1000, ((millis % 1000) * 1_000_000) as u32);
+        let ts = uuid::Timestamp::from_unix(&*self.id_context, millis / 1000, ((millis % 1000) * 1_000_000) as u32);
         Uuid::new_v7(ts)
     }
 }

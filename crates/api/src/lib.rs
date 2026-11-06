@@ -8,10 +8,13 @@ mod dto;
 mod error;
 mod extract;
 mod health;
+mod heaps;
 mod items;
 mod me;
 mod request_id;
 mod tags;
+mod teams;
+mod users;
 
 use std::time::Duration;
 
@@ -56,6 +59,9 @@ pub struct CookieSettings {
         (name = "me", description = "The signed-in user"),
         (name = "items", description = "Items and the ranked list"),
         (name = "tags", description = "A heap's tags"),
+        (name = "teams", description = "Teams and their members"),
+        (name = "heaps", description = "Creating, renaming and archiving heaps"),
+        (name = "users", description = "Finding users to add to a team"),
     )
 )]
 struct ApiDoc;
@@ -78,6 +84,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::routes())
         .merge(items::routes())
         .merge(tags::routes())
+        .merge(teams::routes())
+        .merge(heaps::routes())
+        .merge(users::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)

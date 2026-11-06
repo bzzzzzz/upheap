@@ -141,12 +141,21 @@ impl From<ItemSummary> for ItemRefDto {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = Role)]
 pub(crate) enum RoleDto {
     Admin,
     Member,
+}
+
+impl From<RoleDto> for Role {
+    fn from(role: RoleDto) -> Self {
+        match role {
+            RoleDto::Admin => Self::Admin,
+            RoleDto::Member => Self::Member,
+        }
+    }
 }
 
 impl From<Role> for RoleDto {
@@ -334,7 +343,7 @@ pub(crate) fn to_ranked_dto(entry: RankedEntry, as_of: Timestamp, tz: &TimeZone)
 #[into_params(parameter_in = Header)]
 #[allow(dead_code)]
 pub(crate) struct IfMatchHeader {
-    /// The `version` of the item or tag being edited, for example `"3"`.
+    /// The `version` of what is being edited, for example `"3"`.
     #[param(rename = "If-Match")]
     if_match: String,
 }

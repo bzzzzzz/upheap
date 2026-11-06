@@ -95,6 +95,7 @@ impl Services {
             email,
             display_name,
             created_at: now,
+            version: Version::INITIAL,
         };
         let team = Team {
             id: TeamId::from_uuid(self.new_id(now)),
