@@ -3,9 +3,9 @@
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
 [technical-design.md](technical-design.md). Last reviewed 2026-11-05.
 
-About 45% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
-and reopen, and tags. Blockers, custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
-started. All 54 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
+About 50% of the golden path is built: local accounts, the personal heap, the ranked list with add, edit, close
+and reopen, tags, and blockers. Custom parameters, teams, saved views, search, OIDC and CLI sign-in are not
+started. All 72 Rust tests pass (`cargo test --workspace`), and the web typecheck and lint are clean. CI runs on every
 pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -18,13 +18,13 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Personal team and heap on registration | Off Teams §3 | ✅ | The only team and heap a user can reach today |
 | Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue |
 | Reopen within one week | Req Items §7 | ✅ | 7×24h, enforced on the server |
-| Ranking: age, deadline, value per effort | Req Priority §1–4, 6–10 | 🟡 | Placeholder formula `V1`; no custom parameters or blocker boost |
+| Ranking: age, deadline, value per effort | Req Priority §1–4, 6–10 | 🟡 | Placeholder formula `V1` with blocker inheritance; no custom parameters |
 | Main list view | Req Views: List items | 🟡 | Pinned and blocked groups, inline edits, `N` shortcut; no state config, sort, search or filters |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
 | Add item | Req Views: Add item | 🟡 | Tags, created by typing a new name; no linked parameters |
 | Edit item view | Req Views: Edit item | ⬜ | Description can't be edited and tags can't be added in the UI after creation; the API allows both |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; no tag filter yet (List view controls) |
-| Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ⬜ | The blocked state exists without `blocked_by_item_id` |
+| Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; checked by hand on MySQL 8.4 |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
 | Saved views | Req Heaps §4 | ⬜ | |
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ⬜ | `Permission` enum exists, but no use case checks the admin-only permissions |
@@ -46,11 +46,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] Take a tag off an item from the list (audited as `item_updated`)
   - [x] Tags in Add item; typing a new name creates the tag
   - [x] Manage tags view
-- [ ] **Blockers**
-  - [ ] `blocked_by_item_id` column; a blocker from another heap is rejected with 422
-  - [ ] Cycle detection inside the write transaction (`blocking_cycle`)
-  - [ ] Blocker inheritance in `rank()` (memoized walk, optional boost)
-  - [ ] Pick the blocking item in Edit item
+- [x] **Blockers**
+  - [x] `blocked_by_item_id` column; a blocker from another heap is rejected with 422
+  - [x] Cycle detection inside the write transaction (`blocking_cycle`)
+  - [x] Blocker inheritance in `rank()` (memoized walk, 1.1 boost)
+  - [x] Pick the blocking item (in the list row for now; moves to Edit item when that view exists)
 - [ ] **Edit item view**: every field including description, tags, parameters and state
 - [ ] **List view controls**
   - [ ] Per-state pinned / shown / hidden; blocked items mixed in or grouped
@@ -83,8 +83,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Blockers, with cycle detection and inherited priority.
+1. The MySQL run in CI. A manual run found that the tags migration failed on MySQL, so this shouldn't wait.
 2. Edit item view and list controls (sort, filters including tags, search).
 3. Teams and heaps management.
 4. Custom parameters, which also completes the ranking formula and links parameters to tags.
-5. The MySQL run in CI, alongside the steps above rather than at the end.

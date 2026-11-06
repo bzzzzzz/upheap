@@ -610,7 +610,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, or `tag_not_in_heap`",
+            "description": "Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1032,7 +1032,8 @@
         "enum": [
           "age",
           "deadline",
-          "value"
+          "value",
+          "blocks"
         ]
       },
       "HeapSummary": {
@@ -1078,6 +1079,17 @@
             "items": {
               "$ref": "#/components/schemas/ItemAction"
             }
+          },
+          "blocked_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemRef",
+                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be\nclosed: finishing a blocker doesn't unblock what waits for it."
+              }
+            ]
           },
           "closed_at": {
             "type": [
@@ -1179,6 +1191,14 @@
         "type": "object",
         "description": "A partial edit. Leave a field out to keep it; send `null` to clear it.",
         "properties": {
+          "blocked_by_item_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send\nit with `\"state\": \"blocked\"` unless the item is blocked already. `null` clears it. Leaving the blocked state\nclears it too."
+          },
           "description": {
             "type": [
               "string",
@@ -1238,6 +1258,27 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ItemRef": {
+        "type": "object",
+        "description": "Another item, named where this one refers to it.",
+        "required": [
+          "id",
+          "title",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ItemState"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

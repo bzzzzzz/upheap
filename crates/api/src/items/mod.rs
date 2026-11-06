@@ -105,6 +105,12 @@ pub(crate) struct ItemPatchDto {
     #[schema(value_type = Vec<Uuid>, required = false)]
     pub tag_ids: Option<Vec<Uuid>>,
     pub state: Option<StateDto>,
+    /// The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send
+    /// it with `"state": "blocked"` unless the item is blocked already. `null` clears it. Leaving the blocked state
+    /// clears it too.
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<Uuid>, nullable)]
+    pub blocked_by_item_id: Option<Option<Uuid>>,
 }
 
 impl ItemPatchDto {
@@ -125,6 +131,7 @@ impl ItemPatchDto {
             },
             tags: self.tag_ids.as_deref().map(to_tag_set).transpose()?,
             state: self.state.map(StateKind::from),
+            blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
         })
     }
 }
@@ -223,7 +230,7 @@ async fn get_item(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived`", body = Problem),
-        (status = 422, description = "Invalid fields, or `tag_not_in_heap`", body = Problem),
+        (status = 422, description = "Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_item(

@@ -1,7 +1,7 @@
 import { AnimatePresence } from "motion/react";
 import { useState } from "react";
 
-import type { RankedItem } from "../api/client";
+import type { ItemRef, RankedItem } from "../api/client";
 import { useRankedList } from "../api/queries";
 import { AddItemForm } from "../components/AddItemForm";
 import { ItemRow } from "../components/ItemRow";
@@ -24,6 +24,7 @@ export function HeapPage({ heapId }: { heapId: string }) {
 
   const { heap, pinned, ranked, blocked } = list.data;
   const empty = pinned.length + ranked.length + blocked.length === 0;
+  const blockerCandidates = blockerCandidatesFor([...pinned, ...ranked, ...blocked]);
 
   return (
     <main>
@@ -50,13 +51,13 @@ export function HeapPage({ heapId }: { heapId: string }) {
 
       {pinned.length > 0 && (
         <Section title="In progress">
-          <ItemList entries={pinned} heapId={heapId} compact />
+          <ItemList entries={pinned} heapId={heapId} blockerCandidates={blockerCandidates} compact />
         </Section>
       )}
 
       {ranked.length > 0 && (
         <Section title={pinned.length > 0 ? "Up next" : undefined}>
-          <ItemList entries={ranked} heapId={heapId} />
+          <ItemList entries={ranked} heapId={heapId} blockerCandidates={blockerCandidates} />
         </Section>
       )}
 
@@ -70,7 +71,7 @@ export function HeapPage({ heapId }: { heapId: string }) {
           >
             {showBlocked ? "Hide" : "Show"} blocked ({blocked.length})
           </button>
-          {showBlocked && <ItemList entries={blocked} heapId={heapId} />}
+          {showBlocked && <ItemList entries={blocked} heapId={heapId} blockerCandidates={blockerCandidates} />}
         </section>
       )}
     </main>
@@ -86,14 +87,48 @@ function Section({ title, children }: { title: string | undefined; children: Rea
   );
 }
 
-function ItemList({ entries, heapId, compact }: { entries: RankedItem[]; heapId: string; compact?: boolean }) {
+function ItemList({
+  entries,
+  heapId,
+  blockerCandidates,
+  compact,
+}: {
+  entries: RankedItem[];
+  heapId: string;
+  blockerCandidates: (itemId: string) => ItemRef[];
+  compact?: boolean;
+}) {
   return (
     <ol className="rounded-lg border border-stone-200 bg-white px-3 dark:border-stone-800 dark:bg-stone-900">
       <AnimatePresence initial={false}>
         {entries.map((entry) => (
-          <ItemRow key={entry.item.id} entry={entry} heapId={heapId} compact={compact} />
+          <ItemRow
+            key={entry.item.id}
+            entry={entry}
+            heapId={heapId}
+            blockerCandidates={blockerCandidates(entry.item.id)}
+            compact={compact}
+          />
         ))}
       </AnimatePresence>
     </ol>
   );
+}
+
+/**
+ * The items each item may wait for: every listed item except itself and those that already wait for it, directly
+ * or down a chain, which the server would refuse as a cycle.
+ */
+function blockerCandidatesFor(entries: RankedItem[]): (itemId: string) => ItemRef[] {
+  const waitsFor = new Map(entries.map(({ item }) => [item.id, item.blocked_by?.id]));
+  const refs: ItemRef[] = entries.map(({ item }) => ({ id: item.id, title: item.title, state: item.state }));
+  const reaches = (from: string, target: string) => {
+    const seen = new Set<string>();
+    for (let at: string | undefined = from; at !== undefined && !seen.has(at); at = waitsFor.get(at)) {
+      if (at === target) return true;
+      seen.add(at);
+    }
+    return false;
+  };
+  return (itemId) => refs.filter((ref) => !reaches(ref.id, itemId));
 }

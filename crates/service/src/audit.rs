@@ -44,6 +44,7 @@ fn item_fields(item: &Item) -> Map<String, Value> {
         json!(item.description.as_ref().map(|d| d.as_str())),
     );
     fields.insert("state".into(), json!(item.state.kind().code()));
+    fields.insert("blocked_by".into(), json!(item.blocked_by().map(|id| id.to_string())));
     fields.insert("effort".into(), json!(item.effort.map(|s| s.code())));
     fields.insert("impact".into(), json!(item.impact.map(|s| s.code())));
     fields.insert("due".into(), json!(due(item.due)));

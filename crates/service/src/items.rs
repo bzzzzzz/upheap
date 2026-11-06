@@ -1,10 +1,10 @@
 //! Item use cases: the ranked list, the closed list, adding and editing.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
-use domain::item::{Item, ItemPatch, NewItem, StateKind};
+use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
@@ -25,12 +25,14 @@ pub const MAX_AS_OF_AGE: Duration = Duration::from_hours(24);
 /// Largest page of closed items.
 pub const MAX_CLOSED_PAGE: u64 = 200;
 
-/// An item with its tags and what the caller may do with it.
+/// An item with its tags, its blocker, and what the caller may do with it.
 #[derive(Debug)]
 pub struct ItemView {
     pub item: Item,
     /// The item's tags, by name.
     pub tags: Vec<Tag>,
+    /// The item it waits for, when it's blocked and one was picked.
+    pub blocked_by: Option<ItemSummary>,
     pub allowed_actions: Vec<ItemAction>,
 }
 
@@ -86,8 +88,12 @@ impl Services {
         let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
 
-        let inputs: Vec<ItemForRanking> = items.iter().map(ItemForRanking::from).collect();
-        let ranking = rank(CURRENT_FORMULA, &access.heap.policy, &inputs, as_of);
+        let ranking = {
+            let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
+            rank(CURRENT_FORMULA, &access.heap.policy, &inputs, as_of)
+        };
+        let item_count = items.len();
+        let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
 
         let role = access.membership.role;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
@@ -104,10 +110,12 @@ impl Services {
             let position = u32::try_from(group.len() + 1).unwrap_or(u32::MAX);
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
             let tags = select_tags(&heap_tags, &item.tags);
+            let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
             group.push(RankedEntry {
                 view: ItemView {
                     item,
                     tags,
+                    blocked_by,
                     allowed_actions,
                 },
                 position,
@@ -115,7 +123,7 @@ impl Services {
             });
         }
 
-        tracing::debug!(%heap_id, items = inputs.len(), as_of = as_of.as_millis(), "ranked heap");
+        tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
         Ok(RankedList {
             heap: access.heap,
             role,
@@ -158,9 +166,11 @@ impl Services {
             .map(|item| {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let tags = select_tags(&heap_tags, &item.tags);
+                // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
                     tags,
+                    blocked_by: None,
                     allowed_actions,
                 }
             })
@@ -183,6 +193,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap(&txn, principal, heap_id, Permission::EditItems).await?;
         ensure_active(&access.heap)?;
+        store::heaps::lock_heap(&txn, heap_id).await?;
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
 
         let now = self.now();
@@ -201,9 +212,11 @@ impl Services {
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
+        // New items are open, so they have no blocker.
         Ok(ItemView {
             item,
             tags,
+            blocked_by: None,
             allowed_actions,
         })
     }
@@ -215,15 +228,19 @@ impl Services {
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, self.now());
         let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
+        let blocked_by = find_blocker(&self.db, &item).await?;
         Ok(ItemView {
             item,
             tags,
+            blocked_by,
             allowed_actions,
         })
     }
 
     /// Applies a partial edit if the item is still at version `expected`. New tags must belong to the item's
-    /// heap, or it fails with [`ServiceError::TagNotInHeap`].
+    /// heap, or it fails with [`ServiceError::TagNotInHeap`]. A new blocker must be a non-closed item of the same
+    /// heap that doesn't already wait for this one ([`ServiceError::BlockerNotInHeap`],
+    /// [`ServiceError::BlockerClosed`], [`ServiceError::BlockingCycle`]).
     ///
     /// A patch that changes nothing succeeds and returns the item unchanged, without an audit entry.
     pub async fn update_item(
@@ -239,6 +256,7 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&txn, principal, current.heap_id, Permission::EditItems).await?;
         ensure_active(&access.heap)?;
+        store::heaps::lock_heap(&txn, current.heap_id).await?;
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,
@@ -252,12 +270,21 @@ impl Services {
 
         let now = self.now();
         let role = access.membership.role;
-        let Some(edited) = current.apply_patch(&patch, now)? else {
+        let edited = current.apply_patch(&patch, now)?;
+        // Checked after the patch, so an item that doesn't end up blocked gets `item_not_blocked` first.
+        if let Some(blocker) = edited.as_ref().and_then(Item::blocked_by)
+            && current.blocked_by() != Some(blocker)
+        {
+            check_blocker(&txn, &current, blocker).await?;
+        }
+        let Some(edited) = edited else {
             let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
             let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
+            let blocked_by = find_blocker(&txn, &current).await?;
             return Ok(ItemView {
                 item: current,
                 tags,
+                blocked_by,
                 allowed_actions,
             });
         };
@@ -278,6 +305,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let tags = load_heap_tags(&txn, saved.heap_id, &saved.tags).await?;
+        let blocked_by = find_blocker(&txn, &saved).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
@@ -285,6 +313,7 @@ impl Services {
         Ok(ItemView {
             item: saved,
             tags,
+            blocked_by,
             allowed_actions,
         })
     }
@@ -310,6 +339,70 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// Checks that `item` may wait for `blocker`: a non-closed item of the same heap that doesn't wait, directly or
+/// through others, for `item`.
+///
+/// The caller must hold the heap lock ([`store::heaps::lock_heap`]), so two writes that would close a cycle between
+/// them can't both pass the check.
+async fn check_blocker(db: &impl ConnectionTrait, item: &Item, blocker: ItemId) -> Result<(), ServiceError> {
+    let mut link = store::items::find_item_summary_locking(db, item.heap_id, blocker)
+        .await?
+        .ok_or(ServiceError::BlockerNotInHeap { item_id: blocker })?;
+    if link.state.kind().is_closed() {
+        return Err(ServiceError::BlockerClosed { item_id: blocker });
+    }
+    let mut seen = HashSet::new();
+    loop {
+        if link.id == item.id {
+            return Err(ServiceError::BlockingCycle { item_id: blocker });
+        }
+        // A cycle already in stored data that doesn't pass through `item` isn't this write's doing.
+        if !seen.insert(link.id) {
+            return Ok(());
+        }
+        let Some(next) = link.state.blocked_by() else {
+            return Ok(());
+        };
+        match store::items::find_item_summary_locking(db, item.heap_id, next).await? {
+            Some(found) => link = found,
+            None => return Ok(()),
+        }
+    }
+}
+
+/// The item `item` waits for, if any.
+async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<ItemSummary>, ServiceError> {
+    let Some(id) = item.blocked_by() else {
+        return Ok(None);
+    };
+    Ok(store::items::list_item_summaries(db, item.heap_id, [id]).await?.pop())
+}
+
+/// Every blocker of `items`, by ID. Blockers among `items` are taken from there; closed ones are loaded.
+async fn blocker_summaries(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    items: &[Item],
+) -> Result<HashMap<ItemId, ItemSummary>, ServiceError> {
+    let loaded: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
+    let mut found = HashMap::new();
+    let mut missing = BTreeSet::new();
+    for id in items.iter().filter_map(Item::blocked_by) {
+        match loaded.get(&id) {
+            Some(item) => {
+                found.insert(id, ItemSummary::from(*item));
+            }
+            None => {
+                missing.insert(id);
+            }
+        }
+    }
+    for summary in store::items::list_item_summaries(db, heap_id, missing).await? {
+        found.insert(summary.id, summary);
+    }
+    Ok(found)
 }
 
 /// The tags `ids` names, by name. Fails with [`ServiceError::TagNotInHeap`] if any of them isn't a tag of

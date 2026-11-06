@@ -118,34 +118,52 @@ impl StateKind {
     }
 }
 
-/// An item's state. Only the closed states carry a close time, so an open item with one can't exist.
+/// An item's state. Only the closed states carry a close time, and only the blocked state carries a blocker, so
+/// an open item with either can't exist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemState {
     Open,
     InProgress,
-    Blocked,
-    Done { closed_at: Timestamp },
-    WontDo { closed_at: Timestamp },
+    /// `by` is the item it waits for, of the same heap, if one was picked.
+    Blocked {
+        by: Option<ItemId>,
+    },
+    Done {
+        closed_at: Timestamp,
+    },
+    WontDo {
+        closed_at: Timestamp,
+    },
 }
 
-/// A stored state and close time that don't fit together.
+/// A stored state, close time and blocker that don't fit together.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("state {kind:?} doesn't match closed_at {closed_at:?}")]
+#[error("state {kind:?} doesn't match closed_at {closed_at:?} and blocked_by {blocked_by:?}")]
 pub struct InconsistentState {
     pub kind: StateKind,
     pub closed_at: Option<Timestamp>,
+    pub blocked_by: Option<ItemId>,
 }
 
 impl ItemState {
-    /// Builds a state from its stored parts. `closed_at` must be set exactly when `kind` is closed.
-    pub fn from_parts(kind: StateKind, closed_at: Option<Timestamp>) -> Result<Self, InconsistentState> {
-        match (kind, closed_at) {
-            (StateKind::Open, None) => Ok(Self::Open),
-            (StateKind::InProgress, None) => Ok(Self::InProgress),
-            (StateKind::Blocked, None) => Ok(Self::Blocked),
-            (StateKind::Done, Some(closed_at)) => Ok(Self::Done { closed_at }),
-            (StateKind::WontDo, Some(closed_at)) => Ok(Self::WontDo { closed_at }),
-            _ => Err(InconsistentState { kind, closed_at }),
+    /// Builds a state from its stored parts. `closed_at` must be set exactly when `kind` is closed, and
+    /// `blocked_by` only when it's blocked.
+    pub fn from_parts(
+        kind: StateKind,
+        closed_at: Option<Timestamp>,
+        blocked_by: Option<ItemId>,
+    ) -> Result<Self, InconsistentState> {
+        match (kind, closed_at, blocked_by) {
+            (StateKind::Open, None, None) => Ok(Self::Open),
+            (StateKind::InProgress, None, None) => Ok(Self::InProgress),
+            (StateKind::Blocked, None, by) => Ok(Self::Blocked { by }),
+            (StateKind::Done, Some(closed_at), None) => Ok(Self::Done { closed_at }),
+            (StateKind::WontDo, Some(closed_at), None) => Ok(Self::WontDo { closed_at }),
+            _ => Err(InconsistentState {
+                kind,
+                closed_at,
+                blocked_by,
+            }),
         }
     }
 
@@ -153,7 +171,7 @@ impl ItemState {
         match self {
             Self::Open => StateKind::Open,
             Self::InProgress => StateKind::InProgress,
-            Self::Blocked => StateKind::Blocked,
+            Self::Blocked { .. } => StateKind::Blocked,
             Self::Done { .. } => StateKind::Done,
             Self::WontDo { .. } => StateKind::WontDo,
         }
@@ -163,7 +181,15 @@ impl ItemState {
     pub const fn closed_at(self) -> Option<Timestamp> {
         match self {
             Self::Done { closed_at } | Self::WontDo { closed_at } => Some(closed_at),
-            Self::Open | Self::InProgress | Self::Blocked => None,
+            Self::Open | Self::InProgress | Self::Blocked { .. } => None,
+        }
+    }
+
+    /// The item a blocked item waits for. `None` for every other state.
+    pub const fn blocked_by(self) -> Option<ItemId> {
+        match self {
+            Self::Blocked { by } => by,
+            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } => None,
         }
     }
 }
@@ -175,6 +201,9 @@ pub enum ItemError {
     Closed { item_id: ItemId },
     #[error("item {item_id} was closed at {closed_at}, more than a week ago, so it can't be reopened")]
     ReopenWindowExpired { item_id: ItemId, closed_at: Timestamp },
+    /// Only a blocked item can point to a blocker.
+    #[error("item {item_id} isn't blocked, so it can't have a blocker")]
+    NotBlocked { item_id: ItemId },
 }
 
 /// The fields of a new item. Everything except the title is optional.
@@ -200,6 +229,9 @@ pub struct ItemPatch {
     /// Replaces the whole set of tags.
     pub tags: Option<BTreeSet<TagId>>,
     pub state: Option<StateKind>,
+    /// The item this one waits for. Only a blocked item can have one; leaving the blocked state clears it. The
+    /// service checks the blocker is in the same heap and that no cycle forms.
+    pub blocked_by: Option<Option<ItemId>>,
 }
 
 impl ItemPatch {
@@ -211,6 +243,24 @@ impl ItemPatch {
             || self.impact.is_some()
             || self.due.is_some()
             || self.tags.is_some()
+    }
+}
+
+/// Enough of an item to name it where another item refers to it, as a blocker does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ItemSummary {
+    pub id: ItemId,
+    pub title: Title,
+    pub state: ItemState,
+}
+
+impl From<&Item> for ItemSummary {
+    fn from(item: &Item) -> Self {
+        Self {
+            id: item.id,
+            title: item.title.clone(),
+            state: item.state,
+        }
     }
 }
 
@@ -260,17 +310,30 @@ impl Item {
             .is_some_and(|closed_at| now.since(closed_at) <= REOPEN_WINDOW)
     }
 
+    /// The item this one waits for, if it's blocked and one was picked.
+    pub const fn blocked_by(&self) -> Option<ItemId> {
+        self.state.blocked_by()
+    }
+
     /// Applies `patch` at `now` and returns the edited item, or `None` when the patch changes nothing.
     ///
-    /// The state changes first, so a single patch can reopen an item and edit it. Fields of an item that
-    /// stays closed can't be edited. The returned item keeps the old version; the store bumps it on write.
+    /// The state changes first, so a single patch can reopen an item and edit it, or block it and pick the
+    /// blocker. Fields of an item that stays closed can't be edited. The returned item keeps the old version; the
+    /// store bumps it on write.
     pub fn apply_patch(&self, patch: &ItemPatch, now: Timestamp) -> Result<Option<Self>, ItemError> {
-        let state = match patch.state {
+        let mut state = match patch.state {
             Some(target) => self.transition(target, now)?,
             None => self.state,
         };
         if state.kind().is_closed() && patch.edits_fields() {
             return Err(ItemError::Closed { item_id: self.id });
+        }
+        match (&mut state, patch.blocked_by) {
+            (_, None) => {}
+            (ItemState::Blocked { by }, Some(blocker)) => *by = blocker,
+            // Clearing the blocker of an item that has none is a no-op, whatever its state.
+            (_, Some(None)) => {}
+            (_, Some(Some(_))) => return Err(ItemError::NotBlocked { item_id: self.id }),
         }
 
         let edited = Self {
@@ -306,7 +369,7 @@ impl Item {
         Ok(match target {
             StateKind::Open => ItemState::Open,
             StateKind::InProgress => ItemState::InProgress,
-            StateKind::Blocked => ItemState::Blocked,
+            StateKind::Blocked => ItemState::Blocked { by: None },
             StateKind::Done => ItemState::Done { closed_at: now },
             StateKind::WontDo => ItemState::WontDo { closed_at: now },
         })
@@ -468,7 +531,91 @@ mod tests {
 
     #[gtest]
     fn inconsistent_stored_state_is_rejected() {
-        expect_that!(ItemState::from_parts(StateKind::Open, Some(at(1))), err(anything()));
-        expect_that!(ItemState::from_parts(StateKind::Done, None), err(anything()));
+        let other = ItemId::from_uuid(Uuid::from_u128(1));
+        expect_that!(
+            ItemState::from_parts(StateKind::Open, Some(at(1)), None),
+            err(anything())
+        );
+        expect_that!(ItemState::from_parts(StateKind::Done, None, None), err(anything()));
+        expect_that!(
+            ItemState::from_parts(StateKind::Open, None, Some(other)),
+            err(anything())
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::Blocked, None, Some(other)),
+            ok(eq(ItemState::Blocked { by: Some(other) }))
+        );
+    }
+
+    fn blocker() -> ItemId {
+        ItemId::from_uuid(Uuid::from_u128(7))
+    }
+
+    #[gtest]
+    fn blocking_and_picking_the_blocker_in_one_patch() {
+        let patch = ItemPatch {
+            state: Some(StateKind::Blocked),
+            blocked_by: Some(Some(blocker())),
+            ..ItemPatch::default()
+        };
+
+        let blocked = sample_item()
+            .apply_patch(&patch, at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(blocked.blocked_by(), some(eq(blocker())));
+    }
+
+    #[gtest]
+    fn an_item_that_isnt_blocked_cant_have_a_blocker() {
+        let item = sample_item();
+        let patch = ItemPatch {
+            blocked_by: Some(Some(blocker())),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            item.apply_patch(&patch, at(1)),
+            err(eq(&ItemError::NotBlocked { item_id: item.id }))
+        );
+    }
+
+    #[gtest]
+    fn leaving_the_blocked_state_drops_the_blocker() {
+        let block = ItemPatch {
+            state: Some(StateKind::Blocked),
+            blocked_by: Some(Some(blocker())),
+            ..ItemPatch::default()
+        };
+        let blocked = sample_item().apply_patch(&block, at(1)).expect("ok").expect("changed");
+        let unblock = ItemPatch {
+            state: Some(StateKind::Open),
+            ..ItemPatch::default()
+        };
+
+        let open = blocked.apply_patch(&unblock, at(2)).expect("allowed").expect("changed");
+
+        expect_that!(open.state, eq(ItemState::Open));
+        expect_that!(open.blocked_by(), none());
+    }
+
+    #[gtest]
+    fn staying_blocked_keeps_the_blocker() {
+        let block = ItemPatch {
+            state: Some(StateKind::Blocked),
+            blocked_by: Some(Some(blocker())),
+            ..ItemPatch::default()
+        };
+        let blocked = sample_item().apply_patch(&block, at(1)).expect("ok").expect("changed");
+        let retitle = ItemPatch {
+            state: Some(StateKind::Blocked),
+            title: Some(Title::parse("Renamed").expect("valid")),
+            ..ItemPatch::default()
+        };
+
+        let edited = blocked.apply_patch(&retitle, at(2)).expect("allowed").expect("changed");
+
+        expect_that!(edited.blocked_by(), some(eq(blocker())));
     }
 }

@@ -237,7 +237,7 @@ export interface components {
             firm: boolean;
         };
         /** @enum {string} */
-        Factor: "age" | "deadline" | "value";
+        Factor: "age" | "deadline" | "value" | "blocks";
         HeapSummary: {
             archived: boolean;
             /** Format: uuid */
@@ -248,6 +248,7 @@ export interface components {
         };
         Item: {
             allowed_actions: components["schemas"]["ItemAction"][];
+            blocked_by?: null | components["schemas"]["ItemRef"];
             /**
              * Format: int64
              * @description UTC milliseconds; set exactly when the item is closed.
@@ -285,6 +286,13 @@ export interface components {
         ItemAction: "edit" | "change_state" | "reopen";
         /** @description A partial edit. Leave a field out to keep it; send `null` to clear it. */
         ItemPatchRequest: {
+            /**
+             * Format: uuid
+             * @description The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send
+             *     it with `"state": "blocked"` unless the item is blocked already. `null` clears it. Leaving the blocked state
+             *     clears it too.
+             */
+            blocked_by_item_id?: string | null;
             description?: string | null;
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
@@ -293,6 +301,13 @@ export interface components {
             /** @description Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused. */
             tag_ids?: string[];
             title?: string | null;
+        };
+        /** @description Another item, named where this one refers to it. */
+        ItemRef: {
+            /** Format: uuid */
+            id: string;
+            state: components["schemas"]["ItemState"];
+            title: string;
         };
         /**
          * @description Item state. `done` and `wont_do` are closed.
@@ -795,7 +810,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, or `tag_not_in_heap` */
+            /** @description Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
             422: {
                 headers: {
                     [name: string]: unknown;

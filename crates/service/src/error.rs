@@ -1,6 +1,6 @@
 use domain::item::ItemError;
 use domain::permission::Permission;
-use domain::{HeapId, TagId, ValidationError, Version};
+use domain::{HeapId, ItemId, TagId, ValidationError, Version};
 use store::StoreError;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -30,6 +30,14 @@ pub enum ServiceError {
     /// A tag ID in the request doesn't name a tag of the item's heap.
     #[error("tag {tag_id} is not a tag of this heap")]
     TagNotInHeap { tag_id: TagId },
+    /// The blocker in the request isn't an item of the blocked item's heap.
+    #[error("item {item_id} is not an item of this heap")]
+    BlockerNotInHeap { item_id: ItemId },
+    #[error("item {item_id} is closed, so nothing can wait for it")]
+    BlockerClosed { item_id: ItemId },
+    /// The blocker already waits, directly or through others, for the item being blocked.
+    #[error("item {item_id} already waits for this item, so it can't block it")]
+    BlockingCycle { item_id: ItemId },
     #[error("this heap already has a tag called {name:?}")]
     TagNameTaken { name: String },
     #[error("password hashing failed: {0}")]

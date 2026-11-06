@@ -1,14 +1,37 @@
 import { motion } from "motion/react";
 import { useState, type KeyboardEvent } from "react";
 
-import { ApiProblem, type ItemPatch, type ItemState, type RankedItem } from "../api/client";
+import { ApiProblem, type ItemPatch, type ItemRef, type ItemState, type RankedItem } from "../api/client";
 import { useUpdateItem } from "../api/queries";
+import { BlockerSelect } from "./BlockerSelect";
 import { STATE_LABELS, STATES } from "./labels";
 import { SizeSelect } from "./SizeSelect";
 import { TagChips } from "./TagChips";
 
-/** One ranked item. Controls appear only for actions the server allows. */
-export function ItemRow({ entry, heapId, compact = false }: { entry: RankedItem; heapId: string; compact?: boolean }) {
+/** Messages for the errors an edit can bring back, by code. */
+const PROBLEM_MESSAGES: Record<string, string> = {
+  version_conflict: "Someone else changed this item. It now shows their version.",
+  blocking_cycle: "That item already waits for this one, so it can't block it.",
+  blocker_closed: "That item is closed, so nothing can wait for it.",
+  blocker_not_in_heap: "That item isn't in this heap any more.",
+  item_not_blocked: "Only a blocked item can wait for another one.",
+};
+
+/**
+ * One ranked item. Controls appear only for actions the server allows. `blockerCandidates` are the heap's
+ * non-closed items this one may wait for, offered as blockers when the item is blocked.
+ */
+export function ItemRow({
+  entry,
+  heapId,
+  blockerCandidates,
+  compact = false,
+}: {
+  entry: RankedItem;
+  heapId: string;
+  blockerCandidates: ItemRef[];
+  compact?: boolean;
+}) {
   const { item, position, contributors } = entry;
   const update = useUpdateItem(heapId);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -123,13 +146,19 @@ export function ItemRow({ entry, heapId, compact = false }: { entry: RankedItem;
                 Exact
               </label>
             )}
+            {item.state === "blocked" && (
+              <BlockerSelect
+                value={item.blocked_by}
+                candidates={blockerCandidates}
+                disabled={!canChangeState}
+                onChange={(blockerId) => save({ blocked_by_item_id: blockerId })}
+              />
+            )}
           </div>
         )}
         {update.error && (
           <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
-            {update.error instanceof ApiProblem && update.error.code === "version_conflict"
-              ? "Someone else changed this item. It now shows their version."
-              : update.error.message}
+            {(update.error instanceof ApiProblem && PROBLEM_MESSAGES[update.error.code]) || update.error.message}
           </p>
         )}
       </div>
