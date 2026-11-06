@@ -33,3 +33,4 @@ id_type!(TeamId);
 id_type!(HeapId);
 id_type!(ItemId);
 id_type!(TagId);
+id_type!(SavedViewId);

@@ -1,7 +1,7 @@
 use domain::item::ItemError;
 use domain::permission::Permission;
 use domain::team::TeamError;
-use domain::{HeapId, ItemId, TagId, UserId, ValidationError, Version};
+use domain::{HeapId, ItemId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -44,6 +44,9 @@ pub enum ServiceError {
     /// The user to add to a team doesn't exist.
     #[error("there is no user {user_id}")]
     UserNotFound { user_id: UserId },
+    /// An archived saved view can't be changed.
+    #[error("saved view {view_id} is archived")]
+    SavedViewArchived { view_id: SavedViewId },
     #[error("this heap already has a tag called {name:?}")]
     TagNameTaken { name: String },
     #[error("password hashing failed: {0}")]

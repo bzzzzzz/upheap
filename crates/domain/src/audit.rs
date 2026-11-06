@@ -18,6 +18,9 @@ pub enum AuditAction {
     ItemUpdated,
     TagCreated,
     TagUpdated,
+    SavedViewCreated,
+    SavedViewUpdated,
+    SavedViewArchived,
 }
 
 impl AuditAction {
@@ -39,6 +42,9 @@ impl AuditAction {
             Self::ItemUpdated => "item_updated",
             Self::TagCreated => "tag_created",
             Self::TagUpdated => "tag_updated",
+            Self::SavedViewCreated => "saved_view_created",
+            Self::SavedViewUpdated => "saved_view_updated",
+            Self::SavedViewArchived => "saved_view_archived",
         }
     }
 }
@@ -51,6 +57,7 @@ pub enum EntityType {
     Heap,
     Item,
     Tag,
+    SavedView,
 }
 
 impl EntityType {
@@ -61,6 +68,7 @@ impl EntityType {
             Self::Heap => "heap",
             Self::Item => "item",
             Self::Tag => "tag",
+            Self::SavedView => "saved_view",
         }
     }
 }

@@ -28,6 +28,8 @@ export type Role = Schemas["Role"];
 export type Heap = Schemas["Heap"];
 export type UserMatch = Schemas["UserMatch"];
 export type User = Schemas["User"];
+export type SavedView = Schemas["SavedView"];
+export type ListViewInput = Schemas["ListViewInput"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,

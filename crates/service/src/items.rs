@@ -92,14 +92,7 @@ impl Services {
         let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
         let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
-        if let Some(&tag_id) = view
-            .filter
-            .tags
-            .iter()
-            .find(|id| !heap_tags.iter().any(|tag| tag.id == **id))
-        {
-            return Err(ServiceError::TagNotInHeap { tag_id });
-        }
+        ensure_tags_in_heap(&heap_tags, &view.filter.tags)?;
 
         // Every item is ranked, because a blocker inherits from what it blocks even when that is left out below.
         let ranking = {
@@ -446,6 +439,16 @@ async fn load_heap_tags(
         return Err(ServiceError::TagNotInHeap { tag_id });
     }
     Ok(tags)
+}
+
+/// Fails with [`ServiceError::TagNotInHeap`] unless every tag in `ids` is one of `heap_tags`, the heap's tags.
+///
+/// Checked in memory, so a request with many IDs never becomes a query with as many parameters.
+pub(crate) fn ensure_tags_in_heap(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> Result<(), ServiceError> {
+    match ids.iter().find(|id| !heap_tags.iter().any(|tag| tag.id == **id)) {
+        Some(&tag_id) => Err(ServiceError::TagNotInHeap { tag_id }),
+        None => Ok(()),
+    }
 }
 
 /// The tags among `heap_tags` (already sorted by name) that are in `ids`, in the same order.

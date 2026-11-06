@@ -47,10 +47,10 @@ pub enum ApiError {
     /// A state-changing request came without the CSRF header.
     CsrfHeaderMissing,
     NoSuchRoute,
-    /// A service error caused by one query parameter, which the problem names as its `field`.
-    InQuery {
+    /// A service error caused by one query parameter or body field, which the problem names as its `field`.
+    InField {
         error: ServiceError,
-        param: &'static str,
+        field: &'static str,
     },
 }
 
@@ -112,8 +112,8 @@ fn classify(err: &ApiError) -> Classified {
     };
     match err {
         ApiError::BadRequest { code, detail } => simple(StatusCode::BAD_REQUEST, code, detail, Category::Caller),
-        ApiError::InQuery { error, param } => Classified {
-            field: Some(param),
+        ApiError::InField { error, field } => Classified {
+            field: Some(field),
             ..classify_service(error)
         },
         ApiError::VersionRequired => simple(
@@ -188,6 +188,9 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("user_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "user_not_found", Category::Caller)
         },
+        ServiceError::SavedViewArchived { .. } => {
+            simple(StatusCode::CONFLICT, "saved_view_archived", Category::Conflict)
+        }
         ServiceError::TagNameTaken { .. } => Classified {
             field: Some("name"),
             ..simple(StatusCode::CONFLICT, "tag_name_taken", Category::Conflict)

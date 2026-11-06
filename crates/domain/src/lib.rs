@@ -11,6 +11,7 @@ pub mod item;
 pub mod list_view;
 pub mod permission;
 pub mod ranking;
+pub mod saved_view;
 pub mod tag;
 pub mod team;
 pub mod text;
@@ -18,7 +19,7 @@ pub mod time;
 pub mod user;
 pub mod validation;
 
-pub use ids::{HeapId, ItemId, TagId, TeamId, UserId};
+pub use ids::{HeapId, ItemId, SavedViewId, TagId, TeamId, UserId};
 pub use time::{Duration, Timestamp};
 pub use validation::ValidationError;
 

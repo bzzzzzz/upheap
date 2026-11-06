@@ -1,6 +1,8 @@
 //! Building audit entries and diffs.
 
 use domain::item::{Due, Item};
+use domain::list_view::ListView;
+use domain::saved_view::SavedView;
 use domain::tag::Tag;
 use serde_json::{Map, Value, json};
 
@@ -22,6 +24,16 @@ pub(crate) fn describe_new_tag(tag: &Tag) -> Value {
 /// Changed fields between two versions of a tag.
 pub(crate) fn diff_tags(before: &Tag, after: &Tag) -> Value {
     diff_fields(tag_fields(before), tag_fields(after))
+}
+
+/// The fields of a new saved view, for its `saved_view_created` entry.
+pub(crate) fn describe_new_saved_view(view: &SavedView) -> Value {
+    Value::Object(saved_view_fields(view))
+}
+
+/// Changed fields between two versions of a saved view. A changed list view is recorded whole.
+pub(crate) fn diff_saved_views(before: &SavedView, after: &SavedView) -> Value {
+    diff_fields(saved_view_fields(before), saved_view_fields(after))
 }
 
 fn diff_fields(before: Map<String, Value>, after: Map<String, Value>) -> Value {
@@ -62,4 +74,28 @@ fn tag_fields(tag: &Tag) -> Map<String, Value> {
         json!(tag.description.as_ref().map(|d| d.as_str())),
     );
     fields
+}
+
+fn saved_view_fields(view: &SavedView) -> Map<String, Value> {
+    let mut fields = Map::new();
+    fields.insert("name".into(), json!(view.name.as_str()));
+    fields.insert("list_view".into(), list_view_fields(&view.list_view));
+    fields
+}
+
+/// The view in the API's terms, so an entry reads like the request that made it.
+fn list_view_fields(view: &ListView) -> Value {
+    let tags: Vec<String> = view.filter.tags.iter().map(ToString::to_string).collect();
+    let effort: Vec<&str> = view.filter.effort.iter().map(|s| s.code()).collect();
+    let impact: Vec<&str> = view.filter.impact.iter().map(|s| s.code()).collect();
+    json!({
+        "open": view.open.code(),
+        "in_progress": view.in_progress.code(),
+        "blocked": view.blocked.code(),
+        "blocked_layout": view.blocked_layout.code(),
+        "sort": view.sort.code(),
+        "tag": tags,
+        "effort": effort,
+        "impact": impact,
+    })
 }

@@ -2,6 +2,7 @@
 
 use crate::heap::Heap;
 use crate::item::Item;
+use crate::saved_view::SavedView;
 use crate::team::{Membership, Role, admin_remains};
 use crate::{Timestamp, UserId};
 
@@ -10,7 +11,7 @@ use crate::{Timestamp, UserId};
 pub enum Permission {
     /// See a heap, its items and its tags.
     ViewHeap,
-    /// Add and edit items and tags.
+    /// Add and edit items, tags and saved views.
     EditItems,
     /// Create, rename, archive and unarchive heaps.
     ManageHeaps,
@@ -90,6 +91,44 @@ pub fn allowed_tag_list_actions(heap: &Heap, role: Role) -> Vec<TagListAction> {
 
 /// Tags are edited under the same permission as items: the roles table grants both to every member.
 const fn can_edit_tags(heap: &Heap, role: Role) -> bool {
+    !heap.is_archived() && Permission::EditItems.is_granted_to(role)
+}
+
+/// An action a client may offer on a saved view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SavedViewAction {
+    /// Rename it or change what it shows.
+    Edit,
+    /// Take it out of the heap's list of views.
+    Archive,
+}
+
+/// An action a client may offer on a heap's list of saved views.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SavedViewListAction {
+    /// Save a new view.
+    Create,
+}
+
+/// What `role` can do with `view` in `heap`. Empty for archived views and archived heaps.
+pub fn allowed_saved_view_actions(view: &SavedView, heap: &Heap, role: Role) -> Vec<SavedViewAction> {
+    if view.is_archived() || !can_edit_saved_views(heap, role) {
+        return Vec::new();
+    }
+    vec![SavedViewAction::Edit, SavedViewAction::Archive]
+}
+
+/// What `role` can do with the saved views of `heap`. Empty for archived heaps.
+pub fn allowed_saved_view_list_actions(heap: &Heap, role: Role) -> Vec<SavedViewListAction> {
+    if !can_edit_saved_views(heap, role) {
+        return Vec::new();
+    }
+    vec![SavedViewListAction::Create]
+}
+
+/// Saved views are shared by the team and edited under the same permission as items: the roles table grants both
+/// to every member.
+const fn can_edit_saved_views(heap: &Heap, role: Role) -> bool {
     !heap.is_archived() && Permission::EditItems.is_granted_to(role)
 }
 

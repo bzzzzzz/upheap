@@ -3,10 +3,10 @@
 Tracks what is built against [requirements.md](requirements.md), [offering.md](offering.md) and
 [technical-design.md](technical-design.md). Last reviewed 2026-11-06.
 
-About 65% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
-renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, and the
-list view controls (state modes, sort, filters, search). Custom parameters, saved views, OIDC and CLI sign-in are not
-started. All 126 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
+renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
+list view controls (state modes, sort, filters, search) and saved views. Custom parameters, OIDC and CLI sign-in are
+not started. All 139 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -20,14 +20,14 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue |
 | Reopen within one week | Req Items §7 | ✅ | 7×24h, enforced on the server |
 | Ranking: age, deadline, value per effort | Req Priority §1–4, 6–10 | 🟡 | Placeholder formula `V1` with blocker inheritance; no custom parameters |
-| Main list view | Req Views: List items | ✅ | Per-state pinned/shown/hidden, blocked grouped or mixed in, `sort=`, tag/effort/impact filters, client text search (`/`), inline edits, `N`; the view lives in the URL until saved views exist. Custom parameter sort and filters come with custom parameters |
+| Main list view | Req Views: List items | ✅ | Per-state pinned/shown/hidden, blocked grouped or mixed in, `sort=`, tag/effort/impact filters, client text search (`/`), inline edits, `N`; the view lives in the URL. Custom parameter sort and filters come with custom parameters |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
 | Add item | Req Views: Add item | 🟡 | Tags, created by typing a new name; no linked parameters |
 | Edit item view | Req Views: Edit item | 🟡 | Every field, tags, state and blocker in one save; a closed item is reopened and edited in the same save. No parameters yet |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; filterable in the list |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters | ⬜ | Only the three fixed heap weights exist |
-| Saved views | Req Heaps §4 | ⬜ | |
+| Saved views | Req Heaps §4 | ✅ | Shared by the team, as links above the list; save the current view, save a change into the open view, rename, archive. Parameter filters come with custom parameters |
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
 | Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
@@ -74,7 +74,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] Admin endpoints; archiving with replacement (`replacement_required`, `parameter_in_use`)
   - [ ] Parameters in ranking and contributors
   - [ ] Suggest linked parameters when a tag is added; Manage parameters view
-- [ ] **Saved views**: `saved_views` table, endpoints, UI
+- [x] **Saved views**
+  - [x] `saved_views` table with the list view as JSON; archived, never deleted
+  - [x] `GET/POST /heaps/{id}/views`, `PATCH /views/{id}`, `POST /views/{id}/archive`; any member, like tags
+  - [x] Views bar on the heap page: open a view, save the current list as a view or into the open one, rename, archive
+  - [ ] Custom parameter filters, once they exist
 - [ ] **Audit log reading**: `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, filtered by permission
 - [ ] **Auth**
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
@@ -89,6 +93,6 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Custom parameters, which also completes the ranking formula and links parameters to tags.
-2. Saved views, which store the list view that now lives in the URL.
-3. Audit log reading, now that team and heap changes are audited too.
+1. Audit log reading, now that team, heap and view changes are audited too.
+2. Custom parameters, which also completes the ranking formula and links parameters to tags (postponed for now).
+3. OIDC sign-in, then the CLI's OAuth flow.

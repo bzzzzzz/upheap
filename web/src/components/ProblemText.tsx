@@ -7,6 +7,7 @@ const MESSAGES: Record<string, string> = {
   user_not_found: "That user no longer exists.",
   heap_archived: "This heap is archived, so it can't be changed. Unarchive it first.",
   field_empty: "A name can't be empty.",
+  saved_view_archived: "Someone archived this view, so it can't be changed.",
 };
 
 export function problemMessage(error: Error): string {
