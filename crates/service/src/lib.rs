@@ -20,6 +20,7 @@ pub mod items;
 pub mod me;
 pub mod parameters;
 mod personal;
+mod random;
 pub mod saved_views;
 pub mod tags;
 pub mod teams;
@@ -35,6 +36,7 @@ use uuid::Uuid;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::ServiceError;
+pub use random::{RandomSource, ScriptedRandom, SystemRandom};
 pub use store::StoreError;
 
 /// The authenticated caller of a use case.
@@ -71,6 +73,8 @@ impl Default for Settings {
 pub struct Services {
     db: DatabaseConnection,
     clock: Arc<dyn Clock>,
+    /// Randomness for item keys.
+    random: Arc<dyn RandomSource>,
     // Only accounts read the settings.
     #[cfg_attr(not(feature = "accounts"), allow(dead_code))]
     settings: Arc<Settings>,
@@ -83,9 +87,17 @@ impl Services {
         Self {
             db,
             clock,
+            random: Arc::new(SystemRandom),
             settings: Arc::new(settings),
             id_context: Arc::new(Mutex::new(uuid::ContextV7::new())),
         }
+    }
+
+    /// Draws item keys from `random` in place of the system's random source.
+    #[must_use]
+    pub fn with_random(mut self, random: Arc<dyn RandomSource>) -> Self {
+        self.random = random;
+        self
     }
 
     /// The current time from the injected clock.

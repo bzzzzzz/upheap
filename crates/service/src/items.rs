@@ -20,7 +20,7 @@ pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_item, diff_items};
-use crate::{Principal, ServiceError, Services};
+use crate::{Principal, RandomSource, ServiceError, Services};
 
 /// A client may keep ranking at an `as_of` for at most this long. Older values are replaced by the current time.
 pub const MAX_AS_OF_AGE: Duration = Duration::from_hours(24);
@@ -255,7 +255,7 @@ impl Services {
         check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
 
         let now = self.now();
-        let key = new_item_key(&txn, heap_id).await?;
+        let key = new_item_key(&txn, &*self.random, heap_id).await?;
         let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, key, fields, now);
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
@@ -557,11 +557,15 @@ fn select_tags(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> Vec<Tag> {
 /// A random key no item of `heap_id` has. The caller holds the heap lock, so no other insert can take it first.
 ///
 /// With 5,000 items in a heap about one draw in 5,000 is taken, so a second draw is rare.
-async fn new_item_key(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<ItemKey, ServiceError> {
+async fn new_item_key(
+    db: &impl ConnectionTrait,
+    random: &dyn RandomSource,
+    heap_id: HeapId,
+) -> Result<ItemKey, ServiceError> {
     loop {
-        let mut random = [0u8; ItemKey::LEN];
-        getrandom::fill(&mut random).map_err(|e| ServiceError::RandomSource(e.to_string()))?;
-        let Some(key) = ItemKey::from_random(random) else {
+        let mut bytes = [0u8; ItemKey::LEN];
+        random.fill(&mut bytes)?;
+        let Some(key) = ItemKey::from_random(bytes) else {
             continue;
         };
         if !store::items::is_key_taken(db, heap_id, key).await? {

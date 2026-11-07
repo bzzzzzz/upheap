@@ -67,7 +67,7 @@ pub enum ServiceError {
     /// A list filter names an option that isn't an option of the heap's parameters.
     #[error("option {option_id} is not an option of this heap's parameters")]
     OptionNotInHeap { option_id: OptionId },
-    /// The system's random source failed, so no item key could be made.
+    /// The random source failed, so no item key could be made.
     #[error("random source failed: {0}")]
     RandomSource(String),
     #[error("password hashing failed: {0}")]
