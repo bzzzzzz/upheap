@@ -102,6 +102,16 @@ TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3307 cargo test -p store -p api
 docker stop upheap-test-mysql
 ```
 
+The local build ([design/local-build.md](design/local-build.md)) is checked as CI does: without accounts, for
+wasm, and run in Node on SQLite-wasm. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14:
+
+```sh
+cargo clippy -p service -p api --no-default-features -- -D warnings
+cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
+wasm-pack build crates/local --target web --release --no-typescript --no-pack
+(cd crates/local/spike && npm install && node node.mjs)
+```
+
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
 
 ```sh
@@ -116,6 +126,7 @@ crates/store    SeaORM entities, migrations, repositories
 crates/service  use cases: authorization, transactions, audit
 crates/api      axum routes, DTOs, OpenAPI, sessions, problem+json
 crates/server   the binary: config, startup, embedded web app
+crates/local    the local build: the backend in wasm, on SQLite-wasm in the browser
 web/            React app (TypeScript), generated API types only
 ```
 

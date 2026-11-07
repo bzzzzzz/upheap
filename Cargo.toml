@@ -12,8 +12,9 @@ publish = false
 [workspace.dependencies]
 domain = { path = "crates/domain" }
 store = { path = "crates/store", default-features = false }
-service = { path = "crates/service" }
-api = { path = "crates/api" }
+# Without their default features, so the local build can leave accounts out; `server` turns them on.
+service = { path = "crates/service", default-features = false }
+api = { path = "crates/api", default-features = false }
 
 anyhow = "1"
 argon2 = "0.5"
@@ -40,7 +41,8 @@ thiserror = "2"
 # (wasm) can't have.
 tokio = { version = "1", features = ["rt"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "request-id", "util", "timeout"] }
+# `api` adds `trace` and `timeout` with its `trace-and-timeout` feature; the browser can't run them.
+tower-http = { version = "0.6", features = ["request-id", "util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = { version = "5", features = ["uuid"] }

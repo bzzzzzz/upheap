@@ -3,16 +3,23 @@
 
 use axum::extract::{FromRequest, FromRequestParts, Request};
 use axum::http::request::Parts;
-use axum::http::{HeaderMap, HeaderValue, Method, header};
+#[cfg(feature = "accounts")]
+use axum::http::{HeaderMap, HeaderValue};
+use axum::http::{Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use domain::Version;
 use jiff::tz::TimeZone;
+use service::Principal;
+#[cfg(feature = "accounts")]
+use service::ServiceError;
+#[cfg(feature = "accounts")]
 use service::auth::SessionToken;
-use service::{Principal, ServiceError};
 use utoipa::IntoParams;
 
-use crate::{ApiError, AppState, CookieSettings};
+#[cfg(feature = "accounts")]
+use crate::CookieSettings;
+use crate::{ApiError, AppState, Authentication};
 
 pub(crate) const SESSION_COOKIE: &str = "heap_session";
 pub(crate) const CSRF_HEADER: &str = "x-csrf-protection";
@@ -33,21 +40,31 @@ pub(crate) struct ApiQuery<T>(pub T);
 #[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub(crate) struct ApiPath<T>(pub T);
 
-/// The signed-in caller, from the session cookie. Records `user_id` on the request span.
+/// The caller, from the session cookie or the local user (see [`Authentication`]). Records `user_id` on the
+/// request span.
 pub(crate) struct CurrentUser(pub Principal);
 
 impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = ApiError;
 
+    // Only sessions read the request.
+    #[cfg_attr(not(feature = "accounts"), allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;
-        let principal = state.services.authenticate_session(&token).await?;
+        let principal = match &state.authentication {
+            #[cfg(feature = "accounts")]
+            Authentication::Sessions(_) => {
+                let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;
+                state.services.authenticate_session(&token).await?
+            }
+            Authentication::LocalUser(principal) => *principal,
+        };
         tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
         Ok(Self(principal))
     }
 }
 
 /// The session token from the `Cookie` header, if there is one.
+#[cfg(feature = "accounts")]
 pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
     headers
         .get_all(header::COOKIE)
@@ -60,6 +77,7 @@ pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
 }
 
 /// A `Set-Cookie` value that stores `token` as the session cookie.
+#[cfg(feature = "accounts")]
 pub(crate) fn session_cookie(token: &SessionToken, settings: &CookieSettings) -> Option<HeaderValue> {
     let secure = if settings.secure { "; Secure" } else { "" };
     let max_age = settings.max_age.as_secs();
@@ -71,6 +89,7 @@ pub(crate) fn session_cookie(token: &SessionToken, settings: &CookieSettings) ->
 }
 
 /// A `Set-Cookie` value that removes the session cookie.
+#[cfg(feature = "accounts")]
 pub(crate) fn clear_session_cookie(settings: &CookieSettings) -> HeaderValue {
     let secure = if settings.secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(

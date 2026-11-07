@@ -12,7 +12,7 @@ use utoipa_axum::routes;
 use crate::error::Problem;
 use crate::extract::{ApiJson, clear_session_cookie, session_cookie, session_token};
 use crate::me::UserDto;
-use crate::{ApiError, AppState};
+use crate::{ApiError, AppState, Authentication, CookieSettings};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -50,8 +50,9 @@ async fn register(
         display_name: &body.display_name,
         password: &body.password,
     };
+    let cookies = cookie_settings(&state)?;
     let grant = state.services.register(registration).await?;
-    Ok(signed_in(StatusCode::CREATED, &grant, &state))
+    Ok(signed_in(StatusCode::CREATED, &grant, cookies))
 }
 
 /// Signs in with email and password.
@@ -66,26 +67,36 @@ async fn register(
             headers(("Retry-After" = i64, description = "Seconds until the address may try again"))),
     ))]
 async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInRequest>) -> Result<Response, ApiError> {
+    let cookies = cookie_settings(&state)?;
     let grant = state.services.sign_in(&body.email, &body.password).await?;
-    Ok(signed_in(StatusCode::OK, &grant, &state))
+    Ok(signed_in(StatusCode::OK, &grant, cookies))
 }
 
 /// Ends the current session. Succeeds when there is none.
 #[utoipa::path(post, path = "/auth/logout", tag = "auth", responses((status = 204, description = "Signed out")))]
 async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
+    let cookies = cookie_settings(&state)?;
     if let Some(token) = session_token(&headers) {
         state.services.sign_out(&token).await?;
     }
     Ok((
         StatusCode::NO_CONTENT,
-        [(header::SET_COOKIE, clear_session_cookie(&state.cookies))],
+        [(header::SET_COOKIE, clear_session_cookie(cookies))],
     )
         .into_response())
 }
 
-fn signed_in(status: StatusCode, grant: &SessionGrant, state: &AppState) -> Response {
+/// How to set the session cookie. A server whose one user needs no signing in has no such routes.
+fn cookie_settings(state: &AppState) -> Result<&CookieSettings, ApiError> {
+    match &state.authentication {
+        Authentication::Sessions(cookies) => Ok(cookies),
+        Authentication::LocalUser(_) => Err(ApiError::NoSuchRoute),
+    }
+}
+
+fn signed_in(status: StatusCode, grant: &SessionGrant, cookies: &CookieSettings) -> Response {
     let body = axum::Json(UserDto::from(&grant.user));
-    match session_cookie(&grant.token, &state.cookies) {
+    match session_cookie(&grant.token, cookies) {
         Some(cookie) => (status, [(header::SET_COOKIE, cookie)], body).into_response(),
         // Tokens are base64url, which is always a valid header value; a failure here is a bug.
         None => ApiError::Service(service::ServiceError::Unauthenticated).into_response(),

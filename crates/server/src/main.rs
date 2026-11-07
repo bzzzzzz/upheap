@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
 use anyhow::Context;
-use api::{AppState, CookieSettings};
+use api::{AppState, Authentication, CookieSettings};
 use config::{Config, LogFormat};
 use service::{Services, Settings, SystemClock};
 use tokio::net::TcpListener;
@@ -51,7 +51,11 @@ async fn run(config: Config) -> anyhow::Result<()> {
         secure: config.cookies_secure(),
         max_age: StdDuration::from_secs(u64::from(config.session_ttl_days) * 24 * 60 * 60),
     };
-    let app = api::router(AppState { services, cookies }).fallback(assets::serve);
+    let app = api::router(AppState {
+        services,
+        authentication: Authentication::Sessions(cookies),
+    })
+    .fallback(assets::serve);
 
     let listener = TcpListener::bind(config.bind_addr)
         .await

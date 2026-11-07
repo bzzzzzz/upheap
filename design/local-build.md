@@ -48,8 +48,8 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
    the COOP and COEP headers, which GitHub Pages can't set, but only inside a worker, which is where the backend runs
    anyway.
 2. **SeaORM over a proxy connection.** sqlx doesn't build for wasm. SeaORM's `proxy` feature takes our own backend
-   (`ProxyDatabaseTrait`), which gets the SQL and values and returns rows. `store` adds a `local` feature that builds
-   this connection with `DbBackend::Sqlite`, so SeaORM generates the same SQLite SQL as on the server. The proxy
+   (`ProxyDatabaseTrait`), which gets the SQL and values and returns rows. `store`'s `proxy` feature turns it on, and `local`
+   opens the connection with `DbBackend::Sqlite`, so SeaORM generates the same SQLite SQL as on the server. The proxy
    calls SQLite-wasm synchronously through a small JS shim in the same worker.
    - **Typing rows.** Proxy rows must hold exactly the value type each entity field reads, and SQLite declares
      `i32` and `i64` columns alike as `integer`. So `store::proxy` lists every column's type from the entities
@@ -70,9 +70,10 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
 
 ### Single-user mode
 
-The local build has one user and one team. Both are created on first start, with the first heap, by the same
-service code that creates a personal team and heap on registration. The API resolves every request to that user, and
-every heap belongs to that team.
+The local build has one user and one team. `Services::open_local_user` makes both on first start, with the first
+heap, by the same service code that makes a personal team and heap on registration: the user "Me", the team "My
+heaps" and the heap "My heap". Later starts find the same user. The API resolves every request to that user
+(`api::Authentication::LocalUser`), and every heap belongs to that team.
 
 | Area | Local build |
 | --- | --- |
@@ -90,9 +91,11 @@ every heap belongs to that team.
    are left out of `allowed_actions` (for example `add_member` and `rename` on the team). `GET /me` gains
    `allowed_actions` too, with `sign_out` and `create_team` in the server build only, so the web app hides sign-out,
    the Teams list and team creation the same way. With one team, the web app links straight to its page.
-2. **Cargo features, not runtime flags.** `api` and `service` get a default feature, `accounts`, for sessions,
-   passwords, rate limiting, member search and team management (creating, renaming and leaving teams, and changing
-   members). The local build turns it off, so that code isn't in the wasm at all.
+2. **Cargo features, not runtime flags.** `service` and `api` have a default feature, `accounts`, for
+   registration, sign-in, sessions, rate limiting, user lookup and team management (creating, renaming and leaving
+   teams, and changing members). The local build turns it off, so that code, argon2 and tokio's blocking pool aren't
+   in the wasm at all. The features are additive: with `accounts` on, `Authentication::LocalUser` still works, which
+   lets the native API tests cover the local user, and the sign-in routes then answer `404`.
    The permission functions in `domain` don't change. What changes is which use cases exist.
 
 ### Platform differences
@@ -104,7 +107,8 @@ every heap belongs to that team.
    - The workspace asks only for tokio's `rt`. `server` adds the multi-threaded runtime, signals and networking,
      and axum's `tokio` and `http1` features, which only `axum::serve` needs.
    - The server's trace and timeout layers can't run in wasm: `tower-http`'s tracing reads `Instant::now()`, and
-     its timeout needs tokio's timer. The local build keeps only the request-ID layers.
+     its timeout needs tokio's timer. They are `api`'s `trace-and-timeout` feature, and the local build keeps only
+     the request-ID layers.
    - Migration timestamps use `sea-orm-migration`'s `with-time` with `time`'s `wasm-bindgen` feature, since the
      default reads `SystemTime::now()`, which panics.
 4. **`Send` bounds:** SeaORM's proxy and axum's handlers want `Send` futures, and JS values aren't `Send`. No
@@ -134,23 +138,27 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
    the crate's) for the JS glue. Release builds use `opt-level = "z"` for this crate.
 2. **Web:** `vite build --mode local` picks the worker `fetch` and the base path for Pages (`/<repo>/`). A copy of
    `index.html` as `404.html` makes deep links work, since Pages can't rewrite paths.
-3. **CI:** the existing workflow also builds the local target, so a change that breaks the wasm build fails the pull
-   request. A separate workflow publishes to GitHub Pages from `main`.
+3. **CI:** the "Local build" job lints `service` and `api` without their features and `local` for wasm, builds the
+   wasm, checks its size and runs it in Node on SQLite-wasm (`spike/node.mjs`), so a change that breaks the local
+   build fails the pull request. A separate workflow will publish to GitHub Pages from `main`.
 4. **Tests:** the Rust suites stay native and cover the shared code. Playwright runs the golden paths that apply
    (add and rank, close and reopen, block and unblock, parameter management) against the static build too, plus one
    test for export and import. The proxy connection is tested only there, because it needs a browser.
-5. **Size:** with the Router, the backend is 4.5 MB of wasm (1.45 MB gzipped), and SQLite-wasm adds 0.4 MB
-   gzipped. Without `api` the backend is 0.5 MB gzipped, so the API layer is most of it; the OpenAPI document built
-   into the Router is the first thing to check, then the `accounts` code. CI gets a budget once that's trimmed.
+5. **Size:** without accounts the backend is 4.1 MB of wasm (1.31 MB gzipped; 4.5 MB and 1.45 MB with them), and
+   SQLite-wasm adds 0.4 MB gzipped. CI fails a build over 1.4 MB gzipped. No one part dominates what's left. Of
+   about 2.7 MB of code before `wasm-opt`, async state machines take 0.5 MB, then axum, serde, sea-query and
+   SeaORM about 0.25 MB each, and the OpenAPI document about 0.2 MB. The bundled time zone database is another
+   0.2 MB of data, and the Time-Zone header needs it. Leaving the OpenAPI document out would mean declaring the
+   routes twice, which isn't worth 0.2 MB, so the budget stands as is.
 
 ## Plan
 
 1. **Spike: done.** See [Spike results](#spike-results).
-2. **Features.** Put `accounts` behind a default feature in `service` and `api`, and keep tokio-only code out of the
-   shared path. The server build doesn't change in behaviour.
+2. **Features: done.** `accounts` in `service` and `api`, the local user, `trace-and-timeout` in `api`, and the CI
+   job. The server build doesn't change in behaviour, and `openapi.json` is unchanged.
 3. **`crates/local` and the worker,** plus the custom `fetch` in the web app.
-4. **Single-user mode:** the local user and their one team, `allowed_actions` on `GET /me`, and the UI that hides
-   missing actions.
+4. **Single-user mode:** `allowed_actions` on `GET /me`, the team without `add_member` and `rename`, and the UI
+   that hides missing actions.
 5. **Keeping the data:** persistent storage, export and import, the tab lock.
 6. **Publish:** the Pages workflow and Playwright against the static build.
 
@@ -173,9 +181,9 @@ To run it: `wasm-pack build --target web --release --no-typescript --no-pack` in
    migrations, took about 180 ms; HTTP requests take a few milliseconds each.
 6. **The server build is unchanged.** All 196 native tests pass, and clippy is clean natively and for wasm.
 
-Spike-only shortcuts to replace in the next steps: `service` hashes passwords inline on wasm (the `accounts`
-feature removes this), `api` leaves out its trace and timeout layers by target rather than by feature, and the
-spike entry points (`spike`, `spike_http`) stand in for the worker's `handle`.
+One spike shortcut is left: the spike entry points (`spike`, `spike_http`) stand in for the worker's `handle`.
+Since step 2 they run as the local user instead of registering, and CI runs them. The other two, inline password
+hashing on wasm and leaving out the trace and timeout layers by target, went with the features.
 
 ## Open questions
 

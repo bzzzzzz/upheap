@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use api::{AppState, CookieSettings};
+use api::{AppState, Authentication, CookieSettings};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -76,7 +76,29 @@ impl TestApp {
             max_age: StdDuration::from_secs(3600),
         };
         Ok(Self {
-            router: api::router(AppState { services, cookies }),
+            router: api::router(AppState {
+                services,
+                authentication: Authentication::Sessions(cookies),
+            }),
+            clock,
+            db,
+        })
+    }
+
+    /// The local build's setup: one user, made on start, who is every request's caller.
+    pub async fn start_local() -> Result<Self> {
+        init_tracing();
+        let db = store::testing::fresh_database().await?;
+        let clock = Arc::new(ManualClock::new(
+            Timestamp::from_millis(START).context("start in range")?,
+        ));
+        let services = Services::new(db.clone(), clock.clone(), Settings::default());
+        let local_user = services.open_local_user().await?;
+        Ok(Self {
+            router: api::router(AppState {
+                services,
+                authentication: Authentication::LocalUser(local_user),
+            }),
             clock,
             db,
         })
