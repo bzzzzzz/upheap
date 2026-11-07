@@ -9,6 +9,7 @@
 :root {
   /* The height the on-screen keyboard covers (useKeyboardInset), for sheets that sit above it. */
   --keyboard-inset: 0px;
+  --phone-tabs-height: 0px;
   --canvas: #fafaf9;
   --surface: #ffffff;
   --sunken: #f5f5f4;

@@ -1,6 +1,6 @@
 // Which layout and input the screen has, for the few behaviours CSS can't switch on its own: gestures, and whether
 // a panel is a popover or a sheet. Breakpoints are Tailwind's (app-ux.md, Layout).
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore, type RefObject } from "react";
 
 export const PHONE = "(max-width: 639.98px)";
 export const TABLET = "(min-width: 640px) and (max-width: 1023.98px)";
@@ -40,4 +40,24 @@ export function useKeyboardInset() {
       viewport.removeEventListener("scroll", update);
     };
   }, []);
+}
+
+/**
+ * Keeps `--phone-tabs-height` on the root at the height of the phone's tabs, safe area included, so the More sheet can
+ * sit above them. It's 0 while the tabs aren't shown.
+ */
+export function usePhoneTabsHeight(tabs: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const element = tabs.current;
+    if (!element) return;
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(() =>
+      root.setProperty("--phone-tabs-height", `${Math.round(element.getBoundingClientRect().height)}px`),
+    );
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      root.setProperty("--phone-tabs-height", "0px");
+    };
+  }, [tabs]);
 }

@@ -76,7 +76,8 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 Phone pages respect the safe-area insets (`viewport-fit=cover`) under the bottom tabs and sheets, and inputs are at
 least 16 px so iOS doesn't zoom in on focus. Sheets sit above the on-screen keyboard: Android Chrome resizes the page
 for it (`interactive-widget=resizes-content`), and on iOS, which doesn't, the sheets are lifted by the height the
-keyboard covers, from the visual viewport. The heap switcher and More open as sheets too.
+keyboard covers, from the visual viewport. The heap switcher and More open as sheets too; More's sits above the
+tabs, since a menu opened with a mouse picks the item the button is released over.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 

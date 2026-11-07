@@ -17,13 +17,13 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button, Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
 
 import type { Me } from "../api/client";
 import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
 import { StorageNote } from "../components/LocalDatabase";
-import { useKeyboardInset } from "../components/media";
+import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { ProblemText } from "../components/ProblemText";
 
 export function AppLayout() {
@@ -216,9 +216,12 @@ function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
   const views = heapViews(heapId, itemId !== undefined);
   const navigate = useNavigate();
   const signOut = useSignOut();
+  const tabs = useRef<HTMLElement>(null);
+  usePhoneTabsHeight(tabs);
 
   return (
     <nav
+      ref={tabs}
       aria-label="Heap views"
       className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
@@ -232,7 +235,7 @@ function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
           <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
           <span>More</span>
         </Button>
-        <MenuPopover placement="top end">
+        <MenuPopover placement="top end" aboveTabs>
           <Menu
             aria-label="More"
             className="outline-none"
@@ -329,19 +332,29 @@ function HeapMenu({
   );
 }
 
+/**
+ * A menu's popover. On a phone it's a sheet from the bottom, over a dimmed page (the spread shadow), whatever its
+ * anchor. `aboveTabs` puts the sheet above the phone's tabs, for More: a menu opens on mouse down and picks the item
+ * the button is released over, so a sheet over its own button would pick its bottom item (Sign out) on a click.
+ */
 function MenuPopover({
   placement,
+  aboveTabs = false,
   children,
 }: {
   placement: "end top" | "bottom start" | "top end";
+  aboveTabs?: boolean;
   children: ReactNode;
 }) {
   return (
     <Popover
       placement={placement}
       offset={6}
-      // On a phone the menu is a sheet from the bottom, over a dimmed page (the spread shadow), whatever its anchor.
-      className="max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none max-sm:fixed! max-sm:inset-x-0! max-sm:top-auto! max-sm:bottom-0! max-sm:max-h-[75dvh]! max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:p-2 max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)] max-sm:shadow-[0_0_0_100vmax_rgb(0_0_0/0.4)]"
+      className={`max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none max-sm:fixed! max-sm:inset-x-0! max-sm:top-auto! max-sm:max-h-[75dvh]! max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:p-2 max-sm:shadow-[0_0_0_100vmax_rgb(0_0_0/0.4)] ${
+        aboveTabs
+          ? "max-sm:bottom-(--phone-tabs-height)!"
+          : "max-sm:bottom-0! max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)]"
+      }`}
     >
       {children}
     </Popover>
