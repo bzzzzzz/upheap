@@ -12,6 +12,8 @@ pub mod heaps;
 pub mod items;
 mod migration;
 pub mod parameters;
+#[cfg(feature = "proxy")]
+pub mod proxy;
 pub mod saved_views;
 pub mod sessions;
 pub mod sign_in_attempts;

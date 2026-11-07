@@ -298,10 +298,19 @@ fn verify_password(password: &str, stored: &str) -> bool {
 }
 
 /// Runs CPU-heavy work (argon2) off the async workers.
+#[cfg(not(target_arch = "wasm32"))]
 async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, ServiceError> + Send + 'static,
 ) -> Result<T, ServiceError> {
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|e| ServiceError::PasswordHashing(e.to_string()))?
+}
+
+/// Spike: wasm has no blocking pool, so the work runs inline. The local build drops accounts, and this with them.
+#[cfg(target_arch = "wasm32")]
+async fn run_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, ServiceError> + Send + 'static,
+) -> Result<T, ServiceError> {
+    work()
 }

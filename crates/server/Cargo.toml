@@ -19,14 +19,14 @@ mysql = ["store/mysql"]
 [dependencies]
 anyhow.workspace = true
 api.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["http1", "tokio"] }
 domain.workspace = true
 mime_guess.workspace = true
 rust-embed.workspace = true
 serde_json.workspace = true
 service.workspace = true
 store.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
