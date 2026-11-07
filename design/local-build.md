@@ -159,15 +159,21 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 1. **Rust:** `npm run build:backend` in `web` runs wasm-pack on `crates/local` (release, `wasm-opt -Oz`) and writes
    the wasm and its JS glue into `web/src/local/backend`, which git ignores.
 2. **Web:** `vite build --mode local-build` (`npm run build:local`) picks the worker `fetch`, and `UPHEAP_BASE`
-   sets the base path for Pages (`/<repo>/`), which the router uses too. A copy of `index.html` as `404.html` will
-   make deep links work, since Pages can't rewrite paths. `npm run dev:local` runs it with Vite, with no server.
+   sets the base path for Pages (`/<repo>/`), which the router uses too. The build writes a copy of `index.html` as
+   `404.html`, which Pages serves for any path without a file, so deep links and reloads work although Pages can't
+   rewrite paths. `npm run dev:local` runs it with Vite, with no server.
 3. **CI:** the "Local build" job lints `service` and `api` without their features and `local` for wasm, builds the
    backend and checks its size, typechecks the worker, runs the backend in Node on SQLite-wasm
-   (`web/scripts/local-smoke.ts`), and builds the web app. A change that breaks the local build fails the pull
-   request. A separate workflow will publish to GitHub Pages from `main`.
+   (`web/scripts/local-smoke.ts`), and builds the web app. It then runs Playwright against the static build. A change
+   that breaks the local build fails the pull request. The Pages workflow (`.github/workflows/pages.yml`) builds
+   the same way and publishes to GitHub Pages from `main`, once the repository's Pages source is GitHub Actions.
 4. **Tests:** the Rust suites stay native and cover the shared code. Playwright runs the golden paths that apply
-   (add and rank, close and reopen, block and unblock, parameter management) against the static build too, plus one
-   test for export and import. The proxy connection is tested only there, because it needs a browser.
+   (add and rank, close and reopen, block and unblock, parameter management) against the static build too
+   (`npm run e2e:local`, `playwright.local.config.ts`), with the fixture's `localBuild` option skipping sign-up.
+   `e2e/local` adds a test for export and import and one for the tab lock. `scripts/pages-server.ts` serves `dist`
+   under the base path as Pages does: files, and `404.html` with status `404` for anything else, so the tests load
+   deep links the way Pages will. Each test's browser context starts with empty storage, so each gets a fresh local
+   user. The proxy connection is tested only there, because it needs a browser.
 5. **Size:** without accounts the backend is 4.1 MB of wasm (1.31 MB gzipped; 4.5 MB and 1.45 MB with them), and
    SQLite-wasm adds 0.4 MB gzipped. CI fails a build over 1.4 MB gzipped. No one part dominates what's left. Of
    about 2.7 MB of code before `wasm-opt`, async state machines take 0.5 MB, then axum, serde, sea-query and
@@ -190,7 +196,8 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
    Account page, and one tab at a time. In headless Chromium a second tab waits and opens once the first closes,
    a downloaded copy opened again replaces what was added since, and a file that isn't an Upheap database or comes
    from a newer version is refused with the data left as it was.
-6. **Publish:** the Pages workflow and Playwright against the static build.
+6. **Publish: done.** `404.html`, the Pages workflow, and Playwright against the static build in the "Local
+   build" job: the four golden paths without sign-up, export and import, and the tab lock.
 
 ## Spike results
 

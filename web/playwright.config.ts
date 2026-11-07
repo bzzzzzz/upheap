@@ -8,6 +8,8 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: "e2e",
+  // The local build's own tests (playwright.local.config.ts).
+  testIgnore: ["local/**"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",

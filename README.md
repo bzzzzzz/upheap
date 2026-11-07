@@ -111,8 +111,12 @@ Build the backend into the web app, then run it with Vite or check it as CI does
 (cd web && npm run dev:local)       # http://localhost:5173, no server needed
 cargo clippy -p service -p api --no-default-features -- -D warnings
 cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
-(cd web && npm run typecheck:local && npm run smoke:local && npm run build:local)
+(cd web && npm run typecheck:local && npm run smoke:local)
+(cd web && npm run e2e:local)       # Playwright against the static build, served as GitHub Pages does
 ```
+
+The Pages workflow (`.github/workflows/pages.yml`) publishes it from `main` to
+`https://<owner>.github.io/<repo>/`, once the repository's Pages source is set to GitHub Actions.
 
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
 

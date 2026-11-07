@@ -119,8 +119,8 @@ jobs:
         run: npm run build
 
   # The local build (design/local-build.md): the backend without accounts, compiled to wasm and run on SQLite-wasm
-  # in Node, and the web app built around it. Catches code that only builds natively, and keeps the download within
-  # its budget.
+  # in Node, and the web app built around it and tested in Chromium. Catches code that only builds natively, and
+  # keeps the download within its budget.
   local:
     name: Local build
     runs-on: ubuntu-latest
@@ -178,8 +178,20 @@ jobs:
       - name: Smoke test in Node
         run: npm run smoke:local
 
-      - name: Build the web app
-        run: npm run build:local
+      # Builds the web app, serves it as GitHub Pages does and runs the golden paths that apply, with export and
+      # import and the tab lock (web/playwright.local.config.ts).
+      - name: Playwright against the static build
+        run: npx playwright install --with-deps chromium && npm run e2e:local
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-local
+          path: |
+            web/playwright-report/local
+            web/test-results/local
+          retention-days: 7
 
   # The golden paths in a browser, against the real server binary on in-memory SQLite (web/playwright.config.ts).
   e2e:

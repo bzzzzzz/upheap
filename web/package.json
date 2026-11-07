@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "gen:api": "openapi-typescript ../openapi.json -o src/api/schema.d.ts",
     "e2e": "playwright test",
+    "e2e:local": "playwright test -c playwright.local.config.ts",
     "dev:local": "vite --mode local-build",
     "build:local": "tsc -b && vite build --mode local-build",
     "build:backend": "cd ../crates/local && wasm-pack build --target web --release --no-pack --out-dir ../../web/src/local/backend",

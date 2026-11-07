@@ -1,25 +1,34 @@
-// What the golden-path tests share: a fresh account per test, and ways to find and add items as a user would.
+// What the golden-path tests share, on the server and on the local build: a fresh heap per test, and ways to find
+// and add items as a user would.
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 
 type Size = "S" | "M" | "L" | "XL";
 
-export const test = base.extend<{ heapId: string }>({
+/** The option the local build's config sets. */
+export type LocalBuildOptions = { localBuild: boolean };
+
+export const test = base.extend<{ heapId: string } & LocalBuildOptions>({
+  /** Whether the tests run against the local build, which has one user and nothing to sign in to. */
+  localBuild: [false, { option: true }],
   /**
-   * Registers a new account through the API (the sign-up form has its own test), which signs the page in, and opens
-   * the account's personal heap. Every test gets its own account, so tests can run in parallel. Automatic, so a test
-   * that doesn't need the heap's ID is signed in too.
+   * Opens a heap of the test's own: on the server, a new account's personal heap, which registering through the API
+   * signs the page in to (the sign-up form has its own test); in the local build, the local user's first heap, as
+   * every test's browser context starts with empty storage. So tests can run in parallel. Automatic, so a test that
+   * doesn't need the heap's ID gets its heap too.
    */
   heapId: [
-    async ({ page }, use) => {
-      const email = uniqueEmail();
-      const registered = await page.request.post("/api/v1/auth/register", {
-        headers: { "x-csrf-protection": "1" },
-        data: { email, display_name: "Tester", password: "a long test password" },
-      });
-      expect(registered.status()).toBe(201);
-      await page.goto("/");
+    async ({ page, localBuild }, use) => {
+      if (!localBuild) {
+        const registered = await page.request.post("/api/v1/auth/register", {
+          headers: { "x-csrf-protection": "1" },
+          data: { email: uniqueEmail(), display_name: "Tester", password: "a long test password" },
+        });
+        expect(registered.status()).toBe(201);
+      }
+      // Relative, so the local build's base path stays.
+      await page.goto("./");
       await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
-      const heapId = new URL(page.url()).pathname.split("/")[2] ?? "";
+      const heapId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
       await use(heapId);
     },
     { auto: true },
