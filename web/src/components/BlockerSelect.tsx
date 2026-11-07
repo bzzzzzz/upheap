@@ -19,13 +19,13 @@ export function BlockerSelect({
   // A closed blocker isn't among the candidates, but the select still has to show it.
   const options = value && !candidates.some((c) => c.id === value.id) ? [value, ...candidates] : candidates;
   return (
-    <label className="inline-flex min-w-0 items-center gap-1 text-xs text-stone-500">
-      <span className="shrink-0">Waiting for</span>
+    <label className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-xs font-medium text-ink-soft">Waiting for</span>
       <select
         value={value?.id ?? ""}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        className="max-w-64 min-w-0 truncate rounded border border-stone-300 bg-white px-1 py-0.5 text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+        className="h-9 min-w-0 truncate rounded-lg border border-line bg-surface px-2 text-sm text-ink disabled:opacity-50 pointer-coarse:h-11"
       >
         <option value="">Nothing picked</option>
         {options.map((item) => (

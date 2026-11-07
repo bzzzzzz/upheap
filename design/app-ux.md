@@ -101,7 +101,10 @@ least 16 px so iOS doesn't zoom in on focus.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
    the tag is added, in Add item too, as it does today.
-4. Changes save as they are made, as the list's inline edits do now, each with its own `If-Match`.
+4. Changes save as they are made, each with its own `If-Match`. They go one at a time, each with the version the
+   previous one brought back, so quick changes don't conflict with each other.
+5. Closing it (✕, Escape, or Back) goes back where it was opened from: Back when the app opened it, the list when it
+   was opened from a link. Opening another row while one is open replaces it in the history.
 
 ### Adding an item
 
@@ -141,7 +144,8 @@ Chromium, against both the server and the local build.
    1. The due picker and its choices from the server, the S M L XL buttons, and the Add dialog.
    2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
       keyboard navigation.
-3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions, Filters and View sheets, heap switcher.
+3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
+   sheet down and swiping the tablet panel right to close them, Filters and View sheets, heap switcher.
 4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 
 ## Later: an installable app
