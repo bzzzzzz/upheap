@@ -115,7 +115,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 
 ### Async
 
-1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous.
+1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous. The local build runs on `wasm-bindgen-futures` in one worker thread instead, so code shared with it uses tokio only behind the server's features (see [local-build.md](local-build.md)).
 2. Never block inside async code; move CPU-heavy or blocking work to `spawn_blocking`.
 3. Borrow, don't clone, in hot paths such as ranking. Elsewhere, clarity beats micro-optimisation.
 
@@ -168,7 +168,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 
 ## Operations
 
-1. **One binary, one config.** Configure through environment variables and an optional file, with every option documented and validated at startup.
+1. **One binary, one config.** Configure through environment variables and an optional file, with every option documented and validated at startup. The local build has no configuration.
 2. **Fail at startup, not at runtime.** Bad config, an unreachable database or a failed migration stops the server with a clear message.
 3. **Observable by default.** Provide `/healthz`, `/readyz`, structured JSON logs and request IDs returned to clients.
 4. **Shut down gracefully.** On SIGTERM, drain in-flight requests.

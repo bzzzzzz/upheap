@@ -22,7 +22,7 @@ impl From<DbErr> for StoreError {
         if matches!(err, DbErr::ConnectionAcquire(_) | DbErr::Conn(_)) {
             return Self::Unavailable(err);
         }
-        if matches!(err.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
+        if matches!(err.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) || is_proxy_unique_violation(&err) {
             return Self::Duplicate(err);
         }
         Self::Database(err)
@@ -37,4 +37,14 @@ impl StoreError {
             problem: problem.into(),
         }
     }
+}
+
+#[cfg(feature = "proxy")]
+fn is_proxy_unique_violation(err: &DbErr) -> bool {
+    crate::proxy::is_unique_violation(err)
+}
+
+#[cfg(not(feature = "proxy"))]
+fn is_proxy_unique_violation(_: &DbErr) -> bool {
+    false
 }

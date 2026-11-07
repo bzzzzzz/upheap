@@ -23,12 +23,15 @@ mod views;
 use std::time::Duration;
 
 use axum::Router;
+#[cfg(not(target_arch = "wasm32"))]
 use axum::extract::{MatchedPath, Request};
 use axum::middleware;
 use service::Services;
 use tower::ServiceBuilder;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+#[cfg(not(target_arch = "wasm32"))]
 use tower_http::timeout::TimeoutLayer;
+#[cfg(not(target_arch = "wasm32"))]
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
@@ -111,6 +114,14 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 pub fn router(state: AppState) -> Router {
     let (api, spec) = api_router().split_for_parts();
     let spec_json = serde_json::to_string(&spec).unwrap_or_default();
+    // Spike: wasm has no `Instant::now()` (tracing's latency) and no tokio timer (timeouts), so the local build
+    // keeps only the request IDs.
+    #[cfg(target_arch = "wasm32")]
+    let observed = ServiceBuilder::new()
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(middleware::from_fn(request_id::scope_request_id));
+    #[cfg(not(target_arch = "wasm32"))]
     let observed = ServiceBuilder::new()
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| {

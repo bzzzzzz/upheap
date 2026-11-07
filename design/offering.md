@@ -6,10 +6,11 @@ Companion to [requirements.md](requirements.md).
 
 1. Upheap is free and open source.
 2. Teams self-host it. There is no hosted or paid tier.
+3. One person can also use it without hosting anything: a static, single-user build runs entirely in the browser and keeps the data there (see [local-build.md](local-build.md)). It has no accounts and no teammates, all its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
 
 ## Architecture
 
-1. One backend is the source of truth for all data.
+1. One backend is the source of truth for all data. In the local build, that backend runs inside the browser and owns that browser's data.
 2. The backend exposes an API that any client can use, for example a CLI, a native app or a web app.
 3. For now the web app is the only planned client. The API should not assume it is the only one.
 4. The backend supports more than one database. MySQL is the minimum for production deployments, and SQLite is supported for local and test deployments. Other databases may be added later, so the data layer should not depend on features specific to one database.

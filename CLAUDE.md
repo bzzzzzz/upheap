@@ -19,6 +19,7 @@ web app, on SQLite or MySQL.
   code; where code and principles disagree, fix one of them.
 - [design/technical-design.md](design/technical-design.md): architecture, data model, ranking, API.
 - [design/requirements.md](design/requirements.md) and [design/offering.md](design/offering.md): what we build and why.
+- [design/local-build.md](design/local-build.md): the static, single-user build that runs in the browser.
 - [design/progress.md](design/progress.md): what's done and what's next. Keep it current.
 
 Build, run and check commands are in [README.md](README.md).

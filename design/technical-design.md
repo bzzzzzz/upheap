@@ -8,7 +8,7 @@ Draft. Companion to [requirements.md](requirements.md) and [offering.md](offerin
 2. **The server tells clients what is allowed.** Responses include the actions the current user can take (for example `can_reopen` or `can_edit_parameters`), so clients don't re-implement role or state rules to decide which controls to show.
 3. **Database-agnostic.** Only portable SQL features. No JSON column types, database-specific full-text search, triggers or stored procedures. Everything is tested against both SQLite and MySQL.
 4. **Nothing is deleted, and everything is audited.** There are no `DELETE` statements for domain data. Every write and its audit entry are committed in the same transaction.
-5. **Single binary.** One statically linked executable serves the API and the embedded web app.
+5. **Single binary.** One statically linked executable serves the API and the embedded web app. The [local build](local-build.md) is the one other deliverable: the same backend crates compiled to WebAssembly and shipped with the web app as a static site.
 
 ## Stack
 
@@ -17,13 +17,13 @@ Draft. Companion to [requirements.md](requirements.md) and [offering.md](offerin
 | Language (backend) | Rust (stable), Cargo workspace |
 | HTTP | axum on tokio, tower middleware |
 | API contract | Code-first OpenAPI 3.1 via utoipa; TypeScript types for the web app generated with openapi-typescript |
-| Data access | SeaORM (on sqlx), runtime-selected backend: SQLite or MySQL (Postgres later) |
+| Data access | SeaORM (on sqlx), runtime-selected backend: SQLite or MySQL (Postgres later). The local build uses SeaORM's proxy connection over SQLite-wasm |
 | Migrations | sea-orm-migration, embedded in the binary, run on startup |
 | Auth | `openidconnect` + `oauth2` crates (external IdPs), `argon2` (local passwords), own session table with hashed random tokens (web sessions), own minimal OAuth authorization-code + PKCE endpoints (non-web clients) |
 | Web app | React + Vite + TanStack Query + TanStack Router, Tailwind, Motion (layout animations); embedded with `rust-embed` |
 | Observability | `tracing` with JSON logs, `/healthz` and `/readyz` |
 | Testing | `cargo test`, `proptest` for ranking invariants, a MySQL 8.4 service container in CI, Playwright for end to end |
-| Packaging | Static musl binary; minimal Docker image; example docker-compose with MySQL |
+| Packaging | Static musl binary; minimal Docker image; example docker-compose with MySQL. The local build is a static site on GitHub Pages |
 
 ## Workspace layout
 
@@ -34,10 +34,11 @@ crates/
   service/   Use cases: authorization, transactions, audit logging, orchestration
   api/       axum routes, request/response DTOs, OpenAPI, auth flows, sessions
   server/    Binary: config, startup, migrations, embedded web assets
+  local/     WebAssembly entry point for the local build: clock, proxy database, migrations, Router (planned)
 web/         React app (TypeScript), consumes generated API types only
 ```
 
-Dependencies point one way: `server → api → service → store, domain`. `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
+Dependencies point one way: `server → api → service → store, domain`, and `local` sits beside `server`. `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
 
 ### Errors
 
@@ -291,6 +292,7 @@ These checks run in the same transaction as the write, after the permission chec
 4. **Production:** `DATABASE_URL` points at MySQL. TLS terminates at a reverse proxy.
 5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations have finished and the database answers a ping, so orchestrators and proxies route traffic only to ready instances. Neither needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
+7. **Local build:** a static site with no configuration, published to GitHub Pages. It has one user and one team, which holds every heap, and its data lives in the browser. See [local-build.md](local-build.md).
 
 ## Testing
 

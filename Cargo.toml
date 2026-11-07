@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/domain", "crates/store", "crates/service", "crates/api", "crates/server"]
+members = ["crates/domain", "crates/store", "crates/service", "crates/api", "crates/server", "crates/local"]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,11 +17,15 @@ api = { path = "crates/api" }
 
 anyhow = "1"
 argon2 = "0.5"
-axum = { version = "0.8", features = ["macros"] }
+async-trait = "0.1"
+# Without `tokio` and `http1`, which only `server` needs (`axum::serve`), so the Router also builds for wasm.
+axum = { version = "0.8", default-features = false, features = ["form", "json", "macros", "matched-path", "original-uri", "query", "tower-log", "tracing"] }
 base64 = "0.22"
+getrandom = "0.3"
 googletest = "0.14"
 http-body-util = "0.1"
 jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
+js-sys = "0.3"
 mime_guess = "2"
 proptest = "1"
 rand = "0.9"
@@ -32,7 +36,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
+# Only what every user needs: `server` adds the multi-threaded runtime, signals and networking, which the local build
+# (wasm) can't have.
+tokio = { version = "1", features = ["rt"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "request-id", "util", "timeout"] }
 tracing = "0.1"
@@ -40,6 +46,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = { version = "5", features = ["uuid"] }
 utoipa-axum = "0.2"
 uuid = { version = "1", features = ["v7", "serde"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

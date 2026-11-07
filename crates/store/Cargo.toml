@@ -11,6 +11,8 @@ publish.workspace = true
 default = ["sqlite", "mysql"]
 sqlite = ["sea-orm/sqlx-sqlite", "sea-orm-migration/sqlx-sqlite"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+# A connection whose SQL runs somewhere SeaORM doesn't drive itself, such as SQLite-wasm in the local build.
+proxy = ["sea-orm/proxy"]
 # Test databases for the store and API suites (`store::testing`). Needs both drivers to honour TEST_DATABASE_URL.
 testing = ["sqlite", "mysql"]
 
@@ -27,7 +29,7 @@ uuid.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 googletest.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # Lets this crate's own integration tests use `store::testing`.
 store = { path = ".", default-features = false, features = ["testing"] }
 
