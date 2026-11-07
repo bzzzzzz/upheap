@@ -116,7 +116,9 @@ cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
 ```
 
 The Pages workflow (`.github/workflows/pages.yml`) publishes it from `main` to
-`https://<owner>.github.io/<repo>/`, once the repository's Pages source is set to GitHub Actions.
+`https://<owner>.github.io/<repo>/`, once the repository's Pages source is set to GitHub Actions. Pull requests
+that auto-merge start it only when the `AUTO_MERGE_TOKEN` secret holds a personal access token (see
+`.github/workflows/auto-merge.yml`); a merge made with the workflow's own token starts no workflows.
 
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
 

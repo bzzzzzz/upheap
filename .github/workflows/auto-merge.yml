@@ -1,6 +1,12 @@
 # Turns on auto-merge for the repository owner's pull requests. GitHub then squash-merges them once the required
 # checks pass; branch protection still decides when that is.
 #
+# It runs with the AUTO_MERGE_TOKEN secret, a fine-grained personal access token for this repository only (Contents and
+# Pull requests: read and write). GitHub then merges as the owner, and the push to main triggers the workflows that
+# run on it, Pages among them; a merge made with the workflow's own token would trigger none. Without the secret it
+# falls back to that token: pull requests still merge, but nothing runs after. The token can't merge a pull request
+# that changes a workflow; merge those by hand.
+#
 # Only `pull_request`, never `pull_request_target`: for pull requests from forks this trigger gets a read-only
 # token, so even a fork that edits this file can't merge anything.
 
@@ -27,5 +33,5 @@ jobs:
       - name: Enable auto-merge
         run: gh pr merge --auto --squash "$PR_URL"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN || github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
