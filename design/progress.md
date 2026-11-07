@@ -5,9 +5,10 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
-list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in rate limiting. OIDC and CLI sign-in
-are not started. All 196 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
-web typecheck and lint are clean. CI runs on every pull request.
+list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
+rate limiting. OIDC and CLI sign-in are not started. All 196 Rust tests pass (`cargo test --workspace`), the store and
+API suites also pass on MySQL 8.4, the 5 Playwright golden paths pass, and the web typecheck and lint are clean. CI
+runs all of them on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
 
@@ -37,7 +38,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
-| Testing and CI | TD Testing | 🟡 | CI runs the store and API suites on SQLite and MySQL; the access-control table is in place; no Playwright |
+| Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work
 
@@ -88,14 +89,14 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
   - [x] Sign-in rate limiting
-- [ ] **Testing and CI**
+- [x] **Testing and CI**
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
   - [x] Store and API suites on MySQL in CI (`TEST_DATABASE_URL`, a database per test, `store::testing`)
   - [x] Table-driven access-control test (non-member, member, admin, archived heap) in
     `crates/api/tests/access_control.rs`, covering heap- and team-scoped endpoints
-  - [ ] Playwright golden paths
+  - [x] Playwright golden paths in `web/e2e` (sign-up and sign-in, add and rank, close and reopen, block and
+    unblock, parameter management), against the real binary on in-memory SQLite
 
 ## Suggested order
 
-1. Playwright golden paths.
-2. Later: editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.
+1. Editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.

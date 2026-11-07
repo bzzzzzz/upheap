@@ -303,7 +303,7 @@ These checks run in the same transaction as the write, after the permission chec
 2. **Access control:** a table-driven test runs every endpoint as a non-member, a member and an admin. It also runs every write endpoint against an archived heap. Expected status codes come from the permission table, so adding an endpoint without adding it to the table fails the test.
 3. **Store and service:** the store and API suites (the API suite drives the services) run against in-memory SQLite, and again against MySQL in CI. `TEST_DATABASE_URL` points them at a MySQL server, and each test creates its own database there (`store::testing`). A service container rather than `testcontainers` keeps `cargo test` free of Docker and the tests free of container start-up.
 4. **API:** the generated OpenAPI spec is checked into the repo, and CI fails if it changes without being regenerated.
-5. **End to end:** Playwright covers the golden paths (add item, ranking, block and unblock, close and reopen, admin parameter management).
+5. **End to end:** Playwright covers the golden paths (sign up and sign in, add item, ranking, block and unblock, close and reopen, admin parameter management) in `web/e2e`. They drive Chromium against the real server binary with the web app embedded, on in-memory SQLite. Each test registers its own account, so tests share no data and run in parallel; anything beyond these paths is tested lower down.
 
 ## Decisions
 

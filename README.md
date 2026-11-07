@@ -31,10 +31,12 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - Saved views: name the list view you're looking at (states, sort, filters) and the whole team gets it as a link
   above the list. Change one and save the change into it or as a new view; archive views nobody needs.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
+- Audit log: the history of each item, tag, parameter, saved view, heap and member, and Activity pages per heap and
+  team.
+- Sign-in rate limiting: each email address gets 5 attempts per 15 minutes.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
-Not yet: editing the heap's own weights, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
-limiting.
+Not yet: editing the heap's own weights, OIDC sign-in, the CLI OAuth flow and invitations.
 
 ## Run it
 
@@ -82,6 +84,13 @@ Checks:
 ```sh
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
 (cd web && npm run typecheck && npm run lint && npm run format:check)
+```
+
+End-to-end tests of the golden paths, in Chromium. Playwright builds the web app and starts the server on port 8139
+with an in-memory database:
+
+```sh
+(cd web && npx playwright install chromium && npm run e2e)
 ```
 
 The tests use in-memory SQLite. To run the store and API suites on MySQL as CI does, point `TEST_DATABASE_URL` at a

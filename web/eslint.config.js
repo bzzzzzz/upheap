@@ -9,10 +9,16 @@ export default tseslint.config(
     extends: [js.configs.recommended, ...tseslint.configs.strict],
     files: ["**/*.{ts,tsx}"],
     languageOptions: { globals: globals.browser },
+    rules: { "@typescript-eslint/no-explicit-any": "error" },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      "@typescript-eslint/no-explicit-any": "error",
-    },
+    rules: reactHooks.configs.recommended.rules,
+  },
+  {
+    // Playwright tests and config run in Node.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    languageOptions: { globals: globals.node },
   },
 );
