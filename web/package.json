@@ -8,6 +8,10 @@
     "#api-fetch": {
       "local-build": "./src/local/fetch.ts",
       "default": "./src/api/networkFetch.ts"
+    },
+    "#local-database": {
+      "local-build": "./src/local/database.ts",
+      "default": "./src/api/noLocalDatabase.ts"
     }
   },
   "scripts": {

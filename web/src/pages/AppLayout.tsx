@@ -1,6 +1,7 @@
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
 import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
+import { StorageNote } from "../components/LocalDatabase";
 import { ProblemText } from "../components/ProblemText";
 
 const navLink =
@@ -97,6 +98,7 @@ export function AppLayout() {
       </header>
       {heapId && <ArchivedNotice key={heapId} heapId={heapId} />}
       <Outlet />
+      <StorageNote />
     </div>
   );
 }

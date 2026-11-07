@@ -1,7 +1,8 @@
 import { useMe, useUpdateMe } from "../api/queries";
+import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm } from "../components/NameForm";
 
-/** The signed-in user's display name, which teammates see. */
+/** The signed-in user's display name, which teammates see, and in the local build their data. */
 export function AccountPage() {
   const { data: me } = useMe();
   const update = useUpdateMe();
@@ -30,6 +31,7 @@ export function AccountPage() {
           <dd className="text-sm text-stone-600 dark:text-stone-300">{user.email}</dd>
         </div>
       </dl>
+      <LocalDataSection />
     </main>
   );
 }

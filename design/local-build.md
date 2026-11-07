@@ -38,8 +38,8 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
    problem+json all stay as they are.
 3. **The web app swaps `fetch`, nothing else.** openapi-fetch takes a custom `fetch`. The API client imports it as
    `#api-fetch`, which package.json `imports` resolves to none (the browser's) or, under the `local-build`
-   condition that `vite --mode local-build` sets, to `src/local/fetch.ts`. That one starts the worker
-   (`src/local/worker.ts`) on the first request and posts each request to it. TanStack Query, the routes and the
+   condition that `vite --mode local-build` sets, to `src/local/fetch.ts`. That one posts each request to the
+   worker (`src/local/worker.ts`) through `src/local/backendWorker.ts`, which starts it on first use. TanStack Query, the routes and the
    components don't change, and the server build holds neither the worker nor the wasm.
 4. **One request at a time.** The worker queues requests and finishes one before starting the next. This gives the
    one-writer behaviour that SQLite already has on the server, and keeps transactions from interleaving when a
@@ -131,13 +131,28 @@ heaps" and the heap "My heap". Later starts find the same user. The API resolves
 
 Browser storage can be cleared by the user, or by the browser when the disk fills up.
 
-1. On first start the app asks for persistent storage (`navigator.storage.persist()`), and says plainly in the
-   footer that the data lives only in this browser.
-2. **Export and import.** The Account view offers the database file as a download, and an import that replaces the
+1. **Persistent storage.** Each start the app asks the browser to keep its data (`navigator.storage.persist()`)
+   unless it already does, and its footer says plainly that the data lives only in this browser, and when the
+   browser hasn't agreed, that it may clear it when space runs low.
+2. **Export and import.** The Account page offers the database file as a download, and opening a copy replaces the
    local database after a confirmation. The export is a normal SQLite file with the server's schema, which leaves a
    path open to moving it onto a self-hosted server later.
-3. **One tab at a time.** `opfs-sahpool` allows one connection per database. The worker takes a Web Lock on start-up,
-   and a second tab shows "Upheap is open in another tab" instead of the app.
+   - **They aren't API endpoints.** They are about where this build keeps its data, which a server has no part
+     in. The worker takes `export` and `import` messages beside the HTTP requests, in the same queue, so neither
+     runs in the middle of a request.
+   - **An import can't lose the data.** The worker refuses a file that isn't a sound SQLite database with
+     SeaORM's migration table. Otherwise it keeps a copy of the current database, swaps in the file, and opens it
+     with the migrations, so an older copy is brought up to date. If that fails, as for a copy from a newer
+     version, it puts the old database back and says nothing changed. After an import the page starts again from
+     the top, since everything on screen came from the database it replaced.
+3. **One tab at a time.** `opfs-sahpool` allows one connection per database. Before it opens the database, the
+   worker takes a Web Lock that it holds until its tab closes. A second tab's worker waits for the lock and says
+   so, and the page shows "Upheap is open in another tab" instead of the app until the other tab closes, then
+   opens there.
+4. **The web app finds these through `#local-database`,** which package.json `imports` resolves like
+   `#api-fetch`: to `src/local/database.ts` in the local build, and to `null` in the server build, which then
+   shows none of it and holds none of its code. This is about the build, not about what the user may do, so it
+   doesn't go through `allowed_actions`.
 
 ## Build and publish
 
@@ -171,7 +186,10 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 4. **Single-user mode: done.** `GET /me` offers `sign_out` and `create_team` on the server only, the local user's
    team offers only `create_heap`, and the web app hides the rest: no sign-out, and the header links straight to
    the one team, where `/teams` also leads.
-5. **Keeping the data:** persistent storage, export and import, the tab lock.
+5. **Keeping the data: done.** The footer note and the request for persistent storage, export and import on the
+   Account page, and one tab at a time. In headless Chromium a second tab waits and opens once the first closes,
+   a downloaded copy opened again replaces what was added since, and a file that isn't an Upheap database or comes
+   from a newer version is refused with the data left as it was.
 6. **Publish:** the Pages workflow and Playwright against the static build.
 
 ## Spike results
