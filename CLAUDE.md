@@ -10,7 +10,7 @@ web app, on SQLite or MySQL.
 - `crates/store`: SeaORM entities, migrations, repositories.
 - `crates/service`: use cases. Each one runs in one transaction with its audit entry.
 - `crates/api`: axum handlers, DTOs, error mapping, OpenAPI (utoipa).
-- `crates/server`: the `upheap` binary (config, startup, `openapi` subcommand).
+- `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.
 
 ## Design docs
