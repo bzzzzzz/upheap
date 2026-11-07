@@ -6,6 +6,7 @@ import { isUnauthenticated } from "./api/client";
 import { meQuery } from "./api/queries";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
+import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
@@ -105,6 +106,15 @@ const parametersRoute = createRoute({
   },
 });
 
+const heapActivityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/heaps/$heapId/activity",
+  component: function HeapActivityRoute() {
+    const { heapId } = heapActivityRoute.useParams();
+    return <HeapActivityPage key={heapId} heapId={heapId} />;
+  },
+});
+
 const editItemRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/heaps/$heapId/items/$itemId",
@@ -125,6 +135,15 @@ const teamRoute = createRoute({
   },
 });
 
+const teamActivityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$teamId/activity",
+  component: function TeamActivityRoute() {
+    const { teamId } = teamActivityRoute.useParams();
+    return <TeamActivityPage key={teamId} teamId={teamId} />;
+  },
+});
+
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
 const routeTree = rootRoute.addChildren([
@@ -135,9 +154,11 @@ const routeTree = rootRoute.addChildren([
     closedRoute,
     tagsRoute,
     parametersRoute,
+    heapActivityRoute,
     editItemRoute,
     teamsRoute,
     teamRoute,
+    teamActivityRoute,
     accountRoute,
   ]),
 ]);

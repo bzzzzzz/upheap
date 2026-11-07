@@ -180,7 +180,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |
 | Parameters | `GET/POST /heaps/{id}/parameters` (in use and archived; add one), `PATCH /parameters/{id}` (name, weight), `POST /parameters/{id}/archive`, `POST /parameters/{id}/options` (add one last), `PATCH /parameters/{id}/options` (every option in use, in the new order, with its label), `POST /options/{id}/archive` (with `replacement_option_id`), `PUT /parameters/{id}/tags` |
 | Saved views | `GET/POST /heaps/{id}/views` (the views in use, by name; save one), `PATCH /views/{id}` (rename, or replace the whole view), `POST /views/{id}/archive` |
-| Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit` (filtered by what the caller may do) |
+| Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, newest first, cursor-paged, `entity_id=` for one entity's history; filtered by what the caller may do |
 
 The `DELETE` on a team member removes the membership. That is the one place where a relationship row goes away, and it is audited. The membership history stays in the audit log.
 
@@ -260,9 +260,12 @@ These checks run in the same transaction as the write, after the permission chec
 
 1. Each service use case runs in one database transaction. It performs the change and inserts the audit entry before committing.
 2. `action` is a typed Rust enum, for example `ItemCreated`, `ItemStateChanged`, `OptionArchived` or `MemberPromoted`. `diff` stores the changed fields as before/after pairs.
-3. Each read endpoint maps to the set of actions the caller can perform:
-   - Members see item and tag events on heap pages.
-   - Admins additionally see membership and configuration events.
+3. Each action is shown to those who hold the permission it takes (`audit_permission` in `domain::permission`), and the read filters on it in SQL so paging stays exact:
+   - Members see item, tag and saved view changes, and display name changes.
+   - Admins additionally see heap, parameter, team and membership changes. Leaving a team is a membership change, so only admins see it, although any member may leave.
+4. `GET /heaps/{id}/audit` reads what is recorded against the heap. `GET /teams/{id}/audit` reads the team's own entries (`heap_id` is `NULL`) and the heaps' own entries (created, renamed, archived), but not what happens inside the heaps. With `entity_id`, either reads one entity's history; `idx_audit_log_entity` serves it.
+5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone, a `phrase` to read after the actor's name ("edited item", or "joined the team" when the entry is about the actor, with `names_entity` false), and `changes`, one per changed field with its label and the values before and after as text. IDs in diffs (tags, options, parameters, blockers) are replaced by current names, due times become fixed dates, and an item's parameter values become one change per parameter. The raw `diff` is returned too. The service reads diffs by action: created entries hold the values set, ended memberships the role held, edits before/after pairs.
+6. The web app shows the history where things are edited: under the Edit item view, in a collapsed History on each tag, parameter, heap and member, and for the open saved view. Parameters and heaps offer `view_history` in `allowed_actions` only to those who may see their entries, so members aren't shown histories that are always empty. Archived saved views have no place of their own; their history is on the heap's Activity page. The heap's Activity page and the team's Activity page show the whole logs. Any mutation invalidates every loaded history.
 
 ## Configuration and deployment
 

@@ -116,6 +116,29 @@ export function useClosedItems(heapId: string) {
   });
 }
 
+/** Whose history to read: a heap's or a team's, or one entity's within it. */
+export type AuditScope = { heapId: string } | { teamId: string };
+
+/**
+ * A page-by-page history, newest first. Every write is audited, so `main.tsx` invalidates these after any mutation.
+ */
+export function useAuditLog(scope: AuditScope, entityId?: string) {
+  const owner = "heapId" in scope ? ["heap", scope.heapId] : ["team", scope.teamId];
+  return useInfiniteQuery({
+    queryKey: ["audit", ...owner, entityId ?? null],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      const query = { entity_id: entityId, cursor: pageParam };
+      const result =
+        "heapId" in scope
+          ? await api.GET("/api/v1/heaps/{heap_id}/audit", { params: { path: { heap_id: scope.heapId }, query } })
+          : await api.GET("/api/v1/teams/{team_id}/audit", { params: { path: { team_id: scope.teamId }, query } });
+      return unwrap(result);
+    },
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
+}
+
 /**
  * One item, for the Edit item view. It's fetched when the view opens and after each save, but not in the background
  * (focus, reconnect or an interval), because a newer version resets the form and would drop what the user typed.

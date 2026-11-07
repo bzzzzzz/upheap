@@ -25,7 +25,7 @@ use crate::dto::{
     to_item_dto, to_ranked_dto,
 };
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, ApiQuery, ClientTimeZone, CurrentUser, IfMatch};
+use crate::extract::{ApiJson, ApiPath, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
 use crate::{ApiError, AppState};
 
@@ -411,14 +411,4 @@ fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
         closed_at,
         id: ItemId::from_uuid(id),
     })
-}
-
-/// The `Time-Zone` request header, documented once.
-#[derive(IntoParams)]
-#[into_params(parameter_in = Header)]
-#[allow(dead_code)]
-struct TimeZoneHeader {
-    /// The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.
-    #[param(rename = "Time-Zone")]
-    time_zone: Option<String>,
 }

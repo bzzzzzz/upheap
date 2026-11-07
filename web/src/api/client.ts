@@ -36,6 +36,9 @@ export type ParameterOption = Schemas["ParameterOption"];
 export type ItemParameter = Schemas["ItemParameter"];
 export type NewParameter = Schemas["CreateParameterRequest"];
 export type ParameterPatch = Schemas["ParameterPatchRequest"];
+export type AuditEntry = Schemas["AuditEntry"];
+export type AuditAction = Schemas["AuditAction"];
+export type AuditEntityType = Schemas["AuditEntityType"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,

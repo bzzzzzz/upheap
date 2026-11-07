@@ -1,5 +1,6 @@
 //! The roles table from the offering, as code. Service checks and `allowed_actions` both come from here.
 
+use crate::audit::AuditAction;
 use crate::heap::Heap;
 use crate::item::Item;
 use crate::parameter::Parameter;
@@ -33,6 +34,46 @@ impl Permission {
             Self::ManageHeaps | Self::ConfigureHeap | Self::ManageTeam => matches!(role, Role::Admin),
         }
     }
+}
+
+/// The permission needed to see audit entries of `action`: the one needed to take it (Off Audit §4). Members see
+/// item, tag and saved view changes; only admins see heap, parameter, team and membership changes.
+///
+/// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
+/// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
+pub const fn audit_permission(action: AuditAction) -> Permission {
+    match action {
+        AuditAction::UserRegistered | AuditAction::UserUpdated => Permission::ViewTeam,
+        AuditAction::TeamCreated
+        | AuditAction::TeamUpdated
+        | AuditAction::MemberAdded
+        | AuditAction::MemberRoleChanged
+        | AuditAction::MemberRemoved
+        | AuditAction::MemberLeft => Permission::ManageTeam,
+        AuditAction::HeapCreated
+        | AuditAction::HeapUpdated
+        | AuditAction::HeapArchived
+        | AuditAction::HeapUnarchived => Permission::ManageHeaps,
+        AuditAction::ItemCreated
+        | AuditAction::ItemUpdated
+        | AuditAction::TagCreated
+        | AuditAction::TagUpdated
+        | AuditAction::SavedViewCreated
+        | AuditAction::SavedViewUpdated
+        | AuditAction::SavedViewArchived => Permission::EditItems,
+        AuditAction::ParameterCreated
+        | AuditAction::ParameterUpdated
+        | AuditAction::ParameterArchived
+        | AuditAction::OptionArchived => Permission::ConfigureHeap,
+    }
+}
+
+/// The audit actions `role` may see, per [`audit_permission`].
+pub fn visible_audit_actions(role: Role) -> Vec<AuditAction> {
+    AuditAction::ALL
+        .into_iter()
+        .filter(|action| audit_permission(*action).is_granted_to(role))
+        .collect()
 }
 
 /// An action a client may offer on an item.
@@ -135,6 +176,9 @@ pub enum ParameterAction {
     Edit,
     /// Take it out of use. Refused while an open item has a value for it.
     Archive,
+    /// Read its history. Parameter changes are shown to those who may make them (see [`audit_permission`]), so this
+    /// stays offered on archived parameters and in archived heaps.
+    ViewHistory,
 }
 
 /// An action a client may offer on a heap's list of custom parameters.
@@ -144,12 +188,20 @@ pub enum ParameterListAction {
     Create,
 }
 
-/// What `role` can do with `parameter` in `heap`. Empty for archived parameters and archived heaps.
+/// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
+/// parameter or the heap is archived.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
-    if parameter.is_archived() || !can_configure(heap, role) {
+    if !Permission::ConfigureHeap.is_granted_to(role) {
         return Vec::new();
     }
-    vec![ParameterAction::Edit, ParameterAction::Archive]
+    if parameter.is_archived() || heap.is_archived() {
+        return vec![ParameterAction::ViewHistory];
+    }
+    vec![
+        ParameterAction::Edit,
+        ParameterAction::Archive,
+        ParameterAction::ViewHistory,
+    ]
 }
 
 /// What `role` can do with the parameters of `heap`. Empty for archived heaps.
@@ -233,19 +285,22 @@ pub enum HeapAction {
     Rename,
     /// Make the heap read-only.
     Archive,
-    /// Make an archived heap writable again. The only action an archived heap offers.
+    /// Make an archived heap writable again.
     Unarchive,
+    /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
+    /// [`audit_permission`]).
+    ViewHistory,
 }
 
-/// What `role` can do with `heap`. An archived heap allows only unarchiving.
+/// What `role` can do with `heap`. An archived heap allows only unarchiving and reading its history.
 pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
     if !Permission::ManageHeaps.is_granted_to(role) {
         return Vec::new();
     }
     if heap.is_archived() {
-        return vec![HeapAction::Unarchive];
+        return vec![HeapAction::Unarchive, HeapAction::ViewHistory];
     }
-    vec![HeapAction::Rename, HeapAction::Archive]
+    vec![HeapAction::Rename, HeapAction::Archive, HeapAction::ViewHistory]
 }
 
 #[cfg(test)]
@@ -263,6 +318,29 @@ mod tests {
             role,
             joined_at: Timestamp::EPOCH,
         }
+    }
+
+    #[gtest]
+    fn members_see_content_changes_and_admins_see_everything() {
+        let member = visible_audit_actions(Role::Member);
+        for seen in [
+            AuditAction::ItemUpdated,
+            AuditAction::TagCreated,
+            AuditAction::SavedViewArchived,
+            AuditAction::UserUpdated,
+        ] {
+            expect_that!(member, contains(eq(&seen)));
+        }
+        for unseen in [
+            AuditAction::MemberAdded,
+            AuditAction::MemberLeft,
+            AuditAction::HeapUpdated,
+            AuditAction::ParameterUpdated,
+            AuditAction::OptionArchived,
+        ] {
+            expect_that!(member, not(contains(eq(&unseen))));
+        }
+        expect_that!(visible_audit_actions(Role::Admin), len(eq(AuditAction::ALL.len())));
     }
 
     #[gtest]

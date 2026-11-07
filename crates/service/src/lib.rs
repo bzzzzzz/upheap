@@ -5,6 +5,7 @@
 
 mod access;
 mod audit;
+pub mod audit_log;
 pub mod auth;
 mod clock;
 mod error;

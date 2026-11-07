@@ -16,6 +16,7 @@ import {
 } from "../api/queries";
 import { inputClass, NameForm, primaryButtonClass, quietButtonClass } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
+import { HistoryDisclosure } from "../components/AuditHistory";
 import { useConfirmation } from "../components/useConfirmation";
 
 const sectionTitle = "mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase";
@@ -42,7 +43,14 @@ export function TeamPage({ teamId }: { teamId: string }) {
     <main>
       <TeamName team={data} />
       <p className="mb-6 text-sm text-stone-500">
-        You are {data.role === "admin" ? "an admin" : "a member"} of this team.
+        You are {data.role === "admin" ? "an admin" : "a member"} of this team.{" "}
+        <Link
+          to="/teams/$teamId/activity"
+          params={{ teamId }}
+          className="text-sky-700 hover:underline dark:text-sky-400"
+        >
+          Activity
+        </Link>
       </p>
       <section aria-labelledby="team-heaps" className="mb-8">
         <h2 id="team-heaps" className={sectionTitle}>
@@ -139,6 +147,11 @@ function HeapRow({ heap }: { heap: Heap }) {
         </button>
       )}
       <ProblemText error={setArchived.error} />
+      {can("view_history") && (
+        <div className="basis-full">
+          <HistoryDisclosure scope={{ teamId: heap.team_id }} entityId={heap.id} />
+        </div>
+      )}
     </li>
   );
 }
@@ -227,6 +240,9 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
         </span>
       )}
       <ProblemText error={setRole.error ?? remove.error} />
+      <div className="basis-full">
+        <HistoryDisclosure scope={{ teamId }} entityId={member.user_id} />
+      </div>
     </li>
   );
 }

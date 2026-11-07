@@ -89,6 +89,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/heaps/{heap_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened in a heap, newest first, as far as the caller may see: changes to items, tags and saved views
+         *     for every member, and to the heap and its parameters for admins too.
+         */
+        get: operations["list_heap_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/heaps/{heap_id}/items": {
         parameters: {
             query?: never;
@@ -397,6 +417,26 @@ export interface paths {
         patch: operations["update_team"];
         trace?: never;
     };
+    "/api/v1/teams/{team_id}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened to a team, newest first, as far as the caller may see: its name, members and display names, and
+         *     its heaps being created, renamed and archived. Membership and heap changes are shown to admins only.
+         */
+        get: operations["list_team_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team_id}/heaps": {
         parameters: {
             query?: never;
@@ -570,6 +610,71 @@ export interface components {
             options: components["schemas"]["OptionArrangement"][];
         };
         /**
+         * @description What was done. Each action is shown to those who may take it: members see item, tag and saved view changes,
+         *     admins see everything.
+         * @enum {string}
+         */
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived";
+        AuditActor: {
+            /** @description Their display name now. */
+            display_name: string;
+            /** Format: uuid */
+            id: string;
+        };
+        /** @description One changed field, ready to show. */
+        AuditChange: {
+            after?: string | null;
+            /** @description `null` when it had no value, and for values with no short form, such as what a saved view shows. */
+            before?: string | null;
+            /** @description The field as the diff names it: `title`, `tags`, or `parameters.<id>` for one parameter's value. */
+            field: string;
+            /** @description The field in words. */
+            label: string;
+        };
+        AuditEntity: {
+            /** Format: uuid */
+            id: string;
+            /** @description What it is called now: an item's title, a tag's name, a member's display name. */
+            label: string;
+            type: components["schemas"]["AuditEntityType"];
+        };
+        /**
+         * @description The kind of thing an entry is about. Members are `user`.
+         * @enum {string}
+         */
+        AuditEntityType: "user" | "team" | "heap" | "item" | "tag" | "saved_view" | "parameter";
+        AuditEntry: {
+            action: components["schemas"]["AuditAction"];
+            actor: components["schemas"]["AuditActor"];
+            /** @description The changed fields, in the order the entity's form shows them. Names are the current ones. */
+            changes: components["schemas"]["AuditChange"][];
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            created_at: number;
+            /** @description `created_at` in the request's timezone, such as "12 Mar 2027, 14:05". */
+            created_label: string;
+            /**
+             * @description The change as recorded, with IDs rather than names: `{"field": {"before": …, "after": …}}` for edits, the
+             *     values set for creations.
+             */
+            diff: Record<string, never>;
+            entity: components["schemas"]["AuditEntity"];
+            /** Format: uuid */
+            id: string;
+            /** @description Whether the entity's label goes after `phrase`. `false` when the entry is about the actor themselves. */
+            names_entity: boolean;
+            /** @description What was done, to show after the actor's name: "edited item", "joined the team". */
+            phrase: string;
+        };
+        AuditLog: {
+            /** @description Newest first. */
+            entries: components["schemas"]["AuditEntry"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last page. */
+            next_cursor?: string | null;
+        };
+        /**
          * @description Where shown blocked items go.
          * @enum {string}
          */
@@ -676,7 +781,7 @@ export interface components {
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive";
+        HeapAction: "rename" | "archive" | "unarchive" | "view_history";
         HeapSummary: {
             archived: boolean;
             /** Format: uuid */
@@ -905,7 +1010,7 @@ export interface components {
          * @description An action the caller can take on a parameter.
          * @enum {string}
          */
-        ParameterAction: "edit" | "archive";
+        ParameterAction: "edit" | "archive" | "view_history";
         ParameterList: {
             allowed_actions: components["schemas"]["ParameterListAction"][];
             /** @description Archived parameters, by name. Closed items may still show their values. */
@@ -1366,6 +1471,57 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_heap_audit: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
+                 *     a team, the team, one of its heaps, or a member.
+                 */
+                entity_id?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                heap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLog"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2636,6 +2792,57 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_team_audit: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
+                 *     a team, the team, one of its heaps, or a member.
+                 */
+                entity_id?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLog"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

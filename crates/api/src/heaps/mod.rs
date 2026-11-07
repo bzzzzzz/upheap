@@ -33,6 +33,7 @@ pub(crate) enum HeapActionDto {
     Rename,
     Archive,
     Unarchive,
+    ViewHistory,
 }
 
 impl From<HeapAction> for HeapActionDto {
@@ -41,6 +42,7 @@ impl From<HeapAction> for HeapActionDto {
             HeapAction::Rename => Self::Rename,
             HeapAction::Archive => Self::Archive,
             HeapAction::Unarchive => Self::Unarchive,
+            HeapAction::ViewHistory => Self::ViewHistory,
         }
     }
 }

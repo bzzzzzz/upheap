@@ -53,6 +53,22 @@ pub fn describe_date(at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> String {
     date.strftime(format).to_string()
 }
 
+/// `due` as a fixed calendar date in `tz`, for records that are read long after they were written, such as the audit
+/// log: "12 Mar 2027" for an exact deadline, "around 12 Mar 2027" for a loose due time. Fuzzy and relative labels
+/// would be wrong by the time anyone reads them.
+pub fn describe_due_date(due: Due, tz: &TimeZone) -> String {
+    let date = local_date(due.at, tz).strftime("%-d %b %Y").to_string();
+    if due.firm { date } else { format!("around {date}") }
+}
+
+/// When something happened, in `tz`: "12 Mar 2027, 14:05".
+pub fn describe_time(at: Timestamp, tz: &TimeZone) -> String {
+    at.to_jiff()
+        .to_zoned(tz.clone())
+        .strftime("%-d %b %Y, %H:%M")
+        .to_string()
+}
+
 /// The nearest fuzzy term for a loose due time. Past dates count as "in a few days".
 pub fn fuzzy_label(at: Timestamp, as_of: Timestamp) -> &'static str {
     let days = at.since(as_of).as_days_f64();
@@ -137,6 +153,31 @@ mod tests {
                 overdue: true
             })
         );
+    }
+
+    #[gtest]
+    fn recorded_due_dates_are_absolute() {
+        expect_that!(
+            describe_due_date(Due { at: day(1), firm: true }, &utc()),
+            eq("2 Jan 2027")
+        );
+        expect_that!(
+            describe_due_date(
+                Due {
+                    at: day(1),
+                    firm: false
+                },
+                &utc()
+            ),
+            eq("around 2 Jan 2027")
+        );
+    }
+
+    #[gtest]
+    fn times_are_shown_in_the_timezone() {
+        let berlin = TimeZone::get("Europe/Berlin").expect("bundled");
+        expect_that!(describe_time(day(0), &utc()), eq("1 Jan 2027, 12:00"));
+        expect_that!(describe_time(day(0), &berlin), eq("1 Jan 2027, 13:00"));
     }
 
     #[gtest]

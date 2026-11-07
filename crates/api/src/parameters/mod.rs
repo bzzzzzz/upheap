@@ -45,6 +45,7 @@ pub(crate) enum ParameterActionDto {
     /// Rename it, change its weight, change its options and link it to tags.
     Edit,
     Archive,
+    ViewHistory,
 }
 
 impl From<ParameterAction> for ParameterActionDto {
@@ -52,6 +53,7 @@ impl From<ParameterAction> for ParameterActionDto {
         match action {
             ParameterAction::Edit => Self::Edit,
             ParameterAction::Archive => Self::Archive,
+            ParameterAction::ViewHistory => Self::ViewHistory,
         }
     }
 }

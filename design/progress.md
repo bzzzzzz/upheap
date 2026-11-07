@@ -5,8 +5,8 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
-list view controls (state modes, sort, filters, search), saved views and custom parameters. OIDC and CLI sign-in
-are not started. All 169 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+list view controls (state modes, sort, filters, search), saved views, custom parameters and the audit log. OIDC and CLI sign-in
+are not started. All 187 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -31,7 +31,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
 | Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
-| Audit log: viewing entries | Off Audit §4 | ⬜ | No read endpoint or UI |
+| Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history under Edit item and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI sign-in: OAuth with PKCE | Off Auth §4 | ⬜ | |
 | Sign-in rate limiting | TD Auth §4 | ⬜ | |
@@ -52,7 +52,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] Cycle detection inside the write transaction (`blocking_cycle`)
   - [x] Blocker inheritance in `rank()` (memoized walk, 1.1 boost)
   - [x] Pick the blocking item, in the list row and in Edit item
-- [ ] **Edit item view**
+- [x] **Edit item view**
   - [x] Every field including description, tags, state and blocker, saved as one patch (one version, one audit entry)
   - [x] Opened from the list (Edit) and from Closed (the title); a closed item can be reopened and edited in one save
   - [x] Custom parameter values
@@ -80,7 +80,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] `GET/POST /heaps/{id}/views`, `PATCH /views/{id}`, `POST /views/{id}/archive`; any member, like tags
   - [x] Views bar on the heap page: open a view, save the current list as a view or into the open one, rename, archive
   - [x] Custom parameter filters and sort
-- [ ] **Audit log reading**: `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, filtered by permission
+- [x] **Audit log reading**
+  - [x] `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, filtered by permission, with `entity_id=` and cursor paging
+  - [x] Changes described by the server, with current names for IDs
+  - [x] History under Edit item and on tags, parameters, saved views, heaps and members; heap and team Activity pages
 - [ ] **Auth**
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
@@ -94,6 +97,6 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Audit log reading, now that team, heap and view changes are audited too.
-2. Editing the heap's own weights, next to the parameters.
-3. OIDC sign-in, then the CLI's OAuth flow.
+1. Sign-in rate limiting.
+2. Playwright golden paths.
+3. Later: editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.

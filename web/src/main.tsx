@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
@@ -9,6 +9,13 @@ import { createAppRouter } from "./routes";
 import "./index.css";
 
 const queryClient = new QueryClient({
+  // Every write records an audit entry, so any open history is out of date after one, even a failed one that the
+  // server may have applied. Not awaited: a returned promise would hold every mutation until the histories reload.
+  mutationCache: new MutationCache({
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+    },
+  }),
   queryCache: new QueryCache({
     onError: (error) => {
       if (isUnauthenticated(error)) {
