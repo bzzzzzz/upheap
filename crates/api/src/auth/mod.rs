@@ -55,10 +55,15 @@ async fn register(
 }
 
 /// Signs in with email and password.
+///
+/// Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts
+/// fail with `429` until the window ends, and a successful sign-in starts the count over.
 #[utoipa::path(post, path = "/auth/login", tag = "auth", request_body = SignInRequest,
     responses(
         (status = 200, description = "Signed in; sets the session cookie", body = UserDto),
         (status = 401, description = "`invalid_credentials`", body = Problem),
+        (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
+            headers(("Retry-After" = i64, description = "Seconds until the address may try again"))),
     ))]
 async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInRequest>) -> Result<Response, ApiError> {
     let grant = state.services.sign_in(&body.email, &body.password).await?;

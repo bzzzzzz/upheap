@@ -9,6 +9,8 @@ mod m20261107_000003_blockers;
 mod m20261108_000004_saved_views;
 mod m20261109_000005_parameters;
 mod m20261110_000006_audit_entity;
+mod m20261111_000007_sign_in_attempts;
+mod m20261111_000008_exact_email;
 
 pub struct Migrator;
 
@@ -22,6 +24,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261108_000004_saved_views::Migration),
             Box::new(m20261109_000005_parameters::Migration),
             Box::new(m20261110_000006_audit_entity::Migration),
+            Box::new(m20261111_000007_sign_in_attempts::Migration),
+            Box::new(m20261111_000008_exact_email::Migration),
         ]
     }
 }

@@ -13,7 +13,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Signs in with email and password. */
+        /**
+         * Signs in with email and password.
+         * @description Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts
+         *     fail with `429` until the window ends, and a successful sign-in starts the count over.
+         */
         post: operations["sign_in"];
         delete?: never;
         options?: never;
@@ -1284,6 +1288,17 @@ export interface operations {
             /** @description `invalid_credentials` */
             401: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
+            429: {
+                headers: {
+                    /** @description Seconds until the address may try again */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

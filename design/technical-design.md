@@ -201,7 +201,14 @@ A display name change is audited once in each of the user's teams, since the aud
    - The CLI receives a short-lived access token and a rotating refresh token.
    - Only registered first-party public clients are allowed.
 3. **External identity providers:** generic OIDC, configured per deployment, for example Okta, Google or Keycloak. A first sign-in creates the user. An identity is matched by `(provider, subject)`, never by email alone.
-4. **Local accounts:** passwords are hashed with argon2id, and login attempts are rate-limited.
+4. **Local accounts:** passwords are hashed with argon2id, and sign-in attempts are rate-limited per email address (`domain::sign_in`).
+   - An address gets five attempts per 15-minute window, opened by its first attempt. Later attempts get `429` `too_many_attempts`, with `Retry-After` in seconds, until the window ends. They are refused before any password is checked, so they cost no argon2 work.
+   - Addresses without an account are counted the same way, so a refusal doesn't reveal whether an account exists. Malformed addresses can't have an account and aren't counted.
+   - A successful sign-in clears the count. Refused attempts don't extend the window. Someone who knows an address can still keep its owner out, by using up its attempts at the start of every window; that is the price of a limit per address.
+   - Counts live in the database, in `sign_in_attempts`, so they hold across instances. Each attempt is counted by one upsert inside a transaction, so concurrent attempts are each counted and each reads back its own count.
+   - The table is keyed by the SHA-256 of the normalised address. That keeps addresses out of plain sight but not secret: anyone who can read the table can test a guessed address. Each attempt deletes a few rows whose window has ended, by key, so the table only holds addresses tried in the last few minutes.
+   - Addresses are compared exactly on both databases (`utf8mb4_bin` on MySQL). Otherwise MySQL would find one account under many spellings, each with its own attempts.
+   - There is no per-IP limit, because the server sits behind a proxy and doesn't know client addresses. Spraying one password across many accounts is left to the reverse proxy.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`. The service layer enforces access as described in [Access control](#access-control).
 
 ## Access control

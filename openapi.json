@@ -16,6 +16,7 @@
           "auth"
         ],
         "summary": "Signs in with email and password.",
+        "description": "Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts\nfail with `429` until the window ends, and a successful sign-in starts the count over.",
         "operationId": "sign_in",
         "requestBody": {
           "content": {
@@ -40,6 +41,25 @@
           },
           "401": {
             "description": "`invalid_credentials`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_attempts`; `Retry-After` gives the seconds to wait",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Seconds until the address may try again"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

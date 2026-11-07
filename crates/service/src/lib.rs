@@ -19,6 +19,7 @@ pub mod teams;
 
 use std::sync::{Arc, Mutex};
 
+use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp, UserId};
 use store::DatabaseConnection;
 use uuid::Uuid;
@@ -40,6 +41,8 @@ pub struct Settings {
     pub allow_registration: bool,
     /// How long a web session lasts after sign-in.
     pub session_ttl: Duration,
+    /// How many sign-in attempts an email address gets.
+    pub sign_in_limit: SignInLimit,
 }
 
 /// Entry point to every use case. Cheap to clone.
