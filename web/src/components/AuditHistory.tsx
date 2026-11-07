@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { AuditEntry } from "../api/client";
-import { useAuditLog, type AuditScope } from "../api/queries";
+import { useAuditLog, useMe, type AuditScope } from "../api/queries";
 
 /**
  * The history of `scope`, or of one entity in it, newest first, a page at a time. With `showEntity` each entry
@@ -58,10 +58,13 @@ export function AuditHistory({
 }
 
 function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: boolean }) {
+  const { data: me } = useMe();
+  // The viewer's own changes read as theirs, as the phrase reads after any name: "You added item".
+  const actor = entry.actor.id === me?.user.id ? "You" : entry.actor.display_name;
   return (
     <li className="py-2 text-sm">
       <p>
-        <span className="font-medium">{entry.actor.display_name}</span> {entry.phrase}
+        <span className="font-medium">{actor}</span> {entry.phrase}
         {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}
         <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-stone-500">
           {entry.created_label}
