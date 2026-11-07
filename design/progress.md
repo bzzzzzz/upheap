@@ -38,6 +38,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
+| Local build: static, single user, data in the browser | [local-build.md](local-build.md) | 🟡 | Spike done: the backend and the Router run in a browser worker on SQLite-wasm in OPFS |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work
@@ -89,6 +90,13 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
   - [x] Sign-in rate limiting
+- [ ] **Local build** ([local-build.md](local-build.md))
+  - [x] Spike: `domain`, `store`, `service` and `api` on `wasm32-unknown-unknown`, SeaORM proxy over SQLite-wasm
+  - [ ] `accounts` feature in `service` and `api`; tokio-only code kept out of the shared path
+  - [ ] `crates/local`, the worker and the web app's worker `fetch`
+  - [ ] Single-user mode: the local user and one team for every heap, `allowed_actions` on `GET /me`
+  - [ ] Persistent storage, export and import, one tab at a time
+  - [ ] GitHub Pages workflow; Playwright golden paths against the static build
 - [x] **Testing and CI**
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
   - [x] Store and API suites on MySQL in CI (`TEST_DATABASE_URL`, a database per test, `store::testing`)
@@ -100,3 +108,4 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 ## Suggested order
 
 1. Editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.
+2. The local build, now past its spike, which can run alongside these.
