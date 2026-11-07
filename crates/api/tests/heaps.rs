@@ -54,7 +54,10 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
     expect_that!(created.status, eq(StatusCode::CREATED));
     expect_that!(created.body["name"], eq(&json!("Ops")));
     expect_that!(created.body["archived_at"], eq(&json!(null)));
-    expect_that!(created.body["allowed_actions"], eq(&json!(["rename", "archive"])));
+    expect_that!(
+        created.body["allowed_actions"],
+        eq(&json!(["rename", "archive", "view_history"]))
+    );
     let names: Vec<&str> = me.body["teams"][0]["heaps"]
         .as_array()
         .map(|heaps| heaps.iter().filter_map(|h| h["name"].as_str()).collect())
@@ -100,7 +103,10 @@ async fn an_archived_heap_is_read_only_until_unarchived() -> Result<()> {
     // Assert
     expect_that!(archived.status, eq(StatusCode::OK));
     expect_that!(archived.body["archived_at"], eq(&json!(common::START)));
-    expect_that!(archived.body["allowed_actions"], eq(&json!(["unarchive"])));
+    expect_that!(
+        archived.body["allowed_actions"],
+        eq(&json!(["unarchive", "view_history"]))
+    );
     expect_that!(again.body["version"], eq(&archived.body["version"]));
     expect_that!(write.body["code"], eq(&json!("heap_archived")));
     expect_that!(rename.body["code"], eq(&json!("heap_archived")));

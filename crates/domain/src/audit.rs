@@ -103,6 +103,7 @@ pub enum EntityType {
 }
 
 impl EntityType {
+    /// Every entity type, in the order they are declared.
     pub const ALL: [Self; 7] = [
         Self::User,
         Self::Team,

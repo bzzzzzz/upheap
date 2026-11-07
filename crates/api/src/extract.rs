@@ -82,7 +82,7 @@ pub(crate) fn clear_session_cookie(settings: &CookieSettings) -> HeaderValue {
 /// The `Time-Zone` request header, documented once.
 #[derive(IntoParams)]
 #[into_params(parameter_in = Header)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Only read by utoipa to document the header; `ClientTimeZone` reads the value.
 pub(crate) struct TimeZoneHeader {
     /// The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.
     #[param(rename = "Time-Zone")]

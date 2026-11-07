@@ -8,13 +8,14 @@ use std::collections::{BTreeSet, HashMap};
 
 use domain::audit::{AuditAction, EntityType};
 use domain::due::{describe_due_date, describe_time};
-use domain::item::Due;
+use domain::item::{Due, Size, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
+use domain::team::Role;
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
 use serde_json::{Map, Value};
-pub use store::audit::{AuditCursor, AuditEntry};
-use store::audit::{AuditQuery, AuditScope};
+pub use store::audit::AuditCursor;
+use store::audit::{AuditEntry, AuditQuery, AuditScope};
 use uuid::Uuid;
 
 use crate::access::{authorize_heap, authorize_team};
@@ -34,15 +35,27 @@ pub struct AuditPage {
 /// An audit entry with what is needed to show it.
 #[derive(Debug)]
 pub struct AuditEntryView {
-    pub entry: AuditEntry,
-    /// The actor's display name now.
-    pub actor_name: String,
+    pub id: Uuid,
+    pub created_at: Timestamp,
     /// When it happened, in the caller's timezone.
     pub created_label: String,
+    pub actor: UserId,
+    /// The actor's display name now.
+    pub actor_name: String,
+    pub action: AuditAction,
+    /// What was done, read after the actor's name: "edited item", "joined the team".
+    pub phrase: &'static str,
+    /// Whether the entity's name goes after `phrase`. Not when the entry is about the actor themselves, as with
+    /// "updated their profile".
+    pub names_entity: bool,
+    pub entity_type: EntityType,
+    pub entity_id: Uuid,
     /// What the entity is called now: an item's title, a tag's name, a member's display name.
     pub entity_label: String,
     /// The changed fields, in the order the entity's form shows them.
     pub changes: Vec<AuditChange>,
+    /// The change as recorded, with IDs rather than names (see `audit.rs`).
+    pub diff: Value,
 }
 
 /// One changed field of an audit entry.
@@ -95,11 +108,11 @@ impl Services {
                 names.insert(*option.id.as_uuid(), option.label.as_str());
             }
         }
-        let items = referenced_items(&entries).into_iter().map(ItemId::from_uuid);
+        let items = collect_referenced_items(&entries).into_iter().map(ItemId::from_uuid);
         for item in store::items::list_item_summaries(&self.db, heap_id, items).await? {
             names.insert(*item.id.as_uuid(), item.title.as_str());
         }
-        let views: Vec<SavedViewId> = entity_ids(&entries, EntityType::SavedView)
+        let views: Vec<SavedViewId> = collect_entity_ids(&entries, EntityType::SavedView)
             .map(SavedViewId::from_uuid)
             .collect();
         for view in store::saved_views::list_saved_views_by_ids(&self.db, heap_id, &views).await? {
@@ -163,7 +176,7 @@ impl Services {
         let ids: BTreeSet<UserId> = entries
             .iter()
             .map(|entry| entry.actor)
-            .chain(entity_ids(entries, EntityType::User).map(UserId::from_uuid))
+            .chain(collect_entity_ids(entries, EntityType::User).map(UserId::from_uuid))
             .collect();
         let ids: Vec<UserId> = ids.into_iter().collect();
         for user in store::users::list_users(&self.db, &ids).await? {
@@ -197,7 +210,7 @@ impl Names {
     }
 }
 
-fn entity_ids(entries: &[AuditEntry], entity_type: EntityType) -> impl Iterator<Item = Uuid> + '_ {
+fn collect_entity_ids(entries: &[AuditEntry], entity_type: EntityType) -> impl Iterator<Item = Uuid> + '_ {
     entries
         .iter()
         .filter(move |entry| entry.entity_type == entity_type)
@@ -205,7 +218,7 @@ fn entity_ids(entries: &[AuditEntry], entity_type: EntityType) -> impl Iterator<
 }
 
 /// The items entries are about, and the blockers their diffs name.
-fn referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
+fn collect_referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
     let blockers = entries
         .iter()
         .filter(|entry| entry.entity_type == EntityType::Item)
@@ -213,21 +226,67 @@ fn referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
         .flat_map(|value| [value.get("before"), value.get("after"), Some(value)])
         .flatten()
         .filter_map(|value| value.as_str().and_then(|raw| Uuid::parse_str(raw).ok()));
-    entity_ids(entries, EntityType::Item).chain(blockers).collect()
+    collect_entity_ids(entries, EntityType::Item).chain(blockers).collect()
 }
 
 fn present_page(entries: Vec<AuditEntry>, next: Option<AuditCursor>, names: &Names, tz: &TimeZone) -> AuditPage {
     let entries = entries
         .into_iter()
-        .map(|entry| AuditEntryView {
-            actor_name: names.of_value(&Value::String(entry.actor.to_string()), "Unknown user"),
-            created_label: describe_time(entry.created_at, tz),
-            entity_label: names.get(entry.entity_id).unwrap_or("Unknown").to_owned(),
-            changes: describe_changes(&entry, names, tz),
-            entry,
+        .map(|entry| {
+            let about_actor = entry.entity_id == *entry.actor.as_uuid();
+            let (phrase, names_entity) = describe_action(entry.action, about_actor);
+            AuditEntryView {
+                id: entry.id,
+                created_at: entry.created_at,
+                created_label: describe_time(entry.created_at, tz),
+                actor: entry.actor,
+                actor_name: names.get(*entry.actor.as_uuid()).unwrap_or("Unknown user").to_owned(),
+                action: entry.action,
+                phrase,
+                names_entity,
+                entity_type: entry.entity_type,
+                entity_id: entry.entity_id,
+                entity_label: names.get(entry.entity_id).unwrap_or("Unknown").to_owned(),
+                changes: describe_changes(&entry, names, tz),
+                diff: entry.diff,
+            }
         })
         .collect();
     AuditPage { entries, next }
+}
+
+/// What `action` says, read after the actor's name, and whether the entity's name follows it. `about_actor` is
+/// whether the entry is about the actor themselves, such as joining a team on creating it.
+const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static str, bool) {
+    match (action, about_actor) {
+        (AuditAction::UserRegistered, _) => ("signed up", false),
+        (AuditAction::UserUpdated, true) => ("updated their profile", false),
+        (AuditAction::UserUpdated, false) => ("updated the profile of", true),
+        (AuditAction::TeamCreated, _) => ("created team", true),
+        (AuditAction::TeamUpdated, _) => ("renamed team", true),
+        (AuditAction::MemberAdded, true) => ("joined the team", false),
+        (AuditAction::MemberAdded, false) => ("added member", true),
+        (AuditAction::MemberRoleChanged, true) => ("changed their own role", false),
+        (AuditAction::MemberRoleChanged, false) => ("changed the role of", true),
+        (AuditAction::MemberRemoved, _) => ("removed member", true),
+        // Only the member themselves leaves.
+        (AuditAction::MemberLeft, _) => ("left the team", false),
+        (AuditAction::HeapCreated, _) => ("created heap", true),
+        (AuditAction::HeapUpdated, _) => ("renamed heap", true),
+        (AuditAction::HeapArchived, _) => ("archived heap", true),
+        (AuditAction::HeapUnarchived, _) => ("unarchived heap", true),
+        (AuditAction::ItemCreated, _) => ("added item", true),
+        (AuditAction::ItemUpdated, _) => ("edited item", true),
+        (AuditAction::TagCreated, _) => ("created tag", true),
+        (AuditAction::TagUpdated, _) => ("edited tag", true),
+        (AuditAction::SavedViewCreated, _) => ("saved view", true),
+        (AuditAction::SavedViewUpdated, _) => ("changed view", true),
+        (AuditAction::SavedViewArchived, _) => ("archived view", true),
+        (AuditAction::ParameterCreated, _) => ("added parameter", true),
+        (AuditAction::ParameterUpdated, _) => ("changed parameter", true),
+        (AuditAction::ParameterArchived, _) => ("archived parameter", true),
+        (AuditAction::OptionArchived, _) => ("archived an option of", true),
+    }
 }
 
 /// How an action's diff is shaped (see `audit.rs`).
@@ -241,7 +300,7 @@ enum DiffShape {
     Changed,
 }
 
-const fn diff_shape(action: AuditAction) -> DiffShape {
+const fn classify_diff(action: AuditAction) -> DiffShape {
     match action {
         AuditAction::UserRegistered
         | AuditAction::TeamCreated
@@ -305,7 +364,7 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
         (position.unwrap_or(FIELD_ORDER.len()), field.as_str())
     });
 
-    let shape = diff_shape(entry.action);
+    let shape = classify_diff(entry.action);
     let mut changes = Vec::new();
     for (field, value) in fields {
         let (before, after) = match shape {
@@ -320,15 +379,20 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
             changes.extend(describe_parameter_values(before, after, names));
             continue;
         }
-        if matches!(shape, DiffShape::Created) && has_no_value(after) {
+        if has_no_value(before) && has_no_value(after) {
             continue;
         }
-        changes.push(AuditChange {
+        let change = AuditChange {
             field: field.clone(),
-            label: field_label(field).to_owned(),
+            label: describe_field(field).to_owned(),
             before: describe_value(field, before, names, tz),
             after: describe_value(field, after, names, tz),
-        });
+        };
+        // A created value with no short form, such as what a new saved view shows, would only say "changed".
+        if matches!(shape, DiffShape::Created) && change.after.is_none() {
+            continue;
+        }
+        changes.push(change);
     }
     changes
 }
@@ -369,7 +433,7 @@ fn has_no_value(value: &Value) -> bool {
     }
 }
 
-fn field_label(field: &str) -> &str {
+fn describe_field(field: &str) -> &str {
     match field {
         "title" => "Title",
         "name" => "Name",
@@ -397,9 +461,9 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         return None;
     }
     let text = match field {
-        "state" => state_label(value.as_str()?).to_owned(),
-        "effort" | "impact" => value.as_str()?.to_uppercase(),
-        "role" => role_label(value.as_str()?).to_owned(),
+        "state" => describe_state(StateKind::from_code(value.as_str()?)?).to_owned(),
+        "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
+        "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
         "due" => describe_recorded_due(value, tz)?,
         "blocked_by" => names.of_value(value, "Unknown item"),
         "tags" => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
@@ -438,22 +502,29 @@ fn describe_recorded_due(value: &Value, tz: &TimeZone) -> Option<String> {
     Some(describe_due_date(Due { at, firm }, tz))
 }
 
-fn state_label(code: &str) -> &str {
-    match code {
-        "open" => "Open",
-        "in_progress" => "In progress",
-        "blocked" => "Blocked",
-        "done" => "Done",
-        "wont_do" => "Won't do",
-        other => other,
+const fn describe_state(state: StateKind) -> &'static str {
+    match state {
+        StateKind::Open => "Open",
+        StateKind::InProgress => "In progress",
+        StateKind::Blocked => "Blocked",
+        StateKind::Done => "Done",
+        StateKind::WontDo => "Won't do",
     }
 }
 
-fn role_label(code: &str) -> &str {
-    match code {
-        "admin" => "Admin",
-        "member" => "Member",
-        other => other,
+const fn describe_size(size: Size) -> &'static str {
+    match size {
+        Size::S => "S",
+        Size::M => "M",
+        Size::L => "L",
+        Size::Xl => "XL",
+    }
+}
+
+const fn describe_role(role: Role) -> &'static str {
+    match role {
+        Role::Admin => "Admin",
+        Role::Member => "Member",
     }
 }
 
@@ -592,6 +663,38 @@ mod tests {
                 eq(&change("options", "Options", Some("Low, High"), Some("High"))),
                 eq(&change("items_switched", "Items switched", None, Some("2 items"))),
             ]
+        );
+    }
+
+    #[gtest]
+    fn a_new_saved_view_shows_its_name_but_not_a_bare_changed_line() {
+        let diff = json!({ "name": "Blocked", "list_view": { "blocked": "shown" } });
+
+        let changes = describe_changes(
+            &entry(AuditAction::SavedViewCreated, EntityType::SavedView, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![eq(&change("name", "Name", None, Some("Blocked")))]
+        );
+    }
+
+    #[gtest]
+    fn an_entry_about_the_actor_does_not_name_them_again() {
+        expect_that!(
+            describe_action(AuditAction::UserUpdated, true),
+            eq(("updated their profile", false))
+        );
+        expect_that!(
+            describe_action(AuditAction::MemberAdded, true),
+            eq(("joined the team", false))
+        );
+        expect_that!(
+            describe_action(AuditAction::MemberAdded, false),
+            eq(("added member", true))
         );
     }
 }

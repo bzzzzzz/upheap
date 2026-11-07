@@ -147,9 +147,11 @@ function HeapRow({ heap }: { heap: Heap }) {
         </button>
       )}
       <ProblemText error={setArchived.error} />
-      <div className="basis-full">
-        <HistoryDisclosure scope={{ teamId: heap.team_id }} entityId={heap.id} />
-      </div>
+      {can("view_history") && (
+        <div className="basis-full">
+          <HistoryDisclosure scope={{ teamId: heap.team_id }} entityId={heap.id} />
+        </div>
+      )}
     </li>
   );
 }

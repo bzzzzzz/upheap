@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import type { AuditEntry } from "../api/client";
 import { useAuditLog, type AuditScope } from "../api/queries";
-import { AUDIT_ACTION_LABELS } from "./labels";
 
 /**
  * The history of `scope`, or of one entity in it, newest first, a page at a time. With `showEntity` each entry
@@ -59,13 +58,11 @@ export function AuditHistory({
 }
 
 function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: boolean }) {
-  // Someone changing their own profile, or leaving, is about themselves; naming them twice reads badly.
-  const namesEntity = showEntity && entry.entity.id !== entry.actor.id;
   return (
     <li className="py-2 text-sm">
       <p>
-        <span className="font-medium">{entry.actor.display_name}</span> {AUDIT_ACTION_LABELS[entry.action]}
-        {namesEntity && <span className="font-medium"> {entry.entity.label}</span>}
+        <span className="font-medium">{entry.actor.display_name}</span> {entry.phrase}
+        {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}
         <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-stone-500">
           {entry.created_label}
         </time>

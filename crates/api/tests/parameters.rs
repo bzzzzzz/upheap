@@ -144,7 +144,7 @@ async fn items_show_every_parameter_in_use_set_or_unset() -> Result<()> {
     expect_that!(parameters.body["allowed_actions"], eq(&json!(["create"])));
     expect_that!(
         parameters.body["parameters"][1]["allowed_actions"],
-        eq(&json!(["edit", "archive"]))
+        eq(&json!(["edit", "archive", "view_history"]))
     );
     expect_that!(customer["weight"], eq(&json!(10)));
     Ok(())
@@ -566,7 +566,7 @@ async fn a_parameter_is_archived_only_once_no_open_item_uses_it() -> Result<()> 
     expect_that!(in_use.status, eq(StatusCode::CONFLICT));
     expect_that!(in_use.body["code"], eq(&json!("parameter_in_use")));
     expect_that!(archived.status, eq(StatusCode::OK));
-    expect_that!(archived.body["allowed_actions"], eq(&json!([])));
+    expect_that!(archived.body["allowed_actions"], eq(&json!(["view_history"])));
     expect_that!(rename.body["code"], eq(&json!("parameter_archived")));
     expect_that!(listed.body["parameters"], eq(&json!([])));
     expect_that!(listed.body["archived"][0]["name"], eq(&json!("Customer")));

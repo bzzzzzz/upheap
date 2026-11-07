@@ -7,7 +7,7 @@ export function HeapActivityPage({ heapId }: { heapId: string }) {
   return (
     <ActivityLayout
       title="Activity"
-      subtitle={heap.data && `What changed in ${heap.data.name}: items, tags and views, and its settings for admins.`}
+      subtitle={heap.data && `What changed in ${heap.data.name}, as far as you can see.`}
     >
       <AuditHistory scope={{ heapId }} showEntity />
     </ActivityLayout>
@@ -20,7 +20,7 @@ export function TeamActivityPage({ teamId }: { teamId: string }) {
   return (
     <ActivityLayout
       title="Team activity"
-      subtitle={team.data && `Changes to ${team.data.name}, its members and its heaps.`}
+      subtitle={team.data && `Changes to ${team.data.name}, its members and its heaps, as far as you can see.`}
     >
       <AuditHistory scope={{ teamId }} showEntity />
     </ActivityLayout>

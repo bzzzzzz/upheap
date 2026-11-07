@@ -663,6 +663,10 @@ export interface components {
             entity: components["schemas"]["AuditEntity"];
             /** Format: uuid */
             id: string;
+            /** @description Whether the entity's label goes after `phrase`. `false` when the entry is about the actor themselves. */
+            names_entity: boolean;
+            /** @description What was done, to show after the actor's name: "edited item", "joined the team". */
+            phrase: string;
         };
         AuditLog: {
             /** @description Newest first. */
@@ -777,7 +781,7 @@ export interface components {
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive";
+        HeapAction: "rename" | "archive" | "unarchive" | "view_history";
         HeapSummary: {
             archived: boolean;
             /** Format: uuid */
@@ -1006,7 +1010,7 @@ export interface components {
          * @description An action the caller can take on a parameter.
          * @enum {string}
          */
-        ParameterAction: "edit" | "archive";
+        ParameterAction: "edit" | "archive" | "view_history";
         ParameterList: {
             allowed_actions: components["schemas"]["ParameterListAction"][];
             /** @description Archived parameters, by name. Closed items may still show their values. */

@@ -176,6 +176,9 @@ pub enum ParameterAction {
     Edit,
     /// Take it out of use. Refused while an open item has a value for it.
     Archive,
+    /// Read its history. Parameter changes are shown to those who may make them (see [`audit_permission`]), so this
+    /// stays offered on archived parameters and in archived heaps.
+    ViewHistory,
 }
 
 /// An action a client may offer on a heap's list of custom parameters.
@@ -185,12 +188,20 @@ pub enum ParameterListAction {
     Create,
 }
 
-/// What `role` can do with `parameter` in `heap`. Empty for archived parameters and archived heaps.
+/// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
+/// parameter or the heap is archived.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
-    if parameter.is_archived() || !can_configure(heap, role) {
+    if !Permission::ConfigureHeap.is_granted_to(role) {
         return Vec::new();
     }
-    vec![ParameterAction::Edit, ParameterAction::Archive]
+    if parameter.is_archived() || heap.is_archived() {
+        return vec![ParameterAction::ViewHistory];
+    }
+    vec![
+        ParameterAction::Edit,
+        ParameterAction::Archive,
+        ParameterAction::ViewHistory,
+    ]
 }
 
 /// What `role` can do with the parameters of `heap`. Empty for archived heaps.
@@ -274,19 +285,22 @@ pub enum HeapAction {
     Rename,
     /// Make the heap read-only.
     Archive,
-    /// Make an archived heap writable again. The only action an archived heap offers.
+    /// Make an archived heap writable again.
     Unarchive,
+    /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
+    /// [`audit_permission`]).
+    ViewHistory,
 }
 
-/// What `role` can do with `heap`. An archived heap allows only unarchiving.
+/// What `role` can do with `heap`. An archived heap allows only unarchiving and reading its history.
 pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
     if !Permission::ManageHeaps.is_granted_to(role) {
         return Vec::new();
     }
     if heap.is_archived() {
-        return vec![HeapAction::Unarchive];
+        return vec![HeapAction::Unarchive, HeapAction::ViewHistory];
     }
-    vec![HeapAction::Rename, HeapAction::Archive]
+    vec![HeapAction::Rename, HeapAction::Archive, HeapAction::ViewHistory]
 }
 
 #[cfg(test)]

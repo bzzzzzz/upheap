@@ -184,6 +184,10 @@ pub(crate) struct AuditEntryDto {
     pub created_label: String,
     pub actor: AuditActorDto,
     pub action: AuditActionDto,
+    /// What was done, to show after the actor's name: "edited item", "joined the team".
+    pub phrase: String,
+    /// Whether the entity's label goes after `phrase`. `false` when the entry is about the actor themselves.
+    pub names_entity: bool,
     pub entity: AuditEntityDto,
     /// The changed fields, in the order the entity's form shows them. Names are the current ones.
     pub changes: Vec<AuditChangeDto>,
@@ -195,23 +199,24 @@ pub(crate) struct AuditEntryDto {
 
 impl From<AuditEntryView> for AuditEntryDto {
     fn from(view: AuditEntryView) -> Self {
-        let entry = view.entry;
         Self {
-            id: entry.id,
-            created_at: entry.created_at.as_millis(),
+            id: view.id,
+            created_at: view.created_at.as_millis(),
             created_label: view.created_label,
             actor: AuditActorDto {
-                id: *entry.actor.as_uuid(),
+                id: *view.actor.as_uuid(),
                 display_name: view.actor_name,
             },
-            action: entry.action.into(),
+            action: view.action.into(),
+            phrase: view.phrase.to_owned(),
+            names_entity: view.names_entity,
             entity: AuditEntityDto {
-                entity_type: entry.entity_type.into(),
-                id: entry.entity_id,
+                entity_type: view.entity_type.into(),
+                id: view.entity_id,
                 label: view.entity_label,
             },
             changes: view.changes.into_iter().map(AuditChangeDto::from).collect(),
-            diff: entry.diff,
+            diff: view.diff,
         }
     }
 }
