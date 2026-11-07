@@ -29,7 +29,7 @@ test("added items are ranked, and an edit moves an item", async ({ page }) => {
   await expectOrder(page, ["Slog", "Quick win"]);
 });
 
-test("the item opens over the list, saves each change, and Back closes it", async ({ page, heapId }) => {
+test("the item opens over the list, saves each change, and Back closes it", async ({ page, heapPath }) => {
   await addItem(page, "Write the rota");
   await openItem(page, "Write the rota");
   const pane = itemPane(page);
@@ -51,14 +51,14 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   // Back closes the item and leaves the list where it was.
   await page.goBack();
   await expect(pane).toHaveCount(0);
-  await expect(page).toHaveURL(new RegExp(`/heaps/${heapId}$`));
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
 
   // Opened from a link, it closes to its list.
   await openItem(page, "Write the team rota");
   await page.reload();
   await expect(pane.getByLabel("Description")).toHaveValue("For the next quarter");
   await closeItem(page);
-  await expect(page).toHaveURL(new RegExp(`/heaps/${heapId}$`));
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
   await expect(row(page, "Write the team rota")).toBeVisible();
 });
 
@@ -173,4 +173,18 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByRole("button", { name: "Discard" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(row(page, "A stray thought")).toHaveCount(0);
+});
+
+test("a short link opens the item it names", async ({ page, heapPath }) => {
+  await addItem(page, "Share the plan");
+  await openItem(page, "Share the plan");
+  const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  expect(key).toMatch(/^[0-9a-z]{5}$/);
+  await closeItem(page);
+
+  // `/h/{team}/{heap}/{item}` expands to the item's full address.
+  const short = heapPath.replace(/teams\/([^/]+)\/heaps\/([^/]+)$/, `h/$1/$2/${key}`);
+  await page.goto(short);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}/items/${key}$`));
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
 });

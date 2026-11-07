@@ -116,12 +116,13 @@ impl Services {
     pub async fn update_parameter(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         parameter_id: ParameterId,
         patch: ParameterPatch,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, Some(expected)).await?;
         let edited = current.apply_patch(&patch)?;
         if let Some(edited) = &edited
             && edited.name != current.name
@@ -135,6 +136,7 @@ impl Services {
     pub async fn add_option(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         parameter_id: ParameterId,
         label: OptionLabel,
         expected: Version,
@@ -144,7 +146,7 @@ impl Services {
             label,
         };
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, Some(expected)).await?;
         let edited = current.add_option(option)?;
         self.finish_edit(txn, &heap, role, principal, current, Some(edited))
             .await
@@ -155,12 +157,13 @@ impl Services {
     pub async fn arrange_options(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         parameter_id: ParameterId,
         options: Vec<ParameterOption>,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, Some(expected)).await?;
         let edited = current.arrange_options(options)?;
         self.finish_edit(txn, &heap, role, principal, current, edited).await
     }
@@ -169,12 +172,13 @@ impl Services {
     pub async fn link_parameter_tags(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         parameter_id: ParameterId,
         tags: BTreeSet<TagId>,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, Some(expected)).await?;
         load_heap_tags(&txn, current.heap_id, &tags).await?;
         let edited = current.link_tags(tags)?;
         self.finish_edit(txn, &heap, role, principal, current, edited).await
@@ -187,10 +191,11 @@ impl Services {
     pub async fn archive_parameter(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         parameter_id: ParameterId,
     ) -> Result<ParameterEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, None).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, None).await?;
         let Some(edited) = current.archive(self.now()) else {
             return Ok(with_actions(current, &heap, role));
         };
@@ -213,6 +218,7 @@ impl Services {
     pub async fn archive_option(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         option_id: OptionId,
         replacement: Option<OptionId>,
     ) -> Result<ParameterEntry, ServiceError> {
@@ -220,7 +226,7 @@ impl Services {
         let parameter_id = store::parameters::find_option_parameter(&txn, option_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, None).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, None).await?;
         let now = self.now();
         // An option is only archived with a replacement, so a change always comes with one.
         let (Some(edited), Some(replaced_by)) = (current.archive_option(option_id, replacement, now)?, replacement)
@@ -342,15 +348,17 @@ fn with_actions(parameter: Parameter, heap: &Heap, role: Role) -> ParameterEntry
 
 /// Finds the parameter's heap, authorizes configuring it and locks the heap, then reads the parameter under its own
 /// lock, for the same reason as saved views (see `crate::saved_views`), and checks it is at version `expected` when
-/// given.
+/// given. A parameter of another heap than `heap_id` is [`ServiceError::NotFound`].
 async fn lock_for_write(
     txn: &DatabaseTransaction,
     principal: Principal,
+    heap_id: HeapId,
     parameter_id: ParameterId,
     expected: Option<Version>,
 ) -> Result<(Heap, Role, Parameter), ServiceError> {
     let found = store::parameters::find_parameter(txn, parameter_id)
         .await?
+        .filter(|parameter| parameter.heap_id == heap_id)
         .ok_or(ServiceError::NotFound)?;
     let access = authorize_heap_write(txn, principal, found.heap_id, Permission::ConfigureHeap).await?;
     let current = store::parameters::lock_parameter(txn, parameter_id)

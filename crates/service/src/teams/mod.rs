@@ -13,7 +13,7 @@ use domain::team::{Membership, Role, Team};
 use domain::user::User;
 use domain::{TeamId, Timestamp, UserId};
 #[cfg(feature = "accounts")]
-pub use manage::MemberAdded;
+pub use manage::{MemberAdded, TeamPatch};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError};
 use uuid::Uuid;
@@ -130,7 +130,7 @@ pub(super) async fn load_team_detail(
         })
         .collect();
     Ok(TeamDetail {
-        allowed_actions: allowed_team_actions(&memberships, principal.user_id),
+        allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id),
         role: caller.role,
         team,
         members,

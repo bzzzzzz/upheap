@@ -1,6 +1,6 @@
-//! How the ranked list is shown, in the API's terms: the query parameters of `GET /heaps/{id}/items` and the view a
-//! saved view stores. Both use the same names and values, so a client can turn a saved view into a list query
-//! field by field.
+//! How the ranked list is shown, in the API's terms: the query parameters of `GET /teams/{team}/heaps/{heap}/items`
+//! and the view a saved view stores. Both use the same names and values, so a client can turn a saved view into a
+//! list query field by field.
 
 use domain::item::Size;
 use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};

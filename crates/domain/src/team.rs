@@ -1,5 +1,6 @@
-//! Teams and membership. A team always keeps at least one admin.
+//! Teams and membership. A team always keeps at least one admin, and a personal team keeps exactly its owner.
 
+use crate::handle::Handle;
 use crate::text::Name;
 use crate::{TeamId, Timestamp, UserId, Version};
 
@@ -26,9 +27,28 @@ impl Role {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Team {
     pub id: TeamId,
+    /// Unique among teams. On a personal team it is the owner's username, and never changes.
+    pub slug: Handle,
     pub name: Name,
+    /// The user whose personal team this is. `None` for a shared team.
+    pub personal_user: Option<UserId>,
     pub created_at: Timestamp,
     pub version: Version,
+}
+
+impl Team {
+    /// A personal team is private to its owner: nobody joins it, its owner can't leave it, and its slug is fixed.
+    pub const fn is_personal(&self) -> bool {
+        self.personal_user.is_some()
+    }
+
+    /// Refuses a change only a shared team can take: adding or removing a member, leaving, or a new slug.
+    pub const fn ensure_shared(&self) -> Result<(), TeamError> {
+        if self.is_personal() {
+            return Err(TeamError::PersonalTeam { team_id: self.id });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,6 +64,8 @@ pub struct Membership {
 pub enum TeamError {
     #[error("team {team_id} would have no admin left; make another member an admin first")]
     LastAdmin { team_id: TeamId },
+    #[error("team {team_id} is a personal team, which only its owner belongs to")]
+    PersonalTeam { team_id: TeamId },
 }
 
 /// Whether the team whose memberships are `members` still has an admin once `user_id` gets `new_role`, or leaves
@@ -102,6 +124,26 @@ mod tests {
             ensure_admin_remains(team, &members, admin.user_id, Some(Role::Admin)),
             ok(eq(&()))
         );
+    }
+
+    #[gtest]
+    fn only_shared_teams_change_members_or_slug() {
+        let team_id = TeamId::from_uuid(Uuid::from_u128(1));
+        let shared = Team {
+            id: team_id,
+            slug: Handle::parse("ops", crate::validation::Field::Slug).expect("valid"),
+            name: Name::parse("Ops").expect("valid"),
+            personal_user: None,
+            created_at: Timestamp::EPOCH,
+            version: Version::INITIAL,
+        };
+        let personal = Team {
+            personal_user: Some(UserId::from_uuid(Uuid::from_u128(10))),
+            ..shared.clone()
+        };
+
+        expect_that!(shared.ensure_shared(), ok(eq(&())));
+        expect_that!(personal.ensure_shared(), err(eq(&TeamError::PersonalTeam { team_id })));
     }
 
     #[gtest]

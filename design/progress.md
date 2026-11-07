@@ -6,8 +6,9 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
-rate limiting. OIDC and CLI sign-in are not started. All 196 Rust tests pass (`cargo test --workspace`), the store and
-API suites also pass on MySQL 8.4, the 5 Playwright golden paths pass, and 6 against the local build, and the web typecheck and lint are clean. CI
+rate limiting, and readable handles in every URL. OIDC and CLI sign-in are not started. All 227 Rust tests pass
+(`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, the 15 Playwright tests pass at each of
+three widths, and 16 against the local build, and the web typecheck and lint are clean. CI
 runs all of them on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -17,7 +18,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Area | Spec | Status | Notes |
 | --- | --- | :---: | --- |
 | Local accounts: register, sign in, sign out | Off Auth §2–3 | ✅ | argon2id, hashed session tokens, CSRF header |
-| Personal team and heap on registration | Off Teams §3 | ✅ | |
+| Personal team and heap on registration | Off Teams §3 | ✅ | Named by the username; private to its owner, so it takes no members |
+| Readable IDs: usernames, slugs, item keys, short links | [readable-ids.md](readable-ids.md) | ✅ | `/teams/{team}/heaps/{heap}/items/{item}` in the app and the API, `/h/…` short links with Copy link, slugs editable on team and heap pages; a migration fills them in on existing data |
 | Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue |
 | Reopen within one week | Req Items §7 | ✅ | 7×24h, enforced on the server |
 | Ranking: age, deadline, value per effort, custom parameters | Req Priority §1–10 | 🟡 | Placeholder formula `V1` with blocker inheritance and custom parameters; the heap's own weights can't be changed yet |
@@ -35,6 +37,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history in the item pane and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI sign-in: OAuth with PKCE | Off Auth §4 | ⬜ | |
+| CLI: items, states, list, tags, heaps | [cli.md](cli.md) | ⬜ | Designed; needs CLI sign-in and the DTOs moved to `api-types` first |
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
@@ -46,7 +49,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 - [x] **Tags**
   - [x] `tags` and `item_tags` tables, name unique per heap ignoring case
-  - [x] `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}`; no delete. Items take `tag_ids` on create and edit.
+  - [x] `GET/POST …/heaps/{heap}/tags`, `PATCH …/tags/{tag_id}`; no delete. Items take `tag_ids` on create and edit.
   - [x] Take a tag off an item from the list (audited as `item_updated`)
   - [x] Tags in Add item; typing a new name creates the tag
   - [x] Manage tags view
@@ -80,11 +83,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [ ] Edit the heap's own weights (age, deadline, value)
 - [x] **Saved views**
   - [x] `saved_views` table with the list view as JSON; archived, never deleted
-  - [x] `GET/POST /heaps/{id}/views`, `PATCH /views/{id}`, `POST /views/{id}/archive`; any member, like tags
+  - [x] `GET/POST …/heaps/{heap}/views`, `PATCH …/views/{view_id}`, `POST …/views/{view_id}/archive`; any member, like tags
   - [x] Views bar on the heap page: open a view, save the current list as a view or into the open one, rename, archive
   - [x] Custom parameter filters and sort
 - [x] **Audit log reading**
-  - [x] `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, filtered by permission, with `entity_id=` and cursor paging
+  - [x] `GET /teams/{team}/heaps/{heap}/audit`, `GET /teams/{team}/audit`, filtered by permission, with `entity_id=` and cursor paging
   - [x] Changes described by the server, with current names for IDs
   - [x] History in the item pane and on tags, parameters, saved views, heaps and members; heap and team Activity pages
 - [ ] **Auth**

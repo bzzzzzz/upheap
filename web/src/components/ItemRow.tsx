@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import type { Item, ItemState, RankedItem } from "../api/client";
+import type { HeapRef, Item, ItemState, RankedItem } from "../api/client";
 import { SIZE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
@@ -32,9 +32,9 @@ export function focusFirstRow() {
   document.querySelector<HTMLElement>(`[${ROW_LINK}]`)?.focus();
 }
 
-/** Focuses the row of `itemId`, for when its item closes. */
-export function focusRowOf(itemId: string) {
-  document.querySelector<HTMLElement>(`[${ROW_LINK}="${CSS.escape(itemId)}"]`)?.focus();
+/** Focuses the row of the item with `key`, for when its item closes. */
+export function focusRowOf(key: string) {
+  document.querySelector<HTMLElement>(`[${ROW_LINK}="${CSS.escape(key)}"]`)?.focus();
 }
 
 /**
@@ -47,14 +47,14 @@ export function focusRowOf(itemId: string) {
  */
 export function ItemRow({
   entry,
-  heapId,
+  heapRef,
   selected,
   itemOpen,
   compact = false,
   onChangeState,
 }: {
   entry: RankedItem;
-  heapId: string;
+  heapRef: HeapRef;
   selected: boolean;
   itemOpen: boolean;
   compact?: boolean;
@@ -103,15 +103,15 @@ export function ItemRow({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {/* The link covers the whole row, under the state circle. */}
             <Link
-              to="/heaps/$heapId/items/$itemId"
-              params={{ heapId, itemId: item.id }}
+              to="/teams/$team/heaps/$heap/items/$item"
+              params={{ ...heapRef, item: item.key }}
               search={true}
               replace={itemOpen}
               state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
               onKeyDown={onKeyDown}
               // A swipe moves the row, not a dragged copy of the link.
               draggable={false}
-              {...{ [ROW_LINK]: item.id }}
+              {...{ [ROW_LINK]: item.key }}
               aria-current={selected ? "true" : undefined}
               className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
             >

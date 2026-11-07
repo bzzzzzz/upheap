@@ -24,6 +24,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 #[schema(as = User)]
 pub(crate) struct UserDto {
     pub id: Uuid,
+    /// Also the slug of the user's personal team. Never changes.
+    pub username: String,
     pub email: String,
     pub display_name: String,
     /// Send back in `If-Match` when changing the display name.
@@ -34,6 +36,7 @@ impl From<&User> for UserDto {
     fn from(user: &User) -> Self {
         Self {
             id: *user.id.as_uuid(),
+            username: user.username.to_string(),
             email: user.email.as_str().to_owned(),
             display_name: user.display_name.as_str().to_owned(),
             version: user.version.get(),
@@ -45,7 +48,11 @@ impl From<&User> for UserDto {
 #[schema(as = TeamSummary)]
 pub(crate) struct TeamDto {
     pub id: Uuid,
+    /// The team's path is `/teams/{slug}`.
+    pub slug: String,
     pub name: String,
+    /// Whether this is the caller's personal team, which is theirs alone.
+    pub personal: bool,
     /// The caller's role in this team.
     pub role: RoleDto,
     pub heaps: Vec<HeapSummaryDto>,
@@ -80,7 +87,9 @@ impl MeDto {
         };
         let team = |view: TeamView| TeamDto {
             id: *view.team.id.as_uuid(),
+            slug: view.team.slug.to_string(),
             name: view.team.name.as_str().to_owned(),
+            personal: view.team.is_personal(),
             role: view.role.into(),
             heaps: view.heaps.iter().map(HeapSummaryDto::from).collect(),
         };

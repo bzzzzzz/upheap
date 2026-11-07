@@ -6,7 +6,12 @@ import type { ItemRef, RankedItem } from "../api/client";
  */
 export function blockerCandidatesFor(entries: RankedItem[]): (itemId: string) => ItemRef[] {
   const waitsFor = new Map(entries.map(({ item }) => [item.id, item.blocked_by?.id]));
-  const refs: ItemRef[] = entries.map(({ item }) => ({ id: item.id, title: item.title, state: item.state }));
+  const refs: ItemRef[] = entries.map(({ item }) => ({
+    id: item.id,
+    key: item.key,
+    title: item.title,
+    state: item.state,
+  }));
   const reaches = (from: string, target: string) => {
     const seen = new Set<string>();
     for (let at: string | undefined = from; at !== undefined && !seen.has(at); at = waitsFor.get(at)) {

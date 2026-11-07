@@ -30,7 +30,7 @@ async fn the_local_user_is_signed_in_with_one_team_and_heap() -> Result<()> {
     expect_that!(teams[0]["role"].as_str(), some(eq("admin")));
     let heaps = teams[0]["heaps"].as_array().context("heaps")?;
     expect_that!(heaps.len(), eq(1));
-    expect_that!(heaps[0]["name"].as_str(), some(eq("My heap")));
+    expect_that!(heaps[0]["name"].as_str(), some(eq("Personal")));
     Ok(())
 }
 
@@ -43,9 +43,7 @@ async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
     let team = me.body["teams"][0]["id"].as_str().context("team")?.to_owned();
 
     // Act
-    let detail = app
-        .send(Method::GET, &format!("/api/v1/teams/{team}"), None, None)
-        .await?;
+    let detail = app.send(Method::GET, &app.team_url(&team).await?, None, None).await?;
 
     // Assert
     expect_that!(me.body["allowed_actions"], eq(&json!([])));
@@ -74,13 +72,18 @@ async fn the_local_user_works_in_their_heap_without_a_session() -> Result<()> {
     let created = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             None,
             Some(json!({ "title": "Water the plants", "effort": "s", "impact": "m" })),
         )
         .await?;
     let listed = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/items"), None, None)
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            None,
+            None,
+        )
         .await?;
 
     // Assert
@@ -98,7 +101,7 @@ async fn the_local_user_works_in_their_heap_without_a_session() -> Result<()> {
 async fn signing_in_is_not_offered_to_the_local_user() -> Result<()> {
     // Arrange
     let app = TestApp::start_local().await?;
-    let register = json!({ "email": "ada@example.test", "display_name": "Ada", "password": "correct horse battery" });
+    let register = json!({ "email": "ada@example.test", "username": "ada", "display_name": "Ada", "password": "correct horse battery" });
 
     // Act
     let registered = app

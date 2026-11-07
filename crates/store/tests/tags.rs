@@ -4,10 +4,12 @@
 //! `utf8mb4_bin` key.
 
 use anyhow::{Context, Result};
+use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::tag::{NewTag, Tag, TagName};
 use domain::team::Team;
 use domain::text::Name;
+use domain::validation::Field;
 use domain::{HeapId, TagId, TeamId, Timestamp, Version};
 use googletest::prelude::*;
 use store::{DatabaseConnection, StoreError};
@@ -18,7 +20,9 @@ async fn heap_in_new_database() -> Result<(DatabaseConnection, HeapId)> {
     let now = Timestamp::from_millis(0).context("in range")?;
     let team = Team {
         id: TeamId::from_uuid(Uuid::now_v7()),
+        slug: Handle::parse("team", Field::Slug)?,
         name: Name::parse("Team")?,
+        personal_user: None,
         created_at: now,
         version: Version::INITIAL,
     };
@@ -26,6 +30,7 @@ async fn heap_in_new_database() -> Result<(DatabaseConnection, HeapId)> {
     let heap = Heap {
         id: HeapId::from_uuid(Uuid::now_v7()),
         team_id: team.id,
+        slug: Handle::parse("heap", Field::Slug)?,
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         archived_at: None,

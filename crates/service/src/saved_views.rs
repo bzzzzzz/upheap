@@ -96,12 +96,13 @@ impl Services {
     pub async fn update_saved_view(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         view_id: SavedViewId,
         patch: SavedViewPatch,
         expected: Version,
     ) -> Result<SavedViewEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, view_id).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, view_id).await?;
         if current.is_archived() {
             return Err(ServiceError::SavedViewArchived { view_id });
         }
@@ -133,10 +134,11 @@ impl Services {
     pub async fn archive_saved_view(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         view_id: SavedViewId,
     ) -> Result<SavedViewEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, view_id).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, view_id).await?;
         if current.is_archived() {
             return Ok(with_actions(current, &heap, role));
         }
@@ -221,13 +223,16 @@ fn with_actions(view: SavedView, heap: &Heap, role: Role) -> SavedViewEntry {
 ///
 /// The first read only finds the heap. The view is read again under the lock, because on MySQL a plain read sees
 /// the snapshot from before the heap lock was granted, which can miss a write that committed while this one waited.
+/// A view of another heap than `heap_id` is [`ServiceError::NotFound`].
 async fn lock_for_write(
     txn: &DatabaseTransaction,
     principal: Principal,
+    heap_id: HeapId,
     view_id: SavedViewId,
 ) -> Result<(Heap, Role, SavedView), ServiceError> {
     let found = store::saved_views::find_saved_view(txn, view_id)
         .await?
+        .filter(|view| view.heap_id == heap_id)
         .ok_or(ServiceError::NotFound)?;
     let access = authorize_heap_write(txn, principal, found.heap_id, Permission::EditItems).await?;
     let current = store::saved_views::lock_saved_view(txn, view_id)

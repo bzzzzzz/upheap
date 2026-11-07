@@ -1,13 +1,13 @@
-import { Navigate } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
-import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem } from "../api/client";
+import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
 import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
+import { CopyLink } from "./CopyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { choiceButtonClass, ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
@@ -32,19 +32,19 @@ const CLOSE_SPEED = 600;
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  */
 export function ItemPane({
-  heapId,
-  itemId,
+  heapRef,
+  itemKey,
   entry,
   section,
   onClose,
 }: {
-  heapId: string;
-  itemId: string;
+  heapRef: HeapRef;
+  itemKey: string;
   entry: RankedItem | undefined;
   section: string | undefined;
   onClose: () => void;
 }) {
-  const item = useItem(itemId);
+  const item = useItem(heapRef, itemKey);
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
   const drag = useDragToClose(onClose);
@@ -52,7 +52,7 @@ export function ItemPane({
   // Focus moves to the item as it opens, so the keyboard carries on from there; Escape closes it (HeapPage).
   useEffect(() => {
     paneRef.current?.focus({ preventScroll: true });
-  }, [itemId]);
+  }, [itemKey]);
 
   let body: ReactNode;
   if (item.isPending) {
@@ -64,10 +64,8 @@ export function ItemPane({
         {missing ? "This item doesn't exist, or it's in a heap you can't see." : item.error.message}
       </p>
     );
-  } else if (item.data.heap_id !== heapId) {
-    body = <Navigate to="/heaps/$heapId/items/$itemId" params={{ heapId: item.data.heap_id, itemId }} replace />;
   } else {
-    body = <ItemFields key={item.data.id} item={item.data} entry={entry} />;
+    body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} />;
   }
 
   return (
@@ -102,6 +100,7 @@ export function ItemPane({
               </span>
             )}
           </h2>
+          <CopyLink handles={[heapRef.team, heapRef.heap, itemKey]} />
           <button
             type="button"
             onClick={onClose}
@@ -160,10 +159,10 @@ function useDragToClose(onClose: () => void) {
 }
 
 /** The item's fields, each saving on its own with the item's version in `If-Match`. */
-function ItemFields({ item, entry }: { item: Item; entry: RankedItem | undefined }) {
-  const update = useUpdateItem(item.heap_id);
-  const parameters = useParameters(item.heap_id);
-  const candidates = useBlockerCandidates(item.heap_id, item.state === "blocked");
+function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; entry: RankedItem | undefined }) {
+  const update = useUpdateItem(heapRef);
+  const parameters = useParameters(heapRef);
+  const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const descriptionId = useId();
 
   const closed = isClosed(item.state);
@@ -261,7 +260,7 @@ function ItemFields({ item, entry }: { item: Item; entry: RankedItem | undefined
       />
 
       <TagPicker
-        heapId={item.heap_id}
+        heapRef={heapRef}
         value={item.tags}
         disabled={!canEdit}
         onChange={(tags) => save({ tag_ids: tags.map((tag) => tag.id) })}
@@ -318,7 +317,7 @@ function ItemFields({ item, entry }: { item: Item; entry: RankedItem | undefined
 
       <section aria-label="History" className="flex flex-col gap-1.5 border-t border-line pt-4">
         <h3 className="text-xs font-medium text-ink-soft">History</h3>
-        <AuditHistory scope={{ heapId: item.heap_id }} entityId={item.id} />
+        <AuditHistory scope={{ heap: heapRef }} entityId={item.id} />
       </section>
     </div>
   );

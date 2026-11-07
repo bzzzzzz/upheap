@@ -2,8 +2,8 @@
 
 use axum::Json;
 use axum::extract::State;
+use domain::Timestamp;
 use domain::audit::{AuditAction, EntityType};
-use domain::{HeapId, TeamId, Timestamp};
 use serde::{Deserialize, Serialize};
 use service::audit_log::{AuditChange, AuditCursor, AuditEntryView, AuditPage, AuditRequest};
 use utoipa::{IntoParams, ToSchema};
@@ -12,7 +12,8 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::error::Problem;
-use crate::extract::{ApiPath, ApiQuery, ClientTimeZone, CurrentUser, TimeZoneHeader};
+use crate::extract::{ApiQuery, ClientTimeZone, TimeZoneHeader};
+use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -241,38 +242,36 @@ impl From<AuditPage> for AuditLogDto {
 
 /// What happened in a heap, newest first, as far as the caller may see: changes to items, tags and saved views
 /// for every member, and to the heap and its parameters for admins too.
-#[utoipa::path(get, path = "/heaps/{heap_id}/audit", tag = "audit", security(("session" = [])),
-    params(("heap_id" = Uuid, Path), AuditQueryDto, TimeZoneHeader),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/audit", tag = "audit", security(("session" = [])),
+    params(HeapParams, AuditQueryDto, TimeZoneHeader),
     responses((status = 200, body = AuditLogDto), (status = 400, description = "`invalid_cursor`", body = Problem), (status = 404, body = Problem)))]
 async fn list_heap_audit(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(heap_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<AuditQueryDto>,
 ) -> Result<Json<AuditLogDto>, ApiError> {
     let page = state
         .services
-        .list_heap_audit(principal, HeapId::from_uuid(heap_id), query.to_request()?, &tz)
+        .list_heap_audit(path.principal, path.heap.heap_id, query.to_request()?, &tz)
         .await?;
     Ok(Json(page.into()))
 }
 
 /// What happened to a team, newest first, as far as the caller may see: its name, members and display names, and
 /// its heaps being created, renamed and archived. Membership and heap changes are shown to admins only.
-#[utoipa::path(get, path = "/teams/{team_id}/audit", tag = "audit", security(("session" = [])),
-    params(("team_id" = Uuid, Path), AuditQueryDto, TimeZoneHeader),
+#[utoipa::path(get, path = "/teams/{team}/audit", tag = "audit", security(("session" = [])),
+    params(TeamParams, AuditQueryDto, TimeZoneHeader),
     responses((status = 200, body = AuditLogDto), (status = 400, description = "`invalid_cursor`", body = Problem), (status = 404, body = Problem)))]
 async fn list_team_audit(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: TeamPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(team_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<AuditQueryDto>,
 ) -> Result<Json<AuditLogDto>, ApiError> {
     let page = state
         .services
-        .list_team_audit(principal, TeamId::from_uuid(team_id), query.to_request()?, &tz)
+        .list_team_audit(path.principal, path.team_id, query.to_request()?, &tz)
         .await?;
     Ok(Json(page.into()))
 }

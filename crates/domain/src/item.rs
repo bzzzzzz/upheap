@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::handle::ItemKey;
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
 use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
@@ -255,6 +256,7 @@ impl ItemPatch {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemSummary {
     pub id: ItemId,
+    pub key: ItemKey,
     pub title: Title,
     pub state: ItemState,
 }
@@ -263,6 +265,7 @@ impl From<&Item> for ItemSummary {
     fn from(item: &Item) -> Self {
         Self {
             id: item.id,
+            key: item.key,
             title: item.title.clone(),
             state: item.state,
         }
@@ -273,6 +276,8 @@ impl From<&Item> for ItemSummary {
 pub struct Item {
     pub id: ItemId,
     pub heap_id: HeapId,
+    /// Unique within the heap.
+    pub key: ItemKey,
     pub title: Title,
     pub description: Option<Description>,
     pub state: ItemState,
@@ -292,10 +297,11 @@ pub struct Item {
 
 impl Item {
     /// A new open item created at `now`.
-    pub fn new(id: ItemId, heap_id: HeapId, fields: NewItem, now: Timestamp) -> Self {
+    pub fn new(id: ItemId, heap_id: HeapId, key: ItemKey, fields: NewItem, now: Timestamp) -> Self {
         Self {
             id,
             heap_id,
+            key,
             title: fields.title,
             description: fields.description,
             state: ItemState::Open,
@@ -423,6 +429,7 @@ mod tests {
         Item::new(
             ItemId::from_uuid(Uuid::nil()),
             HeapId::from_uuid(Uuid::nil()),
+            crate::handle::ItemKey::parse("k3x9a").expect("valid"),
             fields,
             at(0),
         )

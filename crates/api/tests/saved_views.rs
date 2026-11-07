@@ -20,7 +20,7 @@ async fn me(app: &TestApp, session: &str) -> Result<(String, String)> {
 async fn save_view(app: &TestApp, session: &str, heap: &str, body: Value) -> Result<common::TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/heaps/{heap}/views"),
+        &format!("{}/views", app.heap_url(&heap).await?),
         Some(session),
         Some(body),
     )
@@ -29,7 +29,12 @@ async fn save_view(app: &TestApp, session: &str, heap: &str, body: Value) -> Res
 
 async fn list_views(app: &TestApp, session: &str, heap: &str) -> Result<Value> {
     let list = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/views"), Some(session), None)
+        .send(
+            Method::GET,
+            &format!("{}/views", app.heap_url(&heap).await?),
+            Some(session),
+            None,
+        )
         .await?;
     anyhow::ensure!(list.status == StatusCode::OK, "list views failed: {}", list.body);
     Ok(list.body)
@@ -47,9 +52,10 @@ fn names(list: &Value) -> Vec<&str> {
 async fn a_saved_view_spells_out_every_setting_and_the_team_sees_it() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (session, heap) = app.register("ada@example.test").await?;
+    let (session, _) = app.register("ada@example.test").await?;
     let (member_session, _) = app.register("bob@example.test").await?;
-    let (ada, team) = me(&app, &session).await?;
+    let (ada, _) = me(&app, &session).await?;
+    let (team, heap) = app.shared_heap(&session).await?;
     let (bob, _) = me(&app, &member_session).await?;
     app.add_member(&team, &bob, Role::Member).await?;
     let ops = app.new_tag_id(&session, &heap, "ops").await?;
@@ -118,7 +124,7 @@ async fn editing_a_view_needs_its_current_version_and_is_audited() -> Result<()>
     let (session, heap) = app.register("ada@example.test").await?;
     let saved = save_view(&app, &session, &heap, json!({ "name": "Ready" })).await?;
     let id = saved.body["id"].as_str().context("view has no id")?.to_owned();
-    let path = format!("/api/v1/views/{id}");
+    let path = format!("{}/views/{id}", app.heap_url(&heap).await?);
 
     // Act
     let edited = app
@@ -169,7 +175,7 @@ async fn an_archived_view_leaves_the_list_and_cant_be_changed() -> Result<()> {
     let saved = save_view(&app, &session, &heap, json!({ "name": "Old" })).await?;
     save_view(&app, &session, &heap, json!({ "name": "Kept" })).await?;
     let id = saved.body["id"].as_str().context("view has no id")?.to_owned();
-    let archive = format!("/api/v1/views/{id}/archive");
+    let archive = format!("{}/views/{id}/archive", app.heap_url(&heap).await?);
 
     // Act
     let archived = app.send(Method::POST, &archive, Some(&session), None).await?;
@@ -178,7 +184,7 @@ async fn an_archived_view_leaves_the_list_and_cant_be_changed() -> Result<()> {
     let edit = app
         .patch(
             &session,
-            &format!("/api/v1/views/{id}"),
+            &format!("{}/views/{id}", app.heap_url(&heap).await?),
             &archived.body["version"],
             json!({ "name": "Back" }),
         )
@@ -211,7 +217,11 @@ async fn a_view_can_only_filter_by_tags_of_its_heap() -> Result<()> {
     let (other_session, other_heap) = app.register("bob@example.test").await?;
     let foreign = app.new_tag_id(&other_session, &other_heap, "theirs").await?;
     let saved = save_view(&app, &session, &heap, json!({ "name": "Mine" })).await?;
-    let path = format!("/api/v1/views/{}", saved.body["id"].as_str().unwrap_or_default());
+    let path = format!(
+        "{}/views/{}",
+        app.heap_url(&heap).await?,
+        saved.body["id"].as_str().unwrap_or_default()
+    );
 
     // Act
     let created = save_view(
@@ -298,7 +308,7 @@ async fn a_view_equal_to_the_saved_one_changes_nothing() -> Result<()> {
     )
     .await?;
     let id = saved.body["id"].as_str().context("view has no id")?.to_owned();
-    let path = format!("/api/v1/views/{id}");
+    let path = format!("{}/views/{id}", app.heap_url(&heap).await?);
 
     // Act
     let tagged = app

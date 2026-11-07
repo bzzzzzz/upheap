@@ -18,6 +18,8 @@ testing = ["sqlite", "mysql"]
 
 [dependencies]
 domain.workspace = true
+# Item keys for existing items, in the handles migration.
+getrandom.workspace = true
 sea-orm.workspace = true
 sea-orm-migration.workspace = true
 serde.workspace = true

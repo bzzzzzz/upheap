@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { useRegister, useSignIn } from "../api/queries";
 import { Field } from "../components/Field";
+import { problemMessage } from "../components/ProblemText";
 
 export function AuthPage() {
   const [mode, setMode] = useState<"sign_in" | "register">("sign_in");
@@ -21,7 +22,8 @@ export function AuthPage() {
     if (mode === "sign_in") {
       signIn.mutate({ email, password }, done);
     } else {
-      register.mutate({ email, password, display_name: String(form.get("display_name") ?? "") }, done);
+      const username = String(form.get("username") ?? "");
+      register.mutate({ email, username, password, display_name: String(form.get("display_name") ?? "") }, done);
     }
   };
 
@@ -31,6 +33,19 @@ export function AuthPage() {
       <p className="mb-8 text-sm text-stone-500">Add what comes up. The list keeps itself in order.</p>
       <form onSubmit={submit} className="flex flex-col gap-4" aria-describedby={error ? "auth-error" : undefined}>
         {mode === "register" && <Field label="Name" name="display_name" autoComplete="name" required />}
+        {mode === "register" && (
+          <Field
+            label="Username"
+            name="username"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            minLength={2}
+            maxLength={39}
+            hint="Lowercase letters, digits and dashes. It's in your links, and can't be changed later."
+            required
+          />
+        )}
         <Field label="Email" name="email" type="email" autoComplete="email" required />
         <Field
           label="Password"
@@ -42,7 +57,7 @@ export function AuthPage() {
         />
         {error && (
           <p id="auth-error" role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {error.message}
+            {problemMessage(error)}
           </p>
         )}
         <button

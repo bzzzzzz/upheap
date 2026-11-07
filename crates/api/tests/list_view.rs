@@ -20,7 +20,7 @@ async fn move_to(app: &TestApp, session: &str, item: &str, state: &str) -> Resul
     let moved = app
         .patch(
             session,
-            &format!("/api/v1/items/{item}"),
+            &app.item_url(&item).await?,
             &json!(1),
             json!({ "state": state }),
         )
@@ -32,7 +32,7 @@ async fn move_to(app: &TestApp, session: &str, item: &str, state: &str) -> Resul
 async fn list(app: &TestApp, session: &str, heap: &str, query: &str) -> Result<TestResponse> {
     app.send(
         Method::GET,
-        &format!("/api/v1/heaps/{heap}/items?{query}"),
+        &format!("{}/items?{query}", app.heap_url(&heap).await?),
         Some(session),
         None,
     )
@@ -191,7 +191,7 @@ async fn a_blocker_keeps_the_priority_of_a_blocked_item_that_is_filtered_out() -
     let blocked = app
         .patch(
             &session,
-            &format!("/api/v1/items/{urgent}"),
+            &app.item_url(&urgent).await?,
             &json!(1),
             json!({ "state": "blocked", "blocked_by_item_id": blocker }),
         )
@@ -329,7 +329,7 @@ async fn grouped_blocked_items_stay_in_priority_order_whatever_the_sort() -> Res
     let waits = app
         .patch(
             &session,
-            &format!("/api/v1/items/{small}"),
+            &app.item_url(&small).await?,
             &json!(1),
             json!({ "state": "blocked", "blocked_by_item_id": large }),
         )

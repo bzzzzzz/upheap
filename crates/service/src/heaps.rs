@@ -4,43 +4,77 @@
 //! that come after it see the heap archived ([`crate::access::authorize_heap_write`]).
 
 use domain::audit::{AuditAction, EntityType};
+use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::permission::{Permission, allowed_heap_actions};
 use domain::text::Name;
+use domain::validation::Field;
 use domain::{HeapId, TeamId, Timestamp, Version};
 use serde_json::json;
 use store::audit::NewAuditEntry;
 use store::{StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, authorize_team, ensure_active};
+use crate::error::handle_taken_on_duplicate;
+use crate::handles::{free_heap_slug, retry_derived_slug};
 use crate::teams::HeapView;
 use crate::{Principal, ServiceError, Services};
 
+/// A change to a heap's name and slug. `None` leaves it as it is.
+#[derive(Clone, Debug, Default)]
+pub struct HeapPatch {
+    pub name: Option<Name>,
+    pub slug: Option<Handle>,
+}
+
 impl Services {
-    /// Adds an active heap with the default ranking policy to the team.
+    /// Adds an active heap with the default ranking policy to the team. Without a `slug`, one is made from the name.
+    /// Fails with [`ServiceError::HandleTaken`] when another heap of the team has the slug.
     pub async fn create_heap(
         &self,
         principal: Principal,
         team_id: TeamId,
         name: Name,
+        slug: Option<Handle>,
+    ) -> Result<HeapView, ServiceError> {
+        let derived = slug.is_none();
+        retry_derived_slug(derived, || {
+            self.try_create_heap(principal, team_id, name.clone(), slug.clone())
+        })
+        .await
+    }
+
+    async fn try_create_heap(
+        &self,
+        principal: Principal,
+        team_id: TeamId,
+        name: Name,
+        slug: Option<Handle>,
     ) -> Result<HeapView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let membership = authorize_team(&txn, principal, team_id, Permission::ManageHeaps).await?;
+        let slug = match slug {
+            Some(slug) => slug,
+            None => free_heap_slug(&txn, team_id, &name).await?,
+        };
         let now = self.now();
         let heap = Heap {
             id: HeapId::from_uuid(self.new_id(now)),
             team_id,
+            slug,
             name,
             policy: HeapPolicy::default(),
             archived_at: None,
             version: Version::INITIAL,
         };
-        store::heaps::insert_heap(&txn, &heap, now).await?;
+        store::heaps::insert_heap(&txn, &heap, now)
+            .await
+            .map_err(|e| handle_taken_on_duplicate(e, Field::Slug))?;
         let entry = self.heap_audit_entry(
             principal,
             &heap,
             AuditAction::HeapCreated,
-            json!({ "name": heap.name.as_str() }),
+            json!({ "slug": heap.slug.as_str(), "name": heap.name.as_str() }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -62,13 +96,14 @@ impl Services {
         })
     }
 
-    /// Renames the heap if it is still at version `expected`. An archived heap is read-only, so renaming it fails
-    /// with [`ServiceError::HeapArchived`]. The same name succeeds without an audit entry.
-    pub async fn rename_heap(
+    /// Changes the heap's name or slug if it is still at version `expected`. An archived heap is read-only, so this
+    /// fails with [`ServiceError::HeapArchived`]. A patch that changes nothing succeeds without an audit entry. A
+    /// slug another heap of the team has fails with [`ServiceError::HandleTaken`].
+    pub async fn update_heap(
         &self,
         principal: Principal,
         heap_id: HeapId,
-        name: Name,
+        patch: HeapPatch,
         expected: Version,
     ) -> Result<HeapView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -82,23 +117,46 @@ impl Services {
             });
         }
         let role = access.membership.role;
-        if current.name == name {
+        let name = patch.name.filter(|name| *name != current.name);
+        let slug = patch.slug.filter(|slug| *slug != current.slug);
+        if name.is_none() && slug.is_none() {
             return Ok(HeapView {
                 allowed_actions: allowed_heap_actions(&current, role),
                 heap: current,
             });
         }
 
+        let mut diff = serde_json::Map::new();
+        if let Some(name) = &name {
+            diff.insert(
+                "name".into(),
+                json!({ "before": current.name.as_str(), "after": name.as_str() }),
+            );
+        }
+        if let Some(slug) = &slug {
+            diff.insert(
+                "slug".into(),
+                json!({ "before": current.slug.as_str(), "after": slug.as_str() }),
+            );
+        }
         let renamed = Heap {
-            name,
+            name: name.unwrap_or_else(|| current.name.clone()),
+            slug: slug.unwrap_or_else(|| current.slug.clone()),
             ..current.clone()
         };
         let now = self.now();
-        let diff = json!({ "name": { "before": current.name.as_str(), "after": renamed.name.as_str() } });
         let saved = self
-            .save_heap(txn, principal, &renamed, expected, AuditAction::HeapUpdated, diff, now)
+            .save_heap(
+                txn,
+                principal,
+                &renamed,
+                expected,
+                AuditAction::HeapUpdated,
+                diff.into(),
+                now,
+            )
             .await?;
-        tracing::info!(%heap_id, user_id = %principal.user_id, "heap renamed");
+        tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
         Ok(HeapView {
             allowed_actions: allowed_heap_actions(&saved, role),
             heap: saved,
@@ -170,7 +228,8 @@ impl Services {
         now: Timestamp,
     ) -> Result<Heap, ServiceError> {
         let saved = store::heaps::update_heap(&txn, heap, expected)
-            .await?
+            .await
+            .map_err(|e| handle_taken_on_duplicate(e, Field::Slug))?
             .ok_or(ServiceError::VersionConflict {
                 expected,
                 current: expected.next(),

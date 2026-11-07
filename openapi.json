@@ -114,7 +114,7 @@
             }
           },
           "409": {
-            "description": "`email_taken`",
+            "description": "`email_taken`, or `handle_taken` (`field` `username`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -124,7 +124,7 @@
             }
           },
           "422": {
-            "description": "Invalid email, name or password",
+            "description": "Invalid email, name or password, or `invalid_handle` with a `hint`",
             "content": {
               "application/json": {
                 "schema": {
@@ -186,36 +186,26 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}": {
+    "/api/v1/me": {
       "get": {
         "tags": [
-          "heaps"
+          "me"
         ],
-        "operationId": "get_heap",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
+        "summary": "The signed-in user with their teams and heaps.",
+        "operationId": "get_me",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Heap"
+                  "$ref": "#/components/schemas/Me"
                 }
               }
             }
           },
-          "404": {
-            "description": "",
+          "401": {
+            "description": "`unauthenticated`",
             "content": {
               "application/json": {
                 "schema": {
@@ -233,20 +223,11 @@
       },
       "patch": {
         "tags": [
-          "heaps"
+          "me"
         ],
-        "summary": "Renames the heap. Admins only; send the heap's `version` in `If-Match`.",
-        "operationId": "update_heap",
+        "summary": "Changes the signed-in user's display name. Send the user's `version` in `If-Match`.",
+        "operationId": "update_me",
         "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
           {
             "name": "If-Match",
             "in": "header",
@@ -261,7 +242,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NameRequest"
+                "$ref": "#/components/schemas/MePatchRequest"
               }
             }
           },
@@ -273,23 +254,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Heap"
+                  "$ref": "#/components/schemas/User"
                 }
               }
             }
           },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
+          "401": {
+            "description": "`unauthenticated`",
             "content": {
               "application/json": {
                 "schema": {
@@ -299,7 +270,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict` or `heap_archived`",
+            "description": "`version_conflict`",
             "content": {
               "application/json": {
                 "schema": {
@@ -336,22 +307,79 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}/archive": {
+    "/api/v1/teams": {
       "post": {
         "tags": [
-          "heaps"
+          "teams"
         ],
-        "summary": "Archives the heap, making it read-only for everyone. Admins only. Archiving an archived heap succeeds.",
-        "operationId": "archive_heap",
+        "summary": "Creates a team with the caller as its admin. The team starts without heaps.",
+        "operationId": "create_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNamedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`handle_taken` (`field` `slug`), by a team or a username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, or `invalid_handle` with a `hint`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}": {
+      "get": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "The team with its members and heaps.",
+        "operationId": "get_team",
         "parameters": [
           {
-            "name": "heap_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
           }
         ],
         "responses": {
@@ -360,7 +388,72 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Heap"
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Renames the team or changes its slug. Admins only; send the team's `version` in `If-Match`.",
+        "operationId": "update_team",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
                 }
               }
             }
@@ -384,6 +477,36 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "`version_conflict`, `handle_taken` (`field` `slug`) or `personal_team`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, or `invalid_handle` with a `hint`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -393,22 +516,23 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}/audit": {
+    "/api/v1/teams/{team}/audit": {
       "get": {
         "tags": [
           "audit"
         ],
-        "summary": "What happened in a heap, newest first, as far as the caller may see: changes to items, tags and saved views\nfor every member, and to the heap and its parameters for admins too.",
-        "operationId": "list_heap_audit",
+        "summary": "What happened to a team, newest first, as far as the caller may see: its name, members and display names, and\nits heaps being created, renamed and archived. Membership and heap changes are shown to admins only.",
+        "operationId": "list_team_audit",
         "parameters": [
           {
-            "name": "heap_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
           },
           {
             "name": "entity_id",
@@ -492,7 +616,445 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}/items": {
+    "/api/v1/teams/{team}/heaps": {
+      "post": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Adds a heap to the team. Admins only.",
+        "operationId": "create_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNamedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heap"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`handle_taken` (`field` `slug`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, or `invalid_handle` with a `hint`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}": {
+      "get": {
+        "tags": [
+          "heaps"
+        ],
+        "operationId": "get_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heap"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Renames the heap or changes its slug. Admins only; send the heap's `version` in `If-Match`.",
+        "operationId": "update_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeapPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heap"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `heap_archived` or `handle_taken` (`field` `slug`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, or `invalid_handle` with a `hint`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/archive": {
+      "post": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Archives the heap, making it read-only for everyone. Admins only. Archiving an archived heap succeeds.",
+        "operationId": "archive_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heap"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/audit": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "What happened in a heap, newest first, as far as the caller may see: changes to items, tags and saved views\nfor every member, and to the heap and its parameters for admins too.",
+        "operationId": "list_heap_audit",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "entity_id",
+            "in": "query",
+            "description": "Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for\na team, the team, one of its heaps, or a member.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` from the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200. Defaults to 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_cursor`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items": {
       "get": {
         "tags": [
           "items"
@@ -501,13 +1063,24 @@
         "operationId": "list_ranked",
         "parameters": [
           {
-            "name": "heap_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
           },
           {
             "name": "as_of",
@@ -701,13 +1274,24 @@
         "operationId": "create_item",
         "parameters": [
           {
-            "name": "heap_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
           },
           {
             "name": "Time-Zone",
@@ -781,7 +1365,7 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}/items/closed": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/closed": {
       "get": {
         "tags": [
           "items"
@@ -790,13 +1374,24 @@
         "operationId": "list_closed",
         "parameters": [
           {
-            "name": "heap_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
           },
           {
             "name": "cursor",
@@ -860,440 +1455,7 @@
         ]
       }
     },
-    "/api/v1/heaps/{heap_id}/parameters": {
-      "get": {
-        "tags": [
-          "parameters"
-        ],
-        "summary": "The heap's parameters. Any member may list them; only admins change them.",
-        "operationId": "list_parameters",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParameterList"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "parameters"
-        ],
-        "summary": "Adds a parameter to the heap. Admins only.",
-        "operationId": "create_parameter",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateParameterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Parameter"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`parameter_name_taken`, `option_label_taken` or `heap_archived`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/heaps/{heap_id}/tags": {
-      "get": {
-        "tags": [
-          "tags"
-        ],
-        "summary": "The heap's tags, by name.",
-        "operationId": "list_tags",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TagList"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "tags"
-        ],
-        "summary": "Adds a tag to the heap.",
-        "operationId": "create_tag",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTagRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Tag"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`tag_name_taken` or `heap_archived`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/heaps/{heap_id}/unarchive": {
-      "post": {
-        "tags": [
-          "heaps"
-        ],
-        "summary": "Makes an archived heap writable again. Admins only. Unarchiving an active heap succeeds.",
-        "operationId": "unarchive_heap",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Heap"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/heaps/{heap_id}/views": {
-      "get": {
-        "tags": [
-          "views"
-        ],
-        "summary": "The heap's saved views that are in use, by name.",
-        "operationId": "list_views",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedViewList"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "views"
-        ],
-        "summary": "Saves a view of the heap, shared with everyone in the team.",
-        "operationId": "create_view",
-        "parameters": [
-          {
-            "name": "heap_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSavedViewRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SavedView"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`heap_archived`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/items/{item_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}": {
       "get": {
         "tags": [
           "items"
@@ -1301,13 +1463,34 @@
         "operationId": "get_item",
         "parameters": [
           {
-            "name": "item_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
           },
           {
             "name": "Time-Zone",
@@ -1358,13 +1541,34 @@
         "operationId": "update_item",
         "parameters": [
           {
-            "name": "item_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
           },
           {
             "name": "If-Match",
@@ -1457,7 +1661,7 @@
         ]
       }
     },
-    "/api/v1/items/{item_id}/reopen": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen": {
       "post": {
         "tags": [
           "items"
@@ -1466,13 +1670,34 @@
         "operationId": "reopen_item",
         "parameters": [
           {
-            "name": "item_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
           },
           {
             "name": "If-Match",
@@ -1535,128 +1760,7 @@
         ]
       }
     },
-    "/api/v1/me": {
-      "get": {
-        "tags": [
-          "me"
-        ],
-        "summary": "The signed-in user with their teams and heaps.",
-        "operationId": "get_me",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Me"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthenticated`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "me"
-        ],
-        "summary": "Changes the signed-in user's display name. Send the user's `version` in `If-Match`.",
-        "operationId": "update_me",
-        "parameters": [
-          {
-            "name": "If-Match",
-            "in": "header",
-            "description": "The `version` of what is being edited, for example `\"3\"`.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MePatchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/User"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthenticated`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`version_conflict`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "428": {
-            "description": "`version_required`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/options/{option_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
       "post": {
         "tags": [
           "parameters"
@@ -1664,6 +1768,26 @@
         "summary": "Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep\nit. Admins only. Archiving an archived option succeeds.",
         "operationId": "archive_option",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "option_id",
             "in": "path",
@@ -1743,7 +1867,161 @@
         ]
       }
     },
-    "/api/v1/parameters/{parameter_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters": {
+      "get": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "The heap's parameters. Any member may list them; only admins change them.",
+        "operationId": "list_parameters",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Adds a parameter to the heap. Admins only.",
+        "operationId": "create_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateParameterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Parameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_name_taken`, `option_label_taken` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}": {
       "patch": {
         "tags": [
           "parameters"
@@ -1751,6 +2029,26 @@
         "summary": "Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`.",
         "operationId": "update_parameter",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "parameter_id",
             "in": "path",
@@ -1849,7 +2147,7 @@
         ]
       }
     },
-    "/api/v1/parameters/{parameter_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/archive": {
       "post": {
         "tags": [
           "parameters"
@@ -1857,6 +2155,26 @@
         "summary": "Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter\nsucceeds.",
         "operationId": "archive_parameter",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "parameter_id",
             "in": "path",
@@ -1916,7 +2234,7 @@
         ]
       }
     },
-    "/api/v1/parameters/{parameter_id}/options": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options": {
       "post": {
         "tags": [
           "parameters"
@@ -1924,6 +2242,26 @@
         "summary": "Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`.",
         "operationId": "add_option",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "parameter_id",
             "in": "path",
@@ -2029,6 +2367,26 @@
         "operationId": "arrange_options",
         "parameters": [
           {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
             "name": "parameter_id",
             "in": "path",
             "required": true,
@@ -2126,7 +2484,7 @@
         ]
       }
     },
-    "/api/v1/parameters/{parameter_id}/tags": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags": {
       "put": {
         "tags": [
           "parameters"
@@ -2134,6 +2492,26 @@
         "summary": "Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`.",
         "operationId": "link_tags",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "parameter_id",
             "in": "path",
@@ -2232,7 +2610,151 @@
         ]
       }
     },
-    "/api/v1/tags/{tag_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/tags": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "The heap's tags, by name.",
+        "operationId": "list_tags",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Adds a tag to the heap.",
+        "operationId": "create_tag",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tag_name_taken` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/tags/{tag_id}": {
       "patch": {
         "tags": [
           "tags"
@@ -2240,6 +2762,26 @@
         "summary": "Renames a tag or changes its description. Send the tag's `version` in `If-Match`.",
         "operationId": "update_tag",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "tag_id",
             "in": "path",
@@ -2328,332 +2870,37 @@
         ]
       }
     },
-    "/api/v1/teams": {
-      "post": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "Creates a team with the caller as its admin. The team starts without heaps.",
-        "operationId": "create_team",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/teams/{team_id}": {
-      "get": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "The team with its members and heaps.",
-        "operationId": "get_team",
-        "parameters": [
-          {
-            "name": "team_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "Renames the team. Admins only; send the team's `version` in `If-Match`.",
-        "operationId": "update_team",
-        "parameters": [
-          {
-            "name": "team_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "If-Match",
-            "in": "header",
-            "description": "The `version` of what is being edited, for example `\"3\"`.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`version_conflict`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "428": {
-            "description": "`version_required`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/teams/{team_id}/audit": {
-      "get": {
-        "tags": [
-          "audit"
-        ],
-        "summary": "What happened to a team, newest first, as far as the caller may see: its name, members and display names, and\nits heaps being created, renamed and archived. Membership and heap changes are shown to admins only.",
-        "operationId": "list_team_audit",
-        "parameters": [
-          {
-            "name": "team_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "entity_id",
-            "in": "query",
-            "description": "Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for\na team, the team, one of its heaps, or a member.",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "description": "`next_cursor` from the previous page.",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "Page size, 1 to 200. Defaults to 50.",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int64",
-              "minimum": 0
-            }
-          },
-          {
-            "name": "Time-Zone",
-            "in": "header",
-            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuditLog"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`invalid_cursor`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/teams/{team_id}/heaps": {
+    "/api/v1/teams/{team}/heaps/{heap}/unarchive": {
       "post": {
         "tags": [
           "heaps"
         ],
-        "summary": "Adds a heap to the team. Admins only.",
-        "operationId": "create_heap",
+        "summary": "Makes an archived heap writable again. Admins only. Unarchiving an active heap succeeds.",
+        "operationId": "unarchive_heap",
         "parameters": [
           {
-            "name": "team_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NameRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
-          "201": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -2682,16 +2929,6 @@
                 }
               }
             }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -2701,196 +2938,48 @@
         ]
       }
     },
-    "/api/v1/teams/{team_id}/leave": {
-      "post": {
+    "/api/v1/teams/{team}/heaps/{heap}/views": {
+      "get": {
         "tags": [
-          "teams"
+          "views"
         ],
-        "summary": "Leaves the team. The last admin can't leave until another member is an admin.",
-        "operationId": "leave_team",
+        "summary": "The heap's saved views that are in use, by name.",
+        "operationId": "list_views",
         "parameters": [
           {
-            "name": "team_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Left the team"
+              "type": "string"
+            },
+            "example": "my-team"
           },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`last_admin`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
           {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/teams/{team_id}/members": {
-      "post": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "Adds an existing user to the team as a member. Admins only. Answers `200` with the team unchanged when they are\nalready a member.",
-        "operationId": "add_member",
-        "parameters": [
-          {
-            "name": "team_id",
+            "name": "heap",
             "in": "path",
+            "description": "The heap's slug, unique within the team.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "backlog"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddMemberRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
-            "description": "Already a member",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "201": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/SavedViewList"
                 }
               }
             }
           },
           "404": {
             "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "`user_not_found`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/teams/{team_id}/members/{user_id}": {
-      "delete": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "Takes a user out of the team. Admins only. Removing someone who isn't a member succeeds.",
-        "operationId": "remove_member",
-        "parameters": [
-          {
-            "name": "team_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Removed"
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`last_admin`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2906,59 +2995,51 @@
           }
         ]
       },
-      "patch": {
+      "post": {
         "tags": [
-          "teams"
+          "views"
         ],
-        "summary": "Makes a member an admin, or an admin a member. Admins only.",
-        "operationId": "update_member",
+        "summary": "Saves a view of the heap, shared with everyone in the team.",
+        "operationId": "create_view",
         "parameters": [
           {
-            "name": "team_id",
+            "name": "team",
             "in": "path",
+            "description": "The team's slug.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "my-team"
           },
           {
-            "name": "user_id",
+            "name": "heap",
             "in": "path",
+            "description": "The heap's slug, unique within the team.",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
+              "type": "string"
+            },
+            "example": "backlog"
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MemberPatchRequest"
+                "$ref": "#/components/schemas/CreateSavedViewRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Team"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/SavedView"
                 }
               }
             }
@@ -2974,54 +3055,7 @@
             }
           },
           "409": {
-            "description": "`last_admin`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session": []
-          }
-        ]
-      }
-    },
-    "/api/v1/users": {
-      "get": {
-        "tags": [
-          "users"
-        ],
-        "summary": "Users with a word of their display name starting with `query`, or, when `query` is the start of an email address\nwith at least its local part, `@` and one character of the domain, users whose email starts with it. Only for\nadmins of some team, to add members.",
-        "operationId": "find_users",
-        "parameters": [
-          {
-            "name": "query",
-            "in": "query",
-            "description": "The start of a word of the display name, or the start of an email address up to at least `@` and one more\ncharacter. Ignores case. At least 3 characters.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserMatches"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller is no team's admin",
+            "description": "`heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3031,7 +3065,7 @@
             }
           },
           "422": {
-            "description": "`field_too_short`",
+            "description": "`tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name",
             "content": {
               "application/json": {
                 "schema": {
@@ -3048,7 +3082,7 @@
         ]
       }
     },
-    "/api/v1/views/{view_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/views/{view_id}": {
       "patch": {
         "tags": [
           "views"
@@ -3056,6 +3090,26 @@
         "summary": "Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`.",
         "operationId": "update_view",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "view_id",
             "in": "path",
@@ -3144,7 +3198,7 @@
         ]
       }
     },
-    "/api/v1/views/{view_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/views/{view_id}/archive": {
       "post": {
         "tags": [
           "views"
@@ -3152,6 +3206,26 @@
         "summary": "Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds.",
         "operationId": "archive_view",
         "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
           {
             "name": "view_id",
             "in": "path",
@@ -3185,6 +3259,369 @@
           },
           "409": {
             "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/leave": {
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Leaves the team. The last admin can't leave until another member is an admin.",
+        "operationId": "leave_team",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Left the team"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`last_admin` or `personal_team`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/members": {
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Adds an existing user to the team as a member. Admins only. Answers `200` with the team unchanged when they are\nalready a member.",
+        "operationId": "add_member",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Already a member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`personal_team`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`user_not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/members/{username}": {
+      "delete": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Takes a user out of the team. Admins only. Removing someone who isn't a member succeeds.",
+        "operationId": "remove_member",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "description": "The user's username, which needn't be a member's.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "eugene"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`last_admin` or `personal_team`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Makes a member an admin, or an admin a member. Admins only.",
+        "operationId": "update_member",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "username",
+            "in": "path",
+            "description": "The user's username, which needn't be a member's.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "eugene"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`last_admin`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "The user whose username is `query`, users with a word of their display name starting with `query`, or, when `query` is the start of an email address\nwith at least its local part, `@` and one character of the domain, users whose email starts with it. Only for\nadmins of some team, to add members.",
+        "operationId": "find_users",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "A username, the start of a word of the display name, or the start of an email address up to at least `@` and one more\ncharacter. Ignores case. At least 3 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserMatches"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is no team's admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_too_short`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3610,6 +4047,26 @@
           }
         }
       },
+      "CreateNamedRequest": {
+        "type": "object",
+        "description": "A new team or heap.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 100 characters."
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have\none made from the name: \"My Team\" gets `my-team`, or `my-team-2` if that is taken."
+          }
+        }
+      },
       "CreateParameterRequest": {
         "type": "object",
         "required": [
@@ -3782,6 +4239,7 @@
         "required": [
           "id",
           "team_id",
+          "slug",
           "name",
           "version",
           "allowed_actions"
@@ -3808,6 +4266,10 @@
           "name": {
             "type": "string"
           },
+          "slug": {
+            "type": "string",
+            "description": "Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`."
+          },
           "team_id": {
             "type": "string",
             "format": "uuid"
@@ -3830,11 +4292,32 @@
           "view_history"
         ]
       },
+      "HeapPatchRequest": {
+        "type": "object",
+        "description": "A change to a heap. Leave a field out to keep it.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1 to 100 characters."
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old\nslug stop working."
+          }
+        }
+      },
       "HeapSummary": {
         "type": "object",
         "required": [
           "id",
           "team_id",
+          "slug",
           "name",
           "archived"
         ],
@@ -3849,6 +4332,10 @@
           "name": {
             "type": "string"
           },
+          "slug": {
+            "type": "string",
+            "description": "Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`."
+          },
           "team_id": {
             "type": "string",
             "format": "uuid"
@@ -3859,6 +4346,7 @@
         "type": "object",
         "required": [
           "id",
+          "key",
           "heap_id",
           "title",
           "state",
@@ -3951,6 +4439,11 @@
                 "description": "`null` when unset."
               }
             ]
+          },
+          "key": {
+            "type": "string",
+            "description": "Five characters, unique within the heap and never changed; the item's path is `…/items/{key}`.",
+            "example": "k3x9a"
           },
           "parameters": {
             "type": "array",
@@ -4138,6 +4631,7 @@
         "description": "Another item, named where this one refers to it.",
         "required": [
           "id",
+          "key",
           "title",
           "state"
         ],
@@ -4145,6 +4639,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Unique within the heap; the item's path is `…/items/{key}`."
           },
           "state": {
             "$ref": "#/components/schemas/ItemState"
@@ -4439,19 +4937,6 @@
           }
         }
       },
-      "NameRequest": {
-        "type": "object",
-        "description": "A team or heap name.",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "1 to 100 characters."
-          }
-        }
-      },
       "OptionArrangement": {
         "type": "object",
         "description": "One option of a new arrangement.",
@@ -4655,6 +5140,13 @@
             ],
             "description": "The input field the error is about, when there is one."
           },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`."
+          },
           "request_id": {
             "type": [
               "string",
@@ -4751,6 +5243,7 @@
         "type": "object",
         "required": [
           "email",
+          "username",
           "display_name",
           "password"
         ],
@@ -4763,6 +5256,11 @@
           },
           "password": {
             "type": "string"
+          },
+          "username": {
+            "type": "string",
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of\nthe personal team, and can't be changed later.",
+            "example": "eugene"
           }
         }
       },
@@ -4822,7 +5320,7 @@
           },
           "view": {
             "$ref": "#/components/schemas/ListView",
-            "description": "What the view shows. The fields are the query parameters of `GET /heaps/{heap_id}/items`."
+            "description": "What the view shows. The fields are the query parameters of `GET /teams/{team}/heaps/{heap}/items`."
           }
         }
       },
@@ -5028,7 +5526,9 @@
         "description": "A team with its members and heaps, as the caller sees it.",
         "required": [
           "id",
+          "slug",
           "name",
+          "personal",
           "version",
           "role",
           "members",
@@ -5063,9 +5563,17 @@
           "name": {
             "type": "string"
           },
+          "personal": {
+            "type": "boolean",
+            "description": "Whether this is the caller's personal team: theirs alone, with their username as its slug."
+          },
           "role": {
             "$ref": "#/components/schemas/Role",
             "description": "The caller's role."
+          },
+          "slug": {
+            "type": "string",
+            "description": "Unique among teams and usernames; the team's path is `/teams/{slug}`."
           },
           "version": {
             "type": "integer",
@@ -5080,6 +5588,7 @@
         "description": "An action the caller can take on a team.",
         "enum": [
           "rename",
+          "change_slug",
           "add_member",
           "create_heap",
           "leave"
@@ -5089,6 +5598,7 @@
         "type": "object",
         "required": [
           "user_id",
+          "username",
           "display_name",
           "email",
           "role",
@@ -5119,6 +5629,30 @@
           "user_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "username": {
+            "type": "string",
+            "description": "The member's path is `/teams/{team}/members/{username}`."
+          }
+        }
+      },
+      "TeamPatchRequest": {
+        "type": "object",
+        "description": "A change to a team. Leave a field out to keep it.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "1 to 100 characters."
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with\n`personal_team` on a personal team. Links with the old slug stop working."
           }
         }
       },
@@ -5126,7 +5660,9 @@
         "type": "object",
         "required": [
           "id",
+          "slug",
           "name",
+          "personal",
           "role",
           "heaps"
         ],
@@ -5144,9 +5680,17 @@
           "name": {
             "type": "string"
           },
+          "personal": {
+            "type": "boolean",
+            "description": "Whether this is the caller's personal team, which is theirs alone."
+          },
           "role": {
             "$ref": "#/components/schemas/Role",
             "description": "The caller's role in this team."
+          },
+          "slug": {
+            "type": "string",
+            "description": "The team's path is `/teams/{slug}`."
           }
         }
       },
@@ -5154,6 +5698,7 @@
         "type": "object",
         "required": [
           "id",
+          "username",
           "email",
           "display_name",
           "version"
@@ -5169,6 +5714,10 @@
             "type": "string",
             "format": "uuid"
           },
+          "username": {
+            "type": "string",
+            "description": "Also the slug of the user's personal team. Never changes."
+          },
           "version": {
             "type": "integer",
             "format": "int32",
@@ -5182,6 +5731,7 @@
         "description": "Only what an admin needs to pick the right person.",
         "required": [
           "id",
+          "username",
           "display_name"
         ],
         "properties": {
@@ -5198,6 +5748,9 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "username": {
+            "type": "string"
           }
         }
       },

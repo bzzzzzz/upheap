@@ -30,6 +30,8 @@ enum Access {
     Heap { permission: Permission, writes: bool },
     /// Members of the team holding `permission`.
     Team { permission: Permission },
+    /// Callers holding `permission` in some shared team. The outsider holds it only in their personal team.
+    SharedTeam { permission: Permission },
 }
 
 /// What a request needs to exist before it is sent.
@@ -54,7 +56,7 @@ enum Target {
     FreshSession,
     /// The shared team, with its version for `If-Match`.
     Team,
-    /// A new user, added to the shared team as a member, in `{user_id}`.
+    /// A new user, added to the shared team as a member, in `{username}`.
     ExtraMember,
     /// A new user who isn't in the shared team yet, for the request body.
     NewUser,
@@ -110,7 +112,7 @@ struct Endpoint {
 }
 
 fn endpoints() -> Vec<Endpoint> {
-    use Access::{Heap, Public, SignedIn, Team};
+    use Access::{Heap, Public, SharedTeam, SignedIn, Team};
     use Permission::{ConfigureHeap, EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
@@ -191,7 +193,9 @@ fn endpoints() -> Vec<Endpoint> {
         row(
             Method::GET,
             "/users",
-            SignedIn,
+            SharedTeam {
+                permission: Permission::ManageTeam,
+            },
             Target::UserQuery,
             RequestBody::Empty,
             StatusCode::OK,
@@ -206,7 +210,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/teams/{team_id}",
+            "/teams/{team}",
             team(ViewTeam),
             Target::Nothing,
             RequestBody::Empty,
@@ -214,7 +218,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/teams/{team_id}/audit",
+            "/teams/{team}/audit",
             team(ViewTeam),
             Target::Nothing,
             RequestBody::Empty,
@@ -222,7 +226,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/teams/{team_id}",
+            "/teams/{team}",
             team(ManageTeam),
             Target::Team,
             RequestBody::Name,
@@ -230,7 +234,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/teams/{team_id}/members",
+            "/teams/{team}/members",
             team(ManageTeam),
             Target::NewUser,
             RequestBody::AddMember,
@@ -238,7 +242,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/teams/{team_id}/members/{user_id}",
+            "/teams/{team}/members/{username}",
             team(ManageTeam),
             Target::ExtraMember,
             RequestBody::Promote,
@@ -246,7 +250,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::DELETE,
-            "/teams/{team_id}/members/{user_id}",
+            "/teams/{team}/members/{username}",
             team(ManageTeam),
             Target::ExtraMember,
             RequestBody::Empty,
@@ -254,7 +258,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/teams/{team_id}/leave",
+            "/teams/{team}/leave",
             team(LeaveTeam),
             Target::FreshTeam,
             RequestBody::Empty,
@@ -262,7 +266,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/teams/{team_id}/heaps",
+            "/teams/{team}/heaps",
             team(ManageHeaps),
             Target::Nothing,
             RequestBody::Name,
@@ -270,7 +274,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}",
+            "/teams/{team}/heaps/{heap}",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -278,7 +282,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/heaps/{heap_id}",
+            "/teams/{team}/heaps/{heap}",
             manage_heap(true),
             Target::HeapVersion,
             RequestBody::Name,
@@ -287,7 +291,7 @@ fn endpoints() -> Vec<Endpoint> {
         // Archiving and unarchiving say what the heap should end up as, so they succeed on an archived heap too.
         row(
             Method::POST,
-            "/heaps/{heap_id}/archive",
+            "/teams/{team}/heaps/{heap}/archive",
             manage_heap(false),
             Target::FreshHeap,
             RequestBody::Empty,
@@ -295,7 +299,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/heaps/{heap_id}/unarchive",
+            "/teams/{team}/heaps/{heap}/unarchive",
             manage_heap(false),
             Target::FreshHeap,
             RequestBody::Empty,
@@ -303,7 +307,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/items",
+            "/teams/{team}/heaps/{heap}/items",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -311,7 +315,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/items/closed",
+            "/teams/{team}/heaps/{heap}/items/closed",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -319,7 +323,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/audit",
+            "/teams/{team}/heaps/{heap}/audit",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -327,7 +331,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/heaps/{heap_id}/items",
+            "/teams/{team}/heaps/{heap}/items",
             edit,
             Target::Heap,
             RequestBody::NewItem,
@@ -335,7 +339,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/items/{item_id}",
+            "/teams/{team}/heaps/{heap}/items/{item}",
             view,
             Target::OpenItem,
             RequestBody::Empty,
@@ -343,7 +347,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/items/{item_id}",
+            "/teams/{team}/heaps/{heap}/items/{item}",
             edit,
             Target::OpenItem,
             RequestBody::Rename,
@@ -351,7 +355,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/items/{item_id}/reopen",
+            "/teams/{team}/heaps/{heap}/items/{item}/reopen",
             edit,
             Target::ClosedItem,
             RequestBody::Empty,
@@ -359,7 +363,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/tags",
+            "/teams/{team}/heaps/{heap}/tags",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -367,7 +371,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/heaps/{heap_id}/tags",
+            "/teams/{team}/heaps/{heap}/tags",
             edit,
             Target::Heap,
             RequestBody::NewTag,
@@ -375,7 +379,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/tags/{tag_id}",
+            "/teams/{team}/heaps/{heap}/tags/{tag_id}",
             edit,
             Target::Tag,
             RequestBody::RenameTag,
@@ -383,7 +387,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/views",
+            "/teams/{team}/heaps/{heap}/views",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -391,7 +395,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/heaps/{heap_id}/views",
+            "/teams/{team}/heaps/{heap}/views",
             edit,
             Target::Heap,
             RequestBody::NewView,
@@ -399,7 +403,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/views/{view_id}",
+            "/teams/{team}/heaps/{heap}/views/{view_id}",
             edit,
             Target::SavedView,
             RequestBody::Name,
@@ -407,7 +411,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/views/{view_id}/archive",
+            "/teams/{team}/heaps/{heap}/views/{view_id}/archive",
             edit,
             Target::SavedView,
             RequestBody::Empty,
@@ -415,7 +419,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/heaps/{heap_id}/parameters",
+            "/teams/{team}/heaps/{heap}/parameters",
             view,
             Target::Heap,
             RequestBody::Empty,
@@ -423,7 +427,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/heaps/{heap_id}/parameters",
+            "/teams/{team}/heaps/{heap}/parameters",
             configure,
             Target::Heap,
             RequestBody::NewParameter,
@@ -431,7 +435,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/parameters/{parameter_id}",
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}",
             configure,
             Target::Parameter,
             RequestBody::NewParameter,
@@ -439,7 +443,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/parameters/{parameter_id}/archive",
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/archive",
             configure,
             Target::Parameter,
             RequestBody::Empty,
@@ -447,7 +451,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/parameters/{parameter_id}/options",
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options",
             configure,
             Target::Parameter,
             RequestBody::NewOption,
@@ -455,7 +459,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PATCH,
-            "/parameters/{parameter_id}/options",
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options",
             configure,
             Target::Parameter,
             RequestBody::ArrangeOptions,
@@ -463,7 +467,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::PUT,
-            "/parameters/{parameter_id}/tags",
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags",
             configure,
             Target::Parameter,
             RequestBody::LinkTags,
@@ -471,7 +475,7 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
-            "/options/{option_id}/archive",
+            "/teams/{team}/heaps/{heap}/options/{option_id}/archive",
             configure,
             Target::ParameterOption,
             RequestBody::ArchiveOption,
@@ -523,12 +527,20 @@ impl Outcome {
 fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outcome {
     let (permission, writes) = match endpoint.access {
         Access::Public => return Outcome::success(endpoint.success),
-        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } if matches!(caller, Caller::Anonymous) => {
+        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. }
+            if matches!(caller, Caller::Anonymous) =>
+        {
             return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated");
         }
         Access::SignedIn => return Outcome::success(endpoint.success),
         Access::Heap { permission, writes } => (permission, writes),
         Access::Team { permission } => (permission, false),
+        Access::SharedTeam { permission } => {
+            if matches!(caller, Caller::Outsider) {
+                return Outcome::problem(StatusCode::FORBIDDEN, "forbidden");
+            }
+            (permission, false)
+        }
     };
     let role = match caller {
         Caller::Anonymous => return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated"),
@@ -559,6 +571,9 @@ struct World {
     outsider: Account,
     team: String,
     heap: String,
+    /// The shared team's and heap's slugs, for `{team}` and `{heap}`.
+    team_slug: String,
+    heap_slug: String,
     /// Counter for names that must be unique: emails and tag names.
     unique_names: AtomicU32,
 }
@@ -566,15 +581,31 @@ struct World {
 impl World {
     async fn build() -> Result<Self> {
         let app = TestApp::start().await?;
-        let (admin_session, heap) = app.register("admin@example.test").await?;
+        let (admin_session, _) = app.register("admin@example.test").await?;
         let (member_session, _) = app.register("member@example.test").await?;
         let (outsider_session, _) = app.register("outsider@example.test").await?;
 
-        let admin_me = app.send(Method::GET, "/api/v1/me", Some(&admin_session), None).await?;
-        let team = admin_me.body["teams"][0]["id"]
-            .as_str()
-            .context("admin has no team")?
-            .to_owned();
+        // A personal team takes no members, so the shared team is one of its own.
+        let created = app
+            .send(
+                Method::POST,
+                "/api/v1/teams",
+                Some(&admin_session),
+                Some(json!({ "name": "Shared" })),
+            )
+            .await?;
+        let team = created.body["id"].as_str().context("team has no id")?.to_owned();
+        let team_slug = created.body["slug"].as_str().context("team has no slug")?.to_owned();
+        let created = app
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{team_slug}/heaps"),
+                Some(&admin_session),
+                Some(json!({ "name": "Shared" })),
+            )
+            .await?;
+        let heap = created.body["id"].as_str().context("heap has no id")?.to_owned();
+        let heap_slug = created.body["slug"].as_str().context("heap has no slug")?.to_owned();
         let member_id = user_id(&app, &member_session).await?;
         app.add_member(&team, &member_id, Role::Member).await?;
 
@@ -594,6 +625,8 @@ impl World {
             },
             team,
             heap,
+            team_slug,
+            heap_slug,
             unique_names: AtomicU32::new(0),
         })
     }
@@ -607,26 +640,31 @@ impl World {
         }
     }
 
-    /// Creates an item as the admin, closing it when `closed`, and returns its ID and version.
+    /// The shared heap's path under `/api/v1`.
+    fn heap_path(&self) -> String {
+        format!("/api/v1/teams/{}/heaps/{}", self.team_slug, self.heap_slug)
+    }
+
+    /// Creates an item as the admin, closing it when `closed`, and returns its key and version.
     async fn create_item(&self, closed: bool) -> Result<(String, String)> {
         let created = self
             .app
             .send(
                 Method::POST,
-                &format!("/api/v1/heaps/{}/items", self.heap),
+                &format!("{}/items", self.heap_path()),
                 Some(&self.admin.session),
                 Some(json!({ "title": "Target" })),
             )
             .await?;
-        let id = created.body["id"].as_str().context("item has no id")?.to_owned();
+        let key = created.body["key"].as_str().context("item has no key")?.to_owned();
         if !closed {
-            return Ok((id, created.body["version"].to_string()));
+            return Ok((key, created.body["version"].to_string()));
         }
         let done = self
             .app
             .send_with(
                 Method::PATCH,
-                &format!("/api/v1/items/{id}"),
+                &format!("{}/items/{key}", self.heap_path()),
                 Some(&self.admin.session),
                 Some(json!({ "state": "done" })),
                 &[
@@ -635,7 +673,7 @@ impl World {
                 ],
             )
             .await?;
-        Ok((id, done.body["version"].to_string()))
+        Ok((key, done.body["version"].to_string()))
     }
 
     /// Creates a tag as the admin and returns its ID and version.
@@ -644,7 +682,7 @@ impl World {
             .app
             .send(
                 Method::POST,
-                &format!("/api/v1/heaps/{}/tags", self.heap),
+                &format!("{}/tags", self.heap_path()),
                 Some(&self.admin.session),
                 Some(json!({ "name": self.unique_name("target") })),
             )
@@ -659,7 +697,7 @@ impl World {
             .app
             .send(
                 Method::POST,
-                &format!("/api/v1/heaps/{}/views", self.heap),
+                &format!("{}/views", self.heap_path()),
                 Some(&self.admin.session),
                 Some(json!({ "name": "Target" })),
             )
@@ -674,7 +712,7 @@ impl World {
             .app
             .send(
                 Method::POST,
-                &format!("/api/v1/heaps/{}/parameters", self.heap),
+                &format!("{}/parameters", self.heap_path()),
                 Some(&self.admin.session),
                 Some(json!({ "name": self.unique_name("target"), "options": ["High", "Low"] })),
             )
@@ -695,14 +733,19 @@ impl World {
         Ok((session, id))
     }
 
-    /// Adds a new user to the shared team as a member and returns their ID.
+    /// Adds a new user to the shared team as a member and returns their username.
     async fn new_member(&self) -> Result<String> {
-        let (_, id) = self.new_user().await?;
+        let (session, id) = self.new_user().await?;
         self.app.add_member(&self.team, &id, Role::Member).await?;
-        Ok(id)
+        let me = self.app.send(Method::GET, "/api/v1/me", Some(&session), None).await?;
+        Ok(me.body["user"]["username"]
+            .as_str()
+            .context("user has no username")?
+            .to_owned())
     }
 
     /// A new team whose admins are a new user and the shared team's admin, with the shared team's member in it.
+    /// Returns its slug.
     async fn new_team(&self) -> Result<String> {
         let (owner, _) = self.new_user().await?;
         let created = self
@@ -719,21 +762,21 @@ impl World {
         let member_id = user_id(&self.app, &self.member.session).await?;
         self.app.add_member(&team, &admin_id, Role::Admin).await?;
         self.app.add_member(&team, &member_id, Role::Member).await?;
-        Ok(team)
+        Ok(created.body["slug"].as_str().context("team has no slug")?.to_owned())
     }
 
-    /// A new heap in the shared team, created by its admin.
+    /// A new heap in the shared team, created by its admin. Returns its slug.
     async fn new_heap(&self) -> Result<String> {
         let created = self
             .app
             .send(
                 Method::POST,
-                &format!("/api/v1/teams/{}/heaps", self.team),
+                &format!("/api/v1/teams/{}/heaps", self.team_slug),
                 Some(&self.admin.session),
                 Some(json!({ "name": "Fresh" })),
             )
             .await?;
-        Ok(created.body["id"].as_str().context("heap has no id")?.to_owned())
+        Ok(created.body["slug"].as_str().context("heap has no slug")?.to_owned())
     }
 
     fn unique_name(&self, prefix: &str) -> String {
@@ -759,8 +802,9 @@ impl World {
         match body {
             RequestBody::Empty => None,
             RequestBody::Registration => {
-                let email = format!("{}@example.test", self.unique_name("new"));
-                Some(json!({ "email": email, "display_name": "New", "password": PASSWORD }))
+                let username = self.unique_name("new");
+                let email = format!("{username}@example.test");
+                Some(json!({ "email": email, "username": username, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
             RequestBody::NewItem => Some(json!({ "title": "New" })),
@@ -790,8 +834,8 @@ impl World {
         let mut session = account.map(|a| a.session.clone());
         let mut path = endpoint
             .path
-            .replace("{heap_id}", &self.heap)
-            .replace("{team_id}", &self.team);
+            .replace("{heap}", &self.heap_slug)
+            .replace("{team}", &self.team_slug);
         let mut if_match = None;
         let mut new_user = None;
         let mut parameter = Value::Null;
@@ -800,31 +844,31 @@ impl World {
             Target::HeapVersion => {
                 let heap = self
                     .app
-                    .send(
-                        Method::GET,
-                        &format!("/api/v1/heaps/{}", self.heap),
-                        Some(&self.admin.session),
-                        None,
-                    )
+                    .send(Method::GET, &self.heap_path(), Some(&self.admin.session), None)
                     .await?;
                 if_match = Some(heap.body["version"].to_string());
             }
-            Target::FreshHeap => path = endpoint.path.replace("{heap_id}", &self.new_heap().await?),
+            Target::FreshHeap => {
+                path = endpoint
+                    .path
+                    .replace("{heap}", &self.new_heap().await?)
+                    .replace("{team}", &self.team_slug);
+            }
             Target::Team => {
                 let team = self
                     .app
                     .send(
                         Method::GET,
-                        &format!("/api/v1/teams/{}", self.team),
+                        &format!("/api/v1/teams/{}", self.team_slug),
                         Some(&self.admin.session),
                         None,
                     )
                     .await?;
                 if_match = Some(team.body["version"].to_string());
             }
-            Target::ExtraMember => path = path.replace("{user_id}", &self.new_member().await?),
+            Target::ExtraMember => path = path.replace("{username}", &self.new_member().await?),
             Target::NewUser => new_user = Some(self.new_user().await?.1),
-            Target::FreshTeam => path = endpoint.path.replace("{team_id}", &self.new_team().await?),
+            Target::FreshTeam => path = endpoint.path.replace("{team}", &self.new_team().await?),
             Target::Me => {
                 if let Some(session) = &session {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
@@ -833,8 +877,8 @@ impl World {
             }
             Target::UserQuery => path.push_str("?query=example"),
             Target::OpenItem | Target::ClosedItem => {
-                let (id, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
-                path = path.replace("{item_id}", &id);
+                let (key, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
+                path = path.replace("{item}", &key);
                 if_match = Some(version);
             }
             Target::Tag => {

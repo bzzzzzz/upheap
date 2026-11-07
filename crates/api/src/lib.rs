@@ -22,6 +22,7 @@ mod items;
 mod list_view;
 mod me;
 mod parameters;
+mod paths;
 mod request_id;
 mod tags;
 mod teams;

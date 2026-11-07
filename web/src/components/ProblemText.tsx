@@ -16,10 +16,15 @@ const MESSAGES: Record<string, string> = {
   parameter_archived: "Someone archived this parameter, so it can't be changed.",
   weight_out_of_range: "The weight goes from 0 to 100.",
   too_many_options: "A parameter can have at most 50 options.",
+  handle_taken: "That's taken. Pick another.",
+  invalid_handle: "Use lowercase letters, digits and single dashes, starting with a letter.",
+  personal_team: "A personal team is yours alone, so nobody can join it and its link stays the same.",
 };
 
 export function problemMessage(error: Error): string {
-  return (error instanceof ApiProblem && MESSAGES[error.code]) || error.message;
+  const message = (error instanceof ApiProblem && MESSAGES[error.code]) || error.message;
+  // A handle the server would take, such as `my-team` for `My-Team`.
+  return error instanceof ApiProblem && error.hint ? `${message} Try “${error.hint}”.` : message;
 }
 
 export function ProblemText({ error }: { error: Error | null }) {

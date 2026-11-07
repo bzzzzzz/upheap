@@ -44,9 +44,15 @@ export type DueInput = Schemas["DueInput"];
 export type DueChoice = Schemas["DueChoice"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
-  NonNullable<paths["/api/v1/heaps/{heap_id}/items"]["get"]["parameters"]["query"]>,
+  NonNullable<paths["/api/v1/teams/{team}/heaps/{heap}/items"]["get"]["parameters"]["query"]>,
   "as_of"
 >;
+
+/**
+ * A heap as paths name it: its team's slug and its own (design/readable-ids.md). It is exactly the path parameters
+ * of the heap's API routes, so it goes into `params.path` as it is.
+ */
+export type HeapRef = { team: string; heap: string };
 type Problem = Schemas["Problem"];
 
 /** A failed API call. Branch on `code`, never on `message`. */
@@ -54,12 +60,15 @@ export class ApiProblem extends Error {
   readonly status: number;
   readonly code: string;
   readonly field: string | undefined;
+  /** A value of `field` the server would accept, such as `my-team` for `My-Team` (`invalid_handle`). */
+  readonly hint: string | undefined;
 
-  constructor(status: number, code: string, message: string, field?: string) {
+  constructor(status: number, code: string, message: string, field?: string, hint?: string) {
     super(message);
     this.status = status;
     this.code = code;
     this.field = field;
+    this.hint = hint;
   }
 }
 
@@ -104,7 +113,7 @@ export function ensureOk(result: { error?: unknown; response: Response }): void 
 
 function toProblem(error: unknown, response: Response): ApiProblem {
   if (isProblem(error)) {
-    return new ApiProblem(error.status, error.code, error.title, error.field ?? undefined);
+    return new ApiProblem(error.status, error.code, error.title, error.field ?? undefined, error.hint ?? undefined);
   }
   return new ApiProblem(response.status, "unexpected_response", `The server answered ${response.status}.`);
 }

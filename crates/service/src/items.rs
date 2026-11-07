@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::audit::{AuditAction, EntityType};
+use domain::handle::ItemKey;
 use domain::heap::Heap;
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
 use domain::list_view::{Group, ListView};
@@ -254,7 +255,8 @@ impl Services {
         check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
 
         let now = self.now();
-        let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, fields, now);
+        let key = new_item_key(&txn, heap_id).await?;
+        let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, key, fields, now);
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
             &access.heap,
@@ -550,4 +552,21 @@ pub(crate) fn ensure_tags_in_heap(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> R
 /// The tags among `heap_tags` (already sorted by name) that are in `ids`, in the same order.
 fn select_tags(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> Vec<Tag> {
     heap_tags.iter().filter(|tag| ids.contains(&tag.id)).cloned().collect()
+}
+
+/// A random key no item of `heap_id` has. The caller holds the heap lock, so no other insert can take it first.
+///
+/// With 5,000 items in a heap about one draw in 5,000 is taken, so a second draw is rare.
+async fn new_item_key(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<ItemKey, ServiceError> {
+    loop {
+        let mut random = [0u8; ItemKey::LEN];
+        getrandom::fill(&mut random).map_err(|e| ServiceError::RandomSource(e.to_string()))?;
+        let Some(key) = ItemKey::from_random(random) else {
+            continue;
+        };
+        if !store::items::is_key_taken(db, heap_id, key).await? {
+            return Ok(key);
+        }
+        tracing::debug!(%heap_id, "item key taken, drawing another");
+    }
 }

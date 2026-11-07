@@ -1,28 +1,29 @@
 import { useHeap, useTeam } from "../api/queries";
 import { AuditHistory } from "../components/AuditHistory";
+import type { HeapRef } from "../api/client";
 
 /** Everything that happened in a heap that the caller may see, newest first. */
-export function HeapActivityPage({ heapId }: { heapId: string }) {
-  const heap = useHeap(heapId);
+export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
+  const heap = useHeap(heapRef);
   return (
     <ActivityLayout
       title="Activity"
       subtitle={heap.data && `What changed in ${heap.data.name}, as far as you can see.`}
     >
-      <AuditHistory scope={{ heapId }} showEntity />
+      <AuditHistory scope={{ heap: heapRef }} showEntity />
     </ActivityLayout>
   );
 }
 
 /** What happened to a team itself, its members and its heaps as wholes, newest first. */
-export function TeamActivityPage({ teamId }: { teamId: string }) {
-  const team = useTeam(teamId);
+export function TeamActivityPage({ team: slug }: { team: string }) {
+  const team = useTeam(slug);
   return (
     <ActivityLayout
       title="Team activity"
       subtitle={team.data && `Changes to ${team.data.name}, its members and its heaps, as far as you can see.`}
     >
-      <AuditHistory scope={{ teamId }} showEntity />
+      <AuditHistory scope={{ team: slug }} showEntity />
     </ActivityLayout>
   );
 }

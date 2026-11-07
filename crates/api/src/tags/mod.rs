@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use domain::permission::{TagAction, TagListAction};
 use domain::tag::{NewTag, TagDescription, TagName, TagPatch};
-use domain::{HeapId, TagId, ValidationError};
+use domain::{TagId, ValidationError};
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
 use service::tags::TagView;
@@ -16,13 +16,20 @@ use uuid::Uuid;
 
 use crate::dto::{HeapSummaryDto, IfMatchHeader, double_option};
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, CurrentUser, IfMatch};
+use crate::extract::{ApiJson, ApiPath, IfMatch};
+use crate::paths::{HeapParams, HeapPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(list_tags, create_tag))
         .routes(routes!(update_tag))
+}
+
+/// `{tag_id}` in a path below the heap's.
+#[derive(Deserialize)]
+struct TagPathId {
+    tag_id: Uuid,
 }
 
 /// An action the caller can take on a tag.
@@ -124,15 +131,11 @@ impl TagPatchDto {
 }
 
 /// The heap's tags, by name.
-#[utoipa::path(get, path = "/heaps/{heap_id}/tags", tag = "tags", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/tags", tag = "tags", security(("session" = [])),
+    params(HeapParams),
     responses((status = 200, body = TagListDto), (status = 404, body = Problem)))]
-async fn list_tags(
-    State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
-) -> Result<Json<TagListDto>, ApiError> {
-    let list = state.services.list_tags(principal, HeapId::from_uuid(heap_id)).await?;
+async fn list_tags(State(state): State<AppState>, path: HeapPath) -> Result<Json<TagListDto>, ApiError> {
+    let list = state.services.list_tags(path.principal, path.heap.heap_id).await?;
     Ok(Json(TagListDto {
         heap: HeapSummaryDto::from(&list.heap),
         tags: list.tags.into_iter().map(TagDto::from).collect(),
@@ -141,8 +144,8 @@ async fn list_tags(
 }
 
 /// Adds a tag to the heap.
-#[utoipa::path(post, path = "/heaps/{heap_id}/tags", tag = "tags", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)), request_body = CreateTagDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/tags", tag = "tags", security(("session" = [])),
+    params(HeapParams), request_body = CreateTagDto,
     responses(
         (status = 201, body = TagDto),
         (status = 404, body = Problem),
@@ -151,21 +154,20 @@ async fn list_tags(
     ))]
 async fn create_tag(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
+    path: HeapPath,
     ApiJson(body): ApiJson<CreateTagDto>,
 ) -> Result<(StatusCode, Json<TagDto>), ApiError> {
     let fields = to_new_tag(&body).map_err(ServiceError::from)?;
     let view = state
         .services
-        .create_tag(principal, HeapId::from_uuid(heap_id), fields)
+        .create_tag(path.principal, path.heap.heap_id, fields)
         .await?;
     Ok((StatusCode::CREATED, Json(TagDto::from(view))))
 }
 
 /// Renames a tag or changes its description. Send the tag's `version` in `If-Match`.
-#[utoipa::path(patch, path = "/tags/{tag_id}", tag = "tags", security(("session" = [])),
-    params(("tag_id" = Uuid, Path), IfMatchHeader), request_body = TagPatchDto,
+#[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/tags/{tag_id}", tag = "tags", security(("session" = [])),
+    params(HeapParams, ("tag_id" = Uuid, Path), IfMatchHeader), request_body = TagPatchDto,
     responses(
         (status = 200, body = TagDto),
         (status = 404, body = Problem),
@@ -175,15 +177,21 @@ async fn create_tag(
     ))]
 async fn update_tag(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(tag_id): ApiPath<Uuid>,
+    ApiPath(TagPathId { tag_id }): ApiPath<TagPathId>,
     ApiJson(body): ApiJson<TagPatchDto>,
 ) -> Result<Json<TagDto>, ApiError> {
     let patch = body.to_patch().map_err(ServiceError::from)?;
     let view = state
         .services
-        .update_tag(principal, TagId::from_uuid(tag_id), patch, expected)
+        .update_tag(
+            path.principal,
+            path.heap.heap_id,
+            TagId::from_uuid(tag_id),
+            patch,
+            expected,
+        )
         .await?;
     Ok(Json(TagDto::from(view)))
 }

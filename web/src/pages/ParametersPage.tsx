@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import type { ItemTag, Parameter, ParameterOption } from "../api/client";
+import type { HeapRef, ItemTag, Parameter, ParameterOption } from "../api/client";
 import {
   useArchiveOption,
   useArchiveParameter,
@@ -19,8 +19,8 @@ import { useConfirmation } from "../components/useConfirmation";
  * Manage parameters (Req Views: Manage parameters). Every member sees the parameters, since they set their values on
  * items; only admins get the controls, as `allowed_actions` says. Parameters and options are archived, never deleted.
  */
-export function ParametersPage({ heapId }: { heapId: string }) {
-  const parameters = useParameters(heapId);
+export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
+  const parameters = useParameters(heapRef);
 
   if (parameters.isPending) {
     return <p className="py-16 text-center text-stone-500">Loading…</p>;
@@ -41,13 +41,13 @@ export function ParametersPage({ heapId }: { heapId: string }) {
         Parameters rank the items of {heap.name} next to age, deadline and value. An item's option counts more the
         higher it is in the list, and the weight sets how much the parameter counts overall.
       </p>
-      {allowed_actions.includes("create") && <NewParameterForm heapId={heapId} />}
+      {allowed_actions.includes("create") && <NewParameterForm heapRef={heapRef} />}
       {parameters.data.parameters.length === 0 ? (
         <p className="py-12 text-center text-stone-500">No parameters yet.</p>
       ) : (
         <ul className="flex flex-col gap-4">
           {parameters.data.parameters.map((parameter) => (
-            <ParameterCard key={parameter.id} parameter={parameter} heapId={heapId} />
+            <ParameterCard key={parameter.id} parameter={parameter} heapRef={heapRef} />
           ))}
         </ul>
       )}
@@ -59,7 +59,7 @@ export function ParametersPage({ heapId }: { heapId: string }) {
               <li key={parameter.id}>
                 {parameter.name}: {parameter.options.map((option) => option.label).join(", ")}
                 {parameter.allowed_actions.includes("view_history") && (
-                  <HistoryDisclosure scope={{ heapId }} entityId={parameter.id} />
+                  <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} />
                 )}
               </li>
             ))}
@@ -70,8 +70,8 @@ export function ParametersPage({ heapId }: { heapId: string }) {
   );
 }
 
-function NewParameterForm({ heapId }: { heapId: string }) {
-  const create = useCreateParameter(heapId);
+function NewParameterForm({ heapRef }: { heapRef: HeapRef }) {
+  const create = useCreateParameter(heapRef);
   const [name, setName] = useState("");
   const [weight, setWeight] = useState(10);
   const [options, setOptions] = useState("");
@@ -146,8 +146,8 @@ function WeightInput({ value, onChange, label }: { value: number; onChange: (val
   );
 }
 
-function ParameterCard({ parameter, heapId }: { parameter: Parameter; heapId: string }) {
-  const change = useChangeParameter(heapId);
+function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: HeapRef }) {
+  const change = useChangeParameter(heapRef);
   const canEdit = parameter.allowed_actions.includes("edit");
 
   return (
@@ -176,11 +176,11 @@ function ParameterCard({ parameter, heapId }: { parameter: Parameter; heapId: st
       )}
       <ProblemText error={change.error} />
 
-      <OptionsEditor parameter={parameter} heapId={heapId} canEdit={canEdit} />
-      <LinkedTags parameter={parameter} heapId={heapId} canEdit={canEdit} />
-      {parameter.allowed_actions.includes("archive") && <ArchiveParameter parameter={parameter} heapId={heapId} />}
+      <OptionsEditor parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
+      <LinkedTags parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
+      {parameter.allowed_actions.includes("archive") && <ArchiveParameter parameter={parameter} heapRef={heapRef} />}
       {parameter.allowed_actions.includes("view_history") && (
-        <HistoryDisclosure scope={{ heapId }} entityId={parameter.id} />
+        <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} />
       )}
     </li>
   );
@@ -216,8 +216,8 @@ function WeightForm({ parameter, onSave }: { parameter: Parameter; onSave: (weig
  * The options in use, highest priority first. Labels and order are edited together and saved as one arrangement;
  * a new option is added last. Archiving an option asks which option open items should switch to.
  */
-function OptionsEditor({ parameter, heapId, canEdit }: { parameter: Parameter; heapId: string; canEdit: boolean }) {
-  const change = useChangeParameter(heapId);
+function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
+  const change = useChangeParameter(heapRef);
   const [options, setOptions] = useState<ParameterOption[]>(parameter.options);
   const [shownVersion, setShownVersion] = useState(parameter.version);
   const [newLabel, setNewLabel] = useState("");
@@ -277,7 +277,7 @@ function OptionsEditor({ parameter, heapId, canEdit }: { parameter: Parameter; h
                   ↓
                 </button>
                 {!changed && options.length > 1 && (
-                  <ArchiveOption option={option} others={options.filter((o) => o.id !== option.id)} heapId={heapId} />
+                  <ArchiveOption option={option} others={options.filter((o) => o.id !== option.id)} heapRef={heapRef} />
                 )}
               </>
             ) : (
@@ -324,13 +324,13 @@ function OptionsEditor({ parameter, heapId, canEdit }: { parameter: Parameter; h
 function ArchiveOption({
   option,
   others,
-  heapId,
+  heapRef,
 }: {
   option: ParameterOption;
   others: ParameterOption[];
-  heapId: string;
+  heapRef: HeapRef;
 }) {
-  const archive = useArchiveOption(heapId);
+  const archive = useArchiveOption(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   const [replacement, setReplacement] = useState(others[0]?.id ?? "");
 
@@ -375,9 +375,9 @@ function ArchiveOption({
 }
 
 /** The tags whose items the parameter is suggested for. Each change is saved at once. */
-function LinkedTags({ parameter, heapId, canEdit }: { parameter: Parameter; heapId: string; canEdit: boolean }) {
-  const tags = useTags(heapId);
-  const change = useChangeParameter(heapId);
+function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
+  const tags = useTags(heapRef);
+  const change = useChangeParameter(heapRef);
   const linked: ItemTag[] = (tags.data?.tags ?? [])
     .filter((tag) => parameter.tag_ids.includes(tag.id))
     .map((tag) => ({ id: tag.id, name: tag.name }));
@@ -391,7 +391,7 @@ function LinkedTags({ parameter, heapId, canEdit }: { parameter: Parameter; heap
   return (
     <div className="mt-3">
       <TagPicker
-        heapId={heapId}
+        heapRef={heapRef}
         value={linked}
         disabled={change.isPending}
         onChange={(next) => change.mutate({ parameter, change: { kind: "link_tags", tagIds: next.map((t) => t.id) } })}
@@ -402,8 +402,8 @@ function LinkedTags({ parameter, heapId, canEdit }: { parameter: Parameter; heap
   );
 }
 
-function ArchiveParameter({ parameter, heapId }: { parameter: Parameter; heapId: string }) {
-  const archive = useArchiveParameter(heapId);
+function ArchiveParameter({ parameter, heapRef }: { parameter: Parameter; heapRef: HeapRef }) {
+  const archive = useArchiveParameter(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   return (
     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-stone-100 pt-2 text-sm dark:border-stone-800">

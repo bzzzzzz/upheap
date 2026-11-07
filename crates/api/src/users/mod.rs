@@ -21,7 +21,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub(crate) struct UserLookupQuery {
-    /// The start of a word of the display name, or the start of an email address up to at least `@` and one more
+    /// A username, the start of a word of the display name, or the start of an email address up to at least `@` and one more
     /// character. Ignores case. At least 3 characters.
     pub query: String,
 }
@@ -31,6 +31,7 @@ pub(crate) struct UserLookupQuery {
 #[schema(as = UserMatch)]
 pub(crate) struct UserMatchDto {
     pub id: Uuid,
+    pub username: String,
     pub display_name: String,
     /// Only when the query matched the start of the email, so a lookup by name never reveals addresses.
     pub email: Option<String>,
@@ -43,7 +44,7 @@ pub(crate) struct UserMatchesDto {
     pub users: Vec<UserMatchDto>,
 }
 
-/// Users with a word of their display name starting with `query`, or, when `query` is the start of an email address
+/// The user whose username is `query`, users with a word of their display name starting with `query`, or, when `query` is the start of an email address
 /// with at least its local part, `@` and one character of the domain, users whose email starts with it. Only for
 /// admins of some team, to add members.
 #[utoipa::path(get, path = "/users", tag = "users", security(("session" = [])),
@@ -65,6 +66,7 @@ async fn find_users(
             .into_iter()
             .map(|found| UserMatchDto {
                 id: *found.user.id.as_uuid(),
+                username: found.user.username.to_string(),
                 display_name: found.user.display_name.as_str().to_owned(),
                 email: found.email_matched.then(|| found.user.email.as_str().to_owned()),
             })

@@ -1,5 +1,6 @@
 //! Teams and memberships.
 
+use domain::handle::Handle;
 use domain::team::{Membership, Role, Team};
 use domain::text::Name;
 use domain::{TeamId, UserId, Version};
@@ -9,13 +10,16 @@ use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
 use crate::entities::{team_members, teams};
 
-/// Inserts a new team. Its members are inserted separately ([`insert_membership`]).
+/// Inserts a new team. Its members are inserted separately ([`insert_membership`]). Fails with
+/// [`StoreError::Duplicate`] when the slug is taken.
 pub async fn insert_team(db: &impl ConnectionTrait, team: &Team) -> Result<(), StoreError> {
     let id = id_to_db(team.id.as_uuid());
     let row = teams::ActiveModel {
         version: Set(version_to_db(team.version, "teams", &id)?),
         id: Set(id),
+        slug: Set(team.slug.as_str().to_owned()),
         name: Set(team.name.as_str().to_owned()),
+        personal_user_id: Set(team.personal_user.map(|id| id_to_db(id.as_uuid()))),
         created_at: Set(team.created_at.as_millis()),
     };
     teams::Entity::insert(row).exec_without_returning(db).await?;
@@ -25,6 +29,15 @@ pub async fn insert_team(db: &impl ConnectionTrait, team: &Team) -> Result<(), S
 /// The team with `id`, or `None` if there is none. Doesn't check who is asking; the service does.
 pub async fn find_team(db: &impl ConnectionTrait, id: TeamId) -> Result<Option<Team>, StoreError> {
     let row = teams::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
+    row.map(to_team).transpose()
+}
+
+/// The team with `slug`, or `None` if there is none. Doesn't check who is asking.
+pub async fn find_team_by_slug(db: &impl ConnectionTrait, slug: &Handle) -> Result<Option<Team>, StoreError> {
+    let row = teams::Entity::find()
+        .filter(teams::Column::Slug.eq(slug.as_str()))
+        .one(db)
+        .await?;
     row.map(to_team).transpose()
 }
 
@@ -39,8 +52,9 @@ pub async fn lock_team(db: &impl ConnectionTrait, id: TeamId) -> Result<Option<T
     row.map(to_team).transpose()
 }
 
-/// Writes the name if the stored row still has version `expected`, and returns the team with its new version.
-/// Returns `None` when the stored version differs.
+/// Writes the slug and name if the stored row still has version `expected`, and returns the team with its new
+/// version. Returns `None` when the stored version differs, and fails with [`StoreError::Duplicate`] when the slug
+/// is taken.
 pub async fn update_team(
     db: &impl ConnectionTrait,
     team: &Team,
@@ -52,6 +66,7 @@ pub async fn update_team(
         ..team.clone()
     };
     let row = teams::ActiveModel {
+        slug: Set(saved.slug.as_str().to_owned()),
         name: Set(saved.name.as_str().to_owned()),
         version: Set(version_to_db(saved.version, "teams", &id)?),
         ..Default::default()
@@ -177,7 +192,13 @@ fn to_team(row: teams::Model) -> Result<Team, StoreError> {
     };
     Ok(Team {
         id: TeamId::from_uuid(read.uuid(&row.id)?),
+        slug: read.handle(&row.slug)?,
         name: Name::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?,
+        personal_user: row
+            .personal_user_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(UserId::from_uuid))
+            .transpose()?,
         created_at: read.timestamp(row.created_at)?,
         version: read.version(row.version)?,
     })
