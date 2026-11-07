@@ -7,7 +7,7 @@ import { useCreateItem, useParameters } from "../api/queries";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
 import { SIZE_LABELS, SIZES } from "./labels";
-import { ParameterPicker } from "./ParameterSelect";
+import { ParameterPicker } from "./ParameterPicker";
 import { TagPicker } from "./TagPicker";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));

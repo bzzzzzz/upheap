@@ -32,14 +32,15 @@ export function AppLayout() {
   return (
     // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
     // menu stays next to what it opens. The left half behind it takes the sidebar's colour, so the sidebar reaches
-    // the edge of the screen.
+    // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
+    // right-hand padding.
     <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
-      <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem]">
+      <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
         {me && <Sidebar me={me} heapId={heapId} />}
         <div className="min-w-0 flex-1 bg-canvas">
           {me && <PhoneTopBar me={me} heapId={heapId} />}
           {/* On a phone, room at the bottom for the tabs. */}
-          <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24">
+          <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
             {heapId && <ArchivedNotice key={heapId} heapId={heapId} />}
             <Outlet />
             <div className="lg:hidden">
@@ -73,19 +74,30 @@ function useShellLinks(me: Me, heapId: string | undefined) {
 const navItemClass =
   "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
-function NavLink({ icon: Icon, label, ...link }: LinkProps & { icon: LucideIcon; label: string }) {
+/** With `current`, the link shows as active also where the router wouldn't say so. */
+function NavLink({
+  icon: Icon,
+  label,
+  current,
+  ...link
+}: LinkProps & { icon: LucideIcon; label: string; current?: boolean }) {
   return (
-    <Link {...link} className={navItemClass}>
+    <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
     </Link>
   );
 }
 
-/** The heap's views, from both the sidebar and the phone's tabs. */
-function heapViews(heapId: string) {
+/** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
+function heapViews(heapId: string, itemOpen: boolean) {
   return {
-    open: { to: "/heaps/$heapId", params: { heapId }, activeOptions: { exact: true, includeSearch: false } },
+    open: {
+      to: "/heaps/$heapId",
+      params: { heapId },
+      activeOptions: { exact: true, includeSearch: false },
+      current: itemOpen,
+    },
     closed: { to: "/heaps/$heapId/closed", params: { heapId } },
     activity: { to: "/heaps/$heapId/activity", params: { heapId } },
     tags: { to: "/heaps/$heapId/tags", params: { heapId } },
@@ -96,7 +108,8 @@ function heapViews(heapId: string) {
 /** The sidebar on a wide screen, folded into a rail on a tablet; hidden on a phone. */
 function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
   const links = useShellLinks(me, heapId);
-  const views = heapId && heapViews(heapId);
+  const { itemId } = useParams({ strict: false });
+  const views = heapId && heapViews(heapId, itemId !== undefined);
 
   return (
     <aside
@@ -197,7 +210,8 @@ function PhoneTopBar({ me, heapId }: { me: Me; heapId: string | undefined }) {
 /** The phone's tabs: the three views used most, and More for the rest. */
 function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
   const links = useShellLinks(me, heapId);
-  const views = heapViews(heapId);
+  const { itemId } = useParams({ strict: false });
+  const views = heapViews(heapId, itemId !== undefined);
   const navigate = useNavigate();
   const signOut = useSignOut();
 

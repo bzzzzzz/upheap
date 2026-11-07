@@ -16,10 +16,13 @@ export function DuePicker({
   value,
   onChange,
   disabled,
+  current,
 }: {
   value: DueInput | null;
   onChange: (value: DueInput | null) => void;
   disabled?: boolean;
+  /** How the saved due time reads now, beside the label, as a loose one picked days ago may match no choice. */
+  current?: string;
 }) {
   const choices = useDueChoices();
   const labelId = useId();
@@ -42,7 +45,10 @@ export function DuePicker({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel id={labelId}>Due</FieldLabel>
+      <div className="flex items-baseline gap-2">
+        <FieldLabel id={labelId}>Due</FieldLabel>
+        {current && <span className="text-xs text-muted">{current}</span>}
+      </div>
       <ToggleButtonGroup
         aria-labelledby={labelId}
         selectionMode="single"

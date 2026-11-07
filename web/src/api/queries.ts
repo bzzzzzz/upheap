@@ -148,16 +148,11 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
   });
 }
 
-/**
- * One item, for the Edit item view. It's fetched when the view opens and after each save, but not in the background
- * (focus, reconnect or an interval), because a newer version resets the form and would drop what the user typed.
- */
+/** One item, for the item pane. Each change saves on its own, so there's no unsaved form for a refetch to reset. */
 export function useItem(itemId: string) {
   return useQuery({
     queryKey: itemKey(itemId),
     queryFn: async () => unwrap(await api.GET("/api/v1/items/{item_id}", { params: { path: { item_id: itemId } } })),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 }
 
@@ -192,16 +187,25 @@ export function useCreateItem(heapId: string) {
   });
 }
 
+/**
+ * Saves one change to an item. The item pane saves each change as it's made, so two can follow each other before
+ * the first is back: edits run one at a time (one `scope`), and each sends the newest version it knows of, its own
+ * item's or the one the previous edit brought back. A change by someone else still fails with a conflict.
+ */
 export function useUpdateItem(heapId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ item, patch }: { item: Item; patch: ItemPatch }) =>
-      unwrap(
+    scope: { id: "item-edits" },
+    mutationFn: async ({ item, patch }: { item: Item; patch: ItemPatch }) => {
+      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(item.id))?.version ?? 0);
+      return unwrap(
         await api.PATCH("/api/v1/items/{item_id}", {
-          params: { path: { item_id: item.id }, header: { "If-Match": `"${item.version}"` } },
+          params: { path: { item_id: item.id }, header: { "If-Match": `"${version}"` } },
           body: patch,
         }),
-      ),
+      );
+    },
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(saved.id), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
     onSettled: () => invalidateHeap(queryClient, heapId),
   });

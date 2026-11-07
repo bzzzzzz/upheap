@@ -1,4 +1,4 @@
-import { addItem, goTo, expect, expectOrder, row, test } from "./fixtures";
+import { addItem, closeItem, expect, expectOrder, goTo, itemPane, openItem, pick, row, test } from "./fixtures";
 
 test("an admin manages a parameter, and its options rank the items", async ({ page }) => {
   await addItem(page, "Free user's request");
@@ -18,9 +18,10 @@ test("an admin manages a parameter, and its options rank the items", async ({ pa
     ["Enterprise request", "Enterprise"],
   ] as const) {
     await goTo(page, "Open");
-    await page.getByRole("link", { name: `Edit ${title}` }).click();
-    await page.getByRole("group", { name: "Parameters" }).getByLabel("Customer").selectOption(customer);
-    await page.getByRole("button", { name: "Save" }).click();
+    await openItem(page, title);
+    await pick(page, "Customer", customer);
+    await expect(itemPane(page).getByRole("radio", { name: customer, exact: true })).toBeChecked();
+    await closeItem(page);
     await expect(row(page, title)).toContainText(`Customer: ${customer}`);
   }
   await page.reload();

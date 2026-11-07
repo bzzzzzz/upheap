@@ -1,0 +1,58 @@
+import { X } from "lucide-react";
+import { useEffect } from "react";
+
+/** A message about a change just made, with a way to take it back. `id` tells one toast from the next. */
+export type Toast = { id: number; message: string; undo?: () => void; error?: boolean };
+
+/** How long a toast stays. */
+const SHOW_FOR_MS = 6000;
+
+/**
+ * The toast after a change from the list (app-ux.md, The list §3): bottom centre, above the phone's tabs. It goes
+ * after a few seconds, or when Undo or ✕ is pressed.
+ */
+export function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(onDismiss, SHOW_FOR_MS);
+    return () => window.clearTimeout(timer);
+  }, [toast, onDismiss]);
+
+  return (
+    <div
+      role={toast?.error ? "alert" : "status"}
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 sm:bottom-6"
+    >
+      {toast && (
+        <div
+          key={toast.id}
+          className={`pointer-events-auto flex max-w-md min-w-0 items-center gap-1 rounded-xl py-1.5 pr-1.5 pl-4 text-sm shadow-lg ${
+            toast.error ? "bg-overdue-soft text-overdue-ink" : "bg-ink text-canvas"
+          }`}
+        >
+          <span className="mr-2 min-w-0 flex-1">{toast.message}</span>
+          {toast.undo && (
+            <button
+              type="button"
+              onClick={() => {
+                toast.undo?.();
+                onDismiss();
+              }}
+              className="h-9 shrink-0 rounded-lg px-3 font-semibold text-accent hover:bg-white/10 pointer-coarse:h-11"
+            >
+              Undo
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg opacity-70 hover:opacity-100 pointer-coarse:size-11"
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
