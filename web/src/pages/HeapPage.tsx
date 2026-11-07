@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { ApiProblem, type ItemRef, type RankedItem, type RankedList } from "../api/client";
 import { useBlockerCandidates, useRankedList } from "../api/queries";
-import { AddItemForm } from "../components/AddItemForm";
+import { AddItem } from "../components/AddItem";
 import { blockerCandidatesFor } from "../components/blockerCandidates";
 import { ItemRow } from "../components/ItemRow";
 import { ListControls, type Panel } from "../components/ListControls";
@@ -104,7 +104,7 @@ export function HeapPage({
 
       {savedViews}
 
-      <AddItemForm heapId={heapId} disabled={heap.archived} />
+      <AddItem heapId={heapId} disabled={heap.archived} />
 
       {controls}
 

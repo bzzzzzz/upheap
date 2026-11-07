@@ -59,6 +59,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/due-choices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The rough due times to offer in a due picker, for today in the request's timezone. */
+        get: operations["list_choices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/heaps/{heap_id}": {
         parameters: {
             query?: never;
@@ -752,6 +769,20 @@ export interface components {
             /** @description Only deadlines become overdue. */
             overdue: boolean;
         };
+        /**
+         * @description A rough due time. Send its `date` as a loose due time (`firm: false`), and the item's due label comes back as this
+         *     `label`.
+         */
+        DueChoice: {
+            /** @description `YYYY-MM-DD`, in the request's timezone. */
+            date: string;
+            /** @description "next week". */
+            label: string;
+        };
+        DueChoices: {
+            /** @description Nearest first. The dates move with the day, so ask again on another day. */
+            choices: components["schemas"]["DueChoice"][];
+        };
         /** @description A due time as entered: a calendar date, stored as the end of that day in the request's timezone. */
         DueInput: {
             /**
@@ -1365,6 +1396,37 @@ export interface operations {
             };
             /** @description Invalid email, name or password */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_choices: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DueChoices"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

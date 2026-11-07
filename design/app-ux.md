@@ -124,8 +124,9 @@ least 16 px so iOS doesn't zoom in on focus.
    field opens the same picker, with the current choice selected.
 4. **The server owns the choices.** Which dates the rough choices stand for, and what they're called, must agree
    with the fuzzy labels the server gives back, or "Next week" could come back as "in a few days". So the server
-   lists the choices, each with its label and date in the request's timezone, and the client only shows them
-   (an addition to the API, made in step 2 of the plan).
+   lists the choices (`GET /due-choices`), each with its label and date in the request's timezone, and the client
+   only shows them. The fuzzy terms include "next week" and "next month", and their bands leave room around each
+   choice, so a picked choice reads back as itself whatever the time of day.
 
 ## Testing
 
@@ -136,8 +137,10 @@ Chromium, against both the server and the local build.
 
 1. **Foundations.** Tokens, icons, React Aria, and the app shell at each width: sidebar, rail, bottom tabs, safe
    areas. The phone and tablet Playwright projects start here.
-2. **List and item.** Compact rows with the state circle, the item pane and sheet in place of the Edit item page,
-   the Add dialog, the due picker and its choices from the server, undo toast, keyboard navigation.
+2. **List and item**, in two changes:
+   1. The due picker and its choices from the server, the S M L XL buttons, and the Add dialog.
+   2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
+      keyboard navigation.
 3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions, Filters and View sheets, heap switcher.
 4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 

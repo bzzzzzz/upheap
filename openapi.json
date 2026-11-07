@@ -136,6 +136,56 @@
         }
       }
     },
+    "/api/v1/due-choices": {
+      "get": {
+        "tags": [
+          "items"
+        ],
+        "summary": "The rough due times to offer in a due picker, for today in the request's timezone.",
+        "operationId": "list_choices",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DueChoices"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/heaps/{heap_id}": {
       "get": {
         "tags": [
@@ -3663,6 +3713,39 @@
           "overdue": {
             "type": "boolean",
             "description": "Only deadlines become overdue."
+          }
+        }
+      },
+      "DueChoice": {
+        "type": "object",
+        "description": "A rough due time. Send its `date` as a loose due time (`firm: false`), and the item's due label comes back as this\n`label`.",
+        "required": [
+          "label",
+          "date"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, in the request's timezone."
+          },
+          "label": {
+            "type": "string",
+            "description": "\"next week\"."
+          }
+        }
+      },
+      "DueChoices": {
+        "type": "object",
+        "required": [
+          "choices"
+        ],
+        "properties": {
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DueChoice"
+            },
+            "description": "Nearest first. The dates move with the day, so ask again on another day."
           }
         }
       },
