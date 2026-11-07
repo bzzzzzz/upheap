@@ -74,7 +74,17 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 ### Phone details
 
 Phone pages respect the safe-area insets (`viewport-fit=cover`) under the bottom tabs and sheets, and inputs are at
-least 16 px so iOS doesn't zoom in on focus.
+least 16 px so iOS doesn't zoom in on focus. Sheets sit above the on-screen keyboard: Android Chrome resizes the page
+for it (`interactive-widget=resizes-content`), and on iOS, which doesn't, the sheets are lifted by the height the
+keyboard covers, from the visual viewport. The heap switcher and More open as sheets too.
+
+Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
+
+1. A row dragged right past about 100 px slides away and marks the item done; dragged left, it stays open on two
+   buttons, In progress and Blocked (Open in place of the state it's in), until one is picked or the row is tapped.
+   Each is followed by the undo toast. A tap just after a drag doesn't open the item.
+2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
+   springs it back.
 
 ### The list
 

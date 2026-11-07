@@ -1,5 +1,6 @@
 import { Navigate } from "@tanstack/react-router";
 import { X } from "lucide-react";
+import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
@@ -12,6 +13,7 @@ import { choiceButtonClass, ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { isClosed, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { ParameterPicker } from "./ParameterPicker";
 import { TagPicker } from "./TagPicker";
 
@@ -19,6 +21,10 @@ const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }
 
 /** The states the segmented control offers. Won't do sits apart, as it's rarely the one wanted. */
 const SEGMENTS: readonly ItemState[] = ["open", "in_progress", "blocked", "done"];
+
+/** How far the sheet (down) or the panel (right) is dragged by its top bar before letting go closes it. */
+const CLOSE_DISTANCE = 120;
+const CLOSE_SPEED = 600;
 
 /**
  * One item over its list (app-ux.md, The item): a pane beside the list on a wide screen, a panel over the right of
@@ -41,6 +47,7 @@ export function ItemPane({
   const item = useItem(itemId);
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
+  const drag = useDragToClose(onClose);
 
   // Focus moves to the item as it opens, so the keyboard carries on from there; Escape closes it (HeapPage).
   useEffect(() => {
@@ -67,14 +74,25 @@ export function ItemPane({
     <>
       {/* On a phone the sheet covers the list, and a tap on what shows of it closes the sheet. */}
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-40 bg-black/40 sm:hidden" />
-      <section
+      <motion.section
         ref={paneRef}
         tabIndex={-1}
         aria-labelledby={headingId}
         data-item-pane=""
-        className="fixed inset-x-0 bottom-0 z-40 max-h-[88dvh] overflow-y-auto rounded-t-2xl bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:left-auto sm:z-20 sm:max-h-none sm:w-[25rem] sm:rounded-none sm:border-l sm:border-line lg:sticky lg:right-auto lg:bottom-auto lg:h-dvh lg:w-[26rem] lg:shrink-0 lg:shadow-none"
+        {...drag.paneProps}
+        className="fixed inset-x-0 bottom-(--keyboard-inset) z-40 max-h-[calc(88dvh-var(--keyboard-inset))] overflow-y-auto rounded-t-2xl bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:bottom-0 sm:left-auto sm:z-20 sm:max-h-none sm:w-[25rem] sm:rounded-none sm:border-l sm:border-line lg:sticky lg:right-auto lg:bottom-auto lg:h-dvh lg:w-[26rem] lg:shrink-0 lg:shadow-none"
       >
-        <div className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-4 pt-3 pb-2 sm:px-5 sm:pt-5">
+        {/* The top bar is what drags: down to close the phone's sheet, right to close the tablet's panel. */}
+        <div
+          {...drag.handleProps}
+          className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-4 pt-3 pb-2 sm:px-5 sm:pt-5"
+        >
+          {drag.enabled && (
+            <span
+              aria-hidden="true"
+              className="absolute top-1.5 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-line sm:hidden"
+            />
+          )}
           <h2 id={headingId} className="flex-1 text-xs font-medium text-muted">
             <span className="sr-only">Item</span>
             {entry && (
@@ -95,9 +113,50 @@ export function ItemPane({
           </button>
         </div>
         <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] sm:px-5">{body}</div>
-      </section>
+      </motion.section>
     </>
   );
+}
+
+/**
+ * Closing by drag, with a finger: the phone's sheet comes up from the bottom and drags down, the tablet's panel drags
+ * right. Only the top bar starts a drag, so the fields scroll as usual. On a wide screen the pane stays put.
+ */
+function useDragToClose(onClose: () => void) {
+  const phone = useMedia(PHONE);
+  const tablet = useMedia(TABLET);
+  const touch = useMedia(TOUCH);
+  const controls = useDragControls();
+  const axis = phone ? "y" : tablet && touch ? "x" : null;
+
+  const onDragEnd = (_event: unknown, info: PanInfo) => {
+    const distance = axis === "y" ? info.offset.y : info.offset.x;
+    const speed = axis === "y" ? info.velocity.y : info.velocity.x;
+    if (distance > CLOSE_DISTANCE || speed > CLOSE_SPEED) onClose();
+  };
+
+  if (axis === null) return { enabled: false, paneProps: {}, handleProps: {} };
+  return {
+    enabled: true,
+    paneProps: {
+      drag: axis,
+      dragControls: controls,
+      dragListener: false,
+      dragConstraints: { top: 0, bottom: 0, left: 0, right: 0 },
+      dragElastic: axis === "y" ? { top: 0, bottom: 1 } : { left: 0, right: 1 },
+      dragSnapToOrigin: true,
+      onDragEnd,
+      ...(phone && {
+        initial: { y: "100%" },
+        animate: { y: 0 },
+        transition: { type: "spring" as const, bounce: 0, duration: 0.3 },
+      }),
+    },
+    handleProps: {
+      onPointerDown: (event: React.PointerEvent) => controls.start(event),
+      style: { touchAction: "none" },
+    },
+  } as const;
 }
 
 /** The item's fields, each saving on its own with the item's version in `If-Match`. */

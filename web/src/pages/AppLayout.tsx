@@ -23,10 +23,12 @@ import { Button, Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } fro
 import type { Me } from "../api/client";
 import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
 import { StorageNote } from "../components/LocalDatabase";
+import { useKeyboardInset } from "../components/media";
 import { ProblemText } from "../components/ProblemText";
 
 export function AppLayout() {
   const { data: me } = useMe();
+  useKeyboardInset();
   const { heapId } = useParams({ strict: false });
 
   return (
@@ -338,7 +340,8 @@ function MenuPopover({
     <Popover
       placement={placement}
       offset={6}
-      className="max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none"
+      // On a phone the menu is a sheet from the bottom, over a dimmed page (the spread shadow), whatever its anchor.
+      className="max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none max-sm:fixed! max-sm:inset-x-0! max-sm:top-auto! max-sm:bottom-0! max-sm:max-h-[75dvh]! max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:p-2 max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)] max-sm:shadow-[0_0_0_100vmax_rgb(0_0_0/0.4)]"
     >
       {children}
     </Popover>

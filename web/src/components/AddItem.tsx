@@ -163,9 +163,9 @@ function AddItemDialog({
       isOpen
       isDismissable
       onOpenChange={(open) => !open && requestClose()}
-      className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 sm:items-start sm:p-4 sm:pt-[10dvh]"
+      className="fixed inset-x-0 top-0 bottom-(--keyboard-inset) z-30 flex items-end justify-center bg-black/40 pt-[max(env(safe-area-inset-top),1rem)] sm:bottom-0 sm:items-start sm:p-4 sm:pt-[10dvh]"
     >
-      <Modal className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-surface text-ink shadow-xl outline-none sm:max-h-[80dvh] sm:max-w-lg sm:rounded-2xl">
+      <Modal className="max-h-full w-full overflow-y-auto rounded-t-2xl bg-surface text-ink shadow-xl outline-none sm:max-h-[80dvh] sm:max-w-lg sm:rounded-2xl">
         <Dialog aria-labelledby={titleId} className="outline-none">
           <form
             onSubmit={submit}

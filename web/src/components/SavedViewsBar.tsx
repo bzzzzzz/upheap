@@ -49,7 +49,11 @@ export function SavedViewsBar({
 
   return (
     <div className="mt-4 flex flex-col gap-2">
-      <nav aria-label="Saved views" className="flex flex-wrap items-center gap-1.5">
+      {/* On a phone the chips scroll sideways rather than wrap (app-ux.md, The list §6). */}
+      <nav
+        aria-label="Saved views"
+        className="flex items-center gap-1.5 max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none] sm:flex-wrap [&>*]:shrink-0"
+      >
         <ViewLink heapId={heapId} search={{}} current={!selected} changed={changed}>
           Default
         </ViewLink>
@@ -131,7 +135,7 @@ function ViewLink({
       activeOptions={{ exact: true, includeSearch: true }}
       activeProps={{}}
       aria-current={current ? "page" : undefined}
-      className={`rounded-full px-2.5 py-0.5 text-sm ${
+      className={`rounded-full px-2.5 py-0.5 text-sm whitespace-nowrap ${
         current
           ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
           : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"

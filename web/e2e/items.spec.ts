@@ -117,7 +117,10 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await closeItem(page);
   await expect(page.getByText("1 item is hidden by the view settings.")).toBeVisible();
   await page.getByRole("button", { name: "Change view" }).click();
-  await page.getByRole("radiogroup", { name: "Blocked" }).getByText("Shown", { exact: true }).click();
+  const viewSettings = page.getByRole("dialog", { name: "View settings" });
+  await viewSettings.getByRole("radiogroup", { name: "Blocked" }).getByText("Shown", { exact: true }).click();
+  await viewSettings.getByRole("button", { name: "Close" }).click();
+  await expect(viewSettings).toHaveCount(0);
 
   await openItem(page, "Deploy");
   await itemPane(page).getByLabel("Waiting for").selectOption({ label: "Get approval" });

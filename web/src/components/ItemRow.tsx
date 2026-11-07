@@ -1,11 +1,22 @@
 import { Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
-import type { KeyboardEvent } from "react";
+import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import type { Item, RankedItem } from "../api/client";
-import { SIZE_LABELS } from "./labels";
+import type { Item, ItemState, RankedItem } from "../api/client";
+import { SIZE_LABELS, STATE_LABELS } from "./labels";
+import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
 import { TagChips } from "./TagChips";
+
+/**
+ * Changes an item's state from the list, and says so with an undo toast. `onError` runs if it fails, for a row to
+ * come back from a swipe.
+ */
+export type ChangeState = (item: Item, state: ItemState, onError?: () => void) => void;
+
+/** How far a row slides left to show its two actions, and how far right marks it done. */
+const ACTIONS_WIDTH = 176;
+const DONE_DISTANCE = 96;
 
 /** What marks a row's link, for moving between rows with the arrow keys. */
 const ROW_LINK = "data-row-link";
@@ -31,6 +42,8 @@ export function focusRowOf(itemId: string) {
  * chip and tags, and below them why it ranks where it does. The whole row opens the item; editing happens there.
  * `selected` marks the open item's row, and `itemOpen` makes opening another one replace it in the history, so Back
  * still closes the item instead of stepping through every row looked at.
+ *
+ * With a finger, a row swipes (app-ux.md, The list §5): right marks it done, left shows two other states to pick.
  */
 export function ItemRow({
   entry,
@@ -38,17 +51,20 @@ export function ItemRow({
   selected,
   itemOpen,
   compact = false,
-  onMarkDone,
+  onChangeState,
 }: {
   entry: RankedItem;
   heapId: string;
   selected: boolean;
   itemOpen: boolean;
   compact?: boolean;
-  onMarkDone: (item: Item) => void;
+  onChangeState: ChangeState;
 }) {
   const { item, position, contributors } = entry;
   const canMarkDone = item.allowed_actions.includes("change_state");
+  const onMarkDone = () => onChangeState(item, "done");
+  const touch = useMedia(TOUCH);
+  const swipe = useSwipe(canMarkDone && touch, (state, onError) => onChangeState(item, state, onError));
 
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -59,7 +75,7 @@ export function ItemRow({
       event.preventDefault();
       // The row goes away, so the next one takes the focus.
       focusRow(event.currentTarget, 1);
-      onMarkDone(item);
+      onMarkDone();
     }
   };
 
@@ -70,50 +86,154 @@ export function ItemRow({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className={`relative flex items-center gap-3 rounded-lg px-2 py-2.5 has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent pointer-coarse:py-3 ${
-        selected ? "bg-accent-soft" : "hover:bg-sunken"
-      }`}
+      className="relative overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
     >
-      <StateCircle item={item} disabled={!canMarkDone} onPress={() => onMarkDone(item)} />
-      <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
-        {position}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {/* The link covers the whole row, under the state circle. */}
-          <Link
-            to="/heaps/$heapId/items/$itemId"
-            params={{ heapId, itemId: item.id }}
-            search={true}
-            replace={itemOpen}
-            state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
-            onKeyDown={onKeyDown}
-            {...{ [ROW_LINK]: item.id }}
-            aria-current={selected ? "true" : undefined}
-            className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
-          >
-            {item.title}
-          </Link>
-          {item.due && <DueChip due={item.due} />}
-          <TagChips tags={item.tags} />
-          <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />
-        </div>
-        {!compact && contributors.length > 0 && (
-          <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
-        )}
-        {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
-        <ParameterChips parameters={item.parameters} className="mt-1 flex lg:hidden" />
-      </div>
-      {(item.effort || item.impact) && (
-        <span className="hidden shrink-0 text-xs text-ink-soft tabular-nums sm:inline">
-          <span className="sr-only">Effort </span>
-          {item.effort ? SIZE_LABELS[item.effort] : "–"}
-          <span aria-hidden="true"> · </span>
-          <span className="sr-only">, impact </span>
-          {item.impact ? SIZE_LABELS[item.impact] : "–"}
+      {swipe.showActions && <SwipeActions item={item} open={swipe.open} onPick={swipe.pick} />}
+      <motion.div
+        {...swipe.dragProps}
+        className={`relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
+          selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
+        }`}
+      >
+        <StateCircle item={item} disabled={!canMarkDone} onPress={onMarkDone} />
+        <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
+          {position}
         </span>
-      )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {/* The link covers the whole row, under the state circle. */}
+            <Link
+              to="/heaps/$heapId/items/$itemId"
+              params={{ heapId, itemId: item.id }}
+              search={true}
+              replace={itemOpen}
+              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              onKeyDown={onKeyDown}
+              // A swipe moves the row, not a dragged copy of the link.
+              draggable={false}
+              {...{ [ROW_LINK]: item.id }}
+              aria-current={selected ? "true" : undefined}
+              className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
+            >
+              {item.title}
+            </Link>
+            {item.due && <DueChip due={item.due} />}
+            <TagChips tags={item.tags} />
+            <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />
+          </div>
+          {!compact && contributors.length > 0 && (
+            <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
+          )}
+          {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
+          <ParameterChips parameters={item.parameters} className="mt-1 flex lg:hidden" />
+        </div>
+        {(item.effort || item.impact) && (
+          <span className="hidden shrink-0 text-xs text-ink-soft tabular-nums sm:inline">
+            <span className="sr-only">Effort </span>
+            {item.effort ? SIZE_LABELS[item.effort] : "–"}
+            <span aria-hidden="true"> · </span>
+            <span className="sr-only">, impact </span>
+            {item.impact ? SIZE_LABELS[item.impact] : "–"}
+          </span>
+        )}
+      </motion.div>
     </motion.li>
+  );
+}
+
+/**
+ * The row's swipe: dragged right past `DONE_DISTANCE` it slides away and marks the item done; dragged left it stays
+ * open on its actions until one is picked or the row is tapped. A tap right after a drag doesn't open the item.
+ */
+function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => void) => void) {
+  const x = useMotionValue(0);
+  const [open, setOpen] = useState(false);
+  // The actions are drawn only while the row moves or is open, so their colours never edge a row at rest.
+  const [moving, setMoving] = useState(false);
+  const dragged = useRef(false);
+  const settle = (to: number) => animate(x, to, { type: "spring", bounce: 0, duration: 0.3 });
+  const close = () => {
+    setOpen(false);
+    void settle(0).then(() => setMoving(false));
+  };
+
+  const onDragEnd = (event: globalThis.MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    window.setTimeout(() => (dragged.current = false));
+    if (info.offset.x > DONE_DISTANCE) {
+      const width = (event.target as HTMLElement | null)?.closest("li")?.offsetWidth ?? 400;
+      void animate(x, width, { duration: 0.2 }).then(() => change("done", close));
+    } else if (info.offset.x < -ACTIONS_WIDTH / 3 || (open && info.offset.x < 0)) {
+      setOpen(true);
+      void settle(-ACTIONS_WIDTH);
+    } else {
+      close();
+    }
+  };
+
+  // Taps while open close the row instead of opening the item.
+  const onClickCapture = (event: MouseEvent) => {
+    if (dragged.current || open) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (open) close();
+    }
+  };
+
+  return {
+    enabled,
+    open,
+    showActions: enabled && (moving || open),
+    pick: (state: ItemState) => {
+      close();
+      change(state, close);
+    },
+    dragProps: enabled
+      ? {
+          style: { x, touchAction: "pan-y" },
+          drag: "x" as const,
+          dragDirectionLock: true,
+          dragConstraints: { left: -ACTIONS_WIDTH, right: 0 },
+          dragElastic: { left: 0.1, right: 0.7 },
+          dragMomentum: false,
+          onDragStart: () => {
+            dragged.current = true;
+            setMoving(true);
+          },
+          onDragEnd,
+          onClickCapture,
+        }
+      : {},
+  };
+}
+
+/**
+ * What a swipe shows under the row: Done on the left, for a swipe right; on the right, the two states besides open
+ * and done, with Open in place of the one the item is in already.
+ */
+function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPick: (state: ItemState) => void }) {
+  const states: ItemState[] = [
+    item.state === "in_progress" ? "open" : "in_progress",
+    item.state === "blocked" ? "open" : "blocked",
+  ];
+  return (
+    <div className="absolute inset-0 flex">
+      <div aria-hidden="true" className="flex flex-1 items-center bg-done pl-5 text-sm font-semibold text-canvas">
+        Done
+      </div>
+      {/* Out of the tab order and hidden from screen readers until the row is open; the item pane has them too. */}
+      <div inert={!open} className="flex flex-1 justify-end">
+        {states.map((state) => (
+          <button
+            key={state}
+            type="button"
+            onClick={() => onPick(state)}
+            className={`w-[88px] text-sm font-semibold text-canvas ${state === "blocked" ? "bg-overdue-ink" : "bg-accent"}`}
+          >
+            {STATE_LABELS[state]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

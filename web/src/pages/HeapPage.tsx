@@ -2,10 +2,11 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList } from "../api/client";
+import { ApiProblem, type ItemPatch, type RankedItem, type RankedList } from "../api/client";
 import { useRankedList, useUpdateItem } from "../api/queries";
 import { AddItem } from "../components/AddItem";
-import { focusFirstRow, focusRowOf, ItemRow } from "../components/ItemRow";
+import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
+import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
 import { itemProblem } from "../components/itemProblems";
 import { ListControls, type Panel } from "../components/ListControls";
@@ -34,7 +35,7 @@ export function HeapPage({
   const [panel, setPanel] = useState<Panel>(null);
   // Bumped to move focus into the open panel, for "Change view" below the list.
   const [panelFocus, setPanelFocus] = useState(0);
-  const markDone = useMarkDone(heapId);
+  const changeState = useChangeState(heapId);
   const closeItem = useCloseItem(heapId, itemId);
 
   // The list's keys (app-ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
@@ -82,11 +83,11 @@ export function HeapPage({
           onPanel={setPanel}
           panelFocus={panelFocus}
           onPanelFocus={() => setPanelFocus((n) => n + 1)}
-          onMarkDone={markDone.run}
+          onChangeState={changeState.run}
         />
       </div>
       {pane}
-      <UndoToast toast={markDone.toast} onDismiss={markDone.dismiss} />
+      <UndoToast toast={changeState.toast} onDismiss={changeState.dismiss} />
     </div>
   );
 }
@@ -109,29 +110,32 @@ const pinnedTitle = (pinned: RankedItem[]) =>
   pinned.every((entry) => entry.item.state === "in_progress") ? "In progress" : "Pinned";
 
 /**
- * Marks an item done from the list, then offers to undo it (app-ux.md, The list §3). Undo puts back the state it had,
- * and the blocker with it.
+ * Changes an item's state from the list, by its circle, `x` or a swipe, then offers to undo it (app-ux.md, The list
+ * §3). Undo puts back the state it had, and the blocker with it.
  */
-function useMarkDone(heapId: string) {
+function useChangeState(heapId: string) {
   const update = useUpdateItem(heapId);
   const [toast, setToast] = useState<Toast | null>(null);
   const dismiss = useCallback(() => setToast(null), []);
   const failed = (error: Error) => setToast({ id: Date.now(), message: itemProblem(error), error: true });
 
-  const run = (item: Item) =>
+  const run: ChangeState = (item, state, onError) =>
     update.mutate(
-      { item, patch: { state: "done" } },
+      { item, patch: { state } },
       {
         onSuccess: (saved) => {
           const restore: ItemPatch = { state: item.state };
           if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
           setToast({
             id: Date.now(),
-            message: `“${item.title}” is done.`,
+            message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
             undo: () => update.mutate({ item: saved, patch: restore }, { onError: failed }),
           });
         },
-        onError: failed,
+        onError: (error) => {
+          failed(error);
+          onError?.();
+        },
       },
     );
   return { run, toast, dismiss };
@@ -170,7 +174,7 @@ function ListPage({
   onPanel,
   panelFocus,
   onPanelFocus,
-  onMarkDone,
+  onChangeState,
 }: {
   heapId: string;
   itemId: string | undefined;
@@ -183,7 +187,7 @@ function ListPage({
   onPanel: (panel: Panel) => void;
   panelFocus: number;
   onPanelFocus: () => void;
-  onMarkDone: (item: Item) => void;
+  onChangeState: ChangeState;
 }) {
   if (list.isPending) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
@@ -242,7 +246,7 @@ function ListPage({
       entries={entries}
       heapId={heapId}
       itemId={itemId}
-      onMarkDone={onMarkDone}
+      onChangeState={onChangeState}
       compact={(entry) => pinned === true && entry.item.state === "in_progress"}
     />
   );
@@ -326,13 +330,13 @@ function ItemList({
   entries,
   heapId,
   itemId,
-  onMarkDone,
+  onChangeState,
   compact,
 }: {
   entries: RankedItem[];
   heapId: string;
   itemId: string | undefined;
-  onMarkDone: (item: Item) => void;
+  onChangeState: ChangeState;
   compact: (entry: RankedItem) => boolean;
 }) {
   return (
@@ -346,7 +350,7 @@ function ItemList({
             selected={entry.item.id === itemId}
             itemOpen={itemId !== undefined}
             compact={compact(entry)}
-            onMarkDone={onMarkDone}
+            onChangeState={onChangeState}
           />
         ))}
       </AnimatePresence>
