@@ -1,4 +1,4 @@
-import { addItem, dayFromToday, expect, expectOrder, row, test } from "./fixtures";
+import { addItem, goTo, dayFromToday, expect, expectOrder, row, test } from "./fixtures";
 
 test("added items are ranked, and an edit moves an item", async ({ page }) => {
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
@@ -22,13 +22,13 @@ test("an item is closed from the list and reopened from Closed", async ({ page }
   await row(page, "Write release notes").getByLabel("State").selectOption("Done");
   await expect(row(page, "Write release notes")).toHaveCount(0);
 
-  await page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Closed" }).click();
+  await goTo(page, "Closed");
   const closed = page.getByRole("listitem").filter({ hasText: "Write release notes" });
   await expect(closed).toContainText("Done ·");
   await closed.getByRole("button", { name: "Reopen" }).click();
   await expect(page.getByText("Nothing closed yet.")).toBeVisible();
 
-  await page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Open" }).click();
+  await goTo(page, "Open");
   await expect(row(page, "Write release notes").getByLabel("State")).toHaveValue("open");
 });
 

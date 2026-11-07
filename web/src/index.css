@@ -1,10 +1,85 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Design tokens (design/app-ux.md, Toolkit). Each colour is named for its job, and dark mode swaps the values here,
+ * so components use `bg-surface` rather than a `bg-white dark:bg-stone-900` pair. The values follow the mockups:
+ * stone for ink and surfaces, amber for the accent, teal for done, violet for custom parameters, red for overdue.
+ */
+:root {
+  --canvas: #fafaf9;
+  --surface: #ffffff;
+  --sunken: #f5f5f4;
+  --line: #e7e5e4;
+  --ink: #1c1917;
+  --ink-soft: #57534e;
+  --muted: #78716c;
+  --accent: #d97706;
+  --accent-soft: #fffbeb;
+  --accent-ink: #92400e;
+  --done: #0f766e;
+  --param-soft: #ede9fe;
+  --param-ink: #4c1d95;
+  --overdue-soft: #fee2e2;
+  --overdue-ink: #991b1b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0c0a09;
+    --surface: #1c1917;
+    --sunken: #141210;
+    --line: #292524;
+    --ink: #f5f5f4;
+    --ink-soft: #d6d3d1;
+    --muted: #a8a29e;
+    --accent: #f59e0b;
+    --accent-soft: #451a03;
+    --accent-ink: #fde68a;
+    --done: #14b8a6;
+    --param-soft: #2e1065;
+    --param-ink: #ddd6fe;
+    --overdue-soft: #450a0a;
+    --overdue-ink: #fca5a5;
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-done: var(--done);
+  --color-param-soft: var(--param-soft);
+  --color-param-ink: var(--param-ink);
+  --color-overdue-soft: var(--overdue-soft);
+  --color-overdue-ink: var(--overdue-ink);
+}
 
 @layer base {
   body {
-    @apply bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+    @apply bg-canvas text-ink antialiased;
   }
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-amber-500;
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+/*
+ * iOS zooms in on a focused field whose text is under 16 px. Unlayered, so it wins over the `text-sm` utilities on
+ * today's fields.
+ */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(1rem, 1em);
   }
 }

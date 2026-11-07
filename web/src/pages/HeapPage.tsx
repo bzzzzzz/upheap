@@ -89,8 +89,9 @@ export function HeapPage({
 
   return (
     <main>
-      <div className="mt-6 flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">{heap.name}</h1>
+      <div className="mt-2 flex items-baseline justify-end sm:mt-6 sm:justify-between">
+        {/* On a phone the heap name is already at the top, as the heap switcher. */}
+        <h1 className="text-xl font-semibold tracking-tight max-sm:sr-only">{heap.name}</h1>
         <button
           type="button"
           onClick={() => void list.refresh()}
