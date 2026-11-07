@@ -28,9 +28,10 @@ It answers questions like:
 1. An item is a finishable piece of work with a title and an optional description.
 2. An item can have an effort size and an impact, each on the scale S, M, L, XL.
 3. An item can have a due time, given either loosely or as an exact deadline date.
-   - A loose due time is stored as a date, marked as not firm. It is shown in fuzzy terms such as "in a few days", "in a few weeks" or "in several months".
+   - A loose due time is stored as a date, marked as not firm. It is shown in fuzzy terms such as "in a few days", "next week", "in a few weeks", "next month" or "in several months".
    - A loose due time never becomes overdue. Once its date has passed, it keeps showing the nearest term, for example "in a few days".
    - An exact deadline can become overdue.
+   - A loose due time is picked from rough choices ("next week") rather than a date, and reads back with the term it was picked by.
 4. Effort, impact, due time and custom parameters can all be left unset. An unset value counts as the lowest-priority option for that parameter, and the interface shows it as unset.
 5. An item can have any number of tags, used to group similar items. A tag has a name and an optional description.
 6. An item is always in one state: open, in progress, blocked, done, or won't do. Done and won't do are closed (terminal) states. Items are never deleted. Work that won't happen is closed as won't do.

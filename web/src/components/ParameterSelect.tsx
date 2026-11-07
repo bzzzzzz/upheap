@@ -1,4 +1,7 @@
+import { useId } from "react";
+
 import type { ItemParameter, Parameter } from "../api/client";
+import { ChoiceButtons } from "./ChoiceButtons";
 
 /**
  * Picks an item's option for one custom parameter. The empty option means unset. An option the item keeps after it
@@ -64,5 +67,61 @@ export function ParameterChips({ parameters }: { parameters: ItemParameter[] }) 
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Up to this many short options show as buttons; more, or longer labels, as a menu (app-ux.md, The item §3). */
+const MAX_BUTTONS = 4;
+const MAX_BUTTON_LABEL = 12;
+
+/**
+ * Picks a value for one of the heap's parameters, as effort and impact are picked: a row of option buttons when there
+ * are a few short options, or a menu otherwise.
+ */
+export function ParameterPicker({
+  parameter,
+  value,
+  onChange,
+  disabled,
+}: {
+  parameter: Parameter;
+  value: string | null;
+  onChange: (optionId: string | null) => void;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  const options = parameter.options;
+  if (options.length <= MAX_BUTTONS && options.every((option) => option.label.length <= MAX_BUTTON_LABEL)) {
+    return (
+      <ChoiceButtons
+        label={<span className="text-param-ink">{parameter.name}</span>}
+        options={options.map((option) => ({ id: option.id, label: option.label }))}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        tone="param"
+      />
+    );
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className="text-xs font-medium text-param-ink">
+        {parameter.name}
+      </label>
+      <select
+        id={id}
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+        className="h-9 rounded-lg border border-line bg-surface px-2 text-sm text-ink pointer-coarse:h-11"
+      >
+        <option value="">Not set</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
