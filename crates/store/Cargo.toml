@@ -29,7 +29,7 @@ uuid.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 googletest.workspace = true
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # Lets this crate's own integration tests use `store::testing`.
 store = { path = ".", default-features = false, features = ["testing"] }
 

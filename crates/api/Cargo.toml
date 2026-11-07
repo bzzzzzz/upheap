@@ -27,7 +27,7 @@ anyhow.workspace = true
 domain.workspace = true
 googletest.workspace = true
 http-body-util.workspace = true
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # The tests open their database through `store::testing` (SQLite, or MySQL with TEST_DATABASE_URL).
 store = { workspace = true, features = ["testing"] }
 tracing-subscriber.workspace = true
