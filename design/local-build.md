@@ -166,7 +166,8 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
    backend and checks its size, typechecks the worker, runs the backend in Node on SQLite-wasm
    (`web/scripts/local-smoke.ts`), and builds the web app. It then runs Playwright against the static build. A change
    that breaks the local build fails the pull request. The Pages workflow (`.github/workflows/pages.yml`) builds
-   the same way and publishes to GitHub Pages from `main`, once the repository's Pages source is GitHub Actions.
+   the same way and publishes to GitHub Pages from `main` after every merge. Auto-merge merges with a personal access token
+   (`AUTO_MERGE_TOKEN`), since a merge made with the workflow's own token wouldn't start the Pages workflow.
 4. **Tests:** the Rust suites stay native and cover the shared code. Playwright runs the golden paths that apply
    (add and rank, close and reopen, block and unblock, parameter management) against the static build too
    (`npm run e2e:local`, `playwright.local.config.ts`), with the fixture's `localBuild` option skipping sign-up.
