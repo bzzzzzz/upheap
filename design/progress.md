@@ -23,7 +23,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Ranking: age, deadline, value per effort, custom parameters | Req Priority §1–10 | 🟡 | Placeholder formula `V1` with blocker inheritance and custom parameters; the heap's own weights can't be changed yet |
 | Main list view | Req Views: List items | ✅ | Per-state pinned/shown/hidden, blocked grouped or mixed in, `sort=`, tag/effort/impact/option filters and sort by a parameter, client text search (`/`), inline edits, `N`; the view lives in the URL |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
-| Add item | Req Views: Add item | ✅ | Tags, created by typing a new name; picking a tag brings up its linked parameters |
+| Add item | Req Views: Add item | ✅ | A dialog (`N`) with every field: rough due choices or an exact date, S M L XL buttons, tags created by typing a new name, and the parameters linked to the chosen tags; Add another for several in a row |
 | Edit item view | Req Views: Edit item | ✅ | Every field, tags, parameter values, state and blocker in one save; a closed item is reopened and edited in the same save |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; filterable in the list |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
@@ -39,7 +39,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
 | Local build: static, single user, data in the browser | [local-build.md](local-build.md) | ✅ | The backend and the Router run in a browser worker on SQLite-wasm in OPFS, without accounts. The web app offers only what one user can do, keeps its data with export and import and one tab at a time, and CI runs the golden paths against the static build. The Pages workflow publishes it from `main` after every merge, to https://bzzzzzz.github.io/upheap/ |
-| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Next: the list and item, with the due choices from the server. Installing (PWA) comes later |
+| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Step 2 in progress: the Add dialog with the due choices from the server (`GET /due-choices`) and S M L XL buttons. Next: compact rows and the item pane. Installing (PWA) comes later |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work

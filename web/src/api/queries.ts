@@ -161,6 +161,18 @@ export function useItem(itemId: string) {
   });
 }
 
+/**
+ * The rough due times a due picker offers, from the server, so a picked choice reads back with the label it was
+ * picked by. Their dates move with the day, so they're fetched again after a while.
+ */
+export function useDueChoices() {
+  return useQuery({
+    queryKey: ["due-choices"],
+    queryFn: async () => unwrap(await api.GET("/api/v1/due-choices")).choices,
+    staleTime: 10 * 60_000,
+  });
+}
+
 function invalidateHeap(queryClient: QueryClient, heapId: string) {
   return Promise.all([
     // Every view of the list, by prefix.

@@ -59,3 +59,32 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await expect(row(page, "Deploy").getByLabel("Waiting for")).toHaveCount(0);
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");
 });
+
+test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {
+  await page.keyboard.press("n");
+  const dialog = page.getByRole("dialog", { name: "Add an item" });
+  const due = dialog.getByRole("radiogroup", { name: "Due" });
+
+  // A rough choice reads back with the label it was picked by, which comes from the server.
+  await dialog.getByLabel("Title").fill("Book the dentist");
+  await due.getByRole("radio", { name: "next week" }).click();
+  await dialog.getByLabel("Add another").check();
+  await dialog.getByLabel("Title").press("Enter");
+  await expect(row(page, "Book the dentist").getByText("next week", { exact: true })).toBeVisible();
+
+  // With Add another, the dialog stays open and clears.
+  await expect(dialog.getByLabel("Title")).toHaveValue("");
+  await expect(due.getByRole("radio", { name: "next week" })).not.toBeChecked();
+  await dialog.getByLabel("Title").fill("Renew the passport");
+  await due.getByRole("radio", { name: "Exact date" }).click();
+  await dialog.getByLabel("Exact due date").fill(dayFromToday(-1));
+  await dialog.getByLabel("Title").press("ControlOrMeta+Enter");
+  await expect(row(page, "Renew the passport").getByText("Overdue · yesterday", { exact: true })).toBeVisible();
+
+  // Closing with a title typed asks first.
+  await dialog.getByLabel("Title").fill("A stray thought");
+  await dialog.getByLabel("Title").press("Escape");
+  await dialog.getByRole("button", { name: "Discard" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row(page, "A stray thought")).toHaveCount(0);
+});

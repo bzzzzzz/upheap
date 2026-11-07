@@ -79,8 +79,9 @@ export function TagPicker({
     } else if (event.key === "Backspace" && text === "" && value.length > 0 && !busy) {
       onChange(value.slice(0, -1));
     } else if (event.key === "Escape" && text !== "") {
-      // Handled here, so a form around the picker doesn't treat it as cancel.
+      // Handled here, so a form or dialog around the picker doesn't treat it as cancel.
       event.preventDefault();
+      event.stopPropagation();
       setText("");
     }
   };
@@ -88,13 +89,13 @@ export function TagPicker({
   const optionId = (index: number) => `${listId}-${index}`;
 
   return (
-    <div className="relative flex flex-col gap-1 text-xs text-stone-500">
+    <div className="relative flex flex-col gap-1.5 text-xs">
+      <span className="font-medium text-ink-soft">Tags</span>
       <div className="flex flex-wrap items-center gap-1">
-        <span>Tags</span>
         {value.map((tag) => (
           <span
             key={tag.id}
-            className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-sky-900 dark:bg-sky-950 dark:text-sky-200"
+            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft"
           >
             {tag.name}
             <button
@@ -102,7 +103,7 @@ export function TagPicker({
               disabled={disabled || busy}
               onClick={() => onChange(value.filter((t) => t.id !== tag.id))}
               aria-label={`Remove tag ${tag.name}`}
-              className="text-sky-700 hover:text-sky-950 dark:text-sky-400 dark:hover:text-sky-100"
+              className="flex size-5 items-center justify-center rounded-full text-muted hover:bg-line hover:text-ink"
             >
               ×
             </button>
@@ -126,7 +127,7 @@ export function TagPicker({
           onKeyDown={onKey}
           placeholder={canCreate ? "Type to add or create" : "Type to add"}
           autoComplete="off"
-          className="min-w-32 flex-1 rounded border border-stone-300 bg-white px-1 py-0.5 text-stone-900 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+          className="h-9 min-w-32 flex-1 rounded-lg border border-line bg-surface px-2 text-sm text-ink pointer-coarse:h-11"
         />
       </div>
       {open && (
@@ -134,7 +135,7 @@ export function TagPicker({
           id={listId}
           role="listbox"
           aria-label="Tags"
-          className="absolute top-full right-0 left-0 z-10 mt-1 rounded border border-stone-200 bg-white py-1 text-sm text-stone-900 shadow-md dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+          className="absolute top-full right-0 left-0 z-10 mt-1 rounded-lg border border-line bg-surface py-1 text-sm text-ink shadow-md"
         >
           {suggestions.map((tag, index) => (
             <li
@@ -146,10 +147,10 @@ export function TagPicker({
                 e.preventDefault();
                 if (!busy) add(tag);
               }}
-              className="cursor-pointer px-2 py-1 aria-selected:bg-stone-100 dark:aria-selected:bg-stone-800"
+              className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
             >
               {tag.name}
-              {tag.description && <span className="ml-2 text-xs text-stone-500">{tag.description}</span>}
+              {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
             </li>
           ))}
           {offerCreate && (
@@ -161,7 +162,7 @@ export function TagPicker({
                 e.preventDefault();
                 createTag();
               }}
-              className="cursor-pointer px-2 py-1 aria-selected:bg-stone-100 dark:aria-selected:bg-stone-800"
+              className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
             >
               Create tag “{query}”
             </li>
@@ -169,7 +170,7 @@ export function TagPicker({
         </ul>
       )}
       {create.error && (
-        <p role="alert" className="text-red-700 dark:text-red-400">
+        <p role="alert" className="text-overdue-ink">
           {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
             ? "A tag with that name already exists."
             : create.error.message}
