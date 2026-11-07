@@ -49,7 +49,7 @@ async fn create_team(
     ApiJson(body): ApiJson<NameDto>,
 ) -> Result<(StatusCode, Json<TeamDto>), ApiError> {
     let detail = state.services.create_team(principal, body.to_name()?).await?;
-    Ok((StatusCode::CREATED, Json(detail.into())))
+    Ok((StatusCode::CREATED, Json(TeamDto::new(detail, &state.authentication))))
 }
 
 /// Renames the team. Admins only; send the team's `version` in `If-Match`.
@@ -74,7 +74,7 @@ pub(super) async fn update_team(
         .services
         .rename_team(principal, TeamId::from_uuid(team_id), body.to_name()?, expected)
         .await?;
-    Ok(Json(detail.into()))
+    Ok(Json(TeamDto::new(detail, &state.authentication)))
 }
 
 /// Adds an existing user to the team as a member. Admins only. Answers `200` with the team unchanged when they are
@@ -102,7 +102,7 @@ async fn add_member(
         MemberAdded::Added => StatusCode::CREATED,
         MemberAdded::AlreadyMember => StatusCode::OK,
     };
-    Ok((status, Json(detail.into())))
+    Ok((status, Json(TeamDto::new(detail, &state.authentication))))
 }
 
 /// Makes a member an admin, or an admin a member. Admins only.
@@ -129,7 +129,7 @@ async fn update_member(
             body.role.into(),
         )
         .await?;
-    Ok(Json(detail.into()))
+    Ok(Json(TeamDto::new(detail, &state.authentication)))
 }
 
 /// Takes a user out of the team. Admins only. Removing someone who isn't a member succeeds.

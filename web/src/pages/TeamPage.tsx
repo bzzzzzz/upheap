@@ -301,7 +301,8 @@ function LeaveTeam({ team }: { team: Team }) {
   const { confirming, ask, cancel, buttonRef: leaveButton } = useConfirmation();
 
   if (!team.allowed_actions.includes("leave")) {
-    return team.role === "admin" ? (
+    // Only worth saying where someone else could be made an admin.
+    return team.role === "admin" && team.allowed_actions.includes("add_member") ? (
       <p className="text-sm text-stone-500">You are the only admin, so you can't leave until someone else is one.</p>
     ) : null;
   }

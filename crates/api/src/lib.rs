@@ -66,6 +66,14 @@ pub enum Authentication {
     LocalUser(Principal),
 }
 
+impl Authentication {
+    /// The local build's one user: no one else to add, one team, and no signing in or out. `allowed_actions` leave
+    /// out what that rules out.
+    pub(crate) const fn is_single_user(&self) -> bool {
+        matches!(self, Self::LocalUser(_))
+    }
+}
+
 /// How the session cookie is issued.
 #[cfg(feature = "accounts")]
 #[derive(Clone, Debug)]

@@ -22,7 +22,7 @@ use crate::dto::RoleDto;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, CurrentUser};
 use crate::heaps::HeapDto;
-use crate::{ApiError, AppState};
+use crate::{ApiError, AppState, Authentication};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     // `GET` and `PATCH` share a path, so they are registered together.
@@ -119,8 +119,18 @@ pub(crate) struct TeamDto {
     pub allowed_actions: Vec<TeamActionDto>,
 }
 
-impl From<TeamDetail> for TeamDto {
-    fn from(detail: TeamDetail) -> Self {
+impl TeamDto {
+    /// The team as `authentication`'s caller sees it. The local user has no one to add and only the one team, so
+    /// creating heaps is the only team action offered, and no member actions are.
+    pub(crate) fn new(mut detail: TeamDetail, authentication: &Authentication) -> Self {
+        if authentication.is_single_user() {
+            detail
+                .allowed_actions
+                .retain(|action| matches!(action, TeamAction::CreateHeap));
+            for member in &mut detail.members {
+                member.allowed_actions.clear();
+            }
+        }
         Self {
             id: *detail.team.id.as_uuid(),
             name: detail.team.name.as_str().to_owned(),
@@ -157,7 +167,7 @@ async fn get_team(
     ApiPath(team_id): ApiPath<Uuid>,
 ) -> Result<Json<TeamDto>, ApiError> {
     let detail = state.services.load_team(principal, TeamId::from_uuid(team_id)).await?;
-    Ok(Json(detail.into()))
+    Ok(Json(TeamDto::new(detail, &state.authentication)))
 }
 
 /// Adds a heap to the team. Admins only.

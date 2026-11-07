@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router";
 
-import { useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
+import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
 import { ProblemText } from "../components/ProblemText";
 
 const navLink =
@@ -14,6 +14,8 @@ export function AppLayout() {
 
   const heapCount = me?.teams.reduce((n, team) => n + team.heaps.length, 0) ?? 0;
   const heapTeam = me?.teams.find((team) => team.heaps.some((heap) => heap.id === heapId));
+  // With one team and no Teams list, the account links go straight to the team, so the heap's own link would repeat it.
+  const onlyTeam = me && soleTeam(me);
 
   return (
     <div className="mx-auto max-w-3xl px-4 pb-24">
@@ -62,7 +64,7 @@ export function AppLayout() {
             <Link to="/heaps/$heapId/activity" params={{ heapId }} className={navLink}>
               Activity
             </Link>
-            {heapTeam && (
+            {heapTeam && !onlyTeam && (
               <Link to="/teams/$teamId" params={{ teamId: heapTeam.id }} className={navLink}>
                 Team
               </Link>
@@ -70,20 +72,28 @@ export function AppLayout() {
           </nav>
         )}
         <nav className="ml-auto flex gap-3 text-sm" aria-label="Account">
-          <Link to="/teams" activeOptions={{ exact: true }} className={navLink}>
-            Teams
-          </Link>
+          {onlyTeam ? (
+            <Link to="/teams/$teamId" params={{ teamId: onlyTeam.id }} className={navLink}>
+              {onlyTeam.name}
+            </Link>
+          ) : (
+            <Link to="/teams" activeOptions={{ exact: true }} className={navLink}>
+              Teams
+            </Link>
+          )}
           <Link to="/account" className={navLink}>
             {me?.user.display_name}
           </Link>
         </nav>
-        <button
-          type="button"
-          onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
-          className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-        >
-          Sign out
-        </button>
+        {me?.allowed_actions.includes("sign_out") && (
+          <button
+            type="button"
+            onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
+            className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
+          >
+            Sign out
+          </button>
+        )}
       </header>
       {heapId && <ArchivedNotice key={heapId} heapId={heapId} />}
       <Outlet />

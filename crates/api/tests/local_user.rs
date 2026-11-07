@@ -36,6 +36,31 @@ async fn the_local_user_is_signed_in_with_one_team_and_heap() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
+    // Arrange
+    let app = TestApp::start_local().await?;
+    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
+    let team = me.body["teams"][0]["id"].as_str().context("team")?.to_owned();
+
+    // Act
+    let detail = app
+        .send(Method::GET, &format!("/api/v1/teams/{team}"), None, None)
+        .await?;
+
+    // Assert
+    expect_that!(me.body["allowed_actions"], eq(&json!([])));
+    expect_that!(detail.status, eq(StatusCode::OK));
+    expect_that!(detail.body["allowed_actions"], eq(&json!(["create_heap"])));
+    expect_that!(detail.body["members"][0]["allowed_actions"], eq(&json!([])));
+    expect_that!(
+        detail.body["heaps"][0]["allowed_actions"],
+        eq(&json!(["rename", "archive", "view_history"]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_local_user_works_in_their_heap_without_a_session() -> Result<()> {
     // Arrange
     let app = TestApp::start_local().await?;
