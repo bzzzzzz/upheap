@@ -7,3 +7,5 @@ web/dist
 .DS_Store
 *.tsbuildinfo
 *.swp
+web/test-results
+web/playwright-report
