@@ -428,9 +428,8 @@ fn to_parameter(
         .iter()
         .map(|link| read.uuid(&link.tag_id).map(TagId::from_uuid))
         .collect::<Result<BTreeSet<_>, _>>()?;
-    let weight = u16::try_from(row.weight)
+    let weight = Weight::parse(row.weight.into())
         .ok()
-        .and_then(|w| Weight::parse(w).ok())
         .ok_or_else(|| read.corrupt(format!("weight {} out of range", row.weight)))?;
     Ok(Parameter {
         id: ParameterId::from_uuid(read.uuid(&row.id)?),

@@ -283,7 +283,8 @@ pub struct Item {
     pub due: Option<Due>,
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. Unset parameters are left out, and rank as their
-    /// lowest-priority option. A closed item may keep an option or a parameter that was archived since.
+    /// lowest-priority option. A closed item may keep an option or a parameter that was archived since; reopening it
+    /// brings them up to date (`parameter::current_values`).
     pub parameters: BTreeMap<ParameterId, OptionId>,
     pub created_at: Timestamp,
     pub version: Version,

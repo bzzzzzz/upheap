@@ -6,7 +6,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
 use domain::list_view::{Group, ListView};
-use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, check_values};
+use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, check_values, current_values};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
@@ -328,11 +328,16 @@ impl Services {
             load_heap_tags(&txn, current.heap_id, tags).await?;
         }
         let parameters = store::parameters::list_parameters_locking(&txn, current.heap_id).await?;
-        check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
 
         let now = self.now();
         let role = access.membership.role;
-        let edited = current.apply_patch(&patch, now)?;
+        // The patch is applied first, so editing an item that stays closed fails with `item_closed`.
+        let mut edited = current.apply_patch(&patch, now)?;
+        check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
+        // A reopened item gets the values archiving would have given it had it been open.
+        if let Some(reopened) = edited.as_mut().filter(|e| current.is_closed() && !e.is_closed()) {
+            reopened.parameters = current_values(&parameters, &reopened.parameters);
+        }
         // Checked after the patch, so an item that doesn't end up blocked gets `item_not_blocked` first.
         if let Some(blocker) = edited.as_ref().and_then(Item::blocked_by)
             && current.blocked_by() != Some(blocker)

@@ -483,6 +483,17 @@ async fn archiving_an_option_switches_open_items_to_its_replacement() -> Result<
         audit.last().map(|(_, diff)| diff["items_switched"].clone()),
         some(eq(&json!([id(&open)])))
     );
+    let item_audit = app.audit_entries(&id(&open)).await?;
+    expect_that!(
+        item_audit.last(),
+        some(eq(&(
+            "item_updated".to_owned(),
+            json!({ "parameters": {
+                "before": { id(&customer): pro },
+                "after": { id(&customer): free },
+            } })
+        )))
+    );
     Ok(())
 }
 
@@ -564,6 +575,57 @@ async fn a_parameter_is_archived_only_once_no_open_item_uses_it() -> Result<()> 
         eq(&json!(true))
     );
     expect_that!(open_after.body["parameters"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_reopened_item_takes_up_replacements_and_drops_archived_parameters() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let customer = new_parameter(&app, &session, &heap, "Customer", &["Pro", "Free"]).await?;
+    let area = new_parameter(&app, &session, &heap, "Area", &["Infra"]).await?;
+    let (pro, free) = (option_id(&customer, "Pro"), option_id(&customer, "Free"));
+    let item = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Closed", "parameter_values": {
+                id(&customer): pro, id(&area): option_id(&area, "Infra")
+            } }),
+        )
+        .await?;
+    let path = format!("/api/v1/items/{}", id(&item));
+    let closed = app
+        .patch(&session, &path, &item["version"], json!({ "state": "done" }))
+        .await?;
+    archive_option(&app, &session, &pro, Some(&free)).await?;
+    archive_parameter(&app, &session, &id(&area)).await?;
+
+    // Act
+    let unknown_while_closed = app
+        .patch(
+            &session,
+            &path,
+            &closed.body["version"],
+            json!({ "parameter_values": { id(&item): null } }),
+        )
+        .await?;
+    let reopened = app
+        .patch(&session, &path, &closed.body["version"], json!({ "state": "open" }))
+        .await?;
+
+    // Assert
+    expect_that!(unknown_while_closed.body["code"], eq(&json!("item_closed")));
+    expect_that!(reopened.status, eq(StatusCode::OK));
+    expect_that!(value_of(&reopened.body, "Customer"), some(eq("Free")));
+    expect_that!(value_of(&reopened.body, "Area"), none());
+    let audit = app.audit_entries(&id(&item)).await?;
+    expect_that!(
+        audit.last().map(|(_, diff)| diff["parameters"].is_null()),
+        some(eq(false))
+    );
     Ok(())
 }
 
@@ -755,6 +817,7 @@ async fn parameter_input_is_checked() -> Result<()> {
 
     // Act
     let heavy = create_parameter(&app, &session, &heap, json!({ "name": "Area", "weight": 101 })).await?;
+    let negative = create_parameter(&app, &session, &heap, json!({ "name": "Area", "weight": -1 })).await?;
     let blank_label = create_parameter(&app, &session, &heap, json!({ "name": "Area", "options": [" "] })).await?;
     let too_many = create_parameter(&app, &session, &heap, json!({ "name": "Area", "options": many })).await?;
     let unknown_field = create_parameter(&app, &session, &heap, json!({ "name": "Area", "option": ["Web"] })).await?;
@@ -762,6 +825,7 @@ async fn parameter_input_is_checked() -> Result<()> {
     // Assert
     expect_that!(heavy.body["code"], eq(&json!("weight_out_of_range")));
     expect_that!(heavy.body["field"], eq(&json!("weight")));
+    expect_that!(negative.body["code"], eq(&json!("weight_out_of_range")));
     expect_that!(blank_label.body["code"], eq(&json!("field_empty")));
     expect_that!(blank_label.body["field"], eq(&json!("options")));
     expect_that!(too_many.body["code"], eq(&json!("too_many_options")));

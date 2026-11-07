@@ -132,13 +132,14 @@ pub struct ListFilter {
     /// Keep items with one of these impacts.
     pub impact: BTreeSet<Size>,
     /// Options of custom parameters. Keep items with one of the options listed for each parameter they belong to.
-    /// An archived option matches the items that switched to its replacement.
+    /// An archived option matches the items that switched to its replacement. Options of archived parameters
+    /// don't filter, as those parameters no longer count anywhere else.
     pub options: BTreeSet<OptionId>,
 }
 
 impl ListFilter {
-    /// Whether `item` passes the filter. `parameters` are the heap's parameters, archived ones included; filter
-    /// options that belong to none of them are ignored.
+    /// Whether `item` passes the filter. `parameters` are the heap's parameters; filter options that belong to
+    /// none of them, or to an archived one, are ignored.
     pub fn matches(&self, item: &Item, parameters: &[Parameter]) -> bool {
         let tags = self.tags.is_empty() || !self.tags.is_disjoint(&item.tags);
         tags && within(&self.effort, item.effort)
@@ -150,7 +151,7 @@ impl ListFilter {
         if self.options.is_empty() {
             return true;
         }
-        parameters.iter().all(|parameter| {
+        parameters.iter().filter(|p| !p.is_archived()).all(|parameter| {
             let wanted: BTreeSet<OptionId> = self
                 .options
                 .iter()
@@ -220,13 +221,15 @@ impl ListView {
 
     /// Sorts `group`, which is in priority order, by [`Self::sort`]. The sort is stable, so ties keep priority
     /// order. Grouped blocked items always stay in priority order (Req Views: List items §3). `parameters` are the
-    /// heap's parameters; a sort by a parameter that isn't among them keeps priority order.
+    /// heap's parameters; a sort by a parameter that isn't among them, or is archived, keeps priority order.
     pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item, parameters: &[Parameter]) {
         let key = self.sort;
         if key == SortKey::Priority || group == Group::Blocked {
             return;
         }
-        let parameter = key.parameter().and_then(|id| parameters.iter().find(|p| p.id == id));
+        let parameter = key
+            .parameter()
+            .and_then(|id| parameters.iter().find(|p| p.id == id && !p.is_archived()));
         entries.sort_by(|a, b| compare(key, parameter, item(a), item(b)));
     }
 }
@@ -524,6 +527,24 @@ mod tests {
         expect_that!(filter.matches(&valued(1, Some(13)), &parameters), eq(true));
         expect_that!(filter.matches(&valued(2, Some(11)), &parameters), eq(false));
         expect_that!(filter.matches(&valued(3, None), &parameters), eq(false));
+    }
+
+    #[gtest]
+    fn an_archived_parameter_neither_filters_nor_sorts() {
+        let at = Timestamp::from_millis(1).expect("in range");
+        let parameters = [area().archive(at).expect("changed")];
+        let filter = ListFilter {
+            options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(11))]),
+            ..ListFilter::default()
+        };
+        let view = by(SortKey::Parameter(ParameterId::from_uuid(Uuid::from_u128(10))));
+        let mut items = vec![valued(1, None), valued(2, Some(13)), valued(3, Some(11))];
+
+        view.sort(Group::Ranked, &mut items, |item| item, &parameters);
+
+        expect_that!(filter.matches(&valued(4, Some(13)), &parameters), eq(true));
+        let ids: Vec<u128> = items.iter().map(|item| item.id.as_uuid().as_u128()).collect();
+        expect_that!(ids, elements_are![eq(&1), eq(&2), eq(&3)]);
     }
 
     #[gtest]

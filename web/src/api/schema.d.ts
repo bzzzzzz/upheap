@@ -612,7 +612,7 @@ export interface components {
             /** @description Tags of the same heap to suggest the parameter for. */
             tag_ids?: string[];
             /**
-             * Format: int32
+             * Format: int64
              * @description 0 to 100. Defaults to 10, the same as the heap's own weights.
              */
             weight?: number | null;
@@ -928,7 +928,10 @@ export interface components {
         /** @description A partial edit. Leave a field out to keep it. */
         ParameterPatchRequest: {
             name?: string | null;
-            /** Format: int32 */
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
             weight?: number | null;
         };
         /** @description An error response body (RFC 9457 problem details). */

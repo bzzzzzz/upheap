@@ -3181,8 +3181,9 @@
               "integer",
               "null"
             ],
-            "format": "int32",
+            "format": "int64",
             "description": "0 to 100. Defaults to 10, the same as the heap's own weights.",
+            "maximum": 100,
             "minimum": 0
           }
         },
@@ -4116,7 +4117,9 @@
               "integer",
               "null"
             ],
-            "format": "int32",
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
             "minimum": 0
           }
         },

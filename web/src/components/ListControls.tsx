@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 
-import type { BlockedLayout, StateMode } from "../api/client";
+import type { BlockedLayout, Parameter, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
 import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import {
@@ -110,7 +110,8 @@ export function ListControls({
             {view.sort === "parameter" &&
               !parameters.data?.parameters.some((parameter) => parameter.id === view.sort_parameter) && (
                 <option value={`parameter:${view.sort_parameter}`}>
-                  By {archivedName(parameters.data?.archived, view.sort_parameter) ?? "a parameter no longer in use"}
+                  By {archivedName(parameters.data?.archived, view.sort_parameter) ?? "a parameter no longer in use"}{" "}
+                  (archived, priority order)
                 </option>
               )}
           </select>
@@ -253,6 +254,13 @@ function sortFrom(value: string): Pick<ListSearch, "sort" | "sort_parameter"> {
 const archivedName = (archived: { id: string; name: string }[] | undefined, id: string | undefined) =>
   archived?.find((parameter) => parameter.id === id)?.name;
 
+/** Archived options of `parameter` that the filter still names, labelled as archived so they can be removed. */
+function chosenArchived(parameter: Parameter, chosen: string[]) {
+  return parameter.archived_options
+    .filter((option) => chosen.includes(option.id))
+    .map((option) => ({ id: option.id, label: `${option.label} (archived)` }));
+}
+
 /** Toggles `value` in a comma-separated list param. */
 const toggled = (raw: string | undefined, value: string) => {
   const values = splitList(raw);
@@ -301,7 +309,7 @@ function FiltersPanel({
       ))}
       {parameters.data?.parameters.map((parameter) => (
         <PanelRow key={parameter.id} label={`${parameter.name} (any)`}>
-          {parameter.options.map((option) => (
+          {[...parameter.options, ...chosenArchived(parameter, chosenOptions)].map((option) => (
             <Toggle
               key={option.id}
               pressed={chosenOptions.includes(option.id)}
@@ -312,6 +320,27 @@ function FiltersPanel({
           ))}
         </PanelRow>
       ))}
+      {/* Archived parameters no longer filter; a filter a saved view still has on one is shown so it can be removed. */}
+      {parameters.data?.archived.map((parameter) => {
+        const chosen = [...parameter.options, ...parameter.archived_options].filter((option) =>
+          chosenOptions.includes(option.id),
+        );
+        return (
+          chosen.length > 0 && (
+            <PanelRow key={parameter.id} label={`${parameter.name} (archived, ignored)`}>
+              {chosen.map((option) => (
+                <Toggle
+                  key={option.id}
+                  pressed
+                  onClick={() => onChange({ ...view, param: toggled(view.param, option.id) })}
+                >
+                  {option.label}
+                </Toggle>
+              ))}
+            </PanelRow>
+          )
+        );
+      })}
       {filterCount(view) > 0 && (
         <button
           type="button"

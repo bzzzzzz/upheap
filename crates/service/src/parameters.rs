@@ -19,7 +19,7 @@ use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, authorize_heap_write};
-use crate::audit::{describe_new_parameter, diff_parameters};
+use crate::audit::{describe_new_parameter, diff_parameters, diff_switched_value};
 use crate::items::load_heap_tags;
 use crate::{Principal, ServiceError, Services};
 
@@ -120,18 +120,15 @@ impl Services {
         patch: ParameterPatch,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
-        self.edit_parameter(principal, parameter_id, Some(expected), |txn, current| {
-            Box::pin(async move {
-                let edited = current.apply_patch(&patch)?;
-                if let Some(edited) = &edited
-                    && edited.name != current.name
-                {
-                    ensure_name_free(txn, current.heap_id, &edited.name, Some(current.id)).await?;
-                }
-                Ok(edited)
-            })
-        })
-        .await
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let edited = current.apply_patch(&patch)?;
+        if let Some(edited) = &edited
+            && edited.name != current.name
+        {
+            ensure_name_free(&txn, current.heap_id, &edited.name, Some(current.id)).await?;
+        }
+        self.finish_edit(txn, &heap, role, principal, current, edited).await
     }
 
     /// Adds an option with `label` as the parameter's lowest-priority option, if it is still at version `expected`.
@@ -146,10 +143,11 @@ impl Services {
             id: OptionId::from_uuid(self.new_id(self.now())),
             label,
         };
-        self.edit_parameter(principal, parameter_id, Some(expected), |_, current| {
-            Box::pin(async move { Ok(Some(current.add_option(option)?)) })
-        })
-        .await
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let edited = current.add_option(option)?;
+        self.finish_edit(txn, &heap, role, principal, current, Some(edited))
+            .await
     }
 
     /// Relabels the parameter's options in use and puts them in the order given, highest priority first, if it is
@@ -161,10 +159,10 @@ impl Services {
         options: Vec<ParameterOption>,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
-        self.edit_parameter(principal, parameter_id, Some(expected), |_, current| {
-            Box::pin(async move { Ok(current.arrange_options(options)?) })
-        })
-        .await
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        let edited = current.arrange_options(options)?;
+        self.finish_edit(txn, &heap, role, principal, current, edited).await
     }
 
     /// Suggests the parameter for exactly `tags`, tags of its heap, if it is still at version `expected`.
@@ -175,13 +173,11 @@ impl Services {
         tags: BTreeSet<TagId>,
         expected: Version,
     ) -> Result<ParameterEntry, ServiceError> {
-        self.edit_parameter(principal, parameter_id, Some(expected), |txn, current| {
-            Box::pin(async move {
-                load_heap_tags(txn, current.heap_id, &tags).await?;
-                Ok(current.link_tags(tags)?)
-            })
-        })
-        .await
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, Some(expected)).await?;
+        load_heap_tags(&txn, current.heap_id, &tags).await?;
+        let edited = current.link_tags(tags)?;
+        self.finish_edit(txn, &heap, role, principal, current, edited).await
     }
 
     /// Takes the parameter out of use. Fails with [`ServiceError::ParameterInUse`] while an open item has a value for
@@ -193,23 +189,20 @@ impl Services {
         principal: Principal,
         parameter_id: ParameterId,
     ) -> Result<ParameterEntry, ServiceError> {
-        let now = self.now();
-        self.edit_parameter(principal, parameter_id, None, |txn, current| {
-            Box::pin(async move {
-                if current.is_archived() {
-                    return Ok(None);
-                }
-                let users = store::parameters::list_open_items_with_value(txn, current.heap_id, current.id).await?;
-                if !users.is_empty() {
-                    return Err(ServiceError::ParameterInUse {
-                        parameter_id: current.id,
-                        items: users.len(),
-                    });
-                }
-                Ok(current.archive(now))
-            })
-        })
-        .await
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, None).await?;
+        let Some(edited) = current.archive(self.now()) else {
+            return Ok(with_actions(current, &heap, role));
+        };
+        let users = store::parameters::list_open_items_with_value(&txn, current.heap_id, current.id).await?;
+        if !users.is_empty() {
+            return Err(ServiceError::ParameterInUse {
+                parameter_id: current.id,
+                items: users.len(),
+            });
+        }
+        self.finish_edit(txn, &heap, role, principal, current, Some(edited))
+            .await
     }
 
     /// Archives an option, and switches every open item that has it to `replacement`, another option of the same
@@ -227,7 +220,7 @@ impl Services {
         let parameter_id = store::parameters::find_option_parameter(&txn, option_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id).await?;
+        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id, None).await?;
         let now = self.now();
         // An option is only archived with a replacement, so a change always comes with one.
         let (Some(edited), Some(replaced_by)) = (current.archive_option(option_id, replacement, now)?, replacement)
@@ -237,6 +230,22 @@ impl Services {
 
         tracing::info!(heap_id = %heap.id, %parameter_id, %option_id, %replaced_by, "archiving option");
         let switched = store::parameters::switch_open_items(&txn, heap.id, option_id, replaced_by).await?;
+        // Each switched item gets an entry of its own too, so its history accounts for every version.
+        let item_entries: Vec<NewAuditEntry> = switched
+            .iter()
+            .map(|item_id| NewAuditEntry {
+                id: self.new_id(now),
+                team_id: heap.team_id,
+                heap_id: Some(heap.id),
+                actor: principal.user_id,
+                action: AuditAction::ItemUpdated,
+                entity_type: EntityType::Item,
+                entity_id: *item_id.as_uuid(),
+                diff: diff_switched_value(parameter_id, option_id, replaced_by),
+                created_at: now,
+            })
+            .collect();
+        store::audit::insert_audit_entries(&txn, &item_entries).await?;
         let mut diff = diff_parameters(&current, &edited);
         if let Value::Object(fields) = &mut diff {
             let ids: Vec<String> = switched.iter().map(ToString::to_string).collect();
@@ -249,34 +258,20 @@ impl Services {
         Ok(with_actions(saved, &heap, role))
     }
 
-    /// Locks the parameter for a write, checks `expected` when given, lets `edit` work out the new parameter, and
-    /// saves it with an audit entry. `edit` returning `None` means nothing changes: the parameter comes back as it
-    /// is, without an audit entry.
-    async fn edit_parameter<F>(
+    /// Saves `edited`, the edit of `current`, with a `parameter_updated` or `parameter_archived` entry and commits.
+    /// `None` means nothing changes: `current` comes back as it is, without an entry.
+    async fn finish_edit(
         &self,
+        txn: DatabaseTransaction,
+        heap: &Heap,
+        role: Role,
         principal: Principal,
-        parameter_id: ParameterId,
-        expected: Option<Version>,
-        edit: F,
-    ) -> Result<ParameterEntry, ServiceError>
-    where
-        F: for<'a> FnOnce(&'a DatabaseTransaction, &'a Parameter) -> EditFuture<'a>,
-    {
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (heap, role, current) = lock_for_write(&txn, principal, parameter_id).await?;
-        if let Some(expected) = expected
-            && current.version != expected
-        {
-            return Err(ServiceError::VersionConflict {
-                expected,
-                current: current.version,
-            });
-        }
-        let Some(edited) = edit(&txn, &current).await? else {
-            return Ok(with_actions(current, &heap, role));
+        current: Parameter,
+        edited: Option<Parameter>,
+    ) -> Result<ParameterEntry, ServiceError> {
+        let Some(edited) = edited else {
+            return Ok(with_actions(current, heap, role));
         };
-
-        let now = self.now();
         let action = if edited.is_archived() && !current.is_archived() {
             AuditAction::ParameterArchived
         } else {
@@ -284,10 +279,10 @@ impl Services {
         };
         let diff = diff_parameters(&current, &edited);
         let saved = self
-            .save_parameter(txn, &heap, principal, &edited, action, diff, now)
+            .save_parameter(txn, heap, principal, &edited, action, diff, self.now())
             .await?;
-        tracing::info!(heap_id = %heap.id, %parameter_id, user_id = %principal.user_id, version = saved.version.get(), action = action.as_str(), "parameter changed");
-        Ok(with_actions(saved, &heap, role))
+        tracing::info!(heap_id = %heap.id, parameter_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), action = action.as_str(), "parameter changed");
+        Ok(with_actions(saved, heap, role))
     }
 
     /// Writes `parameter` over the version it was read at, records `action`, and commits. The caller holds the
@@ -338,10 +333,6 @@ impl Services {
     }
 }
 
-/// What an edit of a parameter works out: the new parameter, or `None` when nothing changes.
-type EditFuture<'a> =
-    std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<Parameter>, ServiceError>> + Send + 'a>>;
-
 fn with_actions(parameter: Parameter, heap: &Heap, role: Role) -> ParameterEntry {
     ParameterEntry {
         allowed_actions: allowed_parameter_actions(&parameter, heap, role),
@@ -350,11 +341,13 @@ fn with_actions(parameter: Parameter, heap: &Heap, role: Role) -> ParameterEntry
 }
 
 /// Finds the parameter's heap, authorizes configuring it and locks the heap, then reads the parameter under its own
-/// lock, for the same reason as saved views (see `crate::saved_views`).
+/// lock, for the same reason as saved views (see `crate::saved_views`), and checks it is at version `expected` when
+/// given.
 async fn lock_for_write(
     txn: &DatabaseTransaction,
     principal: Principal,
     parameter_id: ParameterId,
+    expected: Option<Version>,
 ) -> Result<(Heap, Role, Parameter), ServiceError> {
     let found = store::parameters::find_parameter(txn, parameter_id)
         .await?
@@ -363,6 +356,14 @@ async fn lock_for_write(
     let current = store::parameters::lock_parameter(txn, parameter_id)
         .await?
         .ok_or(ServiceError::NotFound)?;
+    if let Some(expected) = expected
+        && current.version != expected
+    {
+        return Err(ServiceError::VersionConflict {
+            expected,
+            current: current.version,
+        });
+    }
     Ok((access.heap, access.membership.role, current))
 }
 

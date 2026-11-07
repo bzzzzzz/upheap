@@ -6,7 +6,7 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views and custom parameters. OIDC and CLI sign-in
-are not started. All 165 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+are not started. All 169 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.

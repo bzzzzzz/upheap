@@ -10,7 +10,7 @@
 //! A parameter is edited as a whole: its options and tag links have no version of their own, so every change to
 //! them goes through the parameter and its version.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
@@ -69,11 +69,13 @@ impl Weight {
     /// The weight of a new parameter, the same as the heap's default weights.
     pub const DEFAULT: Self = Self(10);
 
-    pub const fn parse(raw: u16) -> Result<Self, ValidationError> {
-        if raw > Self::MAX {
-            return Err(ValidationError::WeightTooLarge { max: Self::MAX });
-        }
-        Ok(Self(raw))
+    /// Takes any integer, so a negative or huge weight from a request is refused as out of range.
+    pub fn parse(raw: i64) -> Result<Self, ValidationError> {
+        u16::try_from(raw)
+            .ok()
+            .filter(|w| *w <= Self::MAX)
+            .map(Self)
+            .ok_or(ValidationError::WeightOutOfRange { max: Self::MAX })
     }
 
     pub const fn get(self) -> u16 {
@@ -335,6 +337,22 @@ fn ensure_labels_unique(options: &[ParameterOption]) -> Result<(), ParameterErro
     Ok(())
 }
 
+/// `values` as they stand for an open item: each value followed to its option in use, and values of archived
+/// parameters dropped. A closed item keeps the values it had; this brings them up to date when it reopens, as
+/// archiving would have if it had been open then.
+pub fn current_values(
+    parameters: &[Parameter],
+    values: &BTreeMap<ParameterId, OptionId>,
+) -> BTreeMap<ParameterId, OptionId> {
+    values
+        .iter()
+        .filter_map(|(&parameter_id, &option_id)| {
+            let parameter = parameters.iter().find(|p| p.id == parameter_id && !p.is_archived())?;
+            Some((parameter_id, parameter.resolve(option_id)?.option.id))
+        })
+        .collect()
+}
+
 /// Checks the values an item edit sets against the heap's parameters in use: a value names a parameter in use and
 /// one of its options in use. A cleared value (`None`) may name any parameter of the heap, archived ones included,
 /// so a value of an archived parameter can still be taken off.
@@ -427,8 +445,9 @@ mod tests {
 
     #[gtest]
     fn weights_above_the_maximum_are_refused() {
-        expect_that!(Weight::parse(Weight::MAX).map(Weight::get), ok(eq(&100)));
+        expect_that!(Weight::parse(Weight::MAX.into()).map(Weight::get), ok(eq(&100)));
         expect_that!(Weight::parse(101), err(anything()));
+        expect_that!(Weight::parse(-1), err(anything()));
     }
 
     #[gtest]
@@ -519,5 +538,25 @@ mod tests {
             check(ParameterId::from_uuid(Uuid::from_u128(300)), None),
             err(anything())
         );
+    }
+
+    #[gtest]
+    fn current_values_follow_replacements_and_drop_archived_parameters() {
+        let parameter = customer()
+            .archive_option(opt(1), Some(opt(2)), at(1))
+            .expect("valid")
+            .expect("changed")
+            .archive_option(opt(2), Some(opt(3)), at(2))
+            .expect("valid")
+            .expect("changed");
+        let archived_parameter = Parameter {
+            id: ParameterId::from_uuid(Uuid::from_u128(200)),
+            ..customer().archive(at(1)).expect("changed")
+        };
+        let values = BTreeMap::from([(parameter.id, opt(1)), (archived_parameter.id, opt(1))]);
+
+        let current = current_values(&[parameter.clone(), archived_parameter], &values);
+
+        expect_that!(current, eq(&BTreeMap::from([(parameter.id, opt(3))])));
     }
 }

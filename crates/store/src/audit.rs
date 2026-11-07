@@ -26,7 +26,14 @@ pub struct NewAuditEntry {
 }
 
 pub async fn insert_audit_entry(db: &impl ConnectionTrait, entry: &NewAuditEntry) -> Result<(), StoreError> {
-    let row = audit_log::ActiveModel {
+    audit_log::Entity::insert(to_row(entry))
+        .exec_without_returning(db)
+        .await?;
+    Ok(())
+}
+
+fn to_row(entry: &NewAuditEntry) -> audit_log::ActiveModel {
+    audit_log::ActiveModel {
         id: Set(id_to_db(&entry.id)),
         team_id: Set(id_to_db(entry.team_id.as_uuid())),
         heap_id: Set(entry.heap_id.map(|h| id_to_db(h.as_uuid()))),
@@ -36,7 +43,17 @@ pub async fn insert_audit_entry(db: &impl ConnectionTrait, entry: &NewAuditEntry
         entity_id: Set(id_to_db(&entry.entity_id)),
         diff: Set(entry.diff.to_string()),
         created_at: Set(entry.created_at.as_millis()),
-    };
-    audit_log::Entity::insert(row).exec_without_returning(db).await?;
+    }
+}
+
+/// Records `entries`, as [`insert_audit_entry`] does each, in a few statements.
+pub async fn insert_audit_entries(db: &impl ConnectionTrait, entries: &[NewAuditEntry]) -> Result<(), StoreError> {
+    // Well under the bind-parameter limits of SQLite and MySQL at 9 columns a row.
+    const CHUNK: usize = 500;
+    for chunk in entries.chunks(CHUNK) {
+        audit_log::Entity::insert_many(chunk.iter().map(to_row))
+            .exec_without_returning(db)
+            .await?;
+    }
     Ok(())
 }

@@ -281,7 +281,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::TimestampOutOfRange => ("timestamp_out_of_range", None),
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
         ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),
-        ValidationError::WeightTooLarge { .. } => ("weight_out_of_range", Some("weight")),
+        ValidationError::WeightOutOfRange { .. } => ("weight_out_of_range", Some("weight")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
     };
     Classified {

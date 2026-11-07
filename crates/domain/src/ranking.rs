@@ -315,7 +315,7 @@ mod v1 {
     }
 
     /// Where the item's option sits in the parameter's order: 1 for the first, 0 for the last. Unset values add
-    /// nothing, the same as the last option.
+    /// nothing, the same as the last option; so a parameter with a single option adds nothing either.
     fn custom(parameter: &Parameter, item: &ItemForRanking<'_>) -> Option<Component> {
         let value = item
             .parameters
@@ -323,7 +323,7 @@ mod v1 {
             .and_then(|option| parameter.resolve(*option))?;
         let last = parameter.options.len().saturating_sub(1);
         let raw = if last == 0 {
-            1.0
+            0.0
         } else {
             (last - value.rank) as f64 / last as f64
         };
@@ -673,28 +673,36 @@ mod tests {
         );
     }
 
-    #[gtest]
-    fn a_parameter_ranks_its_first_option_highest_and_explains_it() {
+    /// A "Customer" parameter with `weight` and one option per label, numbered from 51 in order.
+    fn customer(weight: u16, labels: &[&str]) -> crate::parameter::Parameter {
         use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
-        use crate::{HeapId, OptionId};
-        let option = |n: u128, label: &str| ParameterOption {
-            id: OptionId::from_uuid(Uuid::from_u128(n)),
+        let options = (51..).zip(labels).map(|(n, label)| ParameterOption {
+            id: option_id(n),
             label: OptionLabel::parse(label).expect("valid"),
-        };
-        let customer = crate::parameter::Parameter::new(
+        });
+        crate::parameter::Parameter::new(
             ParameterId::from_uuid(Uuid::from_u128(50)),
-            HeapId::from_uuid(Uuid::nil()),
+            crate::HeapId::from_uuid(Uuid::nil()),
             NewParameter {
                 name: ParameterName::parse("Customer").expect("valid"),
-                weight: Weight::parse(50).expect("valid"),
-                options: vec![option(51, "Enterprise"), option(52, "Free")],
+                weight: Weight::parse(weight.into()).expect("valid"),
+                options: options.collect(),
                 tags: std::collections::BTreeSet::new(),
             },
             day(0),
         )
-        .expect("valid");
-        let enterprise = BTreeMap::from([(customer.id, OptionId::from_uuid(Uuid::from_u128(51)))]);
-        let free = BTreeMap::from([(customer.id, OptionId::from_uuid(Uuid::from_u128(52)))]);
+        .expect("valid")
+    }
+
+    fn option_id(n: u128) -> crate::OptionId {
+        crate::OptionId::from_uuid(Uuid::from_u128(n))
+    }
+
+    #[gtest]
+    fn a_parameter_ranks_its_first_option_highest_and_explains_it() {
+        let customer = customer(50, &["Enterprise", "Free"]);
+        let enterprise = BTreeMap::from([(customer.id, option_id(51))]);
+        let free = BTreeMap::from([(customer.id, option_id(52))]);
         let big = ItemForRanking {
             parameters: &enterprise,
             ..item(1, 0)
@@ -724,6 +732,32 @@ mod tests {
         expect_that!(ranked[0].contributors[0].factor, eq(Factor::Parameter));
         expect_that!(ranked[0].contributors[0].label, eq("Customer: Enterprise"));
         expect_that!(archived[0].item_id, not(eq(big.id)));
+    }
+
+    #[gtest]
+    fn a_single_option_or_a_zero_weight_adds_nothing() {
+        let single = customer(50, &["Enterprise"]);
+        let weightless = customer(0, &["Enterprise", "Free"]);
+        let values = BTreeMap::from([(single.id, option_id(51))]);
+        let set = ItemForRanking {
+            parameters: &values,
+            ..item(1, 0)
+        };
+
+        for parameter in [single, weightless] {
+            let ranked = rank(
+                CURRENT_FORMULA,
+                &HeapPolicy::default(),
+                &[parameter],
+                &[set, item(2, 0)],
+                day(0),
+            );
+
+            expect_that!(
+                ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
+                not(contains(eq(&Factor::Parameter)))
+            );
+        }
     }
 
     fn arb_size() -> impl Strategy<Value = Option<Size>> {

@@ -174,7 +174,8 @@ pub(crate) struct CreateParameterDto {
     /// 1 to 50 characters, unique among the heap's parameters in use ignoring case.
     pub name: String,
     /// 0 to 100. Defaults to 10, the same as the heap's own weights.
-    pub weight: Option<u16>,
+    #[schema(minimum = 0, maximum = 100)]
+    pub weight: Option<i64>,
     /// Option labels, highest priority first: at most 50, unique ignoring case.
     #[serde(default)]
     pub options: Vec<String>,
@@ -189,7 +190,9 @@ pub(crate) struct CreateParameterDto {
 #[schema(as = ParameterPatchRequest)]
 pub(crate) struct ParameterPatchDto {
     pub name: Option<String>,
-    pub weight: Option<u16>,
+    /// 0 to 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub weight: Option<i64>,
 }
 
 #[derive(Deserialize, ToSchema)]

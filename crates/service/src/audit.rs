@@ -5,6 +5,7 @@ use domain::list_view::ListView;
 use domain::parameter::Parameter;
 use domain::saved_view::SavedView;
 use domain::tag::Tag;
+use domain::{OptionId, ParameterId};
 use serde_json::{Map, Value, json};
 
 /// The fields of a newly created item, for its `item_created` entry.
@@ -15,6 +16,13 @@ pub(crate) fn describe_new_item(item: &Item) -> Value {
 /// Changed fields between two versions of an item, as `{"field": {"before": …, "after": …}}`.
 pub(crate) fn diff_items(before: &Item, after: &Item) -> Value {
     diff_fields(item_fields(before), item_fields(after))
+}
+
+/// The change to an item that archiving `from` switched to `to`, in the shape of [`diff_items`] but naming only
+/// that parameter's value: the item's other values didn't change.
+pub(crate) fn diff_switched_value(parameter: ParameterId, from: OptionId, to: OptionId) -> Value {
+    let value = |option: OptionId| json!({ parameter.to_string(): option.to_string() });
+    json!({ "parameters": { "before": value(from), "after": value(to) } })
 }
 
 /// The fields of a newly created tag, for its `tag_created` entry.

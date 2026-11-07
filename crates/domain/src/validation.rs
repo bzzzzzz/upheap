@@ -23,8 +23,8 @@ pub enum ValidationError {
     TooManyTags { max: usize },
     #[error("at most {max} options are allowed")]
     TooManyOptions { max: usize },
-    #[error("weight must be at most {max}")]
-    WeightTooLarge { max: u16 },
+    #[error("weight must be from 0 to {max}")]
+    WeightOutOfRange { max: u16 },
     /// A list sorted by a custom parameter names it in `sort_parameter`, and no other sort does.
     #[error("send sort_parameter exactly when sort is parameter")]
     SortParameterMismatch,

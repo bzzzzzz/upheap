@@ -221,10 +221,11 @@ export function useParameters(heapId: string) {
 }
 
 /** Parameter changes move items (ranking) and change what they show (labels, switched values). */
-function invalidateParameters(queryClient: QueryClient, heapId: string) {
+/** Refetches the heap's parameters and, unless only they changed (`itemsToo` false), the items that show them. */
+function invalidateParameters(queryClient: QueryClient, heapId: string, itemsToo = true) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: parametersKey(heapId) }),
-    invalidateHeap(queryClient, heapId),
+    itemsToo && invalidateHeap(queryClient, heapId),
   ]);
 }
 
@@ -271,8 +272,8 @@ export function useChangeParameter(heapId: string) {
           );
       }
     },
-    // Also after a conflict, so the page shows the version someone else saved.
-    onSettled: () => invalidateParameters(queryClient, heapId),
+    // Also after a conflict, so the page shows the version someone else saved. Tag links don't show on items.
+    onSettled: (_data, _error, { change }) => invalidateParameters(queryClient, heapId, change.kind !== "link_tags"),
   });
 }
 
