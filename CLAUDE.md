@@ -20,6 +20,7 @@ web app, on SQLite or MySQL.
 - [design/technical-design.md](design/technical-design.md): architecture, data model, ranking, API.
 - [design/requirements.md](design/requirements.md) and [design/offering.md](design/offering.md): what we build and why.
 - [design/local-build.md](design/local-build.md): the static, single-user build that runs in the browser.
+- [design/app-ux.md](design/app-ux.md): the web app's layout and interactions for phones and wide screens.
 - [design/progress.md](design/progress.md): what's done and what's next. Keep it current.
 
 Build, run and check commands are in [README.md](README.md).
