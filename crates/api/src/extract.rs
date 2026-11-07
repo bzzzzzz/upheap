@@ -10,6 +10,7 @@ use domain::Version;
 use jiff::tz::TimeZone;
 use service::auth::SessionToken;
 use service::{Principal, ServiceError};
+use utoipa::IntoParams;
 
 use crate::{ApiError, AppState, CookieSettings};
 
@@ -76,6 +77,16 @@ pub(crate) fn clear_session_cookie(settings: &CookieSettings) -> HeaderValue {
         "{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
     ))
     .unwrap_or_else(|_| HeaderValue::from_static("heap_session=; Path=/; Max-Age=0"))
+}
+
+/// The `Time-Zone` request header, documented once.
+#[derive(IntoParams)]
+#[into_params(parameter_in = Header)]
+#[allow(dead_code)]
+pub(crate) struct TimeZoneHeader {
+    /// The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.
+    #[param(rename = "Time-Zone")]
+    time_zone: Option<String>,
 }
 
 /// The client's IANA timezone from the `Time-Zone` header. UTC when the header is missing.

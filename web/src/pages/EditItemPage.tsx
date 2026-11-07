@@ -16,6 +16,7 @@ import { blockerCandidatesFor } from "../components/blockerCandidates";
 import { isClosed, STATE_LABELS, STATES } from "../components/labels";
 import { ParameterSelect } from "../components/ParameterSelect";
 import { SizeSelect } from "../components/SizeSelect";
+import { AuditHistory } from "../components/AuditHistory";
 import { TagPicker } from "../components/TagPicker";
 
 /** Messages for the errors a save can bring back, by code. */
@@ -75,6 +76,12 @@ export function EditItemPage({ heapId, itemId }: { heapId: string; itemId: strin
         onSave={save}
         onCancel={() => leave(isClosed(current.state))}
       />
+      <section aria-labelledby="item-history" className="mt-8">
+        <h2 id="item-history" className="mb-1 text-sm font-semibold">
+          History
+        </h2>
+        <AuditHistory scope={{ heapId }} entityId={itemId} />
+      </section>
     </main>
   );
 }

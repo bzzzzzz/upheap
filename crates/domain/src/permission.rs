@@ -1,5 +1,6 @@
 //! The roles table from the offering, as code. Service checks and `allowed_actions` both come from here.
 
+use crate::audit::AuditAction;
 use crate::heap::Heap;
 use crate::item::Item;
 use crate::parameter::Parameter;
@@ -33,6 +34,46 @@ impl Permission {
             Self::ManageHeaps | Self::ConfigureHeap | Self::ManageTeam => matches!(role, Role::Admin),
         }
     }
+}
+
+/// The permission needed to see audit entries of `action`: the one needed to take it (Off Audit §4). Members see
+/// item, tag and saved view changes; only admins see heap, parameter, team and membership changes.
+///
+/// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
+/// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
+pub const fn audit_permission(action: AuditAction) -> Permission {
+    match action {
+        AuditAction::UserRegistered | AuditAction::UserUpdated => Permission::ViewTeam,
+        AuditAction::TeamCreated
+        | AuditAction::TeamUpdated
+        | AuditAction::MemberAdded
+        | AuditAction::MemberRoleChanged
+        | AuditAction::MemberRemoved
+        | AuditAction::MemberLeft => Permission::ManageTeam,
+        AuditAction::HeapCreated
+        | AuditAction::HeapUpdated
+        | AuditAction::HeapArchived
+        | AuditAction::HeapUnarchived => Permission::ManageHeaps,
+        AuditAction::ItemCreated
+        | AuditAction::ItemUpdated
+        | AuditAction::TagCreated
+        | AuditAction::TagUpdated
+        | AuditAction::SavedViewCreated
+        | AuditAction::SavedViewUpdated
+        | AuditAction::SavedViewArchived => Permission::EditItems,
+        AuditAction::ParameterCreated
+        | AuditAction::ParameterUpdated
+        | AuditAction::ParameterArchived
+        | AuditAction::OptionArchived => Permission::ConfigureHeap,
+    }
+}
+
+/// The audit actions `role` may see, per [`audit_permission`].
+pub fn visible_audit_actions(role: Role) -> Vec<AuditAction> {
+    AuditAction::ALL
+        .into_iter()
+        .filter(|action| audit_permission(*action).is_granted_to(role))
+        .collect()
 }
 
 /// An action a client may offer on an item.
@@ -263,6 +304,29 @@ mod tests {
             role,
             joined_at: Timestamp::EPOCH,
         }
+    }
+
+    #[gtest]
+    fn members_see_content_changes_and_admins_see_everything() {
+        let member = visible_audit_actions(Role::Member);
+        for seen in [
+            AuditAction::ItemUpdated,
+            AuditAction::TagCreated,
+            AuditAction::SavedViewArchived,
+            AuditAction::UserUpdated,
+        ] {
+            expect_that!(member, contains(eq(&seen)));
+        }
+        for unseen in [
+            AuditAction::MemberAdded,
+            AuditAction::MemberLeft,
+            AuditAction::HeapUpdated,
+            AuditAction::ParameterUpdated,
+            AuditAction::OptionArchived,
+        ] {
+            expect_that!(member, not(contains(eq(&unseen))));
+        }
+        expect_that!(visible_audit_actions(Role::Admin), len(eq(AuditAction::ALL.len())));
     }
 
     #[gtest]

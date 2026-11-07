@@ -235,7 +235,8 @@ impl TestApp {
 
     /// The audit entries about `entity_id`, oldest first, as `(action, diff)`.
     ///
-    /// Read straight from the database until the audit endpoints exist.
+    /// Read straight from the database, so it sees every entry whatever the caller's role; `tests/audit.rs` covers the
+    /// endpoints.
     pub async fn audit_entries(&self, entity_id: &str) -> Result<Vec<(String, Value)>> {
         let id: uuid::Uuid = entity_id.parse()?;
         let sql = format!("SELECT action, diff FROM audit_log WHERE entity_id = '{id}' ORDER BY created_at, id");

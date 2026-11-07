@@ -61,6 +61,26 @@ pub async fn list_saved_views(db: &impl ConnectionTrait, heap_id: HeapId) -> Res
     Ok(views)
 }
 
+/// The views among `ids` that belong to `heap_id`, archived ones included, in no particular order. IDs from other
+/// heaps, or unknown ones, are left out.
+pub async fn list_saved_views_by_ids(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    ids: &[SavedViewId],
+) -> Result<Vec<SavedView>, StoreError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    saved_views::Entity::find()
+        .filter(saved_views::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(saved_views::Column::Id.is_in(ids.iter().map(|id| id_to_db(id.as_uuid()))))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(to_saved_view)
+        .collect()
+}
+
 /// Writes `view` if the stored row still has version `expected`, and returns it with its new version. Returns
 /// `None` when the stored version differs.
 pub async fn update_saved_view(

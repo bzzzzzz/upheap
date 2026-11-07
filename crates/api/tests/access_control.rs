@@ -205,6 +205,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::GET,
+            "/teams/{team_id}/audit",
+            team(ViewTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
             Method::PATCH,
             "/teams/{team_id}",
             team(ManageTeam),
@@ -296,6 +304,14 @@ fn endpoints() -> Vec<Endpoint> {
         row(
             Method::GET,
             "/heaps/{heap_id}/items/closed",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/heaps/{heap_id}/audit",
             view,
             Target::Heap,
             RequestBody::Empty,

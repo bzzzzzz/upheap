@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import type { SavedView } from "../api/client";
 import { useArchiveSavedView, useCreateSavedView, useSavedViews, useUpdateSavedView } from "../api/queries";
+import { HistoryDisclosure } from "./AuditHistory";
 import { searchFor, showSameList, toViewInput, type ListSearch } from "./listView";
 import { inputClass, primaryButtonClass, quietButtonClass } from "./NameForm";
 import { ProblemText } from "./ProblemText";
@@ -94,6 +95,14 @@ export function SavedViewsBar({
           saved={selected}
           onRename={() => setNaming("rename")}
           onArchived={() => onViewChange({ ...view, view: undefined })}
+        />
+      )}
+      {selected && (
+        <HistoryDisclosure
+          key={selected.id}
+          scope={{ heapId }}
+          entityId={selected.id}
+          label={`History of ${selected.name}`}
         />
       )}
     </div>

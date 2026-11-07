@@ -8,6 +8,7 @@ mod m20261106_000002_tags;
 mod m20261107_000003_blockers;
 mod m20261108_000004_saved_views;
 mod m20261109_000005_parameters;
+mod m20261110_000006_audit_entity;
 
 pub struct Migrator;
 
@@ -20,6 +21,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261107_000003_blockers::Migration),
             Box::new(m20261108_000004_saved_views::Migration),
             Box::new(m20261109_000005_parameters::Migration),
+            Box::new(m20261110_000006_audit_entity::Migration),
         ]
     }
 }

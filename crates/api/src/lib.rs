@@ -3,6 +3,7 @@
 //! Handlers translate HTTP to use-case calls and back; they never check permissions or compute anything about
 //! items themselves. Errors become `application/problem+json` in one place, [`error::ApiError`].
 
+mod audit;
 mod auth;
 mod dto;
 mod error;
@@ -67,6 +68,7 @@ pub struct CookieSettings {
         (name = "users", description = "Finding users to add to a team"),
         (name = "views", description = "A heap's saved views"),
         (name = "parameters", description = "A heap's custom parameters and their options"),
+        (name = "audit", description = "The history of a heap or a team"),
     )
 )]
 struct ApiDoc;
@@ -94,6 +96,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(users::routes())
         .merge(views::routes())
         .merge(parameters::routes())
+        .merge(audit::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 
 import { ApiProblem, type Tag } from "../api/client";
 import { useCreateTag, useTags, useUpdateTag } from "../api/queries";
+import { HistoryDisclosure } from "../components/AuditHistory";
 
 const inputClass =
   "rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100";
@@ -157,6 +158,7 @@ function TagRow({ tag, heapId }: { tag: Tag; heapId: string }) {
         )}
         <ProblemText error={update.error} />
       </form>
+      <HistoryDisclosure scope={{ heapId }} entityId={tag.id} />
     </li>
   );
 }

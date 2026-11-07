@@ -9,6 +9,7 @@ import {
   useParameters,
   useTags,
 } from "../api/queries";
+import { HistoryDisclosure } from "../components/AuditHistory";
 import { inputClass, NameForm, primaryButtonClass, quietButtonClass } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
@@ -57,6 +58,7 @@ export function ParametersPage({ heapId }: { heapId: string }) {
             {archived.map((parameter) => (
               <li key={parameter.id}>
                 {parameter.name}: {parameter.options.map((option) => option.label).join(", ")}
+                <HistoryDisclosure scope={{ heapId }} entityId={parameter.id} />
               </li>
             ))}
           </ul>
@@ -175,6 +177,7 @@ function ParameterCard({ parameter, heapId }: { parameter: Parameter; heapId: st
       <OptionsEditor parameter={parameter} heapId={heapId} canEdit={canEdit} />
       <LinkedTags parameter={parameter} heapId={heapId} canEdit={canEdit} />
       {parameter.allowed_actions.includes("archive") && <ArchiveParameter parameter={parameter} heapId={heapId} />}
+      <HistoryDisclosure scope={{ heapId }} entityId={parameter.id} />
     </li>
   );
 }
