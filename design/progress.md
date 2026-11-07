@@ -38,7 +38,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
-| Local build: static, single user, data in the browser | [local-build.md](local-build.md) | 🟡 | Spike done: the backend and the Router run in a browser worker on SQLite-wasm in OPFS. Accounts are a feature the local build leaves out. The web app runs on it with `npm run dev:local`, offers only what one user can do, and CI builds and smoke-tests it |
+| Local build: static, single user, data in the browser | [local-build.md](local-build.md) | 🟡 | Spike done: the backend and the Router run in a browser worker on SQLite-wasm in OPFS. Accounts are a feature the local build leaves out. The web app runs on it with `npm run dev:local`, offers only what one user can do, keeps its data with export and import and one tab at a time, and CI builds and smoke-tests it |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work
@@ -97,7 +97,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] `crates/local`, the worker and the web app's worker `fetch`
   - [x] Single-user mode: `allowed_actions` on `GET /me` and the team without the actions it lacks, and the UI
     that hides them
-  - [ ] Persistent storage, export and import, one tab at a time
+  - [x] Persistent storage, export and import, one tab at a time
   - [ ] GitHub Pages workflow; Playwright golden paths against the static build
 - [x] **Testing and CI**
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
@@ -110,5 +110,5 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 ## Suggested order
 
 1. Editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.
-2. The local build, next keeping the data (persistent storage, export and import, one tab at a time), which can
-   run alongside these.
+2. The local build, next publishing it (the GitHub Pages workflow, and Playwright against the static build), which
+   can run alongside these.

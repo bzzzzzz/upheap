@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
+import { LocalDatabaseGate } from "./components/LocalDatabase";
 import { createAppRouter } from "./routes";
 import "./index.css";
 
@@ -40,7 +41,9 @@ if (root) {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <MotionConfig reducedMotion="user">
-          <RouterProvider router={router} />
+          <LocalDatabaseGate>
+            <RouterProvider router={router} />
+          </LocalDatabaseGate>
         </MotionConfig>
       </QueryClientProvider>
     </StrictMode>,
