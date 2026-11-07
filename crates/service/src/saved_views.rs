@@ -18,7 +18,7 @@ use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_saved_view, diff_saved_views};
-use crate::items::ensure_tags_in_heap;
+use crate::items::ensure_view_in_heap;
 use crate::{Principal, ServiceError, Services};
 
 /// A saved view with what the caller may do with it.
@@ -52,8 +52,9 @@ impl Services {
         })
     }
 
-    /// Saves a view of the heap. Every tag the view filters by must be a tag of the heap, or it fails with
-    /// [`ServiceError::TagNotInHeap`].
+    /// Saves a view of the heap. Every tag and option the view filters by, and the parameter it sorts by, must be of
+    /// the heap, or it fails with [`ServiceError::TagNotInHeap`], [`ServiceError::OptionNotInHeap`] or
+    /// [`domain::parameter::ParameterError::NotInHeap`].
     pub async fn create_saved_view(
         &self,
         principal: Principal,
@@ -62,7 +63,7 @@ impl Services {
     ) -> Result<SavedViewEntry, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
-        ensure_view_tags_in_heap(&txn, heap_id, &fields.list_view).await?;
+        ensure_view_belongs_to_heap(&txn, heap_id, &fields.list_view).await?;
 
         let now = self.now();
         let view = SavedView::new(
@@ -114,7 +115,7 @@ impl Services {
             return Ok(with_actions(current, &heap, role));
         };
         if edited.list_view != current.list_view {
-            ensure_view_tags_in_heap(&txn, heap.id, &edited.list_view).await?;
+            ensure_view_belongs_to_heap(&txn, heap.id, &edited.list_view).await?;
         }
 
         let now = self.now();
@@ -235,12 +236,13 @@ async fn lock_for_write(
     Ok((access.heap, access.membership.role, current))
 }
 
-async fn ensure_view_tags_in_heap(
+async fn ensure_view_belongs_to_heap(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
     view: &ListView,
 ) -> Result<(), ServiceError> {
     domain::saved_view::ensure_savable(view)?;
     let heap_tags = store::tags::list_tags(db, heap_id).await?;
-    ensure_tags_in_heap(&heap_tags, &view.filter.tags)
+    let parameters = store::parameters::list_parameters(db, heap_id).await?;
+    ensure_view_in_heap(&heap_tags, &parameters, view)
 }

@@ -21,6 +21,13 @@ pub enum ValidationError {
     TimestampOutOfRange,
     #[error("at most {max} tags are allowed")]
     TooManyTags { max: usize },
+    #[error("at most {max} options are allowed")]
+    TooManyOptions { max: usize },
+    #[error("weight must be from 0 to {max}")]
+    WeightOutOfRange { max: u16 },
+    /// A list sorted by a custom parameter names it in `sort_parameter`, and no other sort does.
+    #[error("send sort_parameter exactly when sort is parameter")]
+    SortParameterMismatch,
 }
 
 /// The input field a [`ValidationError`] is about.
@@ -30,6 +37,8 @@ pub enum Field {
     Description,
     DisplayName,
     Name,
+    /// An option of a custom parameter.
+    Label,
     /// A search text.
     Query,
 }
@@ -42,6 +51,7 @@ impl Field {
             Self::Description => "description",
             Self::DisplayName => "display_name",
             Self::Name => "name",
+            Self::Label => "label",
             Self::Query => "query",
         }
     }

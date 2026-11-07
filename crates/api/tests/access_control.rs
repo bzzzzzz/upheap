@@ -46,6 +46,10 @@ enum Target {
     Tag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
+    /// A parameter of the shared heap with two options, with its version for `If-Match`.
+    Parameter,
+    /// The first option of a new parameter of the shared heap.
+    ParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
     /// The shared team, with its version for `If-Match`.
@@ -78,6 +82,16 @@ enum RequestBody {
     NewView,
     /// A team, heap or saved view name.
     Name,
+    /// A parameter name no other request used, since names are unique per heap.
+    NewParameter,
+    /// A label for a new option.
+    NewOption,
+    /// The target parameter's options, in reverse order.
+    ArrangeOptions,
+    /// The target option's replacement: the other option of its parameter.
+    ArchiveOption,
+    /// No tags.
+    LinkTags,
     /// The user from [`Target::NewUser`].
     AddMember,
     Promote,
@@ -97,7 +111,7 @@ struct Endpoint {
 
 fn endpoints() -> Vec<Endpoint> {
     use Access::{Heap, Public, SignedIn, Team};
-    use Permission::{EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
+    use Permission::{ConfigureHeap, EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
         writes: false,
@@ -109,6 +123,10 @@ fn endpoints() -> Vec<Endpoint> {
     let manage_heap = |writes| Heap {
         permission: ManageHeaps,
         writes,
+    };
+    let configure = Heap {
+        permission: ConfigureHeap,
+        writes: true,
     };
     let team = |permission| Team { permission };
     let row = |method, path, access, target, body, success| Endpoint {
@@ -371,6 +389,70 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::Empty,
             StatusCode::OK,
         ),
+        row(
+            Method::GET,
+            "/heaps/{heap_id}/parameters",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/heaps/{heap_id}/parameters",
+            configure,
+            Target::Heap,
+            RequestBody::NewParameter,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/parameters/{parameter_id}",
+            configure,
+            Target::Parameter,
+            RequestBody::NewParameter,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/parameters/{parameter_id}/archive",
+            configure,
+            Target::Parameter,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/parameters/{parameter_id}/options",
+            configure,
+            Target::Parameter,
+            RequestBody::NewOption,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/parameters/{parameter_id}/options",
+            configure,
+            Target::Parameter,
+            RequestBody::ArrangeOptions,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PUT,
+            "/parameters/{parameter_id}/tags",
+            configure,
+            Target::Parameter,
+            RequestBody::LinkTags,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/options/{option_id}/archive",
+            configure,
+            Target::ParameterOption,
+            RequestBody::ArchiveOption,
+            StatusCode::OK,
+        ),
     ]
 }
 
@@ -562,6 +644,25 @@ impl World {
         Ok((id, created.body["version"].to_string()))
     }
 
+    /// Creates a parameter with two options as the admin and returns its body.
+    async fn create_parameter(&self) -> Result<Value> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/heaps/{}/parameters", self.heap),
+                Some(&self.admin.session),
+                Some(json!({ "name": self.unique_name("target"), "options": ["High", "Low"] })),
+            )
+            .await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create parameter failed: {}",
+            created.body
+        );
+        Ok(created.body)
+    }
+
     /// Registers a new user and returns their session and ID.
     async fn new_user(&self) -> Result<(String, String)> {
         let email = format!("{}@example.test", self.unique_name("user"));
@@ -628,8 +729,9 @@ impl World {
         response.session_cookie.context("sign-in set no cookie")
     }
 
-    /// The body for `body`. `user` is the user [`Target::NewUser`] made.
-    fn body(&self, body: RequestBody, user: Option<&str>) -> Option<Value> {
+    /// The body for `body`. `user` is the user [`Target::NewUser`] made, and `parameter` the parameter
+    /// [`Target::Parameter`] or [`Target::ParameterOption`] made.
+    fn body(&self, body: RequestBody, user: Option<&str>, parameter: &Value) -> Option<Value> {
         match body {
             RequestBody::Empty => None,
             RequestBody::Registration => {
@@ -646,6 +748,15 @@ impl World {
             RequestBody::AddMember => Some(json!({ "user_id": user })),
             RequestBody::Promote => Some(json!({ "role": "admin" })),
             RequestBody::DisplayName => Some(json!({ "display_name": self.unique_name("Name") })),
+            RequestBody::NewParameter => Some(json!({ "name": self.unique_name("parameter") })),
+            RequestBody::NewOption => Some(json!({ "label": "Middle" })),
+            RequestBody::ArrangeOptions => {
+                let mut options = parameter["options"].as_array().cloned().unwrap_or_default();
+                options.reverse();
+                Some(json!({ "options": options }))
+            }
+            RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
+            RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
         }
     }
 
@@ -659,6 +770,7 @@ impl World {
             .replace("{team_id}", &self.team);
         let mut if_match = None;
         let mut new_user = None;
+        let mut parameter = Value::Null;
         match endpoint.target {
             Target::Nothing | Target::Heap => {}
             Target::HeapVersion => {
@@ -711,6 +823,19 @@ impl World {
                 path = path.replace("{view_id}", &id);
                 if_match = Some(version);
             }
+            Target::Parameter => {
+                parameter = self.create_parameter().await?;
+                let id = parameter["id"].as_str().context("parameter has no id")?;
+                path = path.replace("{parameter_id}", id);
+                if_match = Some(parameter["version"].to_string());
+            }
+            Target::ParameterOption => {
+                parameter = self.create_parameter().await?;
+                let id = parameter["options"][0]["id"]
+                    .as_str()
+                    .context("parameter has no option")?;
+                path = path.replace("{option_id}", id);
+            }
             Target::FreshSession => {
                 session = match account {
                     Some(account) => Some(self.sign_in(account).await?),
@@ -732,7 +857,7 @@ impl World {
                 endpoint.method.clone(),
                 &format!("/api/v1{path}"),
                 session.as_deref(),
-                self.body(endpoint.body, new_user.as_deref()),
+                self.body(endpoint.body, new_user.as_deref(), &parameter),
                 &headers,
             )
             .await;

@@ -1,10 +1,10 @@
 //! Items and their state machine.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
-use crate::{Duration, HeapId, ItemId, TagId, Timestamp, Version};
+use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 
 /// A closed item can be reopened for exactly 7 × 24 hours after it was closed, independent of timezones.
 pub const REOPEN_WINDOW: Duration = Duration::from_days(7);
@@ -216,6 +216,8 @@ pub struct NewItem {
     pub due: Option<Due>,
     /// Tags of the item's heap. The service checks they belong to it.
     pub tags: BTreeSet<TagId>,
+    /// An option for each custom parameter that is set. The service checks they are in use in the heap.
+    pub parameters: BTreeMap<ParameterId, OptionId>,
 }
 
 /// A partial edit. An outer `None` leaves the field unchanged; `Some(None)` clears it.
@@ -228,6 +230,8 @@ pub struct ItemPatch {
     pub due: Option<Option<Due>>,
     /// Replaces the whole set of tags.
     pub tags: Option<BTreeSet<TagId>>,
+    /// Sets (`Some`) or clears (`None`) the value of each listed custom parameter; others keep theirs.
+    pub parameters: BTreeMap<ParameterId, Option<OptionId>>,
     pub state: Option<StateKind>,
     /// The item this one waits for. Only a blocked item can have one; leaving the blocked state clears it. The
     /// service checks the blocker is in the same heap and that no cycle forms.
@@ -236,13 +240,14 @@ pub struct ItemPatch {
 
 impl ItemPatch {
     /// Whether the patch changes anything besides the state.
-    pub const fn edits_fields(&self) -> bool {
+    pub fn edits_fields(&self) -> bool {
         self.title.is_some()
             || self.description.is_some()
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
             || self.tags.is_some()
+            || !self.parameters.is_empty()
     }
 }
 
@@ -277,6 +282,10 @@ pub struct Item {
     pub impact: Option<Size>,
     pub due: Option<Due>,
     pub tags: BTreeSet<TagId>,
+    /// An option for each custom parameter that is set. Unset parameters are left out, and rank as their
+    /// lowest-priority option. A closed item may keep an option or a parameter that was archived since; reopening it
+    /// brings them up to date (`parameter::current_values`).
+    pub parameters: BTreeMap<ParameterId, OptionId>,
     pub created_at: Timestamp,
     pub version: Version,
 }
@@ -294,6 +303,7 @@ impl Item {
             impact: fields.impact,
             due: fields.due,
             tags: fields.tags,
+            parameters: fields.parameters,
             created_at: now,
             version: Version::INITIAL,
         }
@@ -343,10 +353,23 @@ impl Item {
             impact: patch.impact.unwrap_or(self.impact),
             due: patch.due.unwrap_or(self.due),
             tags: patch.tags.clone().unwrap_or_else(|| self.tags.clone()),
+            parameters: self.with_values(&patch.parameters),
             state,
             ..self.clone()
         };
         Ok((edited != *self).then_some(edited))
+    }
+
+    /// The item's values with `changes` applied.
+    fn with_values(&self, changes: &BTreeMap<ParameterId, Option<OptionId>>) -> BTreeMap<ParameterId, OptionId> {
+        let mut values = self.parameters.clone();
+        for (&parameter, &option) in changes {
+            match option {
+                Some(option) => values.insert(parameter, option),
+                None => values.remove(&parameter),
+            };
+        }
+        values
     }
 
     /// The state after moving to `target` at `now`. Moving to the current state changes nothing.
@@ -395,6 +418,7 @@ mod tests {
             impact: None,
             due: None,
             tags: BTreeSet::new(),
+            parameters: BTreeMap::new(),
         };
         Item::new(
             ItemId::from_uuid(Uuid::nil()),
@@ -544,6 +568,45 @@ mod tests {
         expect_that!(
             ItemState::from_parts(StateKind::Blocked, None, Some(other)),
             ok(eq(ItemState::Blocked { by: Some(other) }))
+        );
+    }
+
+    #[gtest]
+    fn a_patch_sets_and_clears_parameter_values_and_keeps_the_others() {
+        let (customer, area) = (
+            ParameterId::from_uuid(Uuid::from_u128(1)),
+            ParameterId::from_uuid(Uuid::from_u128(2)),
+        );
+        let (pro, infra) = (
+            OptionId::from_uuid(Uuid::from_u128(11)),
+            OptionId::from_uuid(Uuid::from_u128(21)),
+        );
+        let mut item = sample_item();
+        item.parameters = BTreeMap::from([(customer, pro)]);
+        let patch = ItemPatch {
+            parameters: BTreeMap::from([(customer, None), (area, Some(infra))]),
+            ..ItemPatch::default()
+        };
+
+        let edited = item.apply_patch(&patch, at(1)).expect("allowed").expect("changed");
+
+        expect_that!(edited.parameters, eq(&BTreeMap::from([(area, infra)])));
+    }
+
+    #[gtest]
+    fn setting_a_value_of_a_closed_item_fails() {
+        let closed = sample_item()
+            .apply_patch(&closing_patch(), at(1))
+            .expect("ok")
+            .expect("changed");
+        let patch = ItemPatch {
+            parameters: BTreeMap::from([(ParameterId::from_uuid(Uuid::nil()), None)]),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            closed.apply_patch(&patch, at(2)),
+            err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }
 

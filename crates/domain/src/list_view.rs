@@ -8,8 +8,9 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
-use crate::TagId;
 use crate::item::{Item, Size, StateKind};
+use crate::parameter::Parameter;
+use crate::{OptionId, ParameterId, TagId};
 
 /// Where items in one state go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,23 +76,41 @@ pub enum SortKey {
     Effort,
     /// Largest impact first; items without an impact last.
     Impact,
+    /// The custom parameter's highest-priority option first; items without a value last.
+    Parameter(ParameterId),
 }
 
 impl SortKey {
-    pub const ALL: [Self; 4] = [Self::Priority, Self::Due, Self::Effort, Self::Impact];
+    /// The keys that need no parameter.
+    pub const FIXED: [Self; 4] = [Self::Priority, Self::Due, Self::Effort, Self::Impact];
 
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    /// Stable code used in storage, audit diffs and the API. Never renamed. A parameter sort also stores the
+    /// parameter, see [`Self::parameter`].
     pub const fn code(self) -> &'static str {
         match self {
             Self::Priority => "priority",
             Self::Due => "due",
             Self::Effort => "effort",
             Self::Impact => "impact",
+            Self::Parameter(_) => "parameter",
         }
     }
 
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|key| key.code() == code)
+    /// The parameter a parameter sort sorts by.
+    pub const fn parameter(self) -> Option<ParameterId> {
+        match self {
+            Self::Parameter(parameter) => Some(parameter),
+            Self::Priority | Self::Due | Self::Effort | Self::Impact => None,
+        }
+    }
+
+    /// The key with `code`, given a parameter exactly when the code is `parameter`. `None` for an unknown code or
+    /// a parameter that doesn't fit it.
+    pub fn from_parts(code: &str, parameter: Option<ParameterId>) -> Option<Self> {
+        match parameter {
+            Some(parameter) => (code == "parameter").then_some(Self::Parameter(parameter)),
+            None => Self::FIXED.into_iter().find(|key| key.code() == code),
+        }
     }
 }
 
@@ -112,12 +131,40 @@ pub struct ListFilter {
     pub effort: BTreeSet<Size>,
     /// Keep items with one of these impacts.
     pub impact: BTreeSet<Size>,
+    /// Options of custom parameters. Keep items with one of the options listed for each parameter they belong to.
+    /// An archived option matches the items that switched to its replacement. Options of archived parameters
+    /// don't filter, as those parameters no longer count anywhere else.
+    pub options: BTreeSet<OptionId>,
 }
 
 impl ListFilter {
-    pub fn matches(&self, item: &Item) -> bool {
+    /// Whether `item` passes the filter. `parameters` are the heap's parameters; filter options that belong to
+    /// none of them, or to an archived one, are ignored.
+    pub fn matches(&self, item: &Item, parameters: &[Parameter]) -> bool {
         let tags = self.tags.is_empty() || !self.tags.is_disjoint(&item.tags);
-        tags && within(&self.effort, item.effort) && within(&self.impact, item.impact)
+        tags && within(&self.effort, item.effort)
+            && within(&self.impact, item.impact)
+            && self.matches_options(item, parameters)
+    }
+
+    fn matches_options(&self, item: &Item, parameters: &[Parameter]) -> bool {
+        if self.options.is_empty() {
+            return true;
+        }
+        parameters.iter().filter(|p| !p.is_archived()).all(|parameter| {
+            let wanted: BTreeSet<OptionId> = self
+                .options
+                .iter()
+                .filter_map(|option| parameter.resolve(*option).map(|v| v.option.id))
+                .collect();
+            if wanted.is_empty() {
+                return true;
+            }
+            item.parameters
+                .get(&parameter.id)
+                .and_then(|option| parameter.resolve(*option))
+                .is_some_and(|value| wanted.contains(&value.option.id))
+        })
     }
 }
 
@@ -173,21 +220,38 @@ impl ListView {
     }
 
     /// Sorts `group`, which is in priority order, by [`Self::sort`]. The sort is stable, so ties keep priority
-    /// order. Grouped blocked items always stay in priority order (Req Views: List items §3).
-    pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item) {
+    /// order. Grouped blocked items always stay in priority order (Req Views: List items §3). `parameters` are the
+    /// heap's parameters; a sort by a parameter that isn't among them, or is archived, keeps priority order.
+    pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item, parameters: &[Parameter]) {
         let key = self.sort;
-        if key != SortKey::Priority && group != Group::Blocked {
-            entries.sort_by(|a, b| compare(key, item(a), item(b)));
+        if key == SortKey::Priority || group == Group::Blocked {
+            return;
         }
+        let parameter = key
+            .parameter()
+            .and_then(|id| parameters.iter().find(|p| p.id == id && !p.is_archived()));
+        entries.sort_by(|a, b| compare(key, parameter, item(a), item(b)));
     }
 }
 
-fn compare(key: SortKey, a: &Item, b: &Item) -> Ordering {
+fn compare(key: SortKey, parameter: Option<&Parameter>, a: &Item, b: &Item) -> Ordering {
     match key {
         SortKey::Priority => Ordering::Equal,
         SortKey::Due => missing_last(a.due.map(|d| d.at), b.due.map(|d| d.at), Ord::cmp),
         SortKey::Effort => missing_last(a.effort, b.effort, Ord::cmp),
         SortKey::Impact => missing_last(a.impact, b.impact, |a, b| b.cmp(a)),
+        SortKey::Parameter(_) => {
+            let Some(parameter) = parameter else {
+                return Ordering::Equal;
+            };
+            let rank = |item: &Item| {
+                item.parameters
+                    .get(&parameter.id)
+                    .and_then(|option| parameter.resolve(*option))
+                    .map(|value| value.rank)
+            };
+            missing_last(rank(a), rank(b), Ord::cmp)
+        }
     }
 }
 
@@ -222,6 +286,7 @@ mod tests {
             impact: None,
             due: None,
             tags: BTreeSet::new(),
+            parameters: std::collections::BTreeMap::new(),
         };
         let created = Timestamp::from_millis(0).expect("in range");
         Item::new(
@@ -234,7 +299,7 @@ mod tests {
 
     fn sorted(view: &ListView, items: &[Item]) -> Vec<u128> {
         let mut items = items.to_vec();
-        view.sort(Group::Ranked, &mut items, |item| item);
+        view.sort(Group::Ranked, &mut items, |item| item, &[]);
         items.iter().map(|item| item.id.as_uuid().as_u128()).collect()
     }
 
@@ -256,10 +321,17 @@ mod tests {
             eq(BlockedLayout::ALL.map(Some))
         );
         expect_that!(
-            SortKey::ALL.map(|k| SortKey::from_code(k.code())),
-            eq(SortKey::ALL.map(Some))
+            SortKey::FIXED.map(|k| SortKey::from_parts(k.code(), None)),
+            eq(SortKey::FIXED.map(Some))
         );
-        expect_that!(SortKey::from_code("rank"), none());
+        let parameter = ParameterId::from_uuid(Uuid::nil());
+        expect_that!(
+            SortKey::from_parts("parameter", Some(parameter)),
+            some(eq(SortKey::Parameter(parameter)))
+        );
+        expect_that!(SortKey::from_parts("parameter", None), none());
+        expect_that!(SortKey::from_parts("due", Some(parameter)), none());
+        expect_that!(SortKey::from_parts("rank", None), none());
     }
 
     #[gtest]
@@ -309,9 +381,9 @@ mod tests {
         let mut other = item(2);
         other.tags = BTreeSet::from([tag(3)]);
 
-        expect_that!(filter.matches(&second), eq(true));
-        expect_that!(filter.matches(&other), eq(false));
-        expect_that!(filter.matches(&item(3)), eq(false));
+        expect_that!(filter.matches(&second, &[]), eq(true));
+        expect_that!(filter.matches(&other, &[]), eq(false));
+        expect_that!(filter.matches(&item(3), &[]), eq(false));
     }
 
     #[gtest]
@@ -325,14 +397,14 @@ mod tests {
         let mut large = item(2);
         large.effort = Some(Size::L);
 
-        expect_that!(filter.matches(&small), eq(true));
-        expect_that!(filter.matches(&large), eq(false));
-        expect_that!(filter.matches(&item(3)), eq(false));
+        expect_that!(filter.matches(&small, &[]), eq(true));
+        expect_that!(filter.matches(&large, &[]), eq(false));
+        expect_that!(filter.matches(&item(3), &[]), eq(false));
     }
 
     #[gtest]
     fn an_empty_filter_keeps_everything() {
-        expect_that!(ListFilter::default().matches(&item(1)), eq(true));
+        expect_that!(ListFilter::default().matches(&item(1), &[]), eq(true));
     }
 
     #[gtest]
@@ -383,7 +455,7 @@ mod tests {
         let mut items = vec![item(1), item(2)];
         items[1].effort = Some(Size::S);
 
-        by(SortKey::Effort).sort(Group::Blocked, &mut items, |item| item);
+        by(SortKey::Effort).sort(Group::Blocked, &mut items, |item| item, &[]);
 
         let ids: Vec<u128> = items.iter().map(|item| item.id.as_uuid().as_u128()).collect();
         expect_that!(ids, elements_are![eq(&1), eq(&2)]);
@@ -402,5 +474,93 @@ mod tests {
             sorted(&by(SortKey::Impact), &items),
             elements_are![eq(&3), eq(&2), eq(&1)]
         );
+    }
+
+    fn area() -> Parameter {
+        use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
+        let option = |n: u128, label: &str| ParameterOption {
+            id: OptionId::from_uuid(Uuid::from_u128(n)),
+            label: OptionLabel::parse(label).expect("valid"),
+        };
+        let fields = NewParameter {
+            name: ParameterName::parse("Area").expect("valid"),
+            weight: Weight::DEFAULT,
+            options: vec![option(11, "Infra"), option(12, "Web"), option(13, "Docs")],
+            tags: BTreeSet::new(),
+        };
+        Parameter::new(
+            ParameterId::from_uuid(Uuid::from_u128(10)),
+            HeapId::from_uuid(Uuid::nil()),
+            fields,
+            Timestamp::from_millis(0).expect("in range"),
+        )
+        .expect("valid")
+    }
+
+    fn valued(n: u128, option: Option<u128>) -> Item {
+        let mut item = item(n);
+        if let Some(option) = option {
+            item.parameters.insert(
+                ParameterId::from_uuid(Uuid::from_u128(10)),
+                OptionId::from_uuid(Uuid::from_u128(option)),
+            );
+        }
+        item
+    }
+
+    #[gtest]
+    fn the_option_filter_follows_archived_options_to_their_replacement() {
+        let area = area()
+            .archive_option(
+                OptionId::from_uuid(Uuid::from_u128(12)),
+                Some(OptionId::from_uuid(Uuid::from_u128(13))),
+                Timestamp::from_millis(1).expect("in range"),
+            )
+            .expect("allowed")
+            .expect("changed");
+        let filter = ListFilter {
+            options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(12))]),
+            ..ListFilter::default()
+        };
+        let parameters = [area];
+
+        expect_that!(filter.matches(&valued(1, Some(13)), &parameters), eq(true));
+        expect_that!(filter.matches(&valued(2, Some(11)), &parameters), eq(false));
+        expect_that!(filter.matches(&valued(3, None), &parameters), eq(false));
+    }
+
+    #[gtest]
+    fn an_archived_parameter_neither_filters_nor_sorts() {
+        let at = Timestamp::from_millis(1).expect("in range");
+        let parameters = [area().archive(at).expect("changed")];
+        let filter = ListFilter {
+            options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(11))]),
+            ..ListFilter::default()
+        };
+        let view = by(SortKey::Parameter(ParameterId::from_uuid(Uuid::from_u128(10))));
+        let mut items = vec![valued(1, None), valued(2, Some(13)), valued(3, Some(11))];
+
+        view.sort(Group::Ranked, &mut items, |item| item, &parameters);
+
+        expect_that!(filter.matches(&valued(4, Some(13)), &parameters), eq(true));
+        let ids: Vec<u128> = items.iter().map(|item| item.id.as_uuid().as_u128()).collect();
+        expect_that!(ids, elements_are![eq(&1), eq(&2), eq(&3)]);
+    }
+
+    #[gtest]
+    fn sorting_by_a_parameter_puts_its_first_option_first_and_unset_last() {
+        let parameters = [area()];
+        let view = by(SortKey::Parameter(ParameterId::from_uuid(Uuid::from_u128(10))));
+        let mut items = vec![
+            valued(1, None),
+            valued(2, Some(13)),
+            valued(3, Some(11)),
+            valued(4, Some(13)),
+        ];
+
+        view.sort(Group::Ranked, &mut items, |item| item, &parameters);
+
+        let ids: Vec<u128> = items.iter().map(|item| item.id.as_uuid().as_u128()).collect();
+        expect_that!(ids, elements_are![eq(&3), eq(&2), eq(&4), eq(&1)]);
     }
 }

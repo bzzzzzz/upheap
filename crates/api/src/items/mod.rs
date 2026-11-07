@@ -4,9 +4,12 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
+use std::collections::BTreeMap;
+
 use domain::list_view::ListView;
+use domain::parameter::ParameterError;
 use domain::tag::parse_tag_set;
-use domain::{HeapId, ItemId, TagId, Timestamp, ValidationError};
+use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -51,6 +54,8 @@ pub(crate) struct RankedQuery {
     pub blocked_layout: Option<BlockedLayoutDto>,
     /// What each group is sorted by. Ties keep priority order. Defaults to `priority`.
     pub sort: Option<SortDto>,
+    /// The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`.
+    pub sort_parameter: Option<Uuid>,
     /// Keep items with any of these tags, comma-separated. Tags of the same heap.
     #[serde(default, deserialize_with = "comma_separated")]
     #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
@@ -63,19 +68,26 @@ pub(crate) struct RankedQuery {
     #[serde(default, deserialize_with = "comma_separated")]
     #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
     pub impact: Vec<SizeDto>,
+    /// Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
+    /// any of its options listed. An archived option keeps the items that switched to its replacement.
+    #[serde(default, deserialize_with = "comma_separated")]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub param: Vec<Uuid>,
 }
 
 impl RankedQuery {
-    fn to_view(&self) -> ListView {
+    fn to_view(&self) -> Result<ListView, ValidationError> {
         ListViewInputDto {
             open: self.open,
             in_progress: self.in_progress,
             blocked: self.blocked,
             blocked_layout: self.blocked_layout,
             sort: self.sort,
+            sort_parameter: self.sort_parameter,
             tag: self.tag.clone(),
             effort: self.effort.clone(),
             impact: self.impact.clone(),
+            param: self.param.clone(),
         }
         .to_view()
     }
@@ -139,6 +151,8 @@ pub(crate) struct CreateItemDto {
     pub due: Option<DueInputDto>,
     /// Tags of the same heap, at most 50.
     pub tag_ids: Option<Vec<Uuid>>,
+    /// An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use.
+    pub parameter_values: Option<BTreeMap<Uuid, Uuid>>,
 }
 
 /// A partial edit. Leave a field out to keep it; send `null` to clear it.
@@ -162,6 +176,11 @@ pub(crate) struct ItemPatchDto {
     #[serde(default, deserialize_with = "non_null")]
     #[schema(value_type = Vec<Uuid>, required = false)]
     pub tag_ids: Option<Vec<Uuid>>,
+    /// Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep
+    /// their values.
+    #[serde(default, deserialize_with = "non_null")]
+    #[schema(value_type = BTreeMap<Uuid, Option<Uuid>>, required = false)]
+    pub parameter_values: Option<BTreeMap<Uuid, Option<Uuid>>>,
     pub state: Option<StateDto>,
     /// The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send
     /// it with `"state": "blocked"` unless the item is blocked already. `null` clears it. Leaving the blocked state
@@ -188,6 +207,12 @@ impl ItemPatchDto {
                 Some(Some(due)) => Some(Some(due.to_due(tz)?)),
             },
             tags: self.tag_ids.as_deref().map(to_tag_set).transpose()?,
+            parameters: self
+                .parameter_values
+                .iter()
+                .flatten()
+                .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), option.map(OptionId::from_uuid)))
+                .collect(),
             state: self.state.map(StateKind::from),
             blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
         })
@@ -198,7 +223,7 @@ impl ItemPatchDto {
 /// item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
 #[utoipa::path(get, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
     params(("heap_id" = Uuid, Path), RankedQuery, TimeZoneHeader),
-    responses((status = 200, body = RankedListDto), (status = 400, description = "`invalid_query`", body = Problem), (status = 404, body = Problem), (status = 422, description = "`tag_not_in_heap`, with `field` `tag`", body = Problem)))]
+    responses((status = 200, body = RankedListDto), (status = 400, description = "`invalid_query`", body = Problem), (status = 404, body = Problem), (status = 422, description = "`tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`)", body = Problem)))]
 async fn list_ranked(
     State(state): State<AppState>,
     CurrentUser(principal): CurrentUser,
@@ -211,12 +236,17 @@ async fn list_ranked(
         .map(|ms| Timestamp::from_millis(ms).ok_or(ValidationError::TimestampOutOfRange))
         .transpose()
         .map_err(ServiceError::from)?;
+    let view = query.to_view().map_err(ServiceError::from)?;
     let list = state
         .services
-        .list_ranked(principal, HeapId::from_uuid(heap_id), as_of, &query.to_view())
+        .list_ranked(principal, HeapId::from_uuid(heap_id), as_of, &view)
         .await
         .map_err(|error| match error {
             ServiceError::TagNotInHeap { .. } => ApiError::InField { error, field: "tag" },
+            ServiceError::Parameter(ParameterError::NotInHeap { .. }) => ApiError::InField {
+                error,
+                field: "sort_parameter",
+            },
             other => other.into(),
         })?;
     let as_of = list.as_of;
@@ -258,7 +288,7 @@ async fn list_closed(
 /// Adds an item. Only the title is required.
 #[utoipa::path(post, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
     params(("heap_id" = Uuid, Path), TimeZoneHeader), request_body = CreateItemDto,
-    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, or `tag_not_in_heap`", body = Problem)))]
+    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
 async fn create_item(
     State(state): State<AppState>,
     CurrentUser(principal): CurrentUser,
@@ -294,7 +324,7 @@ async fn get_item(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived`", body = Problem),
-        (status = 422, description = "Invalid fields, `tag_not_in_heap`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
+        (status = 422, description = "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_item(
@@ -352,6 +382,12 @@ fn to_new_item(body: &CreateItemDto, tz: &TimeZone) -> Result<NewItem, Validatio
         impact: body.impact.map(Into::into),
         due: body.due.as_ref().map(|due| due.to_due(tz)).transpose()?,
         tags: to_tag_set(body.tag_ids.as_deref().unwrap_or_default())?,
+        parameters: body
+            .parameter_values
+            .iter()
+            .flatten()
+            .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), OptionId::from_uuid(*option)))
+            .collect(),
     })
 }
 

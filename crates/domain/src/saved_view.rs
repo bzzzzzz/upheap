@@ -12,10 +12,16 @@ use crate::{HeapId, SavedViewId, Timestamp, UserId, ValidationError, Version};
 /// The most tags a saved view can filter by. Keeps the stored view well inside a MySQL `TEXT` column (64 KB).
 pub const MAX_VIEW_TAGS: usize = 200;
 
-/// Refuses a list view with more than [`MAX_VIEW_TAGS`] tags in its filter.
+/// The most custom parameter options a saved view can filter by, for the same reason.
+pub const MAX_VIEW_OPTIONS: usize = 200;
+
+/// Refuses a list view with more than [`MAX_VIEW_TAGS`] tags or [`MAX_VIEW_OPTIONS`] options in its filter.
 pub fn ensure_savable(list_view: &ListView) -> Result<(), ValidationError> {
     if list_view.filter.tags.len() > MAX_VIEW_TAGS {
         return Err(ValidationError::TooManyTags { max: MAX_VIEW_TAGS });
+    }
+    if list_view.filter.options.len() > MAX_VIEW_OPTIONS {
+        return Err(ValidationError::TooManyOptions { max: MAX_VIEW_OPTIONS });
     }
     Ok(())
 }

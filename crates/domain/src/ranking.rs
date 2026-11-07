@@ -4,22 +4,27 @@
 //! change is always an explicit test update. Scores are never stored or returned, only positions and
 //! contributors.
 //!
+//! **Custom parameters** count like the heap's own factors: each parameter in use adds its weight times where the
+//! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
+//! counts as the last option (Req Priority §4), and an archived option as the option that replaced it.
+//!
 //! **Blockers** take on the priority of the most important item they block, times a small boost, through whole
 //! chains. The blocking edges form a forest because cycles are refused on write; the walk still tolerates a cycle
 //! in stored data by ignoring the edge that closes it.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::due::fuzzy_label;
 use crate::heap::HeapPolicy;
 use crate::item::{Due, Item, Size};
-use crate::{ItemId, Timestamp};
+use crate::parameter::Parameter;
+use crate::{ItemId, OptionId, ParameterId, Timestamp};
 
 /// A named version of the scoring formula.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaVersion {
-    /// Placeholder formula for the first release: a weighted sum of age, deadline proximity and value per
-    /// effort. To be replaced by the formula designed separately.
+    /// Placeholder formula for the first release: a weighted sum of age, deadline proximity, value per effort and
+    /// the custom parameters. To be replaced by the formula designed separately.
     V1,
 }
 
@@ -44,6 +49,8 @@ pub struct ItemForRanking<'a> {
     pub due: Option<Due>,
     /// The item this one waits for. Ignored when that item isn't among the ranked items.
     pub blocked_by: Option<ItemId>,
+    /// The item's option for each custom parameter that is set.
+    pub parameters: &'a BTreeMap<ParameterId, OptionId>,
 }
 
 impl<'a> From<&'a Item> for ItemForRanking<'a> {
@@ -56,6 +63,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
             impact: item.impact,
             due: item.due,
             blocked_by: item.blocked_by(),
+            parameters: &item.parameters,
         }
     }
 }
@@ -66,6 +74,8 @@ pub enum Factor {
     Age,
     Deadline,
     Value,
+    /// A custom parameter.
+    Parameter,
     /// Priority inherited from an item this one blocks.
     Blocks,
 }
@@ -89,20 +99,23 @@ pub struct RankedItem {
     pub contributors: Vec<Contributor>,
 }
 
-/// Ranks `items` under `policy` at `as_of`, highest priority first.
+/// Ranks `items` under `policy` and the heap's `parameters` at `as_of`, highest priority first. Archived
+/// parameters don't count.
 ///
 /// An item that blocks others ranks at least as high as each of them. Ties go to the item that blocks the longer
 /// chain, then to the older item, then to the lower ID, so the order is fully deterministic.
 pub fn rank(
     formula: FormulaVersion,
     policy: &HeapPolicy,
+    parameters: &[Parameter],
     items: &[ItemForRanking<'_>],
     as_of: Timestamp,
 ) -> Vec<RankedItem> {
+    let parameters: Vec<&Parameter> = parameters.iter().filter(|p| !p.is_archived()).collect();
     let own: Vec<(f64, Vec<Component>)> = items
         .iter()
         .map(|item| {
-            let components = score_components(formula, policy, item, as_of);
+            let components = score_components(formula, policy, &parameters, item, as_of);
             let total = components.iter().map(|c| c.value).sum();
             (total, components)
         })
@@ -228,11 +241,12 @@ struct Component {
 fn score_components(
     formula: FormulaVersion,
     policy: &HeapPolicy,
+    parameters: &[&Parameter],
     item: &ItemForRanking<'_>,
     as_of: Timestamp,
 ) -> Vec<Component> {
     match formula {
-        FormulaVersion::V1 => v1::components(policy, item, as_of),
+        FormulaVersion::V1 => v1::components(policy, parameters, item, as_of),
     }
 }
 
@@ -269,6 +283,7 @@ mod v1 {
     use super::{Component, Factor, ItemForRanking, fuzzy_label};
     use crate::heap::HeapPolicy;
     use crate::item::{Due, Size};
+    use crate::parameter::Parameter;
     use crate::{Duration, Timestamp};
 
     /// Age at which the age factor reaches 1. It keeps growing slowly after that.
@@ -282,7 +297,12 @@ mod v1 {
     /// A blocker ranks as if it were this much more important than the item it blocks.
     pub(super) const BLOCKER_BOOST: f64 = 1.1;
 
-    pub(super) fn components(policy: &HeapPolicy, item: &ItemForRanking<'_>, as_of: Timestamp) -> Vec<Component> {
+    pub(super) fn components(
+        policy: &HeapPolicy,
+        parameters: &[&Parameter],
+        item: &ItemForRanking<'_>,
+        as_of: Timestamp,
+    ) -> Vec<Component> {
         let mut components = vec![
             age(policy.age_weight, item.created_at, as_of),
             value(policy.value_weight, item),
@@ -290,7 +310,28 @@ mod v1 {
         if let Some(due) = item.due {
             components.push(deadline(policy.deadline_weight, due, as_of));
         }
+        components.extend(parameters.iter().filter_map(|parameter| custom(parameter, item)));
         components
+    }
+
+    /// Where the item's option sits in the parameter's order: 1 for the first, 0 for the last. Unset values add
+    /// nothing, the same as the last option; so a parameter with a single option adds nothing either.
+    fn custom(parameter: &Parameter, item: &ItemForRanking<'_>) -> Option<Component> {
+        let value = item
+            .parameters
+            .get(&parameter.id)
+            .and_then(|option| parameter.resolve(*option))?;
+        let last = parameter.options.len().saturating_sub(1);
+        let raw = if last == 0 {
+            0.0
+        } else {
+            (last - value.rank) as f64 / last as f64
+        };
+        Some(Component {
+            factor: Factor::Parameter,
+            value: f64::from(parameter.weight.get()) * raw,
+            label: format!("{}: {}", parameter.name.as_str(), value.option.label.as_str()),
+        })
     }
 
     fn age(weight: u16, created_at: Timestamp, as_of: Timestamp) -> Component {
@@ -404,6 +445,8 @@ mod tests {
         ItemId::from_uuid(Uuid::from_u128(n))
     }
 
+    static NO_VALUES: BTreeMap<ParameterId, OptionId> = BTreeMap::new();
+
     fn item(n: u128, created_day: i64) -> ItemForRanking<'static> {
         ItemForRanking {
             id: id(n),
@@ -413,6 +456,7 @@ mod tests {
             impact: None,
             due: None,
             blocked_by: None,
+            parameters: &NO_VALUES,
         }
     }
 
@@ -428,7 +472,7 @@ mod tests {
     fn older_items_rank_first_when_otherwise_equal() {
         let items = [item(1, 0), item(2, -10), item(3, -5)];
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &items, day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
 
         expect_that!(
             order(&ranked),
@@ -453,7 +497,7 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[large, small], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[large, small], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&small.id), eq(&large.id)]);
     }
@@ -469,7 +513,7 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[old, overdue], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[old, overdue], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&overdue.id), eq(&old.id)]);
         expect_that!(ranked[0].contributors[0].label, eq("Overdue by 2 days"));
@@ -493,7 +537,7 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[loose, firm], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[loose, firm], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&firm.id), eq(&loose.id)]);
     }
@@ -507,7 +551,7 @@ mod tests {
         };
         let items = [item(2, 0), item(1, 0)];
 
-        let ranked = rank(CURRENT_FORMULA, &policy, &items, day(1));
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &items, day(1));
 
         expect_that!(order(&ranked), elements_are![eq(&items[1].id), eq(&items[0].id)]);
         expect_that!(ranked[0].contributors, is_empty());
@@ -530,6 +574,7 @@ mod tests {
         let ranked = rank(
             CURRENT_FORMULA,
             &HeapPolicy::default(),
+            &[],
             &[middle, blocked, blocker],
             day(0),
         );
@@ -565,6 +610,7 @@ mod tests {
         let ranked = rank(
             CURRENT_FORMULA,
             &HeapPolicy::default(),
+            &[],
             &[other, urgent, middle, root],
             day(0),
         );
@@ -590,7 +636,7 @@ mod tests {
         };
         let blocker = item(2, 0);
 
-        let ranked = rank(CURRENT_FORMULA, &policy, &[blocked, blocker], day(0));
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[blocked, blocker], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&blocker.id), eq(&blocked.id)]);
     }
@@ -606,7 +652,7 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[a, b], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[a, b], day(0));
 
         expect_that!(ranked.len(), eq(2));
     }
@@ -618,13 +664,100 @@ mod tests {
             ..item(1, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[blocked], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[blocked], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&blocked.id)]);
         expect_that!(
             ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
             not(contains(eq(&Factor::Blocks)))
         );
+    }
+
+    /// A "Customer" parameter with `weight` and one option per label, numbered from 51 in order.
+    fn customer(weight: u16, labels: &[&str]) -> crate::parameter::Parameter {
+        use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
+        let options = (51..).zip(labels).map(|(n, label)| ParameterOption {
+            id: option_id(n),
+            label: OptionLabel::parse(label).expect("valid"),
+        });
+        crate::parameter::Parameter::new(
+            ParameterId::from_uuid(Uuid::from_u128(50)),
+            crate::HeapId::from_uuid(Uuid::nil()),
+            NewParameter {
+                name: ParameterName::parse("Customer").expect("valid"),
+                weight: Weight::parse(weight.into()).expect("valid"),
+                options: options.collect(),
+                tags: std::collections::BTreeSet::new(),
+            },
+            day(0),
+        )
+        .expect("valid")
+    }
+
+    fn option_id(n: u128) -> crate::OptionId {
+        crate::OptionId::from_uuid(Uuid::from_u128(n))
+    }
+
+    #[gtest]
+    fn a_parameter_ranks_its_first_option_highest_and_explains_it() {
+        let customer = customer(50, &["Enterprise", "Free"]);
+        let enterprise = BTreeMap::from([(customer.id, option_id(51))]);
+        let free = BTreeMap::from([(customer.id, option_id(52))]);
+        let big = ItemForRanking {
+            parameters: &enterprise,
+            ..item(1, 0)
+        };
+        let small = ItemForRanking {
+            parameters: &free,
+            ..item(2, -20)
+        };
+        let unset = item(3, -20);
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            std::slice::from_ref(&customer),
+            &[unset, small, big],
+            day(0),
+        );
+        let archived = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[customer.archive(day(0)).expect("changed")],
+            &[unset, small, big],
+            day(0),
+        );
+
+        expect_that!(ranked[0].item_id, eq(big.id));
+        expect_that!(ranked[0].contributors[0].factor, eq(Factor::Parameter));
+        expect_that!(ranked[0].contributors[0].label, eq("Customer: Enterprise"));
+        expect_that!(archived[0].item_id, not(eq(big.id)));
+    }
+
+    #[gtest]
+    fn a_single_option_or_a_zero_weight_adds_nothing() {
+        let single = customer(50, &["Enterprise"]);
+        let weightless = customer(0, &["Enterprise", "Free"]);
+        let values = BTreeMap::from([(single.id, option_id(51))]);
+        let set = ItemForRanking {
+            parameters: &values,
+            ..item(1, 0)
+        };
+
+        for parameter in [single, weightless] {
+            let ranked = rank(
+                CURRENT_FORMULA,
+                &HeapPolicy::default(),
+                &[parameter],
+                &[set, item(2, 0)],
+                day(0),
+            );
+
+            expect_that!(
+                ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
+                not(contains(eq(&Factor::Parameter)))
+            );
+        }
     }
 
     fn arb_size() -> impl Strategy<Value = Option<Size>> {
@@ -647,6 +780,7 @@ mod tests {
                 impact,
                 due: due.map(|(d, firm)| Due { at: day(d), firm }),
                 blocked_by: None,
+                parameters: &NO_VALUES,
             })
     }
 
@@ -669,9 +803,9 @@ mod tests {
         #[test]
         fn ranking_ignores_input_order(mut items in prop::collection::vec(arb_item(), 0..40)) {
             let policy = HeapPolicy::default();
-            let first = rank(CURRENT_FORMULA, &policy, &items, day(0));
+            let first = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
             items.reverse();
-            let second = rank(CURRENT_FORMULA, &policy, &items, day(0));
+            let second = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
             prop_assert_eq!(first, second);
         }
 
@@ -690,15 +824,15 @@ mod tests {
                 ranked.into_iter().map(|r| r.item_id).filter(|id| *id != edited_id).collect()
             };
 
-            let before = without(rank(CURRENT_FORMULA, &policy, &items, day(0)));
-            let after = without(rank(CURRENT_FORMULA, &policy, &edited, day(0)));
+            let before = without(rank(CURRENT_FORMULA, &policy, &[], &items, day(0)));
+            let after = without(rank(CURRENT_FORMULA, &policy, &[], &edited, day(0)));
 
             prop_assert_eq!(before, after);
         }
 
         #[test]
         fn an_item_blocking_another_never_ranks_below_it(items in arb_forest()) {
-            let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &items, day(0));
+            let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
             for item in &items {
                 if let Some(blocker) = item.blocked_by {
                     prop_assert!(position_of(&ranked, blocker) < position_of(&ranked, item.id));
@@ -709,9 +843,9 @@ mod tests {
         #[test]
         fn ranking_with_blockers_ignores_input_order(mut items in arb_forest()) {
             let policy = HeapPolicy::default();
-            let first = rank(CURRENT_FORMULA, &policy, &items, day(0));
+            let first = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
             items.reverse();
-            let second = rank(CURRENT_FORMULA, &policy, &items, day(0));
+            let second = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
             prop_assert_eq!(first, second);
         }
     }

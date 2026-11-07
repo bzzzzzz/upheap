@@ -6,11 +6,12 @@ use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
 use domain::list_view::{Group, ListView};
+use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, check_values, current_values};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
 use domain::team::Role;
-use domain::{Duration, HeapId, ItemId, TagId, Timestamp, Version};
+use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
@@ -26,15 +27,38 @@ pub const MAX_AS_OF_AGE: Duration = Duration::from_hours(24);
 /// Largest page of closed items.
 pub const MAX_CLOSED_PAGE: u64 = 200;
 
-/// An item with its tags, its blocker, and what the caller may do with it.
+/// An item with its tags, its parameter values, its blocker, and what the caller may do with it.
 #[derive(Debug)]
 pub struct ItemView {
     pub item: Item,
     /// The item's tags, by name.
     pub tags: Vec<Tag>,
+    /// Its value for each of the heap's parameters in use, set or not, and for each archived parameter it still
+    /// has a value for, by parameter name.
+    pub parameters: Vec<ParameterValue>,
     /// The item it waits for, when it's blocked and one was picked.
     pub blocked_by: Option<ItemSummary>,
     pub allowed_actions: Vec<ItemAction>,
+}
+
+/// An item's value for one custom parameter, ready to show.
+#[derive(Debug)]
+pub struct ParameterValue {
+    pub parameter_id: ParameterId,
+    pub name: ParameterName,
+    /// Whether the parameter is archived. Only closed items, and items reopened since, have values for one.
+    pub parameter_archived: bool,
+    /// `None` when unset.
+    pub option: Option<OptionValue>,
+}
+
+/// The option an item has for a parameter.
+#[derive(Debug)]
+pub struct OptionValue {
+    pub id: OptionId,
+    pub label: OptionLabel,
+    /// Whether the option is archived. Closed items keep archived options.
+    pub archived: bool,
 }
 
 /// An item in the ranked list.
@@ -75,8 +99,9 @@ impl Services {
     /// Ranks every non-closed item of the heap, then shows them as `view` says.
     ///
     /// `requested_as_of` freezes the time input so the order stays stable within a session. It's ignored when
-    /// it's in the future or more than [`MAX_AS_OF_AGE`] old, and the current time is used instead. Every tag in
-    /// the view's filter must belong to the heap, or it fails with [`ServiceError::TagNotInHeap`].
+    /// it's in the future or more than [`MAX_AS_OF_AGE`] old, and the current time is used instead. Every tag and
+    /// option in the view's filter, and the parameter it sorts by, must belong to the heap, or it fails with
+    /// [`ServiceError::TagNotInHeap`], [`ServiceError::OptionNotInHeap`] or [`ParameterError::NotInHeap`].
     pub async fn list_ranked(
         &self,
         principal: Principal,
@@ -92,12 +117,13 @@ impl Services {
         let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
         let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
-        ensure_tags_in_heap(&heap_tags, &view.filter.tags)?;
+        let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
+        ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
         // Every item is ranked, because a blocker inherits from what it blocks even when that is left out below.
         let ranking = {
             let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
-            rank(CURRENT_FORMULA, &access.heap.policy, &inputs, as_of)
+            rank(CURRENT_FORMULA, &access.heap.policy, &parameters, &inputs, as_of)
         };
         let item_count = items.len();
         let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
@@ -110,7 +136,7 @@ impl Services {
                 continue;
             };
             let item = items.swap_remove(index);
-            if !view.filter.matches(&item) {
+            if !view.filter.matches(&item, &parameters) {
                 continue;
             }
             let group = match view.group_of(item.state.kind()) {
@@ -124,11 +150,13 @@ impl Services {
             };
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
             let tags = select_tags(&heap_tags, &item.tags);
+            let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
             group.push(RankedEntry {
                 view: ItemView {
                     item,
                     tags,
+                    parameters: values,
                     blocked_by,
                     allowed_actions,
                 },
@@ -141,7 +169,7 @@ impl Services {
             (Group::Ranked, &mut ranked),
             (Group::Blocked, &mut blocked),
         ] {
-            view.sort(group, entries, |entry| &entry.view.item);
+            view.sort(group, entries, |entry| &entry.view.item, &parameters);
             for (index, entry) in entries.iter_mut().enumerate() {
                 entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
             }
@@ -184,6 +212,7 @@ impl Services {
             .flatten();
 
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
+        let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
@@ -191,10 +220,12 @@ impl Services {
             .map(|item| {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let tags = select_tags(&heap_tags, &item.tags);
+                let values = describe_values(&item, &parameters);
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
                     tags,
+                    parameters: values,
                     blocked_by: None,
                     allowed_actions,
                 }
@@ -208,7 +239,8 @@ impl Services {
     }
 
     /// Adds an open item to the heap. Every tag must belong to the heap, or it fails with
-    /// [`ServiceError::TagNotInHeap`].
+    /// [`ServiceError::TagNotInHeap`]. Every value must be an option in use of a parameter in use of the heap
+    /// ([`ParameterError::NotInHeap`], [`ParameterError::OptionNotInParameter`]).
     pub async fn create_item(
         &self,
         principal: Principal,
@@ -218,6 +250,8 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
+        let parameters = store::parameters::list_parameters_locking(&txn, heap_id).await?;
+        check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
 
         let now = self.now();
         let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, fields, now);
@@ -235,10 +269,12 @@ impl Services {
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
+        let values = describe_values(&item, &parameters);
         // New items are open, so they have no blocker.
         Ok(ItemView {
             item,
             tags,
+            parameters: values,
             blocked_by: None,
             allowed_actions,
         })
@@ -251,8 +287,10 @@ impl Services {
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, self.now());
         let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
+        let parameters = store::parameters::list_parameters(&self.db, item.heap_id).await?;
         let blocked_by = find_blocker(&self.db, &item).await?;
         Ok(ItemView {
+            parameters: describe_values(&item, &parameters),
             item,
             tags,
             blocked_by,
@@ -263,7 +301,8 @@ impl Services {
     /// Applies a partial edit if the item is still at version `expected`. New tags must belong to the item's
     /// heap, or it fails with [`ServiceError::TagNotInHeap`]. A new blocker must be a non-closed item of the same
     /// heap that doesn't already wait for this one ([`ServiceError::BlockerNotInHeap`],
-    /// [`ServiceError::BlockerClosed`], [`ServiceError::BlockingCycle`]).
+    /// [`ServiceError::BlockerClosed`], [`ServiceError::BlockingCycle`]). A value set must be an option in use of a
+    /// parameter in use of the heap; a value cleared may be of any of its parameters.
     ///
     /// A patch that changes nothing succeeds and returns the item unchanged, without an audit entry.
     pub async fn update_item(
@@ -288,10 +327,17 @@ impl Services {
         if let Some(tags) = &patch.tags {
             load_heap_tags(&txn, current.heap_id, tags).await?;
         }
+        let parameters = store::parameters::list_parameters_locking(&txn, current.heap_id).await?;
 
         let now = self.now();
         let role = access.membership.role;
-        let edited = current.apply_patch(&patch, now)?;
+        // The patch is applied first, so editing an item that stays closed fails with `item_closed`.
+        let mut edited = current.apply_patch(&patch, now)?;
+        check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
+        // A reopened item gets the values archiving would have given it had it been open.
+        if let Some(reopened) = edited.as_mut().filter(|e| current.is_closed() && !e.is_closed()) {
+            reopened.parameters = current_values(&parameters, &reopened.parameters);
+        }
         // Checked after the patch, so an item that doesn't end up blocked gets `item_not_blocked` first.
         if let Some(blocker) = edited.as_ref().and_then(Item::blocked_by)
             && current.blocked_by() != Some(blocker)
@@ -303,6 +349,7 @@ impl Services {
             let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
             let blocked_by = find_blocker(&txn, &current).await?;
             return Ok(ItemView {
+                parameters: describe_values(&current, &parameters),
                 item: current,
                 tags,
                 blocked_by,
@@ -332,6 +379,7 @@ impl Services {
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
         let allowed_actions = allowed_item_actions(&saved, &access.heap, role, now);
         Ok(ItemView {
+            parameters: describe_values(&saved, &parameters),
             item: saved,
             tags,
             blocked_by,
@@ -426,9 +474,57 @@ async fn blocker_summaries(
     Ok(found)
 }
 
+/// Fails unless every tag and option `view` filters by, and the parameter it sorts by, belong to the heap whose
+/// tags are `heap_tags` and whose parameters, archived ones included, are `parameters`.
+///
+/// Archived parameters and options are allowed, so a saved view keeps working after they are archived.
+pub(crate) fn ensure_view_in_heap(
+    heap_tags: &[Tag],
+    parameters: &[Parameter],
+    view: &ListView,
+) -> Result<(), ServiceError> {
+    ensure_tags_in_heap(heap_tags, &view.filter.tags)?;
+    let known = |option: &OptionId| parameters.iter().any(|p| p.find_option(*option).is_some());
+    if let Some(&option_id) = view.filter.options.iter().find(|option| !known(option)) {
+        return Err(ServiceError::OptionNotInHeap { option_id });
+    }
+    if let Some(parameter_id) = view.sort.parameter()
+        && !parameters.iter().any(|p| p.id == parameter_id)
+    {
+        return Err(ParameterError::NotInHeap { parameter_id }.into());
+    }
+    Ok(())
+}
+
+/// The item's value for each of `parameters` in use, and for each archived one it has a value for, in the order of
+/// `parameters`.
+pub(crate) fn describe_values(item: &Item, parameters: &[Parameter]) -> Vec<ParameterValue> {
+    parameters
+        .iter()
+        .filter_map(|parameter| {
+            let option = item.parameters.get(&parameter.id).and_then(|id| {
+                parameter.find_option(*id).map(|(label, archived)| OptionValue {
+                    id: *id,
+                    label: label.clone(),
+                    archived,
+                })
+            });
+            if parameter.is_archived() && option.is_none() {
+                return None;
+            }
+            Some(ParameterValue {
+                parameter_id: parameter.id,
+                name: parameter.name.clone(),
+                parameter_archived: parameter.is_archived(),
+                option,
+            })
+        })
+        .collect()
+}
+
 /// The tags `ids` names, by name. Fails with [`ServiceError::TagNotInHeap`] if any of them isn't a tag of
 /// `heap_id`, which also covers IDs that don't exist at all.
-async fn load_heap_tags(
+pub(crate) async fn load_heap_tags(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
     ids: &BTreeSet<TagId>,

@@ -12,7 +12,7 @@ use domain::team::Role;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
-use service::items::{ItemView, RankedEntry};
+use service::items::{ItemView, ParameterValue, RankedEntry};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -122,6 +122,43 @@ impl From<&Tag> for ItemTagDto {
     }
 }
 
+/// An item's value for one custom parameter.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = ItemParameter)]
+pub(crate) struct ItemParameterDto {
+    pub parameter_id: Uuid,
+    pub name: String,
+    /// Only closed items, and items reopened since, list archived parameters, and only when they have a value.
+    pub parameter_archived: bool,
+    /// `null` when unset, which ranks as the parameter's lowest-priority option.
+    pub option: Option<ItemOptionDto>,
+}
+
+/// The option an item has for a parameter.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = ItemOption)]
+pub(crate) struct ItemOptionDto {
+    pub id: Uuid,
+    pub label: String,
+    /// Closed items keep archived options; open items switch to the replacement.
+    pub archived: bool,
+}
+
+impl From<ParameterValue> for ItemParameterDto {
+    fn from(value: ParameterValue) -> Self {
+        Self {
+            parameter_id: *value.parameter_id.as_uuid(),
+            name: value.name.as_str().to_owned(),
+            parameter_archived: value.parameter_archived,
+            option: value.option.map(|option| ItemOptionDto {
+                id: *option.id.as_uuid(),
+                label: option.label.as_str().to_owned(),
+                archived: option.archived,
+            }),
+        }
+    }
+}
+
 /// Another item, named where this one refers to it.
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(as = ItemRef)]
@@ -219,6 +256,9 @@ pub(crate) struct ItemDto {
     pub due: Option<DueDto>,
     /// By name.
     pub tags: Vec<ItemTagDto>,
+    /// A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
+    /// by parameter name.
+    pub parameters: Vec<ItemParameterDto>,
     /// UTC milliseconds.
     pub created_at: i64,
     /// UTC milliseconds; set exactly when the item is closed.
@@ -247,6 +287,8 @@ pub(crate) enum FactorDto {
     Age,
     Deadline,
     Value,
+    /// A custom parameter.
+    Parameter,
     /// Priority taken on from an item this one blocks.
     Blocks,
 }
@@ -257,6 +299,7 @@ impl From<Contributor> for ContributorDto {
             Factor::Age => FactorDto::Age,
             Factor::Deadline => FactorDto::Deadline,
             Factor::Value => FactorDto::Value,
+            Factor::Parameter => FactorDto::Parameter,
             Factor::Blocks => FactorDto::Blocks,
         };
         Self {
@@ -322,6 +365,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
             }
         }),
         tags: view.tags.iter().map(ItemTagDto::from).collect(),
+        parameters: view.parameters.into_iter().map(ItemParameterDto::from).collect(),
         created_at: item.created_at.as_millis(),
         closed_at: closed_at.map(Timestamp::as_millis),
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),

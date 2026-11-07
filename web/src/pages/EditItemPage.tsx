@@ -10,10 +10,11 @@ import {
   type ItemTag,
   type Size,
 } from "../api/client";
-import { useBlockerCandidates, useItem, useUpdateItem } from "../api/queries";
+import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "../components/BlockerSelect";
 import { blockerCandidatesFor } from "../components/blockerCandidates";
 import { isClosed, STATE_LABELS, STATES } from "../components/labels";
+import { ParameterSelect } from "../components/ParameterSelect";
 import { SizeSelect } from "../components/SizeSelect";
 import { TagPicker } from "../components/TagPicker";
 
@@ -24,6 +25,8 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   blocker_closed: "That item is closed, so nothing can wait for it.",
   blocker_not_in_heap: "That item isn't in this heap any more.",
   item_closed: "This item is closed, so only its state can change.",
+  option_not_in_parameter: "One of the options was archived meanwhile. Pick another one.",
+  parameter_not_in_heap: "One of the parameters was archived meanwhile.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };
 
@@ -98,6 +101,8 @@ type Draft = {
   dueDate: string;
   dueFirm: boolean;
   tags: ItemTag[];
+  /** Option ID by parameter ID; `null` when unset. */
+  parameters: Record<string, string | null>;
   state: ItemState;
   blockedBy: string | null;
 };
@@ -111,6 +116,7 @@ function draftOf(item: Item): Draft {
     dueDate: item.due?.date ?? "",
     dueFirm: item.due?.firm ?? false,
     tags: item.tags,
+    parameters: Object.fromEntries(item.parameters.map((p) => [p.parameter_id, p.option?.id ?? null])),
     state: item.state,
     blockedBy: item.blocked_by?.id ?? null,
   };
@@ -139,6 +145,12 @@ function patchFor(item: Item, draft: Draft): ItemPatch {
   const tagIds = draft.tags.map((tag) => tag.id);
   const sameTags = tagIds.length === item.tags.length && item.tags.every((tag) => tagIds.includes(tag.id));
   if (!sameTags) patch.tag_ids = tagIds;
+  const values = Object.fromEntries(
+    item.parameters
+      .filter((p) => (draft.parameters[p.parameter_id] ?? null) !== (p.option?.id ?? null))
+      .map((p) => [p.parameter_id, draft.parameters[p.parameter_id] ?? null]),
+  );
+  if (Object.keys(values).length > 0) patch.parameter_values = values;
   return patch;
 }
 
@@ -158,6 +170,7 @@ function EditItemForm({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(() => draftOf(item));
+  const heapParameters = useParameters(item.heap_id);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   const closed = isClosed(item.state);
@@ -276,6 +289,21 @@ function EditItemForm({
         onChange={(tags) => set("tags", tags)}
         disabled={!fieldsEditable}
       />
+
+      {item.parameters.length > 0 && (
+        <div className="flex flex-wrap items-center gap-4" role="group" aria-label="Parameters">
+          {item.parameters.map((current) => (
+            <ParameterSelect
+              key={current.parameter_id}
+              parameter={heapParameters.data?.parameters.find((p) => p.id === current.parameter_id)}
+              current={current}
+              value={shown.parameters[current.parameter_id] ?? null}
+              disabled={!fieldsEditable}
+              onChange={(optionId) => set("parameters", { ...draft.parameters, [current.parameter_id]: optionId })}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-4">
         <label className="inline-flex items-center gap-1 text-xs text-stone-500">

@@ -21,6 +21,10 @@ pub enum AuditAction {
     SavedViewCreated,
     SavedViewUpdated,
     SavedViewArchived,
+    ParameterCreated,
+    ParameterUpdated,
+    ParameterArchived,
+    OptionArchived,
 }
 
 impl AuditAction {
@@ -45,6 +49,10 @@ impl AuditAction {
             Self::SavedViewCreated => "saved_view_created",
             Self::SavedViewUpdated => "saved_view_updated",
             Self::SavedViewArchived => "saved_view_archived",
+            Self::ParameterCreated => "parameter_created",
+            Self::ParameterUpdated => "parameter_updated",
+            Self::ParameterArchived => "parameter_archived",
+            Self::OptionArchived => "option_archived",
         }
     }
 }
@@ -58,6 +66,8 @@ pub enum EntityType {
     Item,
     Tag,
     SavedView,
+    /// A custom parameter, its options and its tag links.
+    Parameter,
 }
 
 impl EntityType {
@@ -69,6 +79,7 @@ impl EntityType {
             Self::Item => "item",
             Self::Tag => "tag",
             Self::SavedView => "saved_view",
+            Self::Parameter => "parameter",
         }
     }
 }

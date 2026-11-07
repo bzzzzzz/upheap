@@ -23,6 +23,9 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
   can be removed from an item but never deleted.
 - Blockers: a blocked item can wait for another item in its heap. Cycles are refused, and a blocker inherits
   the priority of what it blocks (with a small boost), shown as "Blocks …" in its reasons.
+- Custom parameters: admins define per-heap parameters such as "Customer" with ordered options and a weight, link
+  them to tags, and archive options (open items switch to a replacement) or unused parameters. Items get a value per
+  parameter; it counts in the ranking and its reasons, and the list filters and sorts by it.
 - Teams: create teams, add members by name or email, make admins, remove members or leave; a team always keeps an
   admin. Admins create, rename, archive and unarchive heaps; an archived heap is read-only.
 - Saved views: name the list view you're looking at (states, sort, filters) and the whole team gets it as a link
@@ -30,7 +33,7 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
 
-Not yet: custom parameters, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
+Not yet: editing the heap's own weights, reading the audit log, OIDC sign-in, the CLI OAuth flow and sign-in rate
 limiting.
 
 ## Run it

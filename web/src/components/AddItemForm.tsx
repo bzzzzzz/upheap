@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { ItemTag, Size } from "../api/client";
-import { useCreateItem } from "../api/queries";
+import type { ItemParameter, ItemTag, Size } from "../api/client";
+import { useCreateItem, useParameters } from "../api/queries";
+import { ParameterSelect } from "./ParameterSelect";
 import { SizeSelect } from "./SizeSelect";
 import { TagPicker } from "./TagPicker";
 
-/** The fastest path in the app: type a title, press Enter, type the next one. `n` focuses it. */
+/**
+ * The fastest path in the app: type a title, press Enter, type the next one. `n` focuses it. Picking a tag brings up
+ * the parameters linked to it (Req Views: Add item §3).
+ */
 export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: boolean }) {
   const create = useCreateItem(heapId);
+  const parameters = useParameters(heapId);
   const titleRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [more, setMore] = useState(false);
@@ -17,6 +22,11 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
   const [dueFirm, setDueFirm] = useState(false);
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<ItemTag[]>([]);
+  const [values, setValues] = useState<Record<string, string | null>>({});
+  // Suggested: the parameters linked to a chosen tag, and any already given a value.
+  const suggested = (parameters.data?.parameters ?? []).filter(
+    (parameter) => parameter.tag_ids.some((id) => tags.some((tag) => tag.id === id)) || values[parameter.id],
+  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -42,6 +52,12 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
         impact,
         due: dueDate ? { date: dueDate, firm: dueFirm } : null,
         tag_ids: tags.map((tag) => tag.id),
+        parameter_values: Object.fromEntries(
+          suggested.flatMap((parameter) => {
+            const option = values[parameter.id];
+            return option ? [[parameter.id, option]] : [];
+          }),
+        ),
       },
       {
         onSuccess: () => {
@@ -52,6 +68,7 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
           setDueDate("");
           setDueFirm(false);
           setTags([]);
+          setValues({});
           titleRef.current?.focus();
         },
       },
@@ -118,6 +135,20 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
             </label>
           </div>
           <TagPicker heapId={heapId} value={tags} onChange={setTags} disabled={disabled} />
+          {suggested.length > 0 && (
+            <div className="flex flex-wrap items-center gap-4" role="group" aria-label="Parameters for these tags">
+              {suggested.map((parameter) => (
+                <ParameterSelect
+                  key={parameter.id}
+                  parameter={parameter}
+                  current={unsetValue(parameter.id, parameter.name)}
+                  value={values[parameter.id] ?? null}
+                  onChange={(option) => setValues({ ...values, [parameter.id]: option })}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
+          )}
           <label className="flex flex-col gap-1 text-xs text-stone-500">
             Description
             <textarea
@@ -137,3 +168,11 @@ export function AddItemForm({ heapId, disabled }: { heapId: string; disabled: bo
     </form>
   );
 }
+
+/** An unset value of a parameter in use, for a new item that has no values yet. */
+const unsetValue = (parameterId: string, name: string): ItemParameter => ({
+  parameter_id: parameterId,
+  name,
+  parameter_archived: false,
+  option: null,
+});

@@ -56,6 +56,9 @@ export function AppLayout() {
             <Link to="/heaps/$heapId/tags" params={{ heapId }} className={navLink}>
               Tags
             </Link>
+            <Link to="/heaps/$heapId/parameters" params={{ heapId }} className={navLink}>
+              Parameters
+            </Link>
             {heapTeam && (
               <Link to="/teams/$teamId" params={{ teamId: heapTeam.id }} className={navLink}>
                 Team

@@ -73,10 +73,10 @@ Tables:
 | `items` | id, heap_id, title, description, state, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
 | `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
 | `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
-| `parameters` | id, heap_id, name, weight, archived_at, version |
+| `parameters` | id, heap_id, name, weight, created_at, archived_at, version |
 | `parameter_options` | id, parameter_id, label, position, archived_at, replaced_by_option_id |
-| `parameter_tags` | parameter_id, tag_id |
-| `item_parameter_values` | item_id, parameter_id, option_id |
+| `parameter_tags` | parameter_id, tag_id, added_at, removed_at |
+| `item_parameter_values` | item_id, parameter_id, option_id (`NULL` once cleared) |
 | `saved_views` | id, heap_id, name, list_view (JSON text), created_by, created_at, archived_at, version |
 | `audit_log` | id, team_id, heap_id (nullable), actor_user_id, action, entity_type, entity_id, diff (JSON text), created_at |
 
@@ -87,6 +87,7 @@ Notes:
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
 - The application can only insert into `audit_log`. There is no update or delete code path for it.
 - Tag names are unique per heap ignoring case. The check runs on `name_key` rather than the column collation, because MySQL compares case-insensitively by default and SQLite doesn't.
+- A parameter is one aggregate: its options and tag links have no version of their own, so every change to them takes the parameter's version. Options in use are ordered by `position`, highest priority first. An archived option always names its replacement (`archived_at` and `replaced_by_option_id` are set together), so a value can always be followed to an option in use. Unlinking a tag sets `parameter_tags.removed_at`, and clearing an item's value sets `option_id` to `NULL`, so neither deletes a row. Parameter names are unique among a heap's parameters in use, ignoring case; archived parameters keep their names, so a unique index can't express it, and the service checks it under the heap lock.
 - Taking a tag off an item sets `item_tags.removed_at` instead of deleting the row, so relationship rows follow the no-`DELETE` rule too. The change is audited as an `item_updated` entry whose diff lists the tag IDs before and after. Team membership is the one exception (see [Resources](#resources-initial-set)).
 
 ## Ranking
@@ -104,6 +105,7 @@ fn rank(formula: FormulaVersion, policy: &HeapPolicy, items: &[ItemForRanking], 
 2. Each factor (age, deadline proximity, value per effort, each custom parameter) produces a weighted component. The final score is a combination of these. The exact formula is still open and lives behind one function, so changing it doesn't affect the API.
    - **Formula versioning:** each formula is a named version (`FormulaVersion::V1`, …). The server uses one version at a time, set in code, not stored per heap. Tests pin expected orderings per version, so a formula change shows up as an explicit test update. Because scores are never stored, switching versions needs no migration.
 3. **Blocker inheritance:** the blocking edges form a forest, because cycles are rejected on write. Each item's effective score is the maximum of its own score and the effective scores of the items it blocks, times a boost (1.1 in `V1`). This is computed with a memoized walk over the graph, so it is linear in the number of items. Equal scores go to the item that blocks the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
+   - **Custom parameters** in `V1`: each parameter in use adds its weight times where the item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value counts as the last option, so a parameter with a single option adds nothing, and an archived option counts as the option that replaced it. Archived parameters don't count. The contributor reads "Customer: Enterprise".
 4. **Contributors** are the largest weighted components, returned with a label and a relative share (for example "Deadline in a few days" or "Blocks *Migrate auth*"). Scores themselves are never returned.
 5. **Ties** that the chain length (point 3) doesn't settle are broken by `created_at`, oldest first. The ID is the final tie-breaker, which makes the order fully deterministic.
 
@@ -127,7 +129,8 @@ The score is a deterministic function of item data and time. A stable session th
    - Each non-closed state is `pinned`, `shown` or `hidden` (`open=`, `in_progress=`, `blocked=`; by default in progress is pinned and blocked is hidden). Shown blocked items get their own group or are mixed in (`blocked_layout=`). The response counts what hidden states leave out (`hidden_count`).
    - These defaults are the product's defaults, so every client starts from the same list. Before this, the response always carried blocked items and the web app hid them; the change was made before any release, when the web app was the only client.
    - `tag=`, `effort=` and `impact=` take comma-separated values and keep items with any of them. A malformed value is `400` `invalid_query`; a tag of another heap is `422` `tag_not_in_heap` with `field` `tag`.
-   - `sort=` is `priority`, `due` (soonest first), `effort` (smallest first) or `impact` (largest first). Items without the value come last, and ties keep priority order. Grouped blocked items always stay in priority order (Req Views: List items §3). `position` is the place in the returned group.
+   - `param=` takes option IDs of the heap's parameters, comma-separated. For each parameter they belong to, it keeps items with any of its listed options, and the parameters combine like the other filters. An archived option matches the items that switched to its replacement, so a saved view keeps working after an option is archived. An unknown option is `422` `option_not_in_heap` with `field` `param`.
+   - `sort=` is `priority`, `due` (soonest first), `effort` (smallest first), `impact` (largest first) or `parameter`, with the parameter in `sort_parameter=` (its first option first). `sort_parameter` without `sort=parameter`, or the reverse, is `422` `sort_parameter_mismatch`; a parameter of another heap is `parameter_not_in_heap`. Archived parameters and options are accepted in filters and sorts, for the same reason as above; options of an archived parameter don't filter, and a sort by one keeps priority order, since archived parameters count nowhere else either. Items without the value come last, and ties keep priority order. Grouped blocked items always stay in priority order (Req Views: List items §3). `position` is the place in the returned group.
    - The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text: it changes on every keystroke and is a momentary narrowing rather than part of the view. Saved views store the URL's view: the same settings, under the query parameters' names, so a client turns a saved view into a list query field by field. The web app adds `view=<id>` to the URL when a list is opened from a saved view, and keeps it while the settings are changed, so it can offer to save the change into that view.
 4. If heaps grow beyond this size, search moves to the server with per-database full-text indexes. Clients would then call `GET /heaps/{id}/items?q=`.
 
@@ -171,11 +174,11 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Teams | `POST /teams`, `GET/PATCH /teams/{id}` (the team with its members and heaps; rename), `POST /teams/{id}/members`, `PATCH/DELETE /teams/{id}/members/{user_id}` (role change, removal), `POST /teams/{id}/leave`. The caller's teams are listed by `GET /me` |
 | Users | `GET /users?query=` (lookup for adding members, for admins of some team) |
 | Heaps | `POST /teams/{id}/heaps`, `GET/PATCH /heaps/{id}` (rename), `POST /heaps/{id}/archive`, `POST /heaps/{id}/unarchive` |
-| Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&sort=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value (custom parameter filters, `param=`, come with custom parameters) |
+| Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value |
 | Closed items | `GET /heaps/{id}/items/closed?cursor=` |
 | Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
 | Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |
-| Parameters | `GET/POST /heaps/{id}/parameters`, `PATCH /parameters/{id}`, `POST /parameters/{id}/archive`, `POST/PATCH /parameters/{id}/options`, `POST /options/{id}/archive` (with replacement), `PUT /parameters/{id}/tags` |
+| Parameters | `GET/POST /heaps/{id}/parameters` (in use and archived; add one), `PATCH /parameters/{id}` (name, weight), `POST /parameters/{id}/archive`, `POST /parameters/{id}/options` (add one last), `PATCH /parameters/{id}/options` (every option in use, in the new order, with its label), `POST /options/{id}/archive` (with `replacement_option_id`), `PUT /parameters/{id}/tags` |
 | Saved views | `GET/POST /heaps/{id}/views` (the views in use, by name; save one), `PATCH /views/{id}` (rename, or replace the whole view), `POST /views/{id}/archive` |
 | Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit` (filtered by what the caller may do) |
 
@@ -184,6 +187,8 @@ The `DELETE` on a team member removes the membership. That is the one place wher
 Team endpoints return the whole team, members and heaps included, with `allowed_actions` on the team, each member and each heap, so a client re-renders the team from one response after any change (promoting someone, for example, changes what can be done with every other admin). Adding a member who is already one answers `200` with the team unchanged; removing someone who isn't a member succeeds. Archiving and unarchiving take no `If-Match`: each says what the heap should end up as, so repeating or racing them is safe.
 
 Saved views belong to the heap, not to whoever saved them: every member sees them, and can change and archive them, as with tags. They are archived rather than deleted, and an archived view is left out of the list and refuses edits (`saved_view_archived`); there is no unarchive, since saving the view again is as quick. Archiving takes no `If-Match`, like archiving a heap. A view may filter only by tags of its heap (`tag_not_in_heap` with `field` `view.tag`), and by at most 200 of them (`too_many_tags`), which keeps the stored view well inside a MySQL `TEXT` column. Request bodies refuse unknown fields (`invalid_body`), so a misspelt field fails instead of saving nothing. If the URL names a view that is no longer in use, the web app drops `view` from it. Names need not be unique. Writes lock the heap and then the view, and read the view under its lock, for the MySQL snapshot reason given under [Rules that depend on state](#rules-that-depend-on-state).
+
+Parameter endpoints return the whole parameter, options and tag links included. Changes take the parameter's `version` in `If-Match`; archiving a parameter or an option says what it should end up as, so it takes none. Any member lists parameters, since members set the values on items (`parameter_values` on create and edit, by parameter ID, `null` to clear); only admins change them (`ConfigureHeap`). A value set must be an option in use of a parameter in use (`parameter_not_in_heap`, `option_not_in_parameter`); clearing one works for archived parameters too. Archiving an option switches the open items that have it to the replacement and bumps their versions, so an edit made from the old value fails with `version_conflict` instead of undoing the switch; the `option_archived` entry lists the switched items, and each switched item gets an `item_updated` entry naming the value that changed. A closed item keeps the archived option, and when it is reopened its values are brought up to date the same way: each one follows its replacements, and values of archived parameters are dropped, all in the reopening's `item_updated` entry. Items list a value or `null` for every parameter in use, and the values closed items keep of archived parameters. Writes lock the heap, then the parameter, and read the parameter, its options and the item values they check with locking reads, for the MySQL snapshot reason given under [Rules that depend on state](#rules-that-depend-on-state). Item writes read the parameters they check values against the same way.
 
 A display name change is audited once in each of the user's teams, since the audit log is kept per team and that is where teammates see the name. A user in no team has nowhere to record it.
 
@@ -235,7 +240,11 @@ These checks run in the same transaction as the write, after the permission chec
 | No blocking cycles | Walk the blocker chain (see [Cycle detection](#cycle-detection)). | `blocking_cycle` |
 | A blocker is an open item of the same heap, on a blocked item | Checked with the cycle walk. | `blocker_not_in_heap`, `blocker_closed`, `item_not_blocked` |
 | Archiving an option requires a replacement | The replacement must be an active option of the same parameter. | `replacement_required` |
-| A parameter is archived only when unused | No non-terminal item has a value for it. | `parameter_in_use` |
+| A parameter is archived only when unused | No non-terminal item has a value for it, read with a locking read. | `parameter_in_use` |
+| Archived parameters can't change | Checked on the parameter as read under its row lock. | `parameter_archived` |
+| Parameter names are unique per heap | Among parameters in use, ignoring case, under the heap lock. | `parameter_name_taken` |
+| Option labels are unique per parameter | Among options in use, ignoring case. | `option_label_taken` |
+| Rearranged options are exactly those in use | Every option in use, once each. | `options_mismatch` |
 | Tag names are unique per heap | Compared ignoring case, backed by a unique index on `(heap_id, name_key)`. | `tag_name_taken` |
 | Archived saved views can't change | Checked on the view as read under its row lock. | `saved_view_archived` |
 | Stale writes | `version` in `If-Match` must match. | `version_conflict` |

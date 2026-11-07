@@ -6,6 +6,7 @@ import { ApiProblem, type ItemPatch, type ItemRef, type ItemState, type RankedIt
 import { useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "./BlockerSelect";
 import { STATE_LABELS, STATES } from "./labels";
+import { ParameterChips } from "./ParameterSelect";
 import { SizeSelect } from "./SizeSelect";
 import { TagChips } from "./TagChips";
 
@@ -106,6 +107,7 @@ export function ItemRow({
                 : undefined
             }
           />
+          <ParameterChips parameters={item.parameters} />
         </div>
         {!compact && contributors.length > 0 && (
           <p className="mt-0.5 text-xs text-stone-500">{contributors.map((c) => c.label).join(" · ")}</p>
