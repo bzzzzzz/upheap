@@ -20,6 +20,7 @@ import {
   type ItemPatch,
   type ListViewInput,
   type ListViewQuery,
+  type Me,
   type NewItem,
   type NewParameter,
   type NewTag,
@@ -41,6 +42,14 @@ export const meQuery = queryOptions({
 });
 
 export const useMe = () => useQuery(meQuery);
+
+/**
+ * The caller's one team when there's no Teams list to show: they can't start another, as in the local build. Links
+ * then go straight to its page.
+ */
+export function soleTeam(me: Me): Me["teams"][number] | undefined {
+  return !me.allowed_actions.includes("create_team") && me.teams.length === 1 ? me.teams[0] : undefined;
+}
 
 // Every list query of a heap sits under `["ranked", heapId]`, so one invalidation covers them all. The blocker
 // candidates have a key of their own, so they never share a cache entry (and its `as_of`) with a list view.

@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
 
 import { isUnauthenticated } from "./api/client";
-import { meQuery } from "./api/queries";
+import { meQuery, soleTeam, useMe } from "./api/queries";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -16,6 +16,8 @@ import { ParametersPage } from "./pages/ParametersPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TeamsPage } from "./pages/TeamsPage";
+
+const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
@@ -47,15 +49,30 @@ const indexRoute = createRoute({
       throw redirect({ to: "/heaps/$heapId", params: { heapId: heap.id } });
     }
   },
-  component: () => (
-    <p className="py-16 text-center text-stone-500">
-      You don't have any heaps yet.{" "}
-      <Link to="/teams" className="text-sky-700 hover:underline dark:text-sky-400">
-        Create a team
-      </Link>{" "}
-      to start one.
-    </p>
-  ),
+  component: function NoHeaps() {
+    const { data: me } = useMe();
+    const team = me && soleTeam(me);
+    return (
+      <p className="py-16 text-center text-stone-500">
+        You don't have any heaps yet.{" "}
+        {team ? (
+          <>
+            <Link to="/teams/$teamId" params={{ teamId: team.id }} className={linkClass}>
+              Start one
+            </Link>{" "}
+            in {team.name}.
+          </>
+        ) : (
+          <>
+            <Link to="/teams" className={linkClass}>
+              Create a team
+            </Link>{" "}
+            to start one.
+          </>
+        )}
+      </p>
+    );
+  },
 });
 
 const heapRoute = createRoute({
@@ -124,7 +141,18 @@ const editItemRoute = createRoute({
   },
 });
 
-const teamsRoute = createRoute({ getParentRoute: () => appRoute, path: "/teams", component: TeamsPage });
+const teamsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams",
+  // Without team creation and with one team, as in the local build, the list would hold only that team.
+  beforeLoad: async ({ context }) => {
+    const team = soleTeam(await context.queryClient.ensureQueryData(meQuery));
+    if (team) {
+      throw redirect({ to: "/teams/$teamId", params: { teamId: team.id }, replace: true });
+    }
+  },
+  component: TeamsPage,
+});
 
 const teamRoute = createRoute({
   getParentRoute: () => appRoute,

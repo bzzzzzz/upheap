@@ -92,10 +92,12 @@ heaps" and the heap "My heap". Later starts find the same user. The API resolves
 | Audit log | Unchanged. It is the item history in the UI. |
 | Health checks | Not built. There is no process to check. |
 
-1. **The server says what's offered.** The web app doesn't check which build it's in. Actions the local build lacks
-   are left out of `allowed_actions` (for example `add_member` and `rename` on the team). `GET /me` gains
-   `allowed_actions` too, with `sign_out` and `create_team` in the server build only, so the web app hides sign-out,
-   the Teams list and team creation the same way. With one team, the web app links straight to its page.
+1. **The server says what's offered.** The web app doesn't check which build it's in. For the local user
+   (`Authentication::LocalUser`) the API leaves out of `allowed_actions` what one user can't do: the team offers
+   only `create_heap`, with no member actions, and `GET /me`'s `allowed_actions` is empty, where a signed-in user
+   gets `sign_out` and `create_team`. The web app hides sign-out from that, and when the caller can't create teams
+   and has one, its header links straight to that team's page instead of the Teams list, and `/teams` redirects
+   there.
 2. **Cargo features, not runtime flags.** `service` and `api` have a default feature, `accounts`, for
    registration, sign-in, sessions, rate limiting, user lookup and team management (creating, renaming and leaving
    teams, and changing members). The local build turns it off, so that code, argon2 and tokio's blocking pool aren't
@@ -166,8 +168,9 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 3. **`crates/local` and the worker: done.** `Backend`, the worker and its `fetch`, the `local-build` mode, and the
    smoke test in CI. In headless Chromium the app opens on the local user's heap, migrations included, in about
    220 ms, and items stay across a reload and a browser restart.
-4. **Single-user mode:** `allowed_actions` on `GET /me`, the team without `add_member` and `rename`, and the UI
-   that hides missing actions.
+4. **Single-user mode: done.** `GET /me` offers `sign_out` and `create_team` on the server only, the local user's
+   team offers only `create_heap`, and the web app hides the rest: no sign-out, and the header links straight to
+   the one team, where `/teams` also leads.
 5. **Keeping the data:** persistent storage, export and import, the tab lock.
 6. **Publish:** the Pages workflow and Playwright against the static build.
 

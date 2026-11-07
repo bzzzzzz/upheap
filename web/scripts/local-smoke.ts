@@ -36,6 +36,9 @@ assert.equal(me.status, 200, "GET /me");
 assert.equal(field(me.body, "user", "display_name"), "Me", "the local user");
 const heap = field(me.body, "teams", 0, "heaps", 0, "id");
 assert.equal(typeof heap, "string", "the local user's first heap");
+assert.deepEqual(field(me.body, "allowed_actions"), [], "no signing out or new teams");
+const team = await send("GET", `/api/v1/teams/${String(field(me.body, "teams", 0, "id"))}`);
+assert.deepEqual(field(team.body, "allowed_actions"), ["create_heap"], "the team offers only new heaps");
 
 for (const [title, effort, impact] of [
   ["Big and dull", "xl", "s"],

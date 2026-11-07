@@ -4294,9 +4294,17 @@
         "type": "object",
         "required": [
           "user",
-          "teams"
+          "teams",
+          "allowed_actions"
         ],
         "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeAction"
+            },
+            "description": "Empty for the local build's one user, who can't sign out and has only the one team."
+          },
           "teams": {
             "type": "array",
             "items": {
@@ -4307,6 +4315,14 @@
             "$ref": "#/components/schemas/User"
           }
         }
+      },
+      "MeAction": {
+        "type": "string",
+        "description": "An action the caller can take on their account.",
+        "enum": [
+          "sign_out",
+          "create_team"
+        ]
       },
       "MePatchRequest": {
         "type": "object",

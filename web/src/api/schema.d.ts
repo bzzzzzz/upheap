@@ -955,9 +955,16 @@ export interface components {
             tag?: string[];
         };
         Me: {
+            /** @description Empty for the local build's one user, who can't sign out and has only the one team. */
+            allowed_actions: components["schemas"]["MeAction"][];
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
         };
+        /**
+         * @description An action the caller can take on their account.
+         * @enum {string}
+         */
+        MeAction: "sign_out" | "create_team";
         MePatchRequest: {
             /** @description 1 to 100 characters. */
             display_name: string;
