@@ -2,10 +2,15 @@
 //!
 //! Every use case takes the caller's [`Principal`], checks the permission it needs before anything else, runs
 //! in one transaction, and records its audit entry in that same transaction.
+//!
+//! The `accounts` feature (on by default) adds what only a shared server needs: registration, sign-in and
+//! sessions, team management and user lookup. The local build leaves it out and has one user,
+//! [`Services::open_local_user`].
 
 mod access;
 mod audit;
 pub mod audit_log;
+#[cfg(feature = "accounts")]
 pub mod auth;
 mod clock;
 mod error;
@@ -13,9 +18,12 @@ pub mod heaps;
 pub mod items;
 pub mod me;
 pub mod parameters;
+mod personal;
 pub mod saved_views;
 pub mod tags;
 pub mod teams;
+#[cfg(feature = "accounts")]
+pub mod users;
 
 use std::sync::{Arc, Mutex};
 
@@ -34,7 +42,8 @@ pub struct Principal {
     pub user_id: UserId,
 }
 
-/// Deployment settings the use cases depend on.
+/// Deployment settings the use cases depend on. All of them are about accounts, so the local build takes the
+/// defaults.
 #[derive(Clone, Debug)]
 pub struct Settings {
     /// Whether anyone can create a local account.
@@ -45,11 +54,24 @@ pub struct Settings {
     pub sign_in_limit: SignInLimit,
 }
 
+impl Default for Settings {
+    /// Registration closed, 30-day sessions and the default sign-in limit.
+    fn default() -> Self {
+        Self {
+            allow_registration: false,
+            session_ttl: Duration::from_days(30),
+            sign_in_limit: SignInLimit::DEFAULT,
+        }
+    }
+}
+
 /// Entry point to every use case. Cheap to clone.
 #[derive(Clone)]
 pub struct Services {
     db: DatabaseConnection,
     clock: Arc<dyn Clock>,
+    // Only accounts read the settings.
+    #[cfg_attr(not(feature = "accounts"), allow(dead_code))]
     settings: Arc<Settings>,
     /// Counts IDs made in the same millisecond, so they still sort in the order they were made.
     id_context: Arc<Mutex<uuid::ContextV7>>,

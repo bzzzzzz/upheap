@@ -115,7 +115,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 
 ### Async
 
-1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous. The local build runs on `wasm-bindgen-futures` in one worker thread instead, so code shared with it uses tokio only behind the server's features (see [local-build.md](local-build.md)).
+1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous. The local build runs on `wasm-bindgen-futures` in one worker thread instead, so code shared with it uses only tokio's task-locals, which need no runtime. The rest of tokio stays behind features the local build leaves out, such as `accounts` (see [local-build.md](local-build.md)).
 2. Never block inside async code; move CPU-heavy or blocking work to `spawn_blocking`.
 3. Borrow, don't clone, in hot paths such as ranking. Elsewhere, clarity beats micro-optimisation.
 

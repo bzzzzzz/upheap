@@ -7,17 +7,23 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["accounts"]
+# Registration, sign-in, sessions, team management and user lookup. The local build has one user and leaves it out,
+# and with it argon2 and tokio's blocking pool, which the browser doesn't have.
+accounts = ["dep:argon2", "dep:base64", "dep:rand", "dep:sha2", "dep:tokio"]
+
 [dependencies]
-argon2.workspace = true
-base64.workspace = true
+argon2 = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 domain.workspace = true
 jiff.workspace = true
-rand.workspace = true
+rand = { workspace = true, optional = true }
 serde_json.workspace = true
-sha2.workspace = true
+sha2 = { workspace = true, optional = true }
 store.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, optional = true }
 tracing.workspace = true
 uuid.workspace = true
 

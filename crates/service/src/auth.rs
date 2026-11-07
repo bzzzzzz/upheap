@@ -9,16 +9,11 @@ use argon2::Argon2;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use domain::audit::{AuditAction, EntityType};
-use domain::heap::{Heap, HeapPolicy};
-use domain::team::{Membership, Role, Team};
+use domain::Timestamp;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
-use domain::{HeapId, TeamId, Timestamp, UserId, Version};
 use rand::RngCore;
-use serde_json::json;
 use sha2::{Digest, Sha256};
-use store::audit::NewAuditEntry;
 use store::{StoreError, TransactionTrait};
 
 use crate::{Principal, ServiceError, Services};
@@ -87,91 +82,15 @@ impl Services {
         let password_hash = run_blocking(move || hash_password(&password)).await?;
 
         let now = self.now();
-        let user = User {
-            id: UserId::from_uuid(self.new_id(now)),
-            email,
-            display_name,
-            created_at: now,
-            version: Version::INITIAL,
-        };
-        let team = Team {
-            id: TeamId::from_uuid(self.new_id(now)),
-            name: personal_name.clone(),
-            created_at: now,
-            version: Version::INITIAL,
-        };
-        let membership = Membership {
-            team_id: team.id,
-            user_id: user.id,
-            role: Role::Admin,
-            joined_at: now,
-        };
-        let heap = Heap {
-            id: HeapId::from_uuid(self.new_id(now)),
-            team_id: team.id,
-            name: personal_name,
-            policy: HeapPolicy::default(),
-            archived_at: None,
-            version: Version::INITIAL,
-        };
-
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        store::users::insert_user(&txn, &user).await.map_err(|e| match e {
-            StoreError::Duplicate(_) => ServiceError::EmailTaken,
-            other => other.into(),
-        })?;
-        store::users::insert_password(&txn, user.id, &password_hash, now).await?;
-        store::teams::insert_team(&txn, &team).await?;
-        store::teams::insert_membership(&txn, &membership).await?;
-        store::heaps::insert_heap(&txn, &heap, now).await?;
-        let entry = |action, entity_type, entity_id, heap_id, diff| NewAuditEntry {
-            id: self.new_id(now),
-            team_id: team.id,
-            heap_id,
-            actor: user.id,
-            action,
-            entity_type,
-            entity_id,
-            diff,
-            created_at: now,
-        };
-        let entries = [
-            entry(
-                AuditAction::UserRegistered,
-                EntityType::User,
-                *user.id.as_uuid(),
-                None,
-                json!({ "display_name": user.display_name.as_str() }),
-            ),
-            entry(
-                AuditAction::TeamCreated,
-                EntityType::Team,
-                *team.id.as_uuid(),
-                None,
-                json!({ "name": team.name.as_str() }),
-            ),
-            entry(
-                AuditAction::MemberAdded,
-                EntityType::User,
-                *user.id.as_uuid(),
-                None,
-                json!({ "role": Role::Admin.code() }),
-            ),
-            entry(
-                AuditAction::HeapCreated,
-                EntityType::Heap,
-                *heap.id.as_uuid(),
-                Some(heap.id),
-                json!({ "name": heap.name.as_str() }),
-            ),
-        ];
-        for entry in &entries {
-            store::audit::insert_audit_entry(&txn, entry).await?;
-        }
-        let grant = self.open_session(&txn, user, now).await?;
+        let made = self
+            .insert_personal_user(&txn, email, display_name, personal_name.clone(), personal_name, now)
+            .await?;
+        store::users::insert_password(&txn, made.user.id, &password_hash, now).await?;
+        let grant = self.open_session(&txn, made.user, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(user_id = %grant.user.id, team_id = %team.id, heap_id = %heap.id, "user registered");
+        tracing::info!(user_id = %grant.user.id, team_id = %made.team.id, heap_id = %made.heap.id, "user registered");
         Ok(grant)
     }
 
@@ -298,19 +217,10 @@ fn verify_password(password: &str, stored: &str) -> bool {
 }
 
 /// Runs CPU-heavy work (argon2) off the async workers.
-#[cfg(not(target_arch = "wasm32"))]
 async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, ServiceError> + Send + 'static,
 ) -> Result<T, ServiceError> {
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|e| ServiceError::PasswordHashing(e.to_string()))?
-}
-
-/// Spike: wasm has no blocking pool, so the work runs inline. The local build drops accounts, and this with them.
-#[cfg(target_arch = "wasm32")]
-async fn run_blocking<T: Send + 'static>(
-    work: impl FnOnce() -> Result<T, ServiceError> + Send + 'static,
-) -> Result<T, ServiceError> {
-    work()
 }

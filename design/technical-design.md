@@ -38,7 +38,7 @@ crates/
 web/         React app (TypeScript), consumes generated API types only
 ```
 
-Dependencies point one way: `server → api → service → store, domain`, and `local` sits beside `server`. `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
+Dependencies point one way: `server → api → service → store, domain`, and `local` sits beside `server`. `service` and `api` put what only a shared server needs behind their default `accounts` feature, which the local build leaves out ([local-build.md](local-build.md#single-user-mode)). `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
 
 ### Errors
 
