@@ -1,12 +1,14 @@
 // Keeping the local build's data (design/local-build.md, Keeping the data): export and import, and one tab at a time.
-import { addItem, expect, row, test } from "../fixtures";
+import { addItem, expect, goTo, row, test } from "../fixtures";
 
 test("a downloaded copy replaces the data, and a file that isn't one is refused", async ({ page }) => {
-  await expect(page.locator("footer")).toContainText("Your heaps are stored only in this browser");
+  await expect(page.locator("footer").filter({ visible: true })).toContainText(
+    "Your heaps are stored only in this browser",
+  );
   await addItem(page, "Keep me");
   const heapUrl = page.url();
 
-  await page.getByRole("link", { name: "Me", exact: true }).click();
+  await goTo(page, "Account");
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Download a copy" }).click(),

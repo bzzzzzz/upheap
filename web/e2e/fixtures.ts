@@ -66,5 +66,33 @@ export async function addItem(page: Page, title: string, sizes: { effort?: Size;
   await expect(form.getByLabel("New item title")).toHaveValue("");
 }
 
+/** A page the app's navigation leads to. */
+export type AppPage = "Open" | "Closed" | "Activity" | "Tags" | "Parameters" | "Account";
+
+/**
+ * Goes to one of the app's pages through its navigation, wherever the layout puts it: the sidebar on a wide screen,
+ * the rail on a tablet, and on a phone the bottom tabs or their More menu.
+ */
+export async function goTo(page: Page, name: AppPage) {
+  const link = page.getByRole("link", { name, exact: true });
+  if (await link.isVisible()) {
+    await link.click();
+  } else {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name, exact: true }).click();
+  }
+}
+
+/** Signs out, from the sidebar or rail, or on a phone from More. */
+export async function signOut(page: Page) {
+  const button = page.getByRole("button", { name: "Sign out", exact: true });
+  if (await button.isVisible()) {
+    await button.click();
+  } else {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  }
+}
+
 /** The calendar day `days` from today, in the browser's timezone (UTC, as the config sets it). */
 export const dayFromToday = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);

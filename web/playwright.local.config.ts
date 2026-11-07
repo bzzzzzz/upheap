@@ -1,10 +1,11 @@
-// The golden paths that apply to the local build (design/local-build.md), plus its own tests in e2e/local, in
-// Chromium against the static build served as GitHub Pages serves it (scripts/pages-server.ts), under a base path.
+// The golden paths that apply to the local build (design/local-build.md), plus its own tests in e2e/local, at
+// each width against the static build served as GitHub Pages serves it (scripts/pages-server.ts), under a base path.
 // Each test's browser context starts with empty storage, so each gets a fresh local user and database. The backend
 // must be built first (`npm run build:backend`).
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from "@playwright/test";
 
 import type { LocalBuildOptions } from "./e2e/fixtures";
+import { projects } from "./e2e/projects";
 
 const port = 8140;
 const base = "/upheap/";
@@ -26,7 +27,7 @@ export default defineConfig<LocalBuildOptions>({
     timezoneId: "UTC",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects,
   webServer: {
     command: "npm run build:local && node scripts/pages-server.ts",
     url: baseURL,

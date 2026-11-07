@@ -39,7 +39,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
 | Local build: static, single user, data in the browser | [local-build.md](local-build.md) | ✅ | The backend and the Router run in a browser worker on SQLite-wasm in OPFS, without accounts. The web app offers only what one user can do, keeps its data with export and import and one tab at a time, and CI runs the golden paths against the static build. The Pages workflow publishes it from `main` |
-| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | ⬜ | Designed; four steps, starting with the app shell at each width. Installing (PWA) comes later |
+| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Next: the list and item, with the due choices from the server. Installing (PWA) comes later |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work

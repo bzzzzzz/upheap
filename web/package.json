@@ -31,12 +31,15 @@
     "smoke:local": "node scripts/local-smoke.ts"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@sqlite.org/sqlite-wasm": "^3.53.4-build2",
     "@tanstack/react-query": "^5.106.1",
     "@tanstack/react-router": "^1.170.46",
+    "lucide-react": "^1.70.0",
     "motion": "^14.9.1",
     "openapi-fetch": "^0.17.0",
     "react": "^19.3.1",
+    "react-aria-components": "^1.22.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {

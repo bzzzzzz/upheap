@@ -51,7 +51,11 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: heaps, then the heap's views, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Tags, Parameters, Team, Account and, in the local build, Your data.
+**More** on a phone holds Tags, Parameters, Team, Account (with Your data in the local build) and Sign out.
+
+On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
+wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
+the block when it opens.
 
 ### Tablet
 

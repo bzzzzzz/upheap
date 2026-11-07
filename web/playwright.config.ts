@@ -1,7 +1,9 @@
-// End-to-end tests of the golden paths (design/technical-design.md, Testing §5), in Chromium against the real
+// End-to-end tests of the golden paths (design/technical-design.md, Testing §5), at each width, against the real
 // server binary with the built web app embedded. The server runs on a fresh in-memory SQLite database, and each
 // test registers its own account, so tests share nothing and run in parallel.
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig } from "@playwright/test";
+
+import { projects } from "./e2e/projects";
 
 const port = 8139;
 const baseURL = `http://127.0.0.1:${port}`;
@@ -19,7 +21,7 @@ export default defineConfig({
     timezoneId: "UTC",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects,
   webServer: {
     // The web app is embedded at compile time, so it's built first.
     command: "npm run build && cd .. && cargo run --locked -q -p server",
