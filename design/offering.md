@@ -26,7 +26,7 @@ Companion to [requirements.md](requirements.md).
 
 1. Users form teams. A team has one or more admins.
 2. Any user can create a team and becomes its admin.
-3. Every new user gets a team and a heap named after them. A personal heap is simply a heap in a one-person team. It works like any other team and heap.
+3. Every new user gets a personal team, named by their username, with a first heap called "Personal". The personal team is theirs alone: it holds as many heaps as they like, but it can't be shared. Anything shared lives in another team.
 4. A team owns its heaps. A team can have more than one heap.
 5. A heap belongs to exactly one team, and only that team's members can access it.
 6. Users join a team only when an admin adds them. For now the admin picks an existing user, who is added directly. Invitations by email or link, and membership based on identity-provider groups, are planned for a later iteration.

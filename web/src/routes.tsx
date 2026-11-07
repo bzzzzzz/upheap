@@ -1,4 +1,5 @@
-// The URL is the state: the heap and the page live in the route, so links and reloads work.
+// The URL is the state: the heap and the page live in the route, so links and reloads work. Paths name teams, heaps
+// and items by their handles (design/readable-ids.md), and `/h/…` short links expand to them.
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
@@ -51,9 +52,11 @@ const indexRoute = createRoute({
   path: "/",
   beforeLoad: async ({ context }) => {
     const me = await context.queryClient.ensureQueryData(meQuery);
-    const heap = me.teams.flatMap((team) => team.heaps).find((h) => !h.archived);
-    if (heap) {
-      throw redirect({ to: "/heaps/$heapId", params: { heapId: heap.id } });
+    for (const team of me.teams) {
+      const heap = team.heaps.find((h) => !h.archived);
+      if (heap) {
+        throw redirect({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
+      }
     }
   },
   component: function NoHeaps() {
@@ -64,7 +67,7 @@ const indexRoute = createRoute({
         You don't have any heaps yet.{" "}
         {team ? (
           <>
-            <Link to="/teams/$teamId" params={{ teamId: team.id }} className={linkClass}>
+            <Link to="/teams/$team" params={{ team: team.slug }} className={linkClass}>
               Start one
             </Link>{" "}
             in {team.name}.
@@ -84,21 +87,21 @@ const indexRoute = createRoute({
 
 const heapRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/heaps/$heapId",
+  path: "/teams/$team/heaps/$heap",
   validateSearch: parseListSearch,
   component: function HeapRoute() {
-    const { heapId } = heapRoute.useParams();
+    const { team, heap } = heapRoute.useParams();
     // The item route is a child, so the list stays mounted, and keeps its place, while an item opens over it.
-    const { itemId } = useParams({ strict: false });
+    const { item } = useParams({ strict: false });
     const view = heapRoute.useSearch();
     const navigate = heapRoute.useNavigate();
     // A new key per heap resets the session-stable ranking time. View changes replace the history entry, so Back
     // leaves the list instead of stepping through filter clicks.
     return (
       <HeapPage
-        key={heapId}
-        heapId={heapId}
-        itemId={itemId}
+        key={`${team}/${heap}`}
+        heap={{ team, heap }}
+        itemKey={item}
         view={view}
         onViewChange={(next) => void navigate({ search: parseListSearch(next), replace: true })}
       />
@@ -106,42 +109,42 @@ const heapRoute = createRoute({
   },
 });
 
-/** An item, open over its heap's list (app-ux.md, The item). `HeapPage` shows it. */
-const itemRoute = createRoute({ getParentRoute: () => heapRoute, path: "items/$itemId" });
+/** An item, by its key, open over its heap's list (app-ux.md, The item). `HeapPage` shows it. */
+const itemRoute = createRoute({ getParentRoute: () => heapRoute, path: "items/$item" });
 
 const closedRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/heaps/$heapId/closed",
+  path: "/teams/$team/heaps/$heap/closed",
   component: function ClosedRoute() {
-    const { heapId } = closedRoute.useParams();
-    return <ClosedPage heapId={heapId} />;
+    const { team, heap } = closedRoute.useParams();
+    return <ClosedPage heap={{ team, heap }} />;
   },
 });
 
 const tagsRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/heaps/$heapId/tags",
+  path: "/teams/$team/heaps/$heap/tags",
   component: function TagsRoute() {
-    const { heapId } = tagsRoute.useParams();
-    return <TagsPage heapId={heapId} />;
+    const { team, heap } = tagsRoute.useParams();
+    return <TagsPage heap={{ team, heap }} />;
   },
 });
 
 const parametersRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/heaps/$heapId/parameters",
+  path: "/teams/$team/heaps/$heap/parameters",
   component: function ParametersRoute() {
-    const { heapId } = parametersRoute.useParams();
-    return <ParametersPage heapId={heapId} />;
+    const { team, heap } = parametersRoute.useParams();
+    return <ParametersPage heap={{ team, heap }} />;
   },
 });
 
 const heapActivityRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/heaps/$heapId/activity",
+  path: "/teams/$team/heaps/$heap/activity",
   component: function HeapActivityRoute() {
-    const { heapId } = heapActivityRoute.useParams();
-    return <HeapActivityPage key={heapId} heapId={heapId} />;
+    const { team, heap } = heapActivityRoute.useParams();
+    return <HeapActivityPage key={`${team}/${heap}`} heap={{ team, heap }} />;
   },
 });
 
@@ -152,7 +155,7 @@ const teamsRoute = createRoute({
   beforeLoad: async ({ context }) => {
     const team = soleTeam(await context.queryClient.ensureQueryData(meQuery));
     if (team) {
-      throw redirect({ to: "/teams/$teamId", params: { teamId: team.id }, replace: true });
+      throw redirect({ to: "/teams/$team", params: { team: team.slug }, replace: true });
     }
   },
   component: TeamsPage,
@@ -160,19 +163,45 @@ const teamsRoute = createRoute({
 
 const teamRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/teams/$teamId",
+  path: "/teams/$team",
   component: function TeamRoute() {
-    const { teamId } = teamRoute.useParams();
-    return <TeamPage key={teamId} teamId={teamId} />;
+    const { team } = teamRoute.useParams();
+    return <TeamPage key={team} team={team} />;
   },
 });
 
 const teamActivityRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/teams/$teamId/activity",
+  path: "/teams/$team/activity",
   component: function TeamActivityRoute() {
-    const { teamId } = teamActivityRoute.useParams();
-    return <TeamActivityPage key={teamId} teamId={teamId} />;
+    const { team } = teamActivityRoute.useParams();
+    return <TeamActivityPage key={team} team={team} />;
+  },
+});
+
+// Short links (design/readable-ids.md): the handles alone, in fixed positions, swapped for the full path as they open.
+// The router does it, so they work the same in the local build, which has no server to redirect.
+const shortTeamRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/h/$team",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team", params, replace: true });
+  },
+});
+
+const shortHeapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/h/$team/$heap",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap", params, replace: true });
+  },
+});
+
+const shortItemRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/h/$team/$heap/$item",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap/items/$item", params, replace: true });
   },
 });
 
@@ -180,6 +209,9 @@ const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/accou
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  shortTeamRoute,
+  shortHeapRoute,
+  shortItemRoute,
   appRoute.addChildren([
     indexRoute,
     heapRoute.addChildren([itemRoute]),

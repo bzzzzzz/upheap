@@ -5,6 +5,7 @@
 
 pub mod audit;
 pub mod due;
+pub mod handle;
 pub mod heap;
 pub mod ids;
 pub mod item;

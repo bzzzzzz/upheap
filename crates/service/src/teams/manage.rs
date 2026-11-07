@@ -6,14 +6,18 @@
 //! ([`domain::team::ensure_admin_remains`]) sees both (see `lock_team_for`).
 
 use domain::audit::{AuditAction, EntityType};
+use domain::handle::Handle;
 use domain::permission::Permission;
 use domain::team::{Membership, Role, Team, ensure_admin_remains};
 use domain::text::Name;
+use domain::validation::Field;
 use domain::{TeamId, UserId, Version};
 use serde_json::json;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use super::{TeamDetail, load_team_detail};
+use crate::error::handle_taken_on_duplicate;
+use crate::handles::{free_team_slug, retry_derived_slug};
 use crate::{Principal, ServiceError, Services};
 
 /// Whether [`Services::add_member`] added someone or found them already in the team.
@@ -21,6 +25,14 @@ use crate::{Principal, ServiceError, Services};
 pub enum MemberAdded {
     Added,
     AlreadyMember,
+}
+
+/// A change to a team's name and slug. `None` leaves it as it is.
+#[derive(Clone, Debug, Default)]
+pub struct TeamPatch {
+    pub name: Option<Name>,
+    /// Refused on a personal team, whose slug is its owner's username.
+    pub slug: Option<Handle>,
 }
 
 /// A team locked for a membership change, with its memberships read under the lock.
@@ -36,12 +48,35 @@ impl LockedTeam {
 }
 
 impl Services {
-    /// Creates a team with the caller as its only admin. The team has no heaps yet.
-    pub async fn create_team(&self, principal: Principal, name: Name) -> Result<TeamDetail, ServiceError> {
+    /// Creates a team with the caller as its only admin. The team has no heaps yet. Without a `slug`, one is made
+    /// from the name. Fails with [`ServiceError::HandleTaken`] when the slug is taken, by a team or a username.
+    pub async fn create_team(
+        &self,
+        principal: Principal,
+        name: Name,
+        slug: Option<Handle>,
+    ) -> Result<TeamDetail, ServiceError> {
+        let derived = slug.is_none();
+        retry_derived_slug(derived, || self.try_create_team(principal, name.clone(), slug.clone())).await
+    }
+
+    async fn try_create_team(
+        &self,
+        principal: Principal,
+        name: Name,
+        slug: Option<Handle>,
+    ) -> Result<TeamDetail, ServiceError> {
         let now = self.now();
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let slug = match slug {
+            Some(slug) => slug,
+            None => free_team_slug(&txn, &name).await?,
+        };
         let team = Team {
             id: TeamId::from_uuid(self.new_id(now)),
+            slug,
             name,
+            personal_user: None,
             created_at: now,
             version: Version::INITIAL,
         };
@@ -52,11 +87,12 @@ impl Services {
             joined_at: now,
         };
 
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
         store::users::find_user(&txn, principal.user_id)
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        store::teams::insert_team(&txn, &team).await?;
+        store::teams::insert_team(&txn, &team)
+            .await
+            .map_err(|e| handle_taken_on_duplicate(e, Field::Slug))?;
         store::teams::insert_membership(&txn, &membership).await?;
         let entries = [
             self.team_audit_entry(
@@ -65,7 +101,7 @@ impl Services {
                 AuditAction::TeamCreated,
                 EntityType::Team,
                 *team.id.as_uuid(),
-                json!({ "name": team.name.as_str() }),
+                json!({ "slug": team.slug.as_str(), "name": team.name.as_str() }),
                 now,
             ),
             self.team_audit_entry(
@@ -88,12 +124,14 @@ impl Services {
         Ok(detail)
     }
 
-    /// Renames the team if it is still at version `expected`. The same name succeeds without an audit entry.
-    pub async fn rename_team(
+    /// Changes the team's name or slug if it is still at version `expected`. A patch that changes nothing succeeds
+    /// without an audit entry. A new slug fails with [`domain::team::TeamError::PersonalTeam`] on a personal team,
+    /// and with [`ServiceError::HandleTaken`] when it is taken.
+    pub async fn update_team(
         &self,
         principal: Principal,
         team_id: TeamId,
-        name: Name,
+        patch: TeamPatch,
         expected: Version,
     ) -> Result<TeamDetail, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -105,21 +143,40 @@ impl Services {
                 current: current.version,
             });
         }
-        if current.name == name {
+        let name = patch.name.filter(|name| *name != current.name);
+        let slug = patch.slug.filter(|slug| *slug != current.slug);
+        if name.is_none() && slug.is_none() {
             return load_team_detail(&txn, principal, current).await;
         }
+        if slug.is_some() {
+            current.ensure_shared()?;
+        }
 
+        let mut diff = serde_json::Map::new();
+        if let Some(name) = &name {
+            diff.insert(
+                "name".into(),
+                json!({ "before": current.name.as_str(), "after": name.as_str() }),
+            );
+        }
+        if let Some(slug) = &slug {
+            diff.insert(
+                "slug".into(),
+                json!({ "before": current.slug.as_str(), "after": slug.as_str() }),
+            );
+        }
         let renamed = Team {
-            name,
+            name: name.unwrap_or_else(|| current.name.clone()),
+            slug: slug.unwrap_or_else(|| current.slug.clone()),
             ..current.clone()
         };
-        let saved =
-            store::teams::update_team(&txn, &renamed, expected)
-                .await?
-                .ok_or(ServiceError::VersionConflict {
-                    expected,
-                    current: expected.next(),
-                })?;
+        let saved = store::teams::update_team(&txn, &renamed, expected)
+            .await
+            .map_err(|e| handle_taken_on_duplicate(e, Field::Slug))?
+            .ok_or(ServiceError::VersionConflict {
+                expected,
+                current: expected.next(),
+            })?;
         let now = self.now();
         let entry = self.team_audit_entry(
             principal,
@@ -127,19 +184,20 @@ impl Services {
             AuditAction::TeamUpdated,
             EntityType::Team,
             *team_id.as_uuid(),
-            json!({ "name": { "before": current.name.as_str(), "after": saved.name.as_str() } }),
+            serde_json::Value::Object(diff),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let detail = load_team_detail(&txn, principal, saved).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%team_id, user_id = %principal.user_id, "team renamed");
+        tracing::info!(%team_id, user_id = %principal.user_id, "team updated");
         Ok(detail)
     }
 
     /// Adds an existing user to the team as a member. Adding someone who is already a member changes nothing and
-    /// succeeds. Fails with [`ServiceError::UserNotFound`] when there is no such user.
+    /// succeeds. Fails with [`ServiceError::UserNotFound`] when there is no such user, and with
+    /// [`domain::team::TeamError::PersonalTeam`] on a personal team.
     pub async fn add_member(
         &self,
         principal: Principal,
@@ -148,6 +206,7 @@ impl Services {
     ) -> Result<(TeamDetail, MemberAdded), ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
+        locked.team.ensure_shared()?;
         if locked.find(user_id).is_some() {
             let detail = load_team_detail(&txn, principal, locked.team).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
@@ -219,6 +278,7 @@ impl Services {
     }
 
     /// Takes `user_id` out of the team. Removing someone who isn't a member succeeds. Fails with
+    /// [`domain::team::TeamError::PersonalTeam`] on a personal team, whoever is named, and with
     /// [`domain::team::TeamError::LastAdmin`] for the last admin.
     pub async fn remove_member(
         &self,
@@ -228,6 +288,7 @@ impl Services {
     ) -> Result<(), ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
+        locked.team.ensure_shared()?;
         let Some(target) = locked.find(user_id) else {
             return Ok(());
         };
@@ -258,6 +319,7 @@ impl Services {
         action: AuditAction,
     ) -> Result<(), ServiceError> {
         let team_id = locked.team.id;
+        locked.team.ensure_shared()?;
         ensure_admin_remains(team_id, &locked.members, target.user_id, None)?;
         store::teams::delete_membership(&txn, team_id, target.user_id).await?;
         let entry = self.team_audit_entry(

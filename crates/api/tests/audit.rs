@@ -37,7 +37,7 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
     let id = item["id"].as_str().context("no id")?;
     app.patch(
         &session,
-        &format!("/api/v1/items/{id}"),
+        &app.item_url(&id).await?,
         &item["version"],
         json!({ "title": "Rotate all keys", "state": "in_progress", "tag_ids": [ops] }),
     )
@@ -49,7 +49,7 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
     let history = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/audit?entity_id={id}"),
+            &format!("{}/audit?entity_id={id}", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -93,16 +93,16 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
 async fn members_see_content_changes_and_admins_see_configuration_and_membership() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (admin, heap) = app.register("admin@example.test").await?;
+    let (admin, _) = app.register("admin@example.test").await?;
     let (member, _) = app.register("member@example.test").await?;
-    let (team, _) = team_and_user(&app, &admin).await?;
+    let (team, heap) = app.shared_heap(&admin).await?;
     let (_, member_id) = team_and_user(&app, &member).await?;
     app.add_member(&team, &member_id, Role::Member).await?;
     app.new_item(&admin, &heap, json!({ "title": "Item" })).await?;
     let created = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/parameters"),
+            &format!("{}/parameters", app.heap_url(&heap).await?),
             Some(&admin),
             Some(json!({ "name": "Customer" })),
         )
@@ -118,15 +118,15 @@ async fn members_see_content_changes_and_admins_see_configuration_and_membership
     .await?;
 
     // Act
+    let heap_path = format!("{}/audit", app.heap_url(&heap).await?);
+    let team_path = format!("{}/audit", app.team_url(&team).await?);
     let heap_log = |session: String| {
-        let app = &app;
-        let path = format!("/api/v1/heaps/{heap}/audit");
-        async move { app.send(Method::GET, &path, Some(&session), None).await }
+        let (app, path) = (&app, &heap_path);
+        async move { app.send(Method::GET, path, Some(&session), None).await }
     };
     let team_log = |session: String| {
-        let app = &app;
-        let path = format!("/api/v1/teams/{team}/audit");
-        async move { app.send(Method::GET, &path, Some(&session), None).await }
+        let (app, path) = (&app, &team_path);
+        async move { app.send(Method::GET, path, Some(&session), None).await }
     };
     let admin_heap = heap_log(admin.clone()).await?;
     let member_heap = heap_log(member.clone()).await?;
@@ -145,15 +145,11 @@ async fn members_see_content_changes_and_admins_see_configuration_and_membership
             eq(&"user_updated"),
             eq(&"heap_created"),
             eq(&"member_added"),
-            eq(&"team_created"),
-            eq(&"user_registered")
+            eq(&"team_created")
         ]
     );
     expect_that!(member_team.status, eq(StatusCode::OK));
-    expect_that!(
-        actions(&member_team.body),
-        elements_are![eq(&"user_updated"), eq(&"user_registered")]
-    );
+    expect_that!(actions(&member_team.body), elements_are![eq(&"user_updated")]);
     expect_that!(
         member_team.body["entries"][0]["changes"],
         eq(&json!([{ "field": "display_name", "label": "Display name", "before": "Tester", "after": "Mem" }]))
@@ -181,7 +177,7 @@ async fn pages_follow_on_without_gaps_or_repeats() -> Result<()> {
         let page = app
             .send(
                 Method::GET,
-                &format!("/api/v1/heaps/{heap}/audit?limit=2{after}"),
+                &format!("{}/audit?limit=2{after}", app.heap_url(&heap).await?),
                 Some(&session),
                 None,
             )
@@ -199,7 +195,7 @@ async fn pages_follow_on_without_gaps_or_repeats() -> Result<()> {
     let invalid = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/audit?cursor=nonsense"),
+            &format!("{}/audit?cursor=nonsense", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -209,7 +205,7 @@ async fn pages_follow_on_without_gaps_or_repeats() -> Result<()> {
     expect_that!(pages, eq(3));
     expect_that!(
         labels,
-        elements_are![eq("Item 3"), eq("Item 2"), eq("Item 1"), eq("Item 0"), eq("Tester")]
+        elements_are![eq("Item 3"), eq("Item 2"), eq("Item 1"), eq("Item 0"), eq("Personal")]
     );
     expect_that!(invalid.status, eq(StatusCode::BAD_REQUEST));
     expect_that!(invalid.body["code"], eq(&json!("invalid_cursor")));
@@ -225,11 +221,11 @@ async fn a_teams_log_has_its_heaps_as_wholes_but_not_what_is_in_them() -> Result
     let (team, _) = team_and_user(&app, &session).await?;
     app.new_item(&session, &heap, json!({ "title": "Item" })).await?;
     let current = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}"), Some(&session), None)
+        .send(Method::GET, &app.heap_url(&heap).await?, Some(&session), None)
         .await?;
     app.patch(
         &session,
-        &format!("/api/v1/heaps/{heap}"),
+        &app.heap_url(&heap).await?,
         &current.body["version"],
         json!({ "name": "Work" }),
     )
@@ -239,7 +235,7 @@ async fn a_teams_log_has_its_heaps_as_wholes_but_not_what_is_in_them() -> Result
     let heap_history = app
         .send(
             Method::GET,
-            &format!("/api/v1/teams/{team}/audit?entity_id={heap}"),
+            &format!("{}/audit?entity_id={heap}", app.team_url(&team).await?),
             Some(&session),
             None,
         )
@@ -253,7 +249,7 @@ async fn a_teams_log_has_its_heaps_as_wholes_but_not_what_is_in_them() -> Result
     expect_that!(heap_history.body["entries"][0]["entity"]["label"], eq(&json!("Work")));
     expect_that!(
         heap_history.body["entries"][0]["changes"],
-        eq(&json!([{ "field": "name", "label": "Name", "before": "Tester", "after": "Work" }]))
+        eq(&json!([{ "field": "name", "label": "Name", "before": "Personal", "after": "Work" }]))
     );
     Ok(())
 }
@@ -298,9 +294,9 @@ fn sentences(log: &Value) -> Vec<String> {
 async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_none_for_parameters() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (admin, heap) = app.register("admin@example.test").await?;
+    let (admin, _) = app.register("admin@example.test").await?;
     let (member, other_heap) = app.register("member@example.test").await?;
-    let (team, _) = team_and_user(&app, &admin).await?;
+    let (team, heap) = app.shared_heap(&admin).await?;
     let (_, member_id) = team_and_user(&app, &member).await?;
     app.add_member(&team, &member_id, Role::Member).await?;
     let elsewhere = app
@@ -309,7 +305,7 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
     let parameter = post(
         &app,
         &admin,
-        &format!("/api/v1/heaps/{heap}/parameters"),
+        &format!("{}/parameters", app.heap_url(&heap).await?),
         json!({ "name": "Customer" }),
     )
     .await?;
@@ -319,7 +315,8 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
         &app,
         &member,
         &format!(
-            "/api/v1/heaps/{heap}/audit?entity_id={}",
+            "{}/audit?entity_id={}",
+            app.heap_url(&heap).await?,
             elsewhere["id"].as_str().unwrap_or_default()
         ),
     )
@@ -327,14 +324,15 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
     let other_heap_in_team = get(
         &app,
         &admin,
-        &format!("/api/v1/teams/{team}/audit?entity_id={other_heap}"),
+        &format!("{}/audit?entity_id={other_heap}", app.team_url(&team).await?),
     )
     .await?;
     let member_parameter = get(
         &app,
         &member,
         &format!(
-            "/api/v1/heaps/{heap}/audit?entity_id={}",
+            "{}/audit?entity_id={}",
+            app.heap_url(&heap).await?,
             parameter["id"].as_str().unwrap_or_default()
         ),
     )
@@ -343,7 +341,8 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
         &app,
         &admin,
         &format!(
-            "/api/v1/heaps/{heap}/audit?entity_id={}",
+            "{}/audit?entity_id={}",
+            app.heap_url(&heap).await?,
             parameter["id"].as_str().unwrap_or_default()
         ),
     )
@@ -366,7 +365,7 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
     let parameter = post(
         &app,
         &session,
-        &format!("/api/v1/heaps/{heap}/parameters"),
+        &format!("{}/parameters", app.heap_url(&heap).await?),
         json!({ "name": "Customer", "options": ["Small", "Big"] }),
     )
     .await?;
@@ -386,7 +385,7 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
     let item_id = item["id"].as_str().unwrap_or_default().to_owned();
     app.patch(
         &session,
-        &format!("/api/v1/items/{item_id}"),
+        &app.item_url(&item_id).await?,
         &item["version"],
         json!({ "state": "blocked", "blocked_by_item_id": blocker["id"] }),
     )
@@ -394,17 +393,22 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
     post(
         &app,
         &session,
-        &format!("/api/v1/options/{small}/archive"),
+        &format!("{}/options/{small}/archive", app.heap_url(&heap).await?),
         json!({ "replacement_option_id": big }),
     )
     .await?;
 
     // Act
-    let parameter_log = get(&app, &session, &format!("/api/v1/heaps/{heap}/audit?entity_id={pid}")).await?;
+    let parameter_log = get(
+        &app,
+        &session,
+        &format!("{}/audit?entity_id={pid}", app.heap_url(&heap).await?),
+    )
+    .await?;
     let item_log = get(
         &app,
         &session,
-        &format!("/api/v1/heaps/{heap}/audit?entity_id={item_id}"),
+        &format!("{}/audit?entity_id={item_id}", app.heap_url(&heap).await?),
     )
     .await?;
 
@@ -451,59 +455,72 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
 async fn membership_heap_and_view_entries_read_as_sentences() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (admin, heap) = app.register_as("ada@example.test", "Ada").await?;
+    let (admin, _) = app.register_as("ada@example.test", "Ada").await?;
     let (bob, _) = app.register_as("bob@example.test", "Bob").await?;
     let (cy, _) = app.register_as("cy@example.test", "Cy").await?;
-    let (team, _) = team_and_user(&app, &admin).await?;
+    let (team, heap) = app.shared_heap(&admin).await?;
     let (_, bob_id) = team_and_user(&app, &bob).await?;
     let (_, cy_id) = team_and_user(&app, &cy).await?;
     post(
         &app,
         &admin,
-        &format!("/api/v1/teams/{team}/members"),
+        &format!("{}/members", app.team_url(&team).await?),
         json!({ "user_id": bob_id }),
     )
     .await?;
     post(
         &app,
         &admin,
-        &format!("/api/v1/teams/{team}/members"),
+        &format!("{}/members", app.team_url(&team).await?),
         json!({ "user_id": cy_id }),
     )
     .await?;
     let removed = app
         .send(
             Method::DELETE,
-            &format!("/api/v1/teams/{team}/members/{bob_id}"),
+            &app.member_url(&team, &bob_id).await?,
             Some(&admin),
             None,
         )
         .await?;
     anyhow::ensure!(removed.status.is_success(), "remove: {}", removed.body);
-    post(&app, &cy, &format!("/api/v1/teams/{team}/leave"), json!({})).await?;
+    post(&app, &cy, &format!("{}/leave", app.team_url(&team).await?), json!({})).await?;
     let view = post(
         &app,
         &admin,
-        &format!("/api/v1/heaps/{heap}/views"),
+        &format!("{}/views", app.heap_url(&heap).await?),
         json!({ "name": "Blocked", "view": { "blocked": "shown" } }),
     )
     .await?;
     post(
         &app,
         &admin,
-        &format!("/api/v1/views/{}/archive", view["id"].as_str().unwrap_or_default()),
+        &format!(
+            "{}/views/{}/archive",
+            app.heap_url(&heap).await?,
+            view["id"].as_str().unwrap_or_default()
+        ),
         json!({}),
     )
     .await?;
-    post(&app, &admin, &format!("/api/v1/heaps/{heap}/archive"), json!({})).await?;
+    post(
+        &app,
+        &admin,
+        &format!("{}/archive", app.heap_url(&heap).await?),
+        json!({}),
+    )
+    .await?;
 
     // Act
-    let team_log = get(&app, &admin, &format!("/api/v1/teams/{team}/audit")).await?;
+    let team_log = get(&app, &admin, &format!("{}/audit", app.team_url(&team).await?)).await?;
+    let (personal, _) = team_and_user(&app, &admin).await?;
+    let personal_log = get(&app, &admin, &format!("{}/audit", app.team_url(&personal).await?)).await?;
     let view_log = get(
         &app,
         &admin,
         &format!(
-            "/api/v1/heaps/{heap}/audit?entity_id={}",
+            "{}/audit?entity_id={}",
+            app.heap_url(&heap).await?,
             view["id"].as_str().unwrap_or_default()
         ),
     )
@@ -513,12 +530,20 @@ async fn membership_heap_and_view_entries_read_as_sentences() -> Result<()> {
     expect_that!(
         sentences(&team_log),
         elements_are![
-            eq("Ada archived heap Ada"),
+            eq("Ada archived heap Shared"),
             eq("Cy left the team"),
             eq("Ada removed member Bob"),
             eq("Ada added member Cy"),
             eq("Ada added member Bob"),
-            eq("Ada created heap Ada"),
+            eq("Ada created heap Shared"),
+            eq("Ada joined the team"),
+            eq("Ada created team Shared"),
+        ]
+    );
+    expect_that!(
+        sentences(&personal_log),
+        elements_are![
+            eq("Ada created heap Personal"),
             eq("Ada joined the team"),
             eq("Ada created team Ada"),
             eq("Ada signed up"),
@@ -553,12 +578,12 @@ async fn pages_follow_on_across_different_times() -> Result<()> {
     }
 
     // Act
-    let first = get(&app, &session, &format!("/api/v1/heaps/{heap}/audit?limit=2")).await?;
+    let first = get(&app, &session, &format!("{}/audit?limit=2", app.heap_url(&heap).await?)).await?;
     let cursor = first["next_cursor"].as_str().context("no cursor")?;
     let second = get(
         &app,
         &session,
-        &format!("/api/v1/heaps/{heap}/audit?limit=2&cursor={cursor}"),
+        &format!("{}/audit?limit=2&cursor={cursor}", app.heap_url(&heap).await?),
     )
     .await?;
 
@@ -575,7 +600,7 @@ async fn pages_follow_on_across_different_times() -> Result<()> {
             .unwrap_or_default()
     };
     expect_that!(labels(&first), elements_are![eq("Item 2"), eq("Item 1")]);
-    expect_that!(labels(&second), elements_are![eq("Item 0"), eq("Tester")]);
+    expect_that!(labels(&second), elements_are![eq("Item 0"), eq("Personal")]);
     expect_that!(second["next_cursor"], eq(&Value::Null));
     Ok(())
 }

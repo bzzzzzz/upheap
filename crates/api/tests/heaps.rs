@@ -19,7 +19,7 @@ async fn ada(app: &TestApp) -> Result<(String, String)> {
 async fn create_heap(app: &TestApp, session: &str, team: &str, name: &str) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/teams/{team}/heaps"),
+        &format!("{}/heaps", app.team_url(&team).await?),
         Some(session),
         Some(json!({ "name": name })),
     )
@@ -44,7 +44,7 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
     let list = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -62,7 +62,7 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
         .as_array()
         .map(|heaps| heaps.iter().filter_map(|h| h["name"].as_str()).collect())
         .unwrap_or_default();
-    expect_that!(names, elements_are![eq(&"Ops"), eq(&"Tester")]);
+    expect_that!(names, elements_are![eq(&"Ops"), eq(&"Personal")]);
     expect_that!(list.status, eq(StatusCode::OK));
     Ok(())
 }
@@ -78,13 +78,13 @@ async fn an_archived_heap_is_read_only_until_unarchived() -> Result<()> {
     app.new_item(&session, &heap, json!({ "title": "Kept" })).await?;
 
     // Act
-    let archived = post(&app, &session, &format!("/api/v1/heaps/{heap}/archive")).await?;
-    let again = post(&app, &session, &format!("/api/v1/heaps/{heap}/archive")).await?;
+    let archived = post(&app, &session, &format!("{}/archive", app.heap_url(&heap).await?)).await?;
+    let again = post(&app, &session, &format!("{}/archive", app.heap_url(&heap).await?)).await?;
     let write = app.create_item(&session, &heap, json!({ "title": "Refused" })).await?;
     let rename = app
         .patch(
             &session,
-            &format!("/api/v1/heaps/{heap}"),
+            &app.heap_url(&heap).await?,
             &archived.body["version"],
             json!({ "name": "X" }),
         )
@@ -92,12 +92,12 @@ async fn an_archived_heap_is_read_only_until_unarchived() -> Result<()> {
     let list = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
         .await?;
-    let unarchived = post(&app, &session, &format!("/api/v1/heaps/{heap}/unarchive")).await?;
+    let unarchived = post(&app, &session, &format!("{}/unarchive", app.heap_url(&heap).await?)).await?;
     let write_after = app.create_item(&session, &heap, json!({ "title": "Accepted" })).await?;
 
     // Assert
@@ -137,7 +137,7 @@ async fn renaming_a_heap_needs_its_current_version() -> Result<()> {
     let (session, team) = ada(&app).await?;
     let created = create_heap(&app, &session, &team, "Ops").await?;
     let heap = created.body["id"].as_str().context("no id")?.to_owned();
-    let path = format!("/api/v1/heaps/{heap}");
+    let path = app.heap_url(&heap).await?;
 
     // Act
     let renamed = app

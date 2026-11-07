@@ -164,6 +164,8 @@ impl From<ParameterValue> for ItemParameterDto {
 #[schema(as = ItemRef)]
 pub(crate) struct ItemRefDto {
     pub id: Uuid,
+    /// Unique within the heap; the item's path is `…/items/{key}`.
+    pub key: String,
     pub title: String,
     pub state: StateDto,
 }
@@ -172,6 +174,7 @@ impl From<ItemSummary> for ItemRefDto {
     fn from(item: ItemSummary) -> Self {
         Self {
             id: *item.id.as_uuid(),
+            key: item.key.to_string(),
             title: item.title.as_str().to_owned(),
             state: item.state.kind().into(),
         }
@@ -242,6 +245,9 @@ impl DueInputDto {
 #[schema(as = Item)]
 pub(crate) struct ItemDto {
     pub id: Uuid,
+    /// Five characters, unique within the heap and never changed; the item's path is `…/items/{key}`.
+    #[schema(example = "k3x9a")]
+    pub key: String,
     pub heap_id: Uuid,
     pub title: String,
     pub description: Option<String>,
@@ -325,6 +331,8 @@ pub(crate) struct RankedItemDto {
 pub(crate) struct HeapSummaryDto {
     pub id: Uuid,
     pub team_id: Uuid,
+    /// Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`.
+    pub slug: String,
     pub name: String,
     pub archived: bool,
 }
@@ -334,6 +342,7 @@ impl From<&Heap> for HeapSummaryDto {
         Self {
             id: *heap.id.as_uuid(),
             team_id: *heap.team_id.as_uuid(),
+            slug: heap.slug.to_string(),
             name: heap.name.as_str().to_owned(),
             archived: heap.is_archived(),
         }
@@ -346,6 +355,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
     let closed_at = item.state.closed_at();
     ItemDto {
         id: *item.id.as_uuid(),
+        key: item.key.to_string(),
         heap_id: *item.heap_id.as_uuid(),
         title: item.title.as_str().to_owned(),
         description: item.description.map(|d| d.as_str().to_owned()),

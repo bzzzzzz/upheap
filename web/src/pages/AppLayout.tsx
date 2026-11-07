@@ -20,7 +20,7 @@ import {
 import { useRef, type ReactNode } from "react";
 import { Button, Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
 
-import type { Me } from "../api/client";
+import type { HeapRef, Me } from "../api/client";
 import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
 import { StorageNote } from "../components/LocalDatabase";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
@@ -29,7 +29,8 @@ import { ProblemText } from "../components/ProblemText";
 export function AppLayout() {
   const { data: me } = useMe();
   useKeyboardInset();
-  const { heapId } = useParams({ strict: false });
+  const { team, heap } = useParams({ strict: false });
+  const heapRef = team !== undefined && heap !== undefined ? { team, heap } : undefined;
 
   return (
     // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
@@ -38,35 +39,35 @@ export function AppLayout() {
     // right-hand padding.
     <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
       <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
-        {me && <Sidebar me={me} heapId={heapId} />}
+        {me && <Sidebar me={me} heapRef={heapRef} />}
         <div className="min-w-0 flex-1 bg-canvas">
-          {me && <PhoneTopBar me={me} heapId={heapId} />}
+          {me && <PhoneTopBar me={me} heapRef={heapRef} />}
           {/* On a phone, room at the bottom for the tabs. */}
           <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
-            {heapId && <ArchivedNotice key={heapId} heapId={heapId} />}
+            {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
             <Outlet />
             <div className="lg:hidden">
               <StorageNote />
             </div>
           </div>
         </div>
-        {me && heapId && <PhoneTabs me={me} heapId={heapId} />}
+        {me && heapRef && <PhoneTabs me={me} heapRef={heapRef} />}
       </div>
     </div>
   );
 }
 
 /** Where the shell's links go, for the signed-in user and the heap on screen. */
-function useShellLinks(me: Me, heapId: string | undefined) {
-  const heapTeam = me.teams.find((team) => team.heaps.some((heap) => heap.id === heapId));
+function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
+  const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
   // With one team and no Teams list, as in the local build, the team link goes straight to it, so the heap's own
   // Team link would repeat it.
   const onlyTeam = soleTeam(me);
   return {
-    heap: heapTeam?.heaps.find((heap) => heap.id === heapId),
+    heap: heapTeam?.heaps.find((heap) => heap.slug === heapRef?.heap),
     heapTeam: onlyTeam ? undefined : heapTeam,
     teams: onlyTeam
-      ? ({ to: "/teams/$teamId", params: { teamId: onlyTeam.id }, label: onlyTeam.name } as const)
+      ? ({ to: "/teams/$team", params: { team: onlyTeam.slug }, label: onlyTeam.name } as const)
       : ({ to: "/teams", label: "Teams" } as const),
   };
 }
@@ -92,26 +93,26 @@ function NavLink({
 }
 
 /** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
-function heapViews(heapId: string, itemOpen: boolean) {
+function heapViews(heapRef: HeapRef, itemOpen: boolean) {
   return {
     open: {
-      to: "/heaps/$heapId",
-      params: { heapId },
+      to: "/teams/$team/heaps/$heap",
+      params: heapRef,
       activeOptions: { exact: true, includeSearch: false },
       current: itemOpen,
     },
-    closed: { to: "/heaps/$heapId/closed", params: { heapId } },
-    activity: { to: "/heaps/$heapId/activity", params: { heapId } },
-    tags: { to: "/heaps/$heapId/tags", params: { heapId } },
-    parameters: { to: "/heaps/$heapId/parameters", params: { heapId } },
+    closed: { to: "/teams/$team/heaps/$heap/closed", params: heapRef },
+    activity: { to: "/teams/$team/heaps/$heap/activity", params: heapRef },
+    tags: { to: "/teams/$team/heaps/$heap/tags", params: heapRef },
+    parameters: { to: "/teams/$team/heaps/$heap/parameters", params: heapRef },
   } as const;
 }
 
 /** The sidebar on a wide screen, folded into a rail on a tablet; hidden on a phone. */
-function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
-  const links = useShellLinks(me, heapId);
-  const { itemId } = useParams({ strict: false });
-  const views = heapId && heapViews(heapId, itemId !== undefined);
+function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
+  const links = useShellLinks(me, heapRef);
+  const { item: itemKey } = useParams({ strict: false });
+  const views = heapRef && heapViews(heapRef, itemKey !== undefined);
 
   return (
     <aside
@@ -124,7 +125,7 @@ function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
       </div>
 
       <div className="lg:hidden">
-        <HeapMenu me={me} heapId={heapId} placement="end top">
+        <HeapMenu me={me} heapRef={heapRef} placement="end top">
           <Button
             aria-label={`Switch heap${links.heap ? `: ${links.heap.name}` : ""}`}
             className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink text-lg font-semibold text-canvas outline-offset-2 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
@@ -143,8 +144,8 @@ function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
             {team.heaps.map((heap) => (
               <Link
                 key={heap.id}
-                to="/heaps/$heapId"
-                params={{ heapId: heap.id }}
+                to="/teams/$team/heaps/$heap"
+                params={{ team: team.slug, heap: heap.slug }}
                 activeOptions={{ includeSearch: false }}
                 className="flex min-h-9 items-center rounded-lg px-3 text-sm text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:font-semibold data-[status=active]:text-ink"
               >
@@ -171,7 +172,7 @@ function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
           <NavLink {...views.tags} icon={Tag} label="Tags" />
           <NavLink {...views.parameters} icon={SlidersHorizontal} label="Parameters" />
           {links.heapTeam && (
-            <NavLink to="/teams/$teamId" params={{ teamId: links.heapTeam.id }} icon={Users} label="Team" />
+            <NavLink to="/teams/$team" params={{ team: links.heapTeam.slug }} icon={Users} label="Team" />
           )}
         </nav>
       )}
@@ -192,11 +193,11 @@ function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
 }
 
 /** The heap name on a phone, which switches heap. */
-function PhoneTopBar({ me, heapId }: { me: Me; heapId: string | undefined }) {
-  const { heap } = useShellLinks(me, heapId);
+function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
+  const { heap } = useShellLinks(me, heapRef);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
-      <HeapMenu me={me} heapId={heapId} placement="bottom start">
+      <HeapMenu me={me} heapRef={heapRef} placement="bottom start">
         <Button
           aria-label={`Switch heap${heap ? `: ${heap.name}` : ""}`}
           className="-ml-1 flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg px-1 text-xl font-semibold tracking-tight outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
@@ -210,10 +211,10 @@ function PhoneTopBar({ me, heapId }: { me: Me; heapId: string | undefined }) {
 }
 
 /** The phone's tabs: the three views used most, and More for the rest. */
-function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
-  const links = useShellLinks(me, heapId);
-  const { itemId } = useParams({ strict: false });
-  const views = heapViews(heapId, itemId !== undefined);
+function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
+  const links = useShellLinks(me, heapRef);
+  const { item: itemKey } = useParams({ strict: false });
+  const views = heapViews(heapRef, itemKey !== undefined);
   const navigate = useNavigate();
   const signOut = useSignOut();
   const tabs = useRef<HTMLElement>(null);
@@ -247,7 +248,7 @@ function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
               } else if (key === "parameters") {
                 void navigate(views.parameters);
               } else if (key === "team" && links.heapTeam) {
-                void navigate({ to: "/teams/$teamId", params: { teamId: links.heapTeam.id } });
+                void navigate({ to: "/teams/$team", params: { team: links.heapTeam.slug } });
               } else if (key === "teams") {
                 void navigate(links.teams);
               } else if (key === "account") {
@@ -287,12 +288,12 @@ function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
 /** A menu of every heap, by team, that opens the one picked. */
 function HeapMenu({
   me,
-  heapId,
+  heapRef,
   placement,
   children,
 }: {
   me: Me;
-  heapId: string | undefined;
+  heapRef: HeapRef | undefined;
   placement: "end top" | "bottom start";
   children: ReactNode;
 }) {
@@ -304,7 +305,10 @@ function HeapMenu({
         <Menu
           aria-label="Heaps"
           className="outline-none"
-          onAction={(key) => void navigate({ to: "/heaps/$heapId", params: { heapId: String(key) } })}
+          onAction={(key) => {
+            const [team = "", heap = ""] = String(key).split("/");
+            void navigate({ to: "/teams/$team/heaps/$heap", params: { team, heap } });
+          }}
         >
           {me.teams.map((team) => (
             <MenuSection key={team.id} aria-label={team.name} className="not-first:mt-1">
@@ -316,9 +320,9 @@ function HeapMenu({
               {team.heaps.map((heap) => (
                 <MenuEntry
                   key={heap.id}
-                  id={heap.id}
+                  id={`${team.slug}/${heap.slug}`}
                   textValue={heap.name}
-                  icon={heap.id === heapId ? Check : undefined}
+                  icon={team.slug === heapRef?.team && heap.slug === heapRef.heap ? Check : undefined}
                 >
                   {heap.name}
                   {heap.archived && <span className="text-muted"> (archived)</span>}
@@ -402,9 +406,9 @@ function SignOutButton({ me, className, children }: { me: Me; className: string;
 }
 
 /** Says when the heap is read-only, and lets admins unarchive it. */
-function ArchivedNotice({ heapId }: { heapId: string }) {
-  const { data: heap } = useHeap(heapId);
-  const setArchived = useSetHeapArchived();
+function ArchivedNotice({ heapRef }: { heapRef: HeapRef }) {
+  const { data: heap } = useHeap(heapRef);
+  const setArchived = useSetHeapArchived(heapRef.team);
   if (!heap || heap.archived_at === null) return null;
 
   return (

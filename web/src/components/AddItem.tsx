@@ -2,7 +2,7 @@ import { Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
-import type { DueInput, ItemTag, Size } from "../api/client";
+import type { DueInput, HeapRef, ItemTag, Size } from "../api/client";
 import { useCreateItem, useParameters } from "../api/queries";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
@@ -16,7 +16,7 @@ const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }
  * The way in to adding an item (app-ux.md, Adding an item): a field-like button above the list, or `N`, opens the Add
  * dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone.
  */
-export function AddItem({ heapId, disabled }: { heapId: string; disabled: boolean }) {
+export function AddItem({ heapRef, disabled }: { heapRef: HeapRef; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   // Kept while the page is open, for entering several items in a row over more than one visit to the dialog.
   const [addAnother, setAddAnother] = useState(false);
@@ -55,7 +55,7 @@ export function AddItem({ heapId, disabled }: { heapId: string; disabled: boolea
       </button>
       {open && (
         <AddItemDialog
-          heapId={heapId}
+          heapRef={heapRef}
           addAnother={addAnother}
           onAddAnother={setAddAnother}
           onClose={() => setOpen(false)}
@@ -85,18 +85,18 @@ const EMPTY: Draft = { title: "", description: "", effort: null, impact: null, d
  * closing. Closing with a title typed asks first, so a stray tap outside doesn't lose it.
  */
 function AddItemDialog({
-  heapId,
+  heapRef,
   addAnother,
   onAddAnother,
   onClose,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   addAnother: boolean;
   onAddAnother: (addAnother: boolean) => void;
   onClose: () => void;
 }) {
-  const create = useCreateItem(heapId);
-  const parameters = useParameters(heapId);
+  const create = useCreateItem(heapRef);
+  const parameters = useParameters(heapRef);
   const [draft, setDraft] = useState(EMPTY);
   // A new key remounts the due picker, so a cleared draft doesn't keep Exact date picked.
   const [round, setRound] = useState(0);
@@ -211,7 +211,7 @@ function AddItemDialog({
               />
             </div>
             <DuePicker key={round} value={draft.due} onChange={(due) => set("due", due)} />
-            <TagPicker heapId={heapId} value={draft.tags} onChange={(tags) => set("tags", tags)} />
+            <TagPicker heapRef={heapRef} value={draft.tags} onChange={(tags) => set("tags", tags)} />
             {suggested.length > 0 && (
               <div className="flex flex-col gap-3" role="group" aria-label="Parameters for these tags">
                 {suggested.map((parameter) => (

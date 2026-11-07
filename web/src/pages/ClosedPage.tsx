@@ -3,11 +3,12 @@ import { Link } from "@tanstack/react-router";
 import { useClosedItems, useReopenItem } from "../api/queries";
 import { STATE_LABELS } from "../components/labels";
 import { TagChips } from "../components/TagChips";
+import type { HeapRef } from "../api/client";
 
 /** Done and won't-do items, most recently closed first. */
-export function ClosedPage({ heapId }: { heapId: string }) {
-  const closed = useClosedItems(heapId);
-  const reopen = useReopenItem(heapId);
+export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
+  const closed = useClosedItems(heapRef);
+  const reopen = useReopenItem(heapRef);
 
   if (closed.isPending) {
     return <p className="py-16 text-center text-stone-500">Loading…</p>;
@@ -35,8 +36,8 @@ export function ClosedPage({ heapId }: { heapId: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <Link
-                    to="/heaps/$heapId/items/$itemId"
-                    params={{ heapId, itemId: item.id }}
+                    to="/teams/$team/heaps/$heap/items/$item"
+                    params={{ ...heapRef, item: item.key }}
                     state={(prev) => ({ ...prev, closesBack: true })}
                     className="font-medium text-stone-600 hover:underline dark:text-stone-300"
                   >

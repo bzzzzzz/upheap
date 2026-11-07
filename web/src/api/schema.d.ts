@@ -76,7 +76,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}": {
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in user with their teams and heaps. */
+        get: operations["get_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Changes the signed-in user's display name. Send the user's `version` in `If-Match`. */
+        patch: operations["update_me"];
+        trace?: never;
+    };
+    "/api/v1/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Creates a team with the caller as its admin. The team starts without heaps. */
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team with its members and heaps. */
+        get: operations["get_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames the team or changes its slug. Admins only; send the team's `version` in `If-Match`. */
+        patch: operations["update_team"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened to a team, newest first, as far as the caller may see: its name, members and display names, and
+         *     its heaps being created, renamed and archived. Membership and heap changes are shown to admins only.
+         */
+        get: operations["list_team_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds a heap to the team. Admins only. */
+        post: operations["create_heap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}": {
         parameters: {
             query?: never;
             header?: never;
@@ -89,11 +179,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Renames the heap. Admins only; send the heap's `version` in `If-Match`. */
+        /** Renames the heap or changes its slug. Admins only; send the heap's `version` in `If-Match`. */
         patch: operations["update_heap"];
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -110,7 +200,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}/audit": {
+    "/api/v1/teams/{team}/heaps/{heap}/audit": {
         parameters: {
             query?: never;
             header?: never;
@@ -130,7 +220,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}/items": {
+    "/api/v1/teams/{team}/heaps/{heap}/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -151,7 +241,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}/items/closed": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/closed": {
         parameters: {
             query?: never;
             header?: never;
@@ -168,78 +258,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/heaps/{heap_id}/parameters": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The heap's parameters. Any member may list them; only admins change them. */
-        get: operations["list_parameters"];
-        put?: never;
-        /** Adds a parameter to the heap. Admins only. */
-        post: operations["create_parameter"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/heaps/{heap_id}/tags": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The heap's tags, by name. */
-        get: operations["list_tags"];
-        put?: never;
-        /** Adds a tag to the heap. */
-        post: operations["create_tag"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/heaps/{heap_id}/unarchive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Makes an archived heap writable again. Admins only. Unarchiving an active heap succeeds. */
-        post: operations["unarchive_heap"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/heaps/{heap_id}/views": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The heap's saved views that are in use, by name. */
-        get: operations["list_views"];
-        put?: never;
-        /** Saves a view of the heap, shared with everyone in the team. */
-        post: operations["create_view"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/items/{item_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}": {
         parameters: {
             query?: never;
             header?: never;
@@ -256,7 +275,7 @@ export interface paths {
         patch: operations["update_item"];
         trace?: never;
     };
-    "/api/v1/items/{item_id}/reopen": {
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen": {
         parameters: {
             query?: never;
             header?: never;
@@ -273,25 +292,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The signed-in user with their teams and heaps. */
-        get: operations["get_me"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Changes the signed-in user's display name. Send the user's `version` in `If-Match`. */
-        patch: operations["update_me"];
-        trace?: never;
-    };
-    "/api/v1/options/{option_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -311,7 +312,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/parameters/{parameter_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The heap's parameters. Any member may list them; only admins change them. */
+        get: operations["list_parameters"];
+        put?: never;
+        /** Adds a parameter to the heap. Admins only. */
+        post: operations["create_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -328,7 +347,7 @@ export interface paths {
         patch: operations["update_parameter"];
         trace?: never;
     };
-    "/api/v1/parameters/{parameter_id}/archive": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -348,7 +367,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/parameters/{parameter_id}/options": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options": {
         parameters: {
             query?: never;
             header?: never;
@@ -369,7 +388,7 @@ export interface paths {
         patch: operations["arrange_options"];
         trace?: never;
     };
-    "/api/v1/parameters/{parameter_id}/tags": {
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags": {
         parameters: {
             query?: never;
             header?: never;
@@ -386,7 +405,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tags/{tag_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The heap's tags, by name. */
+        get: operations["list_tags"];
+        put?: never;
+        /** Adds a tag to the heap. */
+        post: operations["create_tag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/tags/{tag_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -403,7 +440,7 @@ export interface paths {
         patch: operations["update_tag"];
         trace?: never;
     };
-    "/api/v1/teams": {
+    "/api/v1/teams/{team}/heaps/{heap}/unarchive": {
         parameters: {
             query?: never;
             header?: never;
@@ -412,53 +449,33 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Creates a team with the caller as its admin. The team starts without heaps. */
-        post: operations["create_team"];
+        /** Makes an archived heap writable again. Admins only. Unarchiving an active heap succeeds. */
+        post: operations["unarchive_heap"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/teams/{team_id}": {
+    "/api/v1/teams/{team}/heaps/{heap}/views": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The team with its members and heaps. */
-        get: operations["get_team"];
+        /** The heap's saved views that are in use, by name. */
+        get: operations["list_views"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Renames the team. Admins only; send the team's `version` in `If-Match`. */
-        patch: operations["update_team"];
-        trace?: never;
-    };
-    "/api/v1/teams/{team_id}/audit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * What happened to a team, newest first, as far as the caller may see: its name, members and display names, and
-         *     its heaps being created, renamed and archived. Membership and heap changes are shown to admins only.
-         */
-        get: operations["list_team_audit"];
-        put?: never;
-        post?: never;
+        /** Saves a view of the heap, shared with everyone in the team. */
+        post: operations["create_view"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/teams/{team_id}/heaps": {
+    "/api/v1/teams/{team}/heaps/{heap}/views/{view_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -467,15 +484,32 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Adds a heap to the team. Admins only. */
-        post: operations["create_heap"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`. */
+        patch: operations["update_view"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/views/{view_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds. */
+        post: operations["archive_view"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/teams/{team_id}/leave": {
+    "/api/v1/teams/{team}/leave": {
         parameters: {
             query?: never;
             header?: never;
@@ -492,7 +526,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/teams/{team_id}/members": {
+    "/api/v1/teams/{team}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -512,7 +546,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/teams/{team_id}/members/{user_id}": {
+    "/api/v1/teams/{team}/members/{username}": {
         parameters: {
             query?: never;
             header?: never;
@@ -538,47 +572,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Users with a word of their display name starting with `query`, or, when `query` is the start of an email address
+         * The user whose username is `query`, users with a word of their display name starting with `query`, or, when `query` is the start of an email address
          *     with at least its local part, `@` and one character of the domain, users whose email starts with it. Only for
          *     admins of some team, to add members.
          */
         get: operations["find_users"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/views/{view_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`. */
-        patch: operations["update_view"];
-        trace?: never;
-    };
-    "/api/v1/views/{view_id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds. */
-        post: operations["archive_view"];
         delete?: never;
         options?: never;
         head?: never;
@@ -730,6 +730,16 @@ export interface components {
             tag_ids?: string[] | null;
             title: string;
         };
+        /** @description A new team or heap. */
+        CreateNamedRequest: {
+            /** @description 1 to 100 characters. */
+            name: string;
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
+             *     one made from the name: "My Team" gets `my-team`, or `my-team-2` if that is taken.
+             */
+            slug?: string | null;
+        };
         CreateParameterRequest: {
             /** @description 1 to 50 characters, unique among the heap's parameters in use ignoring case. */
             name: string;
@@ -804,6 +814,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
+            slug: string;
             /** Format: uuid */
             team_id: string;
             /**
@@ -817,11 +829,23 @@ export interface components {
          * @enum {string}
          */
         HeapAction: "rename" | "archive" | "unarchive" | "view_history";
+        /** @description A change to a heap. Leave a field out to keep it. */
+        HeapPatchRequest: {
+            /** @description 1 to 100 characters. */
+            name?: string | null;
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old
+             *     slug stop working.
+             */
+            slug?: string | null;
+        };
         HeapSummary: {
             archived: boolean;
             /** Format: uuid */
             id: string;
             name: string;
+            /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
+            slug: string;
             /** Format: uuid */
             team_id: string;
         };
@@ -848,6 +872,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             impact?: null | components["schemas"]["Size"];
+            /**
+             * @description Five characters, unique within the heap and never changed; the item's path is `…/items/{key}`.
+             * @example k3x9a
+             */
+            key: string;
             /**
              * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
              *     by parameter name.
@@ -914,6 +943,8 @@ export interface components {
         ItemRef: {
             /** Format: uuid */
             id: string;
+            /** @description Unique within the heap; the item's path is `…/items/{key}`. */
+            key: string;
             state: components["schemas"]["ItemState"];
             title: string;
         };
@@ -1008,11 +1039,6 @@ export interface components {
         MemberPatchRequest: {
             role: components["schemas"]["Role"];
         };
-        /** @description A team or heap name. */
-        NameRequest: {
-            /** @description 1 to 100 characters. */
-            name: string;
-        };
         /** @description One option of a new arrangement. */
         OptionArrangement: {
             /** Format: uuid */
@@ -1087,6 +1113,11 @@ export interface components {
             code: string;
             /** @description The input field the error is about, when there is one. */
             field?: string | null;
+            /**
+             * @description A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
+             *     at, such as `my-team` for `My-Team`.
+             */
+            hint?: string | null;
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -1127,6 +1158,12 @@ export interface components {
             display_name: string;
             email: string;
             password: string;
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
+             *     the personal team, and can't be changed later.
+             * @example eugene
+             */
+            username: string;
         };
         /** @enum {string} */
         Role: "admin" | "member";
@@ -1149,7 +1186,7 @@ export interface components {
              * @description Send back in `If-Match` when editing.
              */
             version: number;
-            /** @description What the view shows. The fields are the query parameters of `GET /heaps/{heap_id}/items`. */
+            /** @description What the view shows. The fields are the query parameters of `GET /teams/{team}/heaps/{heap}/items`. */
             view: components["schemas"]["ListView"];
         };
         /**
@@ -1235,8 +1272,12 @@ export interface components {
             /** @description In the order they joined. */
             members: components["schemas"]["TeamMember"][];
             name: string;
+            /** @description Whether this is the caller's personal team: theirs alone, with their username as its slug. */
+            personal: boolean;
             /** @description The caller's role. */
             role: components["schemas"]["Role"];
+            /** @description Unique among teams and usernames; the team's path is `/teams/{slug}`. */
+            slug: string;
             /**
              * Format: int32
              * @description Send back in `If-Match` when renaming.
@@ -1247,7 +1288,7 @@ export interface components {
          * @description An action the caller can take on a team.
          * @enum {string}
          */
-        TeamAction: "rename" | "add_member" | "create_heap" | "leave";
+        TeamAction: "rename" | "change_slug" | "add_member" | "create_heap" | "leave";
         TeamMember: {
             allowed_actions: components["schemas"]["MemberAction"][];
             display_name: string;
@@ -1260,20 +1301,38 @@ export interface components {
             role: components["schemas"]["Role"];
             /** Format: uuid */
             user_id: string;
+            /** @description The member's path is `/teams/{team}/members/{username}`. */
+            username: string;
+        };
+        /** @description A change to a team. Leave a field out to keep it. */
+        TeamPatchRequest: {
+            /** @description 1 to 100 characters. */
+            name?: string | null;
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with
+             *     `personal_team` on a personal team. Links with the old slug stop working.
+             */
+            slug?: string | null;
         };
         TeamSummary: {
             heaps: components["schemas"]["HeapSummary"][];
             /** Format: uuid */
             id: string;
             name: string;
+            /** @description Whether this is the caller's personal team, which is theirs alone. */
+            personal: boolean;
             /** @description The caller's role in this team. */
             role: components["schemas"]["Role"];
+            /** @description The team's path is `/teams/{slug}`. */
+            slug: string;
         };
         User: {
             display_name: string;
             email: string;
             /** Format: uuid */
             id: string;
+            /** @description Also the slug of the user's personal team. Never changes. */
+            username: string;
             /**
              * Format: int32
              * @description Send back in `If-Match` when changing the display name.
@@ -1287,6 +1346,7 @@ export interface components {
             email?: string | null;
             /** Format: uuid */
             id: string;
+            username: string;
         };
         UserMatches: {
             /** @description Up to 10, by display name. */
@@ -1385,7 +1445,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description `email_taken` */
+            /** @description `email_taken`, or `handle_taken` (`field` `username`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1394,7 +1454,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid email, name or password */
+            /** @description Invalid email, name or password, or `invalid_handle` with a `hint` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1427,784 +1487,6 @@ export interface operations {
             };
             /** @description `unauthenticated` */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    get_heap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Heap"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    update_heap: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The `version` of what is being edited, for example `"3"`. */
-                "If-Match": string;
-            };
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NameRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Heap"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_conflict` or `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_required` */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    archive_heap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Heap"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_heap_audit: {
-        parameters: {
-            query?: {
-                /**
-                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
-                 *     a team, the team, one of its heaps, or a member.
-                 */
-                entity_id?: string;
-                /** @description `next_cursor` from the previous page. */
-                cursor?: string;
-                /** @description Page size, 1 to 200. Defaults to 50. */
-                limit?: number;
-            };
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditLog"];
-                };
-            };
-            /** @description `invalid_cursor` */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_ranked: {
-        parameters: {
-            query?: {
-                /** @description The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time. */
-                as_of?: number;
-                /** @description Where open items go. Defaults to `shown`. */
-                open?: components["schemas"]["StateMode"];
-                /** @description Where in-progress items go. Defaults to `pinned`. */
-                in_progress?: components["schemas"]["StateMode"];
-                /** @description Where blocked items go. Defaults to `hidden`. */
-                blocked?: components["schemas"]["StateMode"];
-                /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
-                blocked_layout?: components["schemas"]["BlockedLayout"];
-                /** @description What each group is sorted by. Ties keep priority order. Defaults to `priority`. */
-                sort?: components["schemas"]["ListSort"];
-                /** @description The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`. */
-                sort_parameter?: string;
-                /** @description Keep items with any of these tags, comma-separated. Tags of the same heap. */
-                tag?: string[];
-                /** @description Keep items with any of these efforts, comma-separated. */
-                effort?: components["schemas"]["Size"][];
-                /** @description Keep items with any of these impacts, comma-separated. */
-                impact?: components["schemas"]["Size"][];
-                /**
-                 * @description Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
-                 *     any of its options listed. An archived option keeps the items that switched to its replacement.
-                 */
-                param?: string[];
-            };
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RankedList"];
-                };
-            };
-            /** @description `invalid_query` */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`) */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    create_item: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateItemRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Item"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_closed: {
-        parameters: {
-            query?: {
-                /** @description `next_cursor` from the previous page. */
-                cursor?: string;
-                /** @description Page size, 1 to 200. Defaults to 50. */
-                limit?: number;
-            };
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClosedItems"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_parameters: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParameterList"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    create_parameter: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateParameterRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Parameter"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `parameter_name_taken`, `option_label_taken` or `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap` */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_tags: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TagList"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    create_tag: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateTagRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tag"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `tag_name_taken` or `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    unarchive_heap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Heap"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_views: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SavedViewList"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    create_view: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                heap_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSavedViewRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SavedView"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    get_item: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Item"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    update_item: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The `version` of what is being edited, for example `"3"`. */
-                "If-Match": string;
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ItemPatchRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Item"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_required` */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    reopen_item: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The `version` of what is being edited, for example `"3"`. */
-                "If-Match": string;
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Item"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `reopen_window_expired` or `version_conflict` */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2303,11 +1585,888 @@ export interface operations {
             };
         };
     };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateNamedRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            /** @description `handle_taken` (`field` `slug`), by a team or a username */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, or `invalid_handle` with a `hint` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `handle_taken` (`field` `slug`) or `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, or `invalid_handle` with a `hint` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_team_audit: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
+                 *     a team, the team, one of its heaps, or a member.
+                 */
+                entity_id?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLog"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateNamedRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `handle_taken` (`field` `slug`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, or `invalid_handle` with a `hint` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_heap: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeapPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `heap_archived` or `handle_taken` (`field` `slug`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, or `invalid_handle` with a `hint` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_heap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_heap_audit: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
+                 *     a team, the team, one of its heaps, or a member.
+                 */
+                entity_id?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLog"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_ranked: {
+        parameters: {
+            query?: {
+                /** @description The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time. */
+                as_of?: number;
+                /** @description Where open items go. Defaults to `shown`. */
+                open?: components["schemas"]["StateMode"];
+                /** @description Where in-progress items go. Defaults to `pinned`. */
+                in_progress?: components["schemas"]["StateMode"];
+                /** @description Where blocked items go. Defaults to `hidden`. */
+                blocked?: components["schemas"]["StateMode"];
+                /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
+                blocked_layout?: components["schemas"]["BlockedLayout"];
+                /** @description What each group is sorted by. Ties keep priority order. Defaults to `priority`. */
+                sort?: components["schemas"]["ListSort"];
+                /** @description The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`. */
+                sort_parameter?: string;
+                /** @description Keep items with any of these tags, comma-separated. Tags of the same heap. */
+                tag?: string[];
+                /** @description Keep items with any of these efforts, comma-separated. */
+                effort?: components["schemas"]["Size"][];
+                /** @description Keep items with any of these impacts, comma-separated. */
+                impact?: components["schemas"]["Size"][];
+                /**
+                 * @description Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
+                 *     any of its options listed. An archived option keeps the items that switched to its replacement.
+                 */
+                param?: string[];
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RankedList"];
+                };
+            };
+            /** @description `invalid_query` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_item: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateItemRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_closed: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClosedItems"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_item: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_item: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reopen_item: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `reopen_window_expired` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     archive_option: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 option_id: string;
             };
             cookie?: never;
@@ -2363,6 +2522,112 @@ export interface operations {
             };
         };
     };
+    list_parameters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParameterRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Parameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_name_taken`, `option_label_taken` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `too_many_options`, `weight_out_of_range` or `tag_not_in_heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     update_parameter: {
         parameters: {
             query?: never;
@@ -2371,6 +2636,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 parameter_id: string;
             };
             cookie?: never;
@@ -2439,6 +2714,16 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 parameter_id: string;
             };
             cookie?: never;
@@ -2488,6 +2773,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 parameter_id: string;
             };
             cookie?: never;
@@ -2559,6 +2854,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 parameter_id: string;
             };
             cookie?: never;
@@ -2630,6 +2935,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 parameter_id: string;
             };
             cookie?: never;
@@ -2693,6 +3008,103 @@ export interface operations {
             };
         };
     };
+    list_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTagRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_name_taken` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     update_tag: {
         parameters: {
             query?: never;
@@ -2701,6 +3113,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 tag_id: string;
             };
             cookie?: never;
@@ -2755,203 +3177,27 @@ export interface operations {
             };
         };
     };
-    create_team: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NameRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    get_team: {
+    unarchive_heap: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    update_team: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description The `version` of what is being edited, for example `"3"`. */
-                "If-Match": string;
-            };
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NameRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_conflict` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `version_required` */
-            428: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    list_team_audit: {
-        parameters: {
-            query?: {
                 /**
-                 * @description Only the history of this entity: an item, tag, saved view or parameter of the heap, or the heap itself; for
-                 *     a team, the team, one of its heaps, or a member.
+                 * @description The team's slug.
+                 * @example my-team
                  */
-                entity_id?: string;
-                /** @description `next_cursor` from the previous page. */
-                cursor?: string;
-                /** @description Page size, 1 to 200. Defaults to 50. */
-                limit?: number;
-            };
-            header?: {
-                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
-                "Time-Zone"?: string | null;
-            };
-            path: {
-                team_id: string;
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditLog"];
-                };
-            };
-            /** @description `invalid_cursor` */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    create_heap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NameRequest"];
-            };
-        };
-        responses: {
-            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2975,33 +3221,35 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
-    leave_team: {
+    list_views: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                team_id: string;
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Left the team */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SavedViewList"];
+                };
             };
             404: {
                 headers: {
@@ -3011,55 +3259,38 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `last_admin` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
-    add_member: {
+    create_view: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                team_id: string;
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AddMemberRequest"];
+                "application/json": components["schemas"]["CreateSavedViewRequest"];
             };
         };
         responses: {
-            /** @description Already a member */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/json": components["schemas"]["SavedView"];
                 };
             };
             404: {
@@ -3070,53 +3301,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `user_not_found` */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    remove_member: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Removed */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `last_admin` */
+            /** @description `heap_archived` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3125,92 +3310,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-        };
-    };
-    update_member: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MemberPatchRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Team"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `last_admin` */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    find_users: {
-        parameters: {
-            query: {
-                /**
-                 * @description The start of a word of the display name, or the start of an email address up to at least `@` and one more
-                 *     character. Ignores case. At least 3 characters.
-                 */
-                query: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserMatches"];
-                };
-            };
-            /** @description The caller is no team's admin */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description `field_too_short` */
+            /** @description `tag_not_in_heap`, `too_many_tags` (`field` `view.tag`), `option_not_in_heap`, `too_many_options` (`view.param`), `parameter_not_in_heap`, `sort_parameter_mismatch` (`view.sort_parameter`), or an invalid name */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3229,6 +3329,16 @@ export interface operations {
                 "If-Match": string;
             };
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 view_id: string;
             };
             cookie?: never;
@@ -3289,6 +3399,16 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
                 view_id: string;
             };
             cookie?: never;
@@ -3313,6 +3433,275 @@ export interface operations {
             };
             /** @description `heap_archived` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    leave_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left the team */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` or `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Already a member */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `user_not_found` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The user's username, which needn't be a member's.
+                 * @example eugene
+                 */
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` or `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The user's username, which needn't be a member's.
+                 * @example eugene
+                 */
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `last_admin` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    find_users: {
+        parameters: {
+            query: {
+                /**
+                 * @description A username, the start of a word of the display name, or the start of an email address up to at least `@` and one more
+                 *     character. Ignores case. At least 3 characters.
+                 */
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserMatches"];
+                };
+            };
+            /** @description The caller is no team's admin */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_too_short` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

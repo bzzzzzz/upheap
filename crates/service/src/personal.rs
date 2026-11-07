@@ -2,22 +2,29 @@
 //! makes for its one user.
 
 use domain::audit::{AuditAction, EntityType};
+use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::team::{Membership, Role, Team};
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User};
+use domain::validation::Field;
 use domain::{HeapId, TeamId, Timestamp, UserId, Version};
 use serde_json::json;
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
+use crate::error::handle_taken_on_duplicate;
 use crate::{Principal, ServiceError, Services};
 
 /// The local build's one user. Nobody signs in, so the address is never used, and `.invalid` can't be anyone's.
 const LOCAL_EMAIL: &str = "me@upheap.invalid";
+const LOCAL_USERNAME: &str = "me";
 const LOCAL_DISPLAY_NAME: &str = "Me";
 const LOCAL_TEAM_NAME: &str = "My heaps";
-const LOCAL_HEAP_NAME: &str = "My heap";
+
+/// Everyone's first heap, in their personal team.
+const FIRST_HEAP_NAME: &str = "Personal";
+const FIRST_HEAP_SLUG: &str = "personal";
 
 /// What [`Services::insert_personal_user`] made.
 pub(crate) struct PersonalUser {
@@ -40,9 +47,9 @@ impl Services {
             .insert_personal_user(
                 &txn,
                 Email::parse(LOCAL_EMAIL)?,
+                Handle::parse(LOCAL_USERNAME, Field::Username)?,
                 DisplayName::parse(LOCAL_DISPLAY_NAME)?,
                 Name::parse(LOCAL_TEAM_NAME)?,
-                Name::parse(LOCAL_HEAP_NAME)?,
                 self.now(),
             )
             .await?;
@@ -52,19 +59,21 @@ impl Services {
         Ok(Principal { user_id: made.user.id })
     }
 
-    /// Inserts a new user, a team with them as its only admin, and a heap in it, with an audit entry for each.
-    /// Fails with [`ServiceError::EmailTaken`] when the email is taken.
+    /// Inserts a new user, their personal team with `username` as its slug and them as its only admin, and a first
+    /// heap in it, with an audit entry for each. Fails with [`ServiceError::EmailTaken`] when the email is taken and
+    /// [`ServiceError::HandleTaken`] when the username is.
     pub(crate) async fn insert_personal_user(
         &self,
         txn: &impl ConnectionTrait,
         email: Email,
+        username: Handle,
         display_name: DisplayName,
         team_name: Name,
-        heap_name: Name,
         now: Timestamp,
     ) -> Result<PersonalUser, ServiceError> {
         let user = User {
             id: UserId::from_uuid(self.new_id(now)),
+            username: username.clone(),
             email,
             display_name,
             created_at: now,
@@ -72,7 +81,9 @@ impl Services {
         };
         let team = Team {
             id: TeamId::from_uuid(self.new_id(now)),
+            slug: username,
             name: team_name,
+            personal_user: Some(user.id),
             created_at: now,
             version: Version::INITIAL,
         };
@@ -85,7 +96,8 @@ impl Services {
         let heap = Heap {
             id: HeapId::from_uuid(self.new_id(now)),
             team_id: team.id,
-            name: heap_name,
+            slug: Handle::parse(FIRST_HEAP_SLUG, Field::Slug)?,
+            name: Name::parse(FIRST_HEAP_NAME)?,
             policy: HeapPolicy::default(),
             archived_at: None,
             version: Version::INITIAL,
@@ -95,7 +107,9 @@ impl Services {
             StoreError::Duplicate(_) => ServiceError::EmailTaken,
             other => other.into(),
         })?;
-        store::teams::insert_team(txn, &team).await?;
+        store::teams::insert_team(txn, &team)
+            .await
+            .map_err(|e| handle_taken_on_duplicate(e, Field::Username))?;
         store::teams::insert_membership(txn, &membership).await?;
         store::heaps::insert_heap(txn, &heap, now).await?;
         let entry = |action, entity_type, entity_id, heap_id, diff| NewAuditEntry {
@@ -115,14 +129,14 @@ impl Services {
                 EntityType::User,
                 *user.id.as_uuid(),
                 None,
-                json!({ "display_name": user.display_name.as_str() }),
+                json!({ "username": user.username.as_str(), "display_name": user.display_name.as_str() }),
             ),
             entry(
                 AuditAction::TeamCreated,
                 EntityType::Team,
                 *team.id.as_uuid(),
                 None,
-                json!({ "name": team.name.as_str() }),
+                json!({ "slug": team.slug.as_str(), "name": team.name.as_str() }),
             ),
             entry(
                 AuditAction::MemberAdded,
@@ -136,7 +150,7 @@ impl Services {
                 EntityType::Heap,
                 *heap.id.as_uuid(),
                 Some(heap.id),
-                json!({ "name": heap.name.as_str() }),
+                json!({ "slug": heap.slug.as_str(), "name": heap.name.as_str() }),
             ),
         ];
         for entry in &entries {

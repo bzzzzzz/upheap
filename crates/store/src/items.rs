@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use domain::handle::ItemKey;
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Size, StateKind, Title};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 use sea_orm::sea_query::Condition;
@@ -33,6 +34,29 @@ pub async fn insert_item(db: &impl ConnectionTrait, item: &Item) -> Result<(), S
     items::Entity::insert(to_row(item)?).exec_without_returning(db).await?;
     add_tags(db, item.id, &item.tags, item.created_at).await?;
     sync_values(db, item.id, &item.parameters).await
+}
+
+/// The ID of the item of `heap_id` with `key`, or `None` when the heap has none.
+pub async fn find_item_id_by_key(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    key: ItemKey,
+) -> Result<Option<ItemId>, StoreError> {
+    let row = items::Entity::find()
+        .select_only()
+        .column(items::Column::Id)
+        .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(items::Column::Key.eq(key.as_str()))
+        .into_tuple::<String>()
+        .one(db)
+        .await?;
+    row.map(|id| RowReader { table: TABLE, id: &id }.uuid(&id).map(ItemId::from_uuid))
+        .transpose()
+}
+
+/// Whether an item of `heap_id` already has `key`. Run under the heap lock, so a new item can take the key safely.
+pub async fn is_key_taken(db: &impl ConnectionTrait, heap_id: HeapId, key: ItemKey) -> Result<bool, StoreError> {
+    Ok(find_item_id_by_key(db, heap_id, key).await?.is_some())
 }
 
 pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
@@ -348,6 +372,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         version: Set(version_to_db(item.version, TABLE, &id)?),
         id: Set(id),
         heap_id: Set(id_to_db(item.heap_id.as_uuid())),
+        key: Set(item.key.as_str().to_owned()),
         title: Set(item.title.as_str().to_owned()),
         description: Set(item.description.as_ref().map(|d| d.as_str().to_owned())),
         state: Set(item.state.kind().code().to_owned()),
@@ -394,6 +419,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
     Ok(Item {
         id: ItemId::from_uuid(read.uuid(&row.id)?),
         heap_id: HeapId::from_uuid(read.uuid(&row.heap_id)?),
+        key: read.item_key(&row.key)?,
         title: Title::parse(&row.title).map_err(|e| read.corrupt(e.to_string()))?,
         description,
         state,

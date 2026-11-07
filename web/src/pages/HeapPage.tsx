@@ -2,9 +2,10 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { ApiProblem, type ItemPatch, type RankedItem, type RankedList } from "../api/client";
+import { ApiProblem, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
 import { useRankedList, useUpdateItem } from "../api/queries";
 import { AddItem } from "../components/AddItem";
+import { CopyLink } from "../components/CopyLink";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
@@ -17,26 +18,26 @@ import { filterCount, matchesSearch, toListQuery, type ListSearch } from "../com
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
  * page only narrows it further by the search text. Saved views are links that put their settings in the URL.
- * `itemId` is the item open over the list, if any (app-ux.md, The item).
+ * `itemKey` is the key of the item open over the list, if any (app-ux.md, The item).
  */
 export function HeapPage({
-  heapId,
-  itemId,
+  heap: heapRef,
+  itemKey,
   view,
   onViewChange,
 }: {
-  heapId: string;
-  itemId: string | undefined;
+  heap: HeapRef;
+  itemKey: string | undefined;
   view: ListSearch;
   onViewChange: (view: ListSearch) => void;
 }) {
-  const list = useRankedList(heapId, toListQuery(view));
+  const list = useRankedList(heapRef, toListQuery(view));
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<Panel>(null);
   // Bumped to move focus into the open panel, for "Change view" below the list.
   const [panelFocus, setPanelFocus] = useState(0);
-  const changeState = useChangeState(heapId);
-  const closeItem = useCloseItem(heapId, itemId);
+  const changeState = useChangeState(heapRef);
+  const closeItem = useCloseItem(heapRef, itemKey);
 
   // The list's keys (app-ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
   // Escape closes the open item. The rows handle the arrows and `x` themselves.
@@ -55,12 +56,12 @@ export function HeapPage({
     return () => window.removeEventListener("keydown", onKey);
   }, [closeItem]);
 
-  const place = itemId && list.data ? placeOf(list.data, itemId) : undefined;
-  const pane = itemId && closeItem && (
+  const place = itemKey && list.data ? placeOf(list.data, itemKey) : undefined;
+  const pane = itemKey && closeItem && (
     <ItemPane
-      key={itemId}
-      heapId={heapId}
-      itemId={itemId}
+      key={itemKey}
+      heapRef={heapRef}
+      itemKey={itemKey}
       entry={place?.entry}
       section={place?.section}
       onClose={closeItem}
@@ -72,8 +73,8 @@ export function HeapPage({
     <div className="lg:flex lg:items-start">
       <div className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
         <ListPage
-          heapId={heapId}
-          itemId={itemId}
+          heapRef={heapRef}
+          itemKey={itemKey}
           list={list}
           view={view}
           onViewChange={onViewChange}
@@ -93,14 +94,14 @@ export function HeapPage({
 }
 
 /** Where an item sits in the list, for the pane's "#3 · Up next". */
-function placeOf(list: RankedList, itemId: string): { entry: RankedItem; section: string | undefined } | undefined {
+function placeOf(list: RankedList, itemKey: string): { entry: RankedItem; section: string | undefined } | undefined {
   const sections: [RankedItem[], string | undefined][] = [
     [list.pinned, pinnedTitle(list.pinned)],
     [list.ranked, list.pinned.length > 0 ? "Up next" : undefined],
     [list.blocked, "Blocked"],
   ];
   for (const [entries, section] of sections) {
-    const entry = entries.find((e) => e.item.id === itemId);
+    const entry = entries.find((e) => e.item.key === itemKey);
     if (entry) return { entry, section };
   }
   return undefined;
@@ -113,8 +114,8 @@ const pinnedTitle = (pinned: RankedItem[]) =>
  * Changes an item's state from the list, by its circle, `x` or a swipe, then offers to undo it (app-ux.md, The list
  * §3). Undo puts back the state it had, and the blocker with it.
  */
-function useChangeState(heapId: string) {
-  const update = useUpdateItem(heapId);
+function useChangeState(heapRef: HeapRef) {
+  const update = useUpdateItem(heapRef);
   const [toast, setToast] = useState<Toast | null>(null);
   const dismiss = useCallback(() => setToast(null), []);
   const failed = (error: Error) => setToast({ id: Date.now(), message: itemProblem(error), error: true });
@@ -145,26 +146,26 @@ function useChangeState(heapId: string) {
  * Closes the open item. Back closes it when the app opened it, so the history doesn't gain an entry per look at an
  * item; opened from outside (a link, a reload), it goes to the list instead. Focus goes back to the item's row.
  */
-function useCloseItem(heapId: string, itemId: string | undefined) {
+function useCloseItem(heapRef: HeapRef, itemKey: string | undefined) {
   const router = useRouter();
   const navigate = useNavigate();
   const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
   const close = useCallback(() => {
-    if (itemId === undefined) return;
+    if (itemKey === undefined) return;
     if (closesBack) {
       router.history.back();
     } else {
-      void navigate({ to: "/heaps/$heapId", params: { heapId }, search: true });
+      void navigate({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true });
     }
-    window.setTimeout(() => focusRowOf(itemId));
-  }, [router, navigate, closesBack, heapId, itemId]);
-  return itemId === undefined ? undefined : close;
+    window.setTimeout(() => focusRowOf(itemKey));
+  }, [router, navigate, closesBack, heapRef, itemKey]);
+  return itemKey === undefined ? undefined : close;
 }
 
 /** The list itself, with its controls. */
 function ListPage({
-  heapId,
-  itemId,
+  heapRef,
+  itemKey,
   list,
   view,
   onViewChange,
@@ -176,8 +177,8 @@ function ListPage({
   onPanelFocus,
   onChangeState,
 }: {
-  heapId: string;
-  itemId: string | undefined;
+  heapRef: HeapRef;
+  itemKey: string | undefined;
   list: ReturnType<typeof useRankedList>;
   view: ListSearch;
   onViewChange: (view: ListSearch) => void;
@@ -195,7 +196,7 @@ function ListPage({
 
   const controls = (
     <ListControls
-      heapId={heapId}
+      heapRef={heapRef}
       view={view}
       onChange={onViewChange}
       search={search}
@@ -206,7 +207,7 @@ function ListPage({
     />
   );
 
-  const savedViews = <SavedViewsBar heapId={heapId} view={view} onViewChange={onViewChange} />;
+  const savedViews = <SavedViewsBar heapRef={heapRef} view={view} onViewChange={onViewChange} />;
 
   if (list.isError) {
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
@@ -244,8 +245,8 @@ function ListPage({
   const rows = (entries: RankedItem[], pinned?: boolean) => (
     <ItemList
       entries={entries}
-      heapId={heapId}
-      itemId={itemId}
+      heapRef={heapRef}
+      itemKey={itemKey}
       onChangeState={onChangeState}
       compact={(entry) => pinned === true && entry.item.state === "in_progress"}
     />
@@ -256,19 +257,22 @@ function ListPage({
       <div className="mt-2 flex items-baseline justify-end sm:mt-6 sm:justify-between">
         {/* On a phone the heap name is already at the top, as the heap switcher. */}
         <h1 className="text-xl font-semibold tracking-tight max-sm:sr-only">{heap.name}</h1>
-        <button
-          type="button"
-          onClick={() => void list.refresh()}
-          className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-          title="Re-rank at the current time"
-        >
-          Refresh order
-        </button>
+        <div className="flex items-baseline gap-3">
+          <CopyLink handles={[heapRef.team, heapRef.heap]} />
+          <button
+            type="button"
+            onClick={() => void list.refresh()}
+            className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
+            title="Re-rank at the current time"
+          >
+            Refresh order
+          </button>
+        </div>
       </div>
 
       {savedViews}
 
-      <AddItem heapId={heapId} disabled={heap.archived} />
+      <AddItem heapRef={heapRef} disabled={heap.archived} />
 
       {controls}
 
@@ -328,14 +332,14 @@ function Section({ title, children }: { title: string | undefined; children: Rea
 /** With `compact`, a row leaves out why it ranks where it does, so pinned in-progress rows don't crowd the list. */
 function ItemList({
   entries,
-  heapId,
-  itemId,
+  heapRef,
+  itemKey,
   onChangeState,
   compact,
 }: {
   entries: RankedItem[];
-  heapId: string;
-  itemId: string | undefined;
+  heapRef: HeapRef;
+  itemKey: string | undefined;
   onChangeState: ChangeState;
   compact: (entry: RankedItem) => boolean;
 }) {
@@ -346,9 +350,9 @@ function ItemList({
           <ItemRow
             key={entry.item.id}
             entry={entry}
-            heapId={heapId}
-            selected={entry.item.id === itemId}
-            itemOpen={itemId !== undefined}
+            heapRef={heapRef}
+            selected={entry.item.key === itemKey}
+            itemOpen={itemKey !== undefined}
             compact={compact(entry)}
             onChangeState={onChangeState}
           />

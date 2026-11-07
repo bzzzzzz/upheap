@@ -1,5 +1,7 @@
 //! Conversions between domain values and their stored form. Stored strings are stable and never renamed.
 
+use domain::handle::{Handle, ItemKey};
+use domain::validation::Field;
 use domain::{Timestamp, Version};
 use uuid::Uuid;
 
@@ -34,6 +36,14 @@ impl RowReader<'_> {
 
     pub fn weight(&self, raw: i32) -> Result<u16, StoreError> {
         u16::try_from(raw).map_err(|_| self.corrupt(format!("weight {raw} out of range")))
+    }
+
+    pub fn handle(&self, raw: &str) -> Result<Handle, StoreError> {
+        Handle::parse(raw, Field::Slug).map_err(|_| self.corrupt(format!("invalid handle {raw:?}")))
+    }
+
+    pub fn item_key(&self, raw: &str) -> Result<ItemKey, StoreError> {
+        ItemKey::parse(raw).map_err(|_| self.corrupt(format!("invalid item key {raw:?}")))
     }
 
     pub fn corrupt(&self, problem: String) -> StoreError {

@@ -5,15 +5,17 @@ import type { Heap, Team, TeamMember } from "../api/client";
 import {
   useAddMember,
   useCreateHeap,
+  isUserQuery,
   useFindUsers,
   useLeaveTeam,
   useRemoveMember,
-  useRenameHeap,
-  useRenameTeam,
   useSetHeapArchived,
   useSetMemberRole,
   useTeam,
+  useUpdateHeap,
+  useUpdateTeam,
 } from "../api/queries";
+import { CopyLink } from "../components/CopyLink";
 import { inputClass, NameForm, primaryButtonClass, quietButtonClass } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { HistoryDisclosure } from "../components/AuditHistory";
@@ -23,9 +25,12 @@ const sectionTitle = "mb-2 text-sm font-semibold tracking-wide text-stone-500 up
 const listClass =
   "rounded-lg border border-stone-200 bg-white px-3 dark:border-stone-800 dark:bg-stone-900 [&>li]:border-b [&>li]:border-stone-200 [&>li:last-child]:border-b-0 dark:[&>li]:border-stone-800";
 
-/** A team's heaps and members. What each person can change comes from `allowed_actions`. */
-export function TeamPage({ teamId }: { teamId: string }) {
-  const team = useTeam(teamId);
+/**
+ * A team's heaps and members, by its slug `team`. What each person can change comes from `allowed_actions`, so a
+ * personal team shows no member controls and no slug field.
+ */
+export function TeamPage({ team: slug }: { team: string }) {
+  const team = useTeam(slug);
 
   if (team.isPending) {
     return <p className="py-16 text-center text-stone-500">Loading…</p>;
@@ -42,15 +47,19 @@ export function TeamPage({ teamId }: { teamId: string }) {
   return (
     <main>
       <TeamName team={data} />
+      {data.allowed_actions.includes("change_slug") && <TeamSlug team={data} />}
       <p className="mb-6 text-sm text-stone-500">
-        You are {data.role === "admin" ? "an admin" : "a member"} of this team.{" "}
+        {data.personal
+          ? "Your personal team. It's yours alone, and its link uses your username."
+          : `You are ${data.role === "admin" ? "an admin" : "a member"} of this team.`}{" "}
         <Link
-          to="/teams/$teamId/activity"
-          params={{ teamId }}
+          to="/teams/$team/activity"
+          params={{ team: data.slug }}
           className="text-sky-700 hover:underline dark:text-sky-400"
         >
           Activity
         </Link>
+        <CopyLink handles={[data.slug]} className="ml-2" />
       </p>
       <section aria-labelledby="team-heaps" className="mb-8">
         <h2 id="team-heaps" className={sectionTitle}>
@@ -61,11 +70,11 @@ export function TeamPage({ teamId }: { teamId: string }) {
         ) : (
           <ul className={listClass}>
             {data.heaps.map((heap) => (
-              <HeapRow key={heap.id} heap={heap} />
+              <HeapRow key={heap.id} team={data.slug} heap={heap} />
             ))}
           </ul>
         )}
-        {data.allowed_actions.includes("create_heap") && <NewHeapForm teamId={teamId} />}
+        {data.allowed_actions.includes("create_heap") && <NewHeapForm team={data.slug} />}
       </section>
       <section aria-labelledby="team-members" className="mb-8">
         <h2 id="team-members" className={sectionTitle}>
@@ -73,7 +82,7 @@ export function TeamPage({ teamId }: { teamId: string }) {
         </h2>
         <ul className={listClass}>
           {data.members.map((member) => (
-            <MemberRow key={member.user_id} teamId={teamId} member={member} />
+            <MemberRow key={member.user_id} team={data.slug} member={member} />
           ))}
         </ul>
         {data.allowed_actions.includes("add_member") && <AddMember team={data} />}
@@ -84,7 +93,7 @@ export function TeamPage({ teamId }: { teamId: string }) {
 }
 
 function TeamName({ team }: { team: Team }) {
-  const rename = useRenameTeam(team.id);
+  const rename = useUpdateTeam();
   if (!team.allowed_actions.includes("rename")) {
     return <h1 className="mt-6 mb-1 text-xl font-semibold tracking-tight">{team.name}</h1>;
   }
@@ -97,30 +106,61 @@ function TeamName({ team }: { team: Team }) {
         version={team.version}
         pending={rename.isPending}
         error={rename.error}
-        onSave={(name) => rename.mutate({ team, name })}
+        onSave={(name) => rename.mutate({ team, patch: { name } })}
         className="text-lg font-semibold"
       />
     </div>
   );
 }
 
-function HeapRow({ heap }: { heap: Heap }) {
-  const rename = useRenameHeap();
-  const setArchived = useSetHeapArchived();
+/** The team's slug, which its links use. Links with the old one stop working. */
+function TeamSlug({ team }: { team: Team }) {
+  const update = useUpdateTeam();
+  return (
+    <div className="mb-1 flex items-center gap-2 text-sm text-stone-500">
+      <span aria-hidden="true">/teams/</span>
+      <NameForm
+        label="Team slug"
+        value={team.slug}
+        version={team.version}
+        maxLength={39}
+        pending={update.isPending}
+        error={update.error}
+        onSave={(slug) => update.mutate({ team, patch: { slug: slug.trim() } })}
+      />
+    </div>
+  );
+}
+
+function HeapRow({ team, heap }: { team: string; heap: Heap }) {
+  const update = useUpdateHeap(team);
+  const setArchived = useSetHeapArchived(team);
   const archived = heap.archived_at !== null;
   const can = (action: Heap["allowed_actions"][number]) => heap.allowed_actions.includes(action);
 
   return (
     <li className="flex flex-wrap items-center gap-2 py-2">
       {can("rename") ? (
-        <NameForm
-          label={`Name of heap ${heap.name}`}
-          value={heap.name}
-          version={heap.version}
-          pending={rename.isPending}
-          error={rename.error}
-          onSave={(name) => rename.mutate({ heap, name })}
-        />
+        <>
+          <NameForm
+            label={`Name of heap ${heap.name}`}
+            value={heap.name}
+            version={heap.version}
+            pending={update.isPending}
+            error={update.error}
+            onSave={(name) => update.mutate({ heap, patch: { name } })}
+          />
+          <NameForm
+            label={`Slug of heap ${heap.name}`}
+            value={heap.slug}
+            version={heap.version}
+            maxLength={39}
+            pending={update.isPending}
+            error={null}
+            onSave={(slug) => update.mutate({ heap, patch: { slug: slug.trim() } })}
+            className="max-w-40 font-mono text-xs"
+          />
+        </>
       ) : (
         <span className="min-w-0 flex-1 text-sm font-medium">{heap.name}</span>
       )}
@@ -130,8 +170,8 @@ function HeapRow({ heap }: { heap: Heap }) {
         </span>
       )}
       <Link
-        to="/heaps/$heapId"
-        params={{ heapId: heap.id }}
+        to="/teams/$team/heaps/$heap"
+        params={{ team, heap: heap.slug }}
         className="text-sm text-sky-700 hover:underline dark:text-sky-400"
       >
         Open
@@ -149,15 +189,15 @@ function HeapRow({ heap }: { heap: Heap }) {
       <ProblemText error={setArchived.error} />
       {can("view_history") && (
         <div className="basis-full">
-          <HistoryDisclosure scope={{ teamId: heap.team_id }} entityId={heap.id} />
+          <HistoryDisclosure scope={{ team }} entityId={heap.id} />
         </div>
       )}
     </li>
   );
 }
 
-function NewHeapForm({ teamId }: { teamId: string }) {
-  const create = useCreateHeap(teamId);
+function NewHeapForm({ team }: { team: string }) {
+  const create = useCreateHeap(team);
   const [name, setName] = useState("");
 
   const submit = (event: FormEvent) => {
@@ -184,9 +224,9 @@ function NewHeapForm({ teamId }: { teamId: string }) {
   );
 }
 
-function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
-  const setRole = useSetMemberRole(teamId);
-  const remove = useRemoveMember(teamId);
+function MemberRow({ team, member }: { team: string; member: TeamMember }) {
+  const setRole = useSetMemberRole(team);
+  const remove = useRemoveMember(team);
   const { confirming, ask, cancel, buttonRef: removeButton } = useConfirmation();
   const can = (action: TeamMember["allowed_actions"][number]) => member.allowed_actions.includes(action);
 
@@ -194,6 +234,7 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
       <span className="min-w-0 flex-1">
         <span className="text-sm font-medium">{member.display_name}</span>{" "}
+        <span className="text-sm text-stone-500">@{member.username}</span>{" "}
         <span className="text-sm text-stone-500">{member.email}</span>
       </span>
       <span className="text-xs text-stone-500">{member.role === "admin" ? "Admin" : "Member"}</span>
@@ -201,7 +242,7 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
         <button
           type="button"
           disabled={setRole.isPending}
-          onClick={() => setRole.mutate({ userId: member.user_id, role: "admin" })}
+          onClick={() => setRole.mutate({ username: member.username, role: "admin" })}
           className={quietButtonClass}
         >
           Make admin
@@ -211,7 +252,7 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
         <button
           type="button"
           disabled={setRole.isPending}
-          onClick={() => setRole.mutate({ userId: member.user_id, role: "member" })}
+          onClick={() => setRole.mutate({ username: member.username, role: "member" })}
           className={quietButtonClass}
         >
           Make member
@@ -229,7 +270,7 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
             type="button"
             autoFocus
             disabled={remove.isPending}
-            onClick={() => remove.mutate(member.user_id, { onError: cancel })}
+            onClick={() => remove.mutate(member.username, { onError: cancel })}
             className="rounded px-1.5 py-1 font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
           >
             Remove
@@ -241,7 +282,7 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
       )}
       <ProblemText error={setRole.error ?? remove.error} />
       <div className="basis-full">
-        <HistoryDisclosure scope={{ teamId }} entityId={member.user_id} />
+        <HistoryDisclosure scope={{ team }} entityId={member.user_id} />
       </div>
     </li>
   );
@@ -249,23 +290,23 @@ function MemberRow({ teamId, member }: { teamId: string; member: TeamMember }) {
 
 /**
  * Finds users by the start of a name, or of an email up to the `@` and part of the domain, and adds them as members.
- * The server needs at least 3 characters, and shows an email only when it was typed.
+ * The server needs at least 3 characters or a whole username, and shows an email only when it was typed.
  */
 function AddMember({ team }: { team: Team }) {
   const [query, setQuery] = useState("");
   const found = useFindUsers(query);
-  const add = useAddMember(team.id);
+  const add = useAddMember(team.slug);
   const memberIds = new Set(team.members.map((m) => m.user_id));
-  const searching = [...query.trim()].length >= 3;
+  const searching = isUserQuery(query);
 
   return (
     <div className="mt-3">
       <input
         type="search"
-        aria-label="Find a user to add by name or email"
+        aria-label="Find a user to add by username, name or email"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Add a member: name, or full email"
+        placeholder="Add a member: username, name, or full email"
         className={`${inputClass} w-72 max-w-full`}
       />
       {searching && found.data && (
@@ -274,6 +315,7 @@ function AddMember({ team }: { team: Team }) {
           {found.data.users.map((user) => (
             <li key={user.id} className="flex items-center gap-2 text-sm">
               <span className="font-medium">{user.display_name}</span>
+              <span className="text-stone-500">@{user.username}</span>
               {user.email && <span className="text-stone-500">{user.email}</span>}
               {memberIds.has(user.id) ? (
                 <span className="text-xs text-stone-500">Already a member</span>

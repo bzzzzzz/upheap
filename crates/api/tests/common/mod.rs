@@ -172,7 +172,7 @@ impl TestApp {
     pub async fn create_item(&self, session: &str, heap: &str, body: Value) -> Result<TestResponse> {
         self.send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", self.heap_url(heap).await?),
             Some(session),
             Some(body),
         )
@@ -194,7 +194,7 @@ impl TestApp {
     pub async fn create_tag(&self, session: &str, heap: &str, name: &str) -> Result<TestResponse> {
         self.send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/tags"),
+            &format!("{}/tags", self.heap_url(heap).await?),
             Some(session),
             Some(serde_json::json!({ "name": name })),
         )
@@ -224,15 +224,22 @@ impl TestApp {
         .await
     }
 
-    /// Registers a user and returns their session token and personal heap ID.
+    /// Registers a user and returns their session token and personal heap ID. Their username is made from the
+    /// email's local part.
     pub async fn register(&self, email: &str) -> Result<(String, String)> {
         self.register_as(email, "Tester").await
     }
 
-    /// Registers a user called `display_name` and returns their session token and personal heap ID.
+    /// Registers a user called `display_name` and returns their session token and personal heap ID. Their username
+    /// is made from the email's local part: `ada@example.test` is `ada`.
     pub async fn register_as(&self, email: &str, display_name: &str) -> Result<(String, String)> {
-        let body =
-            serde_json::json!({ "email": email, "display_name": display_name, "password": "a long test password" });
+        let username = username_for(email);
+        let body = serde_json::json!({
+            "email": email,
+            "username": username,
+            "display_name": display_name,
+            "password": "a long test password",
+        });
         let response = self
             .send(Method::POST, "/api/v1/auth/register", None, Some(body))
             .await?;
@@ -248,6 +255,92 @@ impl TestApp {
             .context("no heap")?
             .to_owned();
         Ok((session, heap))
+    }
+
+    /// Makes a team called "Shared" with a heap called "Shared" as the user of `session`, who is its admin, and returns
+    /// their IDs. Personal teams take no members, so tests that share a heap use one of these.
+    pub async fn shared_heap(&self, session: &str) -> Result<(String, String)> {
+        let team = self
+            .send(
+                Method::POST,
+                "/api/v1/teams",
+                Some(session),
+                Some(serde_json::json!({ "name": "Shared" })),
+            )
+            .await?;
+        anyhow::ensure!(team.status == StatusCode::CREATED, "create team failed: {}", team.body);
+        let slug = team.body["slug"].as_str().context("team has no slug")?;
+        let heap = self
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{slug}/heaps"),
+                Some(session),
+                Some(serde_json::json!({ "name": "Shared" })),
+            )
+            .await?;
+        anyhow::ensure!(heap.status == StatusCode::CREATED, "create heap failed: {}", heap.body);
+        let team_id = team.body["id"].as_str().context("team has no id")?.to_owned();
+        let heap_id = heap.body["id"].as_str().context("heap has no id")?.to_owned();
+        Ok((team_id, heap_id))
+    }
+
+    /// `/api/v1/teams/{team}` for the team with `team_id`, from its slug in the database.
+    pub async fn team_url(&self, team_id: impl AsRef<str>) -> Result<String> {
+        let id: uuid::Uuid = team_id.as_ref().parse()?;
+        let slug = self
+            .query_text(&format!("SELECT slug FROM teams WHERE id = '{id}'"), "slug")
+            .await?;
+        Ok(format!("/api/v1/teams/{slug}"))
+    }
+
+    /// `/api/v1/teams/{team}/heaps/{heap}` for the heap with `heap_id`, from the slugs in the database.
+    pub async fn heap_url(&self, heap_id: impl AsRef<str>) -> Result<String> {
+        let id: uuid::Uuid = heap_id.as_ref().parse()?;
+        let team_id = self
+            .query_text(&format!("SELECT team_id FROM heaps WHERE id = '{id}'"), "team_id")
+            .await?;
+        let slug = self
+            .query_text(&format!("SELECT slug FROM heaps WHERE id = '{id}'"), "slug")
+            .await?;
+        Ok(format!("{}/heaps/{slug}", self.team_url(&team_id).await?))
+    }
+
+    /// `…/items/{key}` for the item with `item_id`, from the handles in the database.
+    pub async fn item_url(&self, item_id: impl AsRef<str>) -> Result<String> {
+        let id: uuid::Uuid = item_id.as_ref().parse()?;
+        let heap_id = self
+            .query_text(&format!("SELECT heap_id FROM items WHERE id = '{id}'"), "heap_id")
+            .await?;
+        // `key` is reserved on MySQL, but not after a table name.
+        let key = self
+            .query_text(
+                &format!("SELECT items.key AS item_key FROM items WHERE id = '{id}'"),
+                "item_key",
+            )
+            .await?;
+        Ok(format!("{}/items/{key}", self.heap_url(&heap_id).await?))
+    }
+
+    /// `/api/v1/teams/{team}/members/{username}` for `user_id` in the team with `team_id`.
+    pub async fn member_url(&self, team_id: impl AsRef<str>, user_id: impl AsRef<str>) -> Result<String> {
+        let id: uuid::Uuid = user_id.as_ref().parse()?;
+        let username = self
+            .query_text(
+                &format!("SELECT slug FROM teams WHERE personal_user_id = '{id}'"),
+                "slug",
+            )
+            .await?;
+        Ok(format!("{}/members/{username}", self.team_url(team_id).await?))
+    }
+
+    /// The one text value `column` of the first row `sql` returns.
+    async fn query_text(&self, sql: &str, column: &str) -> Result<String> {
+        let row = self
+            .db
+            .query_one_raw(Statement::from_string(self.db.get_database_backend(), sql.to_owned()))
+            .await?
+            .with_context(|| format!("no row for {sql}"))?;
+        Ok(row.try_get("", column)?)
     }
 
     /// Adds `user_id` to `team_id` with `role` straight in the database, so a test can set up any role in one step.
@@ -302,4 +395,20 @@ impl TestApp {
             .context("set heap archived")?;
         Ok(())
     }
+}
+
+/// The username tests register with `email` under: its local part, lowercased, with anything but letters and digits
+/// made a dash.
+pub fn username_for(email: &str) -> String {
+    let local = email.split('@').next().unwrap_or(email);
+    local
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }

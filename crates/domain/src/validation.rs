@@ -25,6 +25,11 @@ pub enum ValidationError {
     TooManyOptions { max: usize },
     #[error("weight must be from 0 to {max}")]
     WeightOutOfRange { max: u16 },
+    /// Not a valid username or slug. `hint` is one made from the input that would be, when there is one.
+    #[error("{field} must be lowercase letters, digits and single dashes, starting with a letter")]
+    HandleInvalid { field: Field, hint: Option<String> },
+    #[error("item key is not valid")]
+    ItemKeyInvalid,
     /// A list sorted by a custom parameter names it in `sort_parameter`, and no other sort does.
     #[error("send sort_parameter exactly when sort is parameter")]
     SortParameterMismatch,
@@ -41,6 +46,9 @@ pub enum Field {
     Label,
     /// A search text.
     Query,
+    Username,
+    /// A team's or heap's slug.
+    Slug,
 }
 
 impl Field {
@@ -53,6 +61,8 @@ impl Field {
             Self::Name => "name",
             Self::Label => "label",
             Self::Query => "query",
+            Self::Username => "username",
+            Self::Slug => "slug",
         }
     }
 }

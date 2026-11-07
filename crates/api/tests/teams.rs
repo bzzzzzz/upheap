@@ -32,14 +32,14 @@ async fn create_team(app: &TestApp, session: &str, name: &str) -> Result<Value> 
 }
 
 async fn get_team(app: &TestApp, session: &str, team: &str) -> Result<TestResponse> {
-    app.send(Method::GET, &format!("/api/v1/teams/{team}"), Some(session), None)
+    app.send(Method::GET, &app.team_url(&team).await?, Some(session), None)
         .await
 }
 
 async fn add_member(app: &TestApp, session: &str, team: &str, user: &str) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/teams/{team}/members"),
+        &format!("{}/members", app.team_url(&team).await?),
         Some(session),
         Some(json!({ "user_id": user })),
     )
@@ -49,7 +49,7 @@ async fn add_member(app: &TestApp, session: &str, team: &str, user: &str) -> Res
 async fn set_role(app: &TestApp, session: &str, team: &str, user: &str, role: &str) -> Result<TestResponse> {
     app.send(
         Method::PATCH,
-        &format!("/api/v1/teams/{team}/members/{user}"),
+        &app.member_url(&team, &user).await?,
         Some(session),
         Some(json!({ "role": role })),
     )
@@ -59,7 +59,7 @@ async fn set_role(app: &TestApp, session: &str, team: &str, user: &str, role: &s
 async fn leave(app: &TestApp, session: &str, team: &str) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/teams/{team}/leave"),
+        &format!("{}/leave", app.team_url(&team).await?),
         Some(session),
         None,
     )
@@ -93,7 +93,7 @@ async fn a_new_team_has_its_creator_as_admin_and_no_heaps() -> Result<()> {
     expect_that!(team["members"][0]["allowed_actions"], eq(&json!([])));
     expect_that!(
         team["allowed_actions"],
-        eq(&json!(["rename", "add_member", "create_heap"]))
+        eq(&json!(["rename", "change_slug", "add_member", "create_heap"]))
     );
     let names: Vec<&str> = me.body["teams"]
         .as_array()
@@ -108,17 +108,21 @@ async fn a_new_team_has_its_creator_as_admin_and_no_heaps() -> Result<()> {
 async fn an_added_member_sees_the_team_and_its_heaps() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (admin, heap) = app.register_as("ada@example.test", "Ada").await?;
+    let (admin, _) = app.register_as("ada@example.test", "Ada").await?;
     let (grace, _) = app.register_as("grace@example.test", "Grace").await?;
-    let me = app.send(Method::GET, "/api/v1/me", Some(&admin), None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
+    let (team, heap) = app.shared_heap(&admin).await?;
     let grace_id = user_id(&app, &grace).await?;
 
     // Act
     let added = add_member(&app, &admin, &team, &grace_id).await?;
     let again = add_member(&app, &admin, &team, &grace_id).await?;
     let list = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/items"), Some(&grace), None)
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&grace),
+            None,
+        )
         .await?;
     let as_grace = get_team(&app, &grace, &team).await?;
 
@@ -177,12 +181,7 @@ async fn the_last_admin_cannot_leave_be_demoted_or_removed_until_another_is_prom
     let left = leave(&app, &ada, &team).await?;
     let demoted = set_role(&app, &ada, &team, &ada_id, "member").await?;
     let removed = app
-        .send(
-            Method::DELETE,
-            &format!("/api/v1/teams/{team}/members/{ada_id}"),
-            Some(&ada),
-            None,
-        )
+        .send(Method::DELETE, &app.member_url(&team, &ada_id).await?, Some(&ada), None)
         .await?;
     let promoted = set_role(&app, &ada, &team, &grace_id, "admin").await?;
     let left_after = leave(&app, &ada, &team).await?;
@@ -197,14 +196,14 @@ async fn the_last_admin_cannot_leave_be_demoted_or_removed_until_another_is_prom
     expect_that!(member(&promoted.body, &grace_id)["role"], eq(&json!("admin")));
     expect_that!(
         promoted.body["allowed_actions"],
-        eq(&json!(["rename", "add_member", "create_heap", "leave"]))
+        eq(&json!(["rename", "change_slug", "add_member", "create_heap", "leave"]))
     );
     expect_that!(left_after.status, eq(StatusCode::NO_CONTENT));
     expect_that!(get_team(&app, &ada, &team).await?.status, eq(StatusCode::NOT_FOUND));
     expect_that!(as_grace.body["members"].as_array().map(Vec::len), some(eq(1)));
     expect_that!(
         as_grace.body["allowed_actions"],
-        eq(&json!(["rename", "add_member", "create_heap"]))
+        eq(&json!(["rename", "change_slug", "add_member", "create_heap"]))
     );
     let actions: Vec<String> = app.audit_entries(&ada_id).await?.into_iter().map(|(a, _)| a).collect();
     expect_that!(actions.last(), some(eq("member_left")));
@@ -216,19 +215,23 @@ async fn the_last_admin_cannot_leave_be_demoted_or_removed_until_another_is_prom
 async fn a_removed_member_loses_access_to_the_heaps() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (ada, heap) = app.register("ada@example.test").await?;
+    let (ada, _) = app.register("ada@example.test").await?;
     let (grace, _) = app.register("grace@example.test").await?;
-    let me = app.send(Method::GET, "/api/v1/me", Some(&ada), None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
+    let (team, heap) = app.shared_heap(&ada).await?;
     let grace_id = user_id(&app, &grace).await?;
     add_member(&app, &ada, &team, &grace_id).await?;
-    let path = format!("/api/v1/teams/{team}/members/{grace_id}");
+    let path = app.member_url(&team, &grace_id).await?;
 
     // Act
     let removed = app.send(Method::DELETE, &path, Some(&ada), None).await?;
     let again = app.send(Method::DELETE, &path, Some(&ada), None).await?;
     let list = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/items"), Some(&grace), None)
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&grace),
+            None,
+        )
         .await?;
 
     // Assert
@@ -250,16 +253,20 @@ async fn a_removed_member_loses_access_to_the_heaps() -> Result<()> {
 async fn a_member_can_leave() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (ada, heap) = app.register("ada@example.test").await?;
+    let (ada, _) = app.register("ada@example.test").await?;
     let (grace, _) = app.register("grace@example.test").await?;
-    let me = app.send(Method::GET, "/api/v1/me", Some(&ada), None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
+    let (team, heap) = app.shared_heap(&ada).await?;
     add_member(&app, &ada, &team, &user_id(&app, &grace).await?).await?;
 
     // Act
     let left = leave(&app, &grace, &team).await?;
     let list = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/items"), Some(&grace), None)
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&grace),
+            None,
+        )
         .await?;
     let again = leave(&app, &grace, &team).await?;
 
@@ -300,7 +307,7 @@ async fn renaming_a_team_needs_its_current_version() -> Result<()> {
     let (ada, _) = app.register("ada@example.test").await?;
     let team = create_team(&app, &ada, "Platform").await?;
     let id = team["id"].as_str().context("no id")?.to_owned();
-    let path = format!("/api/v1/teams/{id}");
+    let path = app.team_url(&id).await?;
 
     // Act
     let renamed = app
@@ -354,6 +361,7 @@ async fn admins_find_users_by_the_start_of_a_name_or_of_an_email() -> Result<()>
     // Arrange
     let app = TestApp::start().await?;
     let (ada, _) = app.register_as("ada@example.test", "Ada Lovelace").await?;
+    app.shared_heap(&ada).await?;
     app.register_as("grace@navy.test", "Grace Hopper").await?;
     app.register_as("percent@example.test", "100% Sure").await?;
     app.register_as("under@example.test", "A_bc Two").await?;
@@ -374,7 +382,7 @@ async fn admins_find_users_by_the_start_of_a_name_or_of_an_email() -> Result<()>
     let percent = find("100%25").await?;
     let only_percents = find("%25%25%25").await?;
     let underscore = find("a_b").await?;
-    let short = find("ad").await?;
+    let short = find("a-").await?;
 
     // Assert
     let grace = || ("Grace Hopper".to_owned(), json!(null));
@@ -403,13 +411,14 @@ async fn admins_find_users_by_the_start_of_a_name_or_of_an_email() -> Result<()>
 
 #[gtest]
 #[tokio::test]
-async fn a_user_who_is_no_teams_admin_cannot_look_users_up() -> Result<()> {
-    // Arrange: Grace hands her personal team to Ada and steps down, so she administers nothing.
+async fn a_user_who_is_no_shared_teams_admin_cannot_look_users_up() -> Result<()> {
+    // Arrange: Grace makes a team, hands it to Ada and steps down, so she administers only her personal team, which
+    // takes no members.
     let app = TestApp::start().await?;
     let (ada, _) = app.register("ada@example.test").await?;
     let (grace, _) = app.register("grace@example.test").await?;
-    let me = app.send(Method::GET, "/api/v1/me", Some(&grace), None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
+    let team = create_team(&app, &grace, "Platform").await?;
+    let team = team["id"].as_str().context("no id")?.to_owned();
     let (ada_id, grace_id) = (user_id(&app, &ada).await?, user_id(&app, &grace).await?);
     add_member(&app, &grace, &team, &ada_id).await?;
     set_role(&app, &grace, &team, &ada_id, "admin").await?;
@@ -488,12 +497,7 @@ async fn an_admin_removing_themselves_is_recorded_as_leaving() -> Result<()> {
 
     // Act
     let removed = app
-        .send(
-            Method::DELETE,
-            &format!("/api/v1/teams/{team}/members/{ada_id}"),
-            Some(&ada),
-            None,
-        )
+        .send(Method::DELETE, &app.member_url(&team, &ada_id).await?, Some(&ada), None)
         .await?;
 
     // Assert
@@ -524,7 +528,7 @@ async fn members_and_demoted_admins_cannot_manage_the_team() -> Result<()> {
     let removed_self = app
         .send(
             Method::DELETE,
-            &format!("/api/v1/teams/{team}/members/{grace_id}"),
+            &app.member_url(&team, &grace_id).await?,
             Some(&grace),
             None,
         )

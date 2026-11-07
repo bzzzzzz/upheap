@@ -13,7 +13,7 @@ use axum::http::StatusCode;
 use domain::parameter::{OptionLabel, Parameter, ParameterName, ParameterOption, ParameterPatch, Weight};
 use domain::permission::{ParameterAction, ParameterListAction};
 use domain::tag::parse_tag_set;
-use domain::{HeapId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
+use domain::{OptionId, ParameterId, TagId, Timestamp, ValidationError};
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
 use service::parameters::{ParameterDraft, ParameterEntry};
@@ -24,7 +24,8 @@ use uuid::Uuid;
 
 use crate::dto::{HeapSummaryDto, IfMatchHeader};
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, CurrentUser, IfMatch};
+use crate::extract::{ApiJson, ApiPath, IfMatch};
+use crate::paths::{HeapParams, HeapPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -35,6 +36,18 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(add_option, arrange_options))
         .routes(routes!(archive_option))
         .routes(routes!(link_tags))
+}
+
+/// `{parameter_id}` in a path below the heap's.
+#[derive(Deserialize)]
+struct ParameterPathId {
+    parameter_id: Uuid,
+}
+
+/// `{option_id}` in a path below the heap's.
+#[derive(Deserialize)]
+struct OptionPathId {
+    option_id: Uuid,
 }
 
 /// An action the caller can take on a parameter.
@@ -240,17 +253,13 @@ pub(crate) struct LinkTagsDto {
 }
 
 /// The heap's parameters. Any member may list them; only admins change them.
-#[utoipa::path(get, path = "/heaps/{heap_id}/parameters", tag = "parameters", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/parameters", tag = "parameters", security(("session" = [])),
+    params(HeapParams),
     responses((status = 200, body = ParameterListDto), (status = 404, body = Problem)))]
-async fn list_parameters(
-    State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
-) -> Result<Json<ParameterListDto>, ApiError> {
+async fn list_parameters(State(state): State<AppState>, path: HeapPath) -> Result<Json<ParameterListDto>, ApiError> {
     let list = state
         .services
-        .list_parameters(principal, HeapId::from_uuid(heap_id))
+        .list_parameters(path.principal, path.heap.heap_id)
         .await?;
     Ok(Json(ParameterListDto {
         heap: HeapSummaryDto::from(&list.heap),
@@ -261,8 +270,8 @@ async fn list_parameters(
 }
 
 /// Adds a parameter to the heap. Admins only.
-#[utoipa::path(post, path = "/heaps/{heap_id}/parameters", tag = "parameters", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)), request_body = CreateParameterDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters", tag = "parameters", security(("session" = [])),
+    params(HeapParams), request_body = CreateParameterDto,
     responses(
         (status = 201, body = ParameterDto),
         (status = 403, body = Problem),
@@ -272,21 +281,20 @@ async fn list_parameters(
     ))]
 async fn create_parameter(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
+    path: HeapPath,
     ApiJson(body): ApiJson<CreateParameterDto>,
 ) -> Result<(StatusCode, Json<ParameterDto>), ApiError> {
     let draft = to_draft(&body).map_err(|error| in_options(error.into()))?;
     let entry = state
         .services
-        .create_parameter(principal, HeapId::from_uuid(heap_id), draft)
+        .create_parameter(path.principal, path.heap.heap_id, draft)
         .await?;
     Ok((StatusCode::CREATED, Json(ParameterDto::from(entry))))
 }
 
 /// Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`.
-#[utoipa::path(patch, path = "/parameters/{parameter_id}", tag = "parameters", security(("session" = [])),
-    params(("parameter_id" = Uuid, Path), IfMatchHeader), request_body = ParameterPatchDto,
+#[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = ParameterPatchDto,
     responses(
         (status = 200, body = ParameterDto),
         (status = 403, body = Problem),
@@ -297,9 +305,9 @@ async fn create_parameter(
     ))]
 async fn update_parameter(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(parameter_id): ApiPath<Uuid>,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<ParameterPatchDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let patch = ParameterPatch {
@@ -313,15 +321,21 @@ async fn update_parameter(
     };
     let entry = state
         .services
-        .update_parameter(principal, ParameterId::from_uuid(parameter_id), patch, expected)
+        .update_parameter(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            patch,
+            expected,
+        )
         .await?;
     Ok(Json(entry.into()))
 }
 
 /// Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter
 /// succeeds.
-#[utoipa::path(post, path = "/parameters/{parameter_id}/archive", tag = "parameters", security(("session" = [])),
-    params(("parameter_id" = Uuid, Path)),
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/archive", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path)),
     responses(
         (status = 200, body = ParameterDto),
         (status = 403, body = Problem),
@@ -330,19 +344,19 @@ async fn update_parameter(
     ))]
 async fn archive_parameter(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(parameter_id): ApiPath<Uuid>,
+    path: HeapPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let entry = state
         .services
-        .archive_parameter(principal, ParameterId::from_uuid(parameter_id))
+        .archive_parameter(path.principal, path.heap.heap_id, ParameterId::from_uuid(parameter_id))
         .await?;
     Ok(Json(entry.into()))
 }
 
 /// Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`.
-#[utoipa::path(post, path = "/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
-    params(("parameter_id" = Uuid, Path), IfMatchHeader), request_body = AddOptionDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = AddOptionDto,
     responses(
         (status = 200, body = ParameterDto),
         (status = 403, body = Problem),
@@ -353,15 +367,21 @@ async fn archive_parameter(
     ))]
 async fn add_option(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(parameter_id): ApiPath<Uuid>,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<AddOptionDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let label = OptionLabel::parse(&body.label).map_err(ServiceError::from)?;
     let entry = state
         .services
-        .add_option(principal, ParameterId::from_uuid(parameter_id), label, expected)
+        .add_option(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            label,
+            expected,
+        )
         .await
         .map_err(|error| match error {
             ServiceError::Parameter(domain::parameter::ParameterError::OptionLabelTaken { .. }) => {
@@ -374,8 +394,8 @@ async fn add_option(
 
 /// Puts the options in use in a new order, highest priority first, and relabels them. Admins only; send the
 /// parameter's `version` in `If-Match`.
-#[utoipa::path(patch, path = "/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
-    params(("parameter_id" = Uuid, Path), IfMatchHeader), request_body = ArrangeOptionsDto,
+#[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = ArrangeOptionsDto,
     responses(
         (status = 200, body = ParameterDto),
         (status = 403, body = Problem),
@@ -386,9 +406,9 @@ async fn add_option(
     ))]
 async fn arrange_options(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(parameter_id): ApiPath<Uuid>,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<ArrangeOptionsDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let options = body
@@ -404,15 +424,21 @@ async fn arrange_options(
         .map_err(|error| in_options(error.into()))?;
     let entry = state
         .services
-        .arrange_options(principal, ParameterId::from_uuid(parameter_id), options, expected)
+        .arrange_options(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            options,
+            expected,
+        )
         .await?;
     Ok(Json(entry.into()))
 }
 
 /// Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep
 /// it. Admins only. Archiving an archived option succeeds.
-#[utoipa::path(post, path = "/options/{option_id}/archive", tag = "parameters", security(("session" = [])),
-    params(("option_id" = Uuid, Path)), request_body = ArchiveOptionDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/options/{option_id}/archive", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("option_id" = Uuid, Path)), request_body = ArchiveOptionDto,
     responses(
         (status = 200, description = "The option's parameter", body = ParameterDto),
         (status = 403, body = Problem),
@@ -422,14 +448,15 @@ async fn arrange_options(
     ))]
 async fn archive_option(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(option_id): ApiPath<Uuid>,
+    path: HeapPath,
+    ApiPath(OptionPathId { option_id }): ApiPath<OptionPathId>,
     ApiJson(body): ApiJson<ArchiveOptionDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let entry = state
         .services
         .archive_option(
-            principal,
+            path.principal,
+            path.heap.heap_id,
             OptionId::from_uuid(option_id),
             body.replacement_option_id.map(OptionId::from_uuid),
         )
@@ -438,8 +465,8 @@ async fn archive_option(
 }
 
 /// Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`.
-#[utoipa::path(put, path = "/parameters/{parameter_id}/tags", tag = "parameters", security(("session" = [])),
-    params(("parameter_id" = Uuid, Path), IfMatchHeader), request_body = LinkTagsDto,
+#[utoipa::path(put, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = LinkTagsDto,
     responses(
         (status = 200, body = ParameterDto),
         (status = 403, body = Problem),
@@ -450,15 +477,21 @@ async fn archive_option(
     ))]
 async fn link_tags(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(parameter_id): ApiPath<Uuid>,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<LinkTagsDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
     let tags = to_tag_set(&body.tag_ids).map_err(ServiceError::from)?;
     let entry = state
         .services
-        .link_parameter_tags(principal, ParameterId::from_uuid(parameter_id), tags, expected)
+        .link_parameter_tags(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            tags,
+            expected,
+        )
         .await?;
     Ok(Json(entry.into()))
 }

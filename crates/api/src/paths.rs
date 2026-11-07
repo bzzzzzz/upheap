@@ -1,0 +1,155 @@
+//! The handles in a path (`/teams/{team}/heaps/{heap}/items/{item}`), found for the caller (design/readable-ids.md).
+//!
+//! Each extractor authenticates first, so a caller who isn't signed in gets `401` before anything else. A handle
+//! that isn't well formed names nothing, so it is `404` like one nobody has.
+
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+#[cfg(feature = "accounts")]
+use domain::UserId;
+use domain::handle::{Handle, ItemKey};
+use domain::validation::Field;
+use domain::{ItemId, TeamId};
+use serde::Deserialize;
+use service::handles::HeapRef;
+use service::{Principal, ServiceError};
+use utoipa::IntoParams;
+
+use crate::extract::{ApiPath, CurrentUser};
+use crate::{ApiError, AppState};
+
+/// `{team}`, for documenting paths as well as reading them.
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub(crate) struct TeamParams {
+    /// The team's slug.
+    #[param(example = "my-team")]
+    team: String,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub(crate) struct HeapParams {
+    /// The team's slug.
+    #[param(example = "my-team")]
+    team: String,
+    /// The heap's slug, unique within the team.
+    #[param(example = "backlog")]
+    heap: String,
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub(crate) struct ItemParams {
+    /// The team's slug.
+    #[param(example = "my-team")]
+    team: String,
+    /// The heap's slug, unique within the team.
+    #[param(example = "backlog")]
+    heap: String,
+    /// The item's key, unique within the heap.
+    #[param(example = "k3x9a")]
+    item: String,
+}
+
+#[cfg(feature = "accounts")]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub(crate) struct MemberParams {
+    /// The team's slug.
+    #[param(example = "my-team")]
+    team: String,
+    /// The user's username, which needn't be a member's.
+    #[param(example = "eugene")]
+    username: String,
+}
+
+/// `{team}`: a team the caller belongs to.
+pub(crate) struct TeamPath {
+    pub principal: Principal,
+    pub team_id: TeamId,
+}
+
+impl FromRequestParts<AppState> for TeamPath {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+        let ApiPath(params) = ApiPath::<TeamParams>::from_request_parts(parts, state).await?;
+        let team_id = state.services.resolve_team(principal, &handle(&params.team)?).await?;
+        Ok(Self { principal, team_id })
+    }
+}
+
+/// `{team}/heaps/{heap}`: a heap of a team the caller belongs to.
+pub(crate) struct HeapPath {
+    pub principal: Principal,
+    pub heap: HeapRef,
+}
+
+impl FromRequestParts<AppState> for HeapPath {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+        let ApiPath(params) = ApiPath::<HeapParams>::from_request_parts(parts, state).await?;
+        let heap = state
+            .services
+            .resolve_heap(principal, &handle(&params.team)?, &handle(&params.heap)?)
+            .await?;
+        Ok(Self { principal, heap })
+    }
+}
+
+/// `{team}/heaps/{heap}/items/{item}`: an item, by its key, of a heap of a team the caller belongs to.
+pub(crate) struct ItemPath {
+    pub principal: Principal,
+    pub item_id: ItemId,
+}
+
+impl FromRequestParts<AppState> for ItemPath {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+        let ApiPath(params) = ApiPath::<ItemParams>::from_request_parts(parts, state).await?;
+        let key = ItemKey::parse(&params.item).map_err(|_| ServiceError::NotFound)?;
+        let item_id = state
+            .services
+            .resolve_item(principal, &handle(&params.team)?, &handle(&params.heap)?, key)
+            .await?;
+        Ok(Self { principal, item_id })
+    }
+}
+
+/// `{team}/members/{username}`: a team the caller belongs to, and a user, who may or may not be a member. Only team
+/// management names members, and it needs accounts.
+#[cfg(feature = "accounts")]
+pub(crate) struct MemberPath {
+    pub principal: Principal,
+    pub team_id: TeamId,
+    pub user_id: UserId,
+}
+
+#[cfg(feature = "accounts")]
+impl FromRequestParts<AppState> for MemberPath {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+        let ApiPath(params) = ApiPath::<MemberParams>::from_request_parts(parts, state).await?;
+        let (team_id, user_id) = state
+            .services
+            .resolve_member(principal, &handle(&params.team)?, &handle(&params.username)?)
+            .await?;
+        Ok(Self {
+            principal,
+            team_id,
+            user_id,
+        })
+    }
+}
+
+fn handle(raw: &str) -> Result<Handle, ServiceError> {
+    Handle::parse(raw, Field::Slug).map_err(|_| ServiceError::NotFound)
+}

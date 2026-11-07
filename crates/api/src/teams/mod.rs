@@ -7,9 +7,10 @@ mod manage;
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use domain::TeamId;
+use domain::handle::Handle;
 use domain::permission::{MemberAction, TeamAction};
 use domain::text::Name;
+use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
 use service::teams::{MemberView, TeamDetail};
@@ -20,8 +21,9 @@ use uuid::Uuid;
 
 use crate::dto::RoleDto;
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, CurrentUser};
+use crate::extract::ApiJson;
 use crate::heaps::HeapDto;
+use crate::paths::{TeamParams, TeamPath};
 use crate::{ApiError, AppState, Authentication};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -41,6 +43,9 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 #[schema(as = TeamAction)]
 pub(crate) enum TeamActionDto {
     Rename,
+    /// Not offered on a personal team, whose slug is its owner's username.
+    ChangeSlug,
+    /// Not offered on a personal team.
     AddMember,
     CreateHeap,
     Leave,
@@ -50,6 +55,7 @@ impl From<TeamAction> for TeamActionDto {
     fn from(action: TeamAction) -> Self {
         match action {
             TeamAction::Rename => Self::Rename,
+            TeamAction::ChangeSlug => Self::ChangeSlug,
             TeamAction::AddMember => Self::AddMember,
             TeamAction::CreateHeap => Self::CreateHeap,
             TeamAction::Leave => Self::Leave,
@@ -81,6 +87,8 @@ impl From<MemberAction> for MemberActionDto {
 #[schema(as = TeamMember)]
 pub(crate) struct MemberDto {
     pub user_id: Uuid,
+    /// The member's path is `/teams/{team}/members/{username}`.
+    pub username: String,
     pub display_name: String,
     pub email: String,
     pub role: RoleDto,
@@ -93,6 +101,7 @@ impl From<MemberView> for MemberDto {
     fn from(view: MemberView) -> Self {
         Self {
             user_id: *view.user.id.as_uuid(),
+            username: view.user.username.to_string(),
             display_name: view.user.display_name.as_str().to_owned(),
             email: view.user.email.as_str().to_owned(),
             role: view.membership.role.into(),
@@ -107,7 +116,11 @@ impl From<MemberView> for MemberDto {
 #[schema(as = Team)]
 pub(crate) struct TeamDto {
     pub id: Uuid,
+    /// Unique among teams and usernames; the team's path is `/teams/{slug}`.
+    pub slug: String,
     pub name: String,
+    /// Whether this is the caller's personal team: theirs alone, with their username as its slug.
+    pub personal: bool,
     /// Send back in `If-Match` when renaming.
     pub version: u32,
     /// The caller's role.
@@ -133,7 +146,9 @@ impl TeamDto {
         }
         Self {
             id: *detail.team.id.as_uuid(),
+            slug: detail.team.slug.to_string(),
             name: detail.team.name.as_str().to_owned(),
+            personal: detail.team.is_personal(),
             version: detail.team.version.get(),
             role: detail.role.into(),
             members: detail.members.into_iter().map(MemberDto::from).collect(),
@@ -143,51 +158,58 @@ impl TeamDto {
     }
 }
 
-/// A team or heap name.
+/// A new team or heap.
 #[derive(Deserialize, ToSchema)]
-#[schema(as = NameRequest)]
-pub(crate) struct NameDto {
+#[schema(as = CreateNamedRequest)]
+pub(crate) struct CreateNamedDto {
     /// 1 to 100 characters.
     pub name: String,
+    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
+    /// one made from the name: "My Team" gets `my-team`, or `my-team-2` if that is taken.
+    pub slug: Option<String>,
 }
 
-impl NameDto {
+impl CreateNamedDto {
     pub(crate) fn to_name(&self) -> Result<Name, ServiceError> {
         Ok(Name::parse(&self.name)?)
+    }
+
+    pub(crate) fn to_slug(&self) -> Result<Option<Handle>, ServiceError> {
+        Ok(self
+            .slug
+            .as_deref()
+            .map(|raw| Handle::parse(raw, Field::Slug))
+            .transpose()?)
     }
 }
 
 /// The team with its members and heaps.
-#[utoipa::path(get, path = "/teams/{team_id}", tag = "teams", security(("session" = [])),
-    params(("team_id" = Uuid, Path)),
+#[utoipa::path(get, path = "/teams/{team}", tag = "teams", security(("session" = [])),
+    params(TeamParams),
     responses((status = 200, body = TeamDto), (status = 404, body = Problem)))]
-async fn get_team(
-    State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(team_id): ApiPath<Uuid>,
-) -> Result<Json<TeamDto>, ApiError> {
-    let detail = state.services.load_team(principal, TeamId::from_uuid(team_id)).await?;
+async fn get_team(State(state): State<AppState>, path: TeamPath) -> Result<Json<TeamDto>, ApiError> {
+    let detail = state.services.load_team(path.principal, path.team_id).await?;
     Ok(Json(TeamDto::new(detail, &state.authentication)))
 }
 
 /// Adds a heap to the team. Admins only.
-#[utoipa::path(post, path = "/teams/{team_id}/heaps", tag = "heaps", security(("session" = [])),
-    params(("team_id" = Uuid, Path)), request_body = NameDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps", tag = "heaps", security(("session" = [])),
+    params(TeamParams), request_body = CreateNamedDto,
     responses(
         (status = 201, body = HeapDto),
         (status = 403, body = Problem),
         (status = 404, body = Problem),
-        (status = 422, body = Problem),
+        (status = 409, description = "`handle_taken` (`field` `slug`)", body = Problem),
+        (status = 422, description = "Invalid fields, or `invalid_handle` with a `hint`", body = Problem),
     ))]
 async fn create_heap(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(team_id): ApiPath<Uuid>,
-    ApiJson(body): ApiJson<NameDto>,
+    path: TeamPath,
+    ApiJson(body): ApiJson<CreateNamedDto>,
 ) -> Result<(StatusCode, Json<HeapDto>), ApiError> {
     let view = state
         .services
-        .create_heap(principal, TeamId::from_uuid(team_id), body.to_name()?)
+        .create_heap(path.principal, path.team_id, body.to_name()?, body.to_slug()?)
         .await?;
     Ok((StatusCode::CREATED, Json(view.into())))
 }

@@ -34,33 +34,43 @@ const field = (value: unknown, ...path: (string | number)[]): unknown =>
 const me = await send("GET", "/api/v1/me");
 assert.equal(me.status, 200, "GET /me");
 assert.equal(field(me.body, "user", "display_name"), "Me", "the local user");
-const heap = field(me.body, "teams", 0, "heaps", 0, "id");
-assert.equal(typeof heap, "string", "the local user's first heap");
+assert.equal(field(me.body, "user", "username"), "me", "the local user's username");
+assert.equal(field(me.body, "teams", 0, "slug"), "me", "the local user's team");
+assert.equal(field(me.body, "teams", 0, "heaps", 0, "slug"), "personal", "the local user's first heap");
+const heap = "/api/v1/teams/me/heaps/personal";
 assert.deepEqual(field(me.body, "allowed_actions"), [], "no signing out or new teams");
-const team = await send("GET", `/api/v1/teams/${String(field(me.body, "teams", 0, "id"))}`);
+const team = await send("GET", "/api/v1/teams/me");
 assert.deepEqual(field(team.body, "allowed_actions"), ["create_heap"], "the team offers only new heaps");
 
 for (const [title, effort, impact] of [
   ["Big and dull", "xl", "s"],
   ["Small and valuable", "s", "xl"],
 ]) {
-  const created = await send("POST", `/api/v1/heaps/${heap}/items`, { title, effort, impact });
+  const created = await send("POST", `${heap}/items`, { title, effort, impact });
   assert.equal(created.status, 201, `POST an item: ${JSON.stringify(created.body)}`);
 }
-const list = await send("GET", `/api/v1/heaps/${heap}/items`, undefined, ["time-zone", "Europe/Berlin"]);
+const list = await send("GET", `${heap}/items`, undefined, ["time-zone", "Europe/Berlin"]);
 assert.equal(list.status, 200, "GET the ranked list");
 assert.equal(field(list.body, "ranked", 0, "item", "title"), "Small and valuable", "items are ranked");
 
-const tag = await send("POST", `/api/v1/heaps/${heap}/tags`, { name: "home" });
+const tag = await send("POST", `${heap}/tags`, { name: "home" });
 assert.equal(tag.status, 201, "POST a tag");
-const again = await send("POST", `/api/v1/heaps/${heap}/tags`, { name: "home" });
+const again = await send("POST", `${heap}/tags`, { name: "home" });
 assert.equal(again.status, 409, "a duplicate tag");
 assert.equal(field(again.body, "code"), "tag_name_taken");
 
-const missing = await send("GET", "/api/v1/items/00000000-0000-0000-0000-000000000000");
+const key = field(list.body, "ranked", 0, "item", "key");
+const item = await send("GET", `${heap}/items/${String(key)}`);
+assert.equal(field(item.body, "title"), "Small and valuable", "an item by its key");
+const missing = await send("GET", `${heap}/items/zzzz9`);
 assert.equal(missing.status, 404, "an unknown item");
 assert.equal(field(missing.body, "code"), "not_found");
-const register = await send("POST", "/api/v1/auth/register", { email: "a@b.c", display_name: "A", password: "x" });
+const register = await send("POST", "/api/v1/auth/register", {
+  email: "a@b.c",
+  username: "ab",
+  display_name: "A",
+  password: "x",
+});
 assert.equal(register.status, 404, "no registration without accounts");
 
 const reopened = await Backend.open();

@@ -1,6 +1,6 @@
 // The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
-import { addItem, expect, goTo, test, type AppPage } from "./fixtures";
+import { addItem, expect, goTo, HEAP_URL, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
 const pages: AppPage[] = ["Closed", "Activity", "Tags", "Parameters", "Open", "Account"];
@@ -47,7 +47,7 @@ test("the heap switcher opens another heap", async ({ page }) => {
   const heaps = page.getByRole("menu");
   await expect(heaps.getByRole("menuitem")).not.toHaveCount(0);
   await heaps.getByRole("menuitem").first().click();
-  await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
+  await expect(page).toHaveURL(HEAP_URL);
   await expect(heaps).toHaveCount(0);
 });
 
@@ -65,7 +65,7 @@ test("More on a phone opens above the tabs, so releasing on it picks nothing", a
   await page.mouse.up();
 
   await expect(menu).toBeVisible();
-  await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
+  await expect(page).toHaveURL(HEAP_URL);
   const sheet = await menu.boundingBox();
   expect(sheet && sheet.y + sheet.height).toBeLessThanOrEqual(box.y);
 });

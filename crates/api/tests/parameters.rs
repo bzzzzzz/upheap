@@ -24,7 +24,7 @@ async fn new_parameter(app: &TestApp, session: &str, heap: &str, name: &str, opt
 async fn create_parameter(app: &TestApp, session: &str, heap: &str, body: Value) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/heaps/{heap}/parameters"),
+        &format!("{}/parameters", app.heap_url(heap).await?),
         Some(session),
         Some(body),
     )
@@ -60,7 +60,7 @@ fn labels(parameter: &Value) -> Vec<String> {
 async fn list(app: &TestApp, session: &str, heap: &str, query: &str) -> Result<TestResponse> {
     app.send(
         Method::GET,
-        &format!("/api/v1/heaps/{heap}/items?{query}"),
+        &format!("{}/items?{query}", app.heap_url(heap).await?),
         Some(session),
         None,
     )
@@ -84,20 +84,26 @@ fn value_of<'a>(item: &'a Value, name: &str) -> Option<&'a str> {
     item["parameters"].as_array()?.iter().find(|p| p["name"] == name)?["option"]["label"].as_str()
 }
 
-async fn archive_option(app: &TestApp, session: &str, option: &str, replacement: Option<&str>) -> Result<TestResponse> {
+async fn archive_option(
+    app: &TestApp,
+    session: &str,
+    heap: &str,
+    option: &str,
+    replacement: Option<&str>,
+) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/options/{option}/archive"),
+        &format!("{}/options/{option}/archive", app.heap_url(heap).await?),
         Some(session),
         Some(json!({ "replacement_option_id": replacement })),
     )
     .await
 }
 
-async fn archive_parameter(app: &TestApp, session: &str, parameter: &str) -> Result<TestResponse> {
+async fn archive_parameter(app: &TestApp, session: &str, heap: &str, parameter: &str) -> Result<TestResponse> {
     app.send(
         Method::POST,
-        &format!("/api/v1/parameters/{parameter}/archive"),
+        &format!("{}/parameters/{parameter}/archive", app.heap_url(heap).await?),
         Some(session),
         None,
     )
@@ -125,7 +131,7 @@ async fn items_show_every_parameter_in_use_set_or_unset() -> Result<()> {
     let parameters = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/parameters"),
+            &format!("{}/parameters", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -155,10 +161,9 @@ async fn items_show_every_parameter_in_use_set_or_unset() -> Result<()> {
 async fn members_set_values_but_only_admins_change_parameters() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let (admin, heap) = app.register("ada@example.test").await?;
+    let (admin, _) = app.register("ada@example.test").await?;
     let (member, _) = app.register("bob@example.test").await?;
-    let me = app.send(Method::GET, "/api/v1/me", Some(&admin), None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
+    let (team, heap) = app.shared_heap(&admin).await?;
     let member_me = app.send(Method::GET, "/api/v1/me", Some(&member), None).await?;
     let member_id = member_me.body["user"]["id"].as_str().context("no user")?.to_owned();
     app.add_member(&team, &member_id, Role::Member).await?;
@@ -175,7 +180,7 @@ async fn members_set_values_but_only_admins_change_parameters() -> Result<()> {
     let listed = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/parameters"),
+            &format!("{}/parameters", app.heap_url(&heap).await?),
             Some(&member),
             None,
         )
@@ -206,7 +211,7 @@ async fn a_patch_sets_and_clears_values_and_refuses_foreign_ones() -> Result<()>
             json!({ "title": "Fix login", "parameter_values": { id(&customer): option_id(&customer, "Free") } }),
         )
         .await?;
-    let path = format!("/api/v1/items/{}", id(&item));
+    let path = app.item_url(id(&item)).await?;
 
     // Act
     let edited = app
@@ -321,7 +326,7 @@ async fn names_and_labels_are_unique_ignoring_case() -> Result<()> {
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
     let customer = new_parameter(&app, &session, &heap, "Customer", &["Enterprise"]).await?;
-    let options_path = format!("/api/v1/parameters/{}/options", id(&customer));
+    let options_path = format!("{}/parameters/{}/options", app.heap_url(&heap).await?, id(&customer));
 
     // Act
     let same_name = create_parameter(&app, &session, &heap, json!({ "name": " customer " })).await?;
@@ -341,7 +346,7 @@ async fn names_and_labels_are_unique_ignoring_case() -> Result<()> {
             &[common::CSRF, ("if-match", "1")],
         )
         .await?;
-    let archived = archive_parameter(&app, &session, &id(&customer)).await?;
+    let archived = archive_parameter(&app, &session, &heap, &id(&customer)).await?;
     let after_archiving = create_parameter(&app, &session, &heap, json!({ "name": "Customer" })).await?;
 
     // Assert
@@ -363,7 +368,7 @@ async fn options_are_added_last_and_rearranged_as_a_whole() -> Result<()> {
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
     let area = new_parameter(&app, &session, &heap, "Area", &["Infra", "Web"]).await?;
-    let path = format!("/api/v1/parameters/{}/options", id(&area));
+    let path = format!("{}/parameters/{}/options", app.heap_url(&heap).await?, id(&area));
 
     // Act
     let added = app
@@ -428,28 +433,23 @@ async fn archiving_an_option_switches_open_items_to_its_replacement() -> Result<
     let closed = app
         .new_item(&session, &heap, json!({ "title": "Closed", "parameter_values": value }))
         .await?;
-    let closed_path = format!("/api/v1/items/{}", id(&closed));
+    let closed_path = app.item_url(id(&closed)).await?;
     app.patch(&session, &closed_path, &closed["version"], json!({ "state": "done" }))
         .await?;
 
     // Act
-    let without_replacement = archive_option(&app, &session, &pro, None).await?;
-    let onto_itself = archive_option(&app, &session, &pro, Some(&pro)).await?;
-    let archived = archive_option(&app, &session, &pro, Some(&free)).await?;
-    let again = archive_option(&app, &session, &pro, None).await?;
+    let without_replacement = archive_option(&app, &session, &heap, &pro, None).await?;
+    let onto_itself = archive_option(&app, &session, &heap, &pro, Some(&pro)).await?;
+    let archived = archive_option(&app, &session, &heap, &pro, Some(&free)).await?;
+    let again = archive_option(&app, &session, &heap, &pro, None).await?;
     let open_after = app
-        .send(
-            Method::GET,
-            &format!("/api/v1/items/{}", id(&open)),
-            Some(&session),
-            None,
-        )
+        .send(Method::GET, &app.item_url(id(&open)).await?, Some(&session), None)
         .await?;
     let closed_after = app.send(Method::GET, &closed_path, Some(&session), None).await?;
     let stale_edit = app
         .patch(
             &session,
-            &format!("/api/v1/items/{}", id(&open)),
+            &app.item_url(id(&open)).await?,
             &open["version"],
             json!({ "title": "Renamed" }),
         )
@@ -513,26 +513,26 @@ async fn a_parameter_is_archived_only_once_no_open_item_uses_it() -> Result<()> 
         .await?;
     app.patch(
         &session,
-        &format!("/api/v1/items/{}", id(&closed)),
+        &app.item_url(id(&closed)).await?,
         &closed["version"],
         json!({ "state": "wont_do" }),
     )
     .await?;
 
     // Act
-    let in_use = archive_parameter(&app, &session, &id(&customer)).await?;
+    let in_use = archive_parameter(&app, &session, &heap, &id(&customer)).await?;
     app.patch(
         &session,
-        &format!("/api/v1/items/{}", id(&open)),
+        &app.item_url(id(&open)).await?,
         &open["version"],
         json!({ "parameter_values": { id(&customer): null } }),
     )
     .await?;
-    let archived = archive_parameter(&app, &session, &id(&customer)).await?;
+    let archived = archive_parameter(&app, &session, &heap, &id(&customer)).await?;
     let rename = app
         .patch(
             &session,
-            &format!("/api/v1/parameters/{}", id(&customer)),
+            &format!("{}/parameters/{}", app.heap_url(&heap).await?, id(&customer)),
             &archived.body["version"],
             json!({ "name": "Client" }),
         )
@@ -540,7 +540,7 @@ async fn a_parameter_is_archived_only_once_no_open_item_uses_it() -> Result<()> 
     let listed = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/parameters"),
+            &format!("{}/parameters", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -548,18 +548,13 @@ async fn a_parameter_is_archived_only_once_no_open_item_uses_it() -> Result<()> 
     let closed_page = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items/closed"),
+            &format!("{}/items/closed", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
         .await?;
     let open_after = app
-        .send(
-            Method::GET,
-            &format!("/api/v1/items/{}", id(&open)),
-            Some(&session),
-            None,
-        )
+        .send(Method::GET, &app.item_url(id(&open)).await?, Some(&session), None)
         .await?;
 
     // Assert
@@ -596,12 +591,12 @@ async fn a_reopened_item_takes_up_replacements_and_drops_archived_parameters() -
             } }),
         )
         .await?;
-    let path = format!("/api/v1/items/{}", id(&item));
+    let path = app.item_url(id(&item)).await?;
     let closed = app
         .patch(&session, &path, &item["version"], json!({ "state": "done" }))
         .await?;
-    archive_option(&app, &session, &pro, Some(&free)).await?;
-    archive_parameter(&app, &session, &id(&area)).await?;
+    archive_option(&app, &session, &heap, &pro, Some(&free)).await?;
+    archive_parameter(&app, &session, &heap, &id(&area)).await?;
 
     // Act
     let unknown_while_closed = app
@@ -641,7 +636,7 @@ async fn parameters_are_linked_to_tags_of_their_heap() -> Result<()> {
     let customer = create_parameter(&app, &session, &heap, json!({ "name": "Customer", "tag_ids": [ops] }))
         .await?
         .body;
-    let path = format!("/api/v1/parameters/{}/tags", id(&customer));
+    let path = format!("{}/parameters/{}/tags", app.heap_url(&heap).await?, id(&customer));
 
     // Act
     let foreign_link = app
@@ -771,7 +766,7 @@ async fn a_saved_view_keeps_filtering_after_its_option_is_archived() -> Result<(
     let saved = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/views"),
+            &format!("{}/views", app.heap_url(&heap).await?),
             Some(&session),
             Some(json!({ "name": "Paying", "view": {
                 "param": [pro], "sort": "parameter", "sort_parameter": id(&customer),
@@ -781,14 +776,14 @@ async fn a_saved_view_keeps_filtering_after_its_option_is_archived() -> Result<(
     let foreign_option = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/views"),
+            &format!("{}/views", app.heap_url(&heap).await?),
             Some(&session),
             Some(json!({ "name": "Wrong", "view": { "param": [id(&customer)] } })),
         )
         .await?;
 
     // Act
-    archive_option(&app, &session, &pro, Some(&free)).await?;
+    archive_option(&app, &session, &heap, &pro, Some(&free)).await?;
     let view = &saved.body["view"];
     let query = format!(
         "param={}&sort={}&sort_parameter={}",

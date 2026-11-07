@@ -104,7 +104,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 ### The item
 
-1. The item route (`/heaps/$heapId/items/$itemId`) shows the list with the item over it or beside it, instead of a
+1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it, instead of a
    separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens with the state (a segmented control on a wide screen; Start, Blocked and Done buttons on a phone), then
    "Why it's #3" from the contributors, then effort and impact as S M L XL buttons, due, tags, parameters, the

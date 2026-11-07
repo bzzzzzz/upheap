@@ -2,6 +2,7 @@ use domain::item::ItemError;
 use domain::parameter::ParameterError;
 use domain::permission::Permission;
 use domain::team::TeamError;
+use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
@@ -24,6 +25,9 @@ pub enum ServiceError {
     TooManySignInAttempts { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
+    /// Another user or team has the username or team slug, or another heap of the team has the heap slug.
+    #[error("this {field} is taken")]
+    HandleTaken { field: Field },
     #[error("registration is disabled on this server")]
     RegistrationClosed,
     #[error("heap {heap_id} is archived")]
@@ -63,10 +67,21 @@ pub enum ServiceError {
     /// A list filter names an option that isn't an option of the heap's parameters.
     #[error("option {option_id} is not an option of this heap's parameters")]
     OptionNotInHeap { option_id: OptionId },
+    /// The system's random source failed, so no item key could be made.
+    #[error("random source failed: {0}")]
+    RandomSource(String),
     #[error("password hashing failed: {0}")]
     PasswordHashing(String),
     #[error("storage failed")]
     Store(#[from] StoreError),
+}
+
+/// A duplicate-key failure on a write that sets a handle means another row has it.
+pub(crate) fn handle_taken_on_duplicate(err: StoreError, field: Field) -> ServiceError {
+    match err {
+        StoreError::Duplicate(_) => ServiceError::HandleTaken { field },
+        other => ServiceError::Store(other),
+    }
 }
 
 /// "1 minute", "12 minutes": a wait in whole minutes, rounded up.

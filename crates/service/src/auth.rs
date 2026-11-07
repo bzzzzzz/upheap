@@ -10,8 +10,10 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::Timestamp;
+use domain::handle::Handle;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
+use domain::validation::Field;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use store::{StoreError, TransactionTrait};
@@ -59,6 +61,8 @@ pub struct SessionGrant {
 /// What a new user enters to register.
 pub struct Registration<'a> {
     pub email: &'a str,
+    /// Becomes the slug of their personal team, and never changes.
+    pub username: &'a str,
     pub display_name: &'a str,
     pub password: &'a str,
 }
@@ -69,22 +73,24 @@ static DUMMY_HASH: LazyLock<Option<String>> = LazyLock::new(|| hash_password("du
 impl Services {
     /// Creates a local account with its personal team and heap, and signs the user in.
     ///
-    /// The team and heap are named after the user, and the user is the team's admin.
+    /// The team is named after the user and takes their username as its slug, and the user is its admin. Its first
+    /// heap is `personal`.
     pub async fn register(&self, registration: Registration<'_>) -> Result<SessionGrant, ServiceError> {
         if !self.settings.allow_registration {
             return Err(ServiceError::RegistrationClosed);
         }
         let email = Email::parse(registration.email)?;
+        let username = Handle::parse(registration.username, Field::Username)?;
         let display_name = DisplayName::parse(registration.display_name)?;
         validate_new_password(registration.password)?;
-        let personal_name = Name::parse(display_name.as_str())?;
+        let team_name = Name::parse(display_name.as_str())?;
         let password = registration.password.to_owned();
         let password_hash = run_blocking(move || hash_password(&password)).await?;
 
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let made = self
-            .insert_personal_user(&txn, email, display_name, personal_name.clone(), personal_name, now)
+            .insert_personal_user(&txn, email, username, display_name, team_name, now)
             .await?;
         store::users::insert_password(&txn, made.user.id, &password_hash, now).await?;
         let grant = self.open_session(&txn, made.user, now).await?;

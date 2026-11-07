@@ -5,6 +5,7 @@
 //! empty database on that server, so tests stay independent and can run in parallel.
 
 use sea_orm::ConnectionTrait;
+use sea_orm_migration::MigratorTrait;
 use uuid::Uuid;
 
 use crate::{DatabaseConnection, StoreError};
@@ -23,6 +24,21 @@ pub async fn fresh_database() -> Result<DatabaseConnection, StoreError> {
         _ => crate::connect("sqlite::memory:").await?,
     };
     crate::run_migrations(&db).await?;
+    Ok(db)
+}
+
+/// Opens a new, empty test database with only the first `migrations` migrations applied, for testing a later
+/// migration on data written before it. [`crate::run_migrations`] applies the rest.
+///
+/// # Errors
+///
+/// As [`fresh_database`].
+pub async fn database_before_migration(migrations: u32) -> Result<DatabaseConnection, StoreError> {
+    let db = match std::env::var(TEST_DATABASE_URL) {
+        Ok(server) if !server.is_empty() => fresh_mysql_database(server.trim_end_matches('/')).await?,
+        _ => crate::connect("sqlite::memory:").await?,
+    };
+    crate::migration::Migrator::up(&db, Some(migrations)).await?;
     Ok(db)
 }
 
