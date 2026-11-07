@@ -11,6 +11,7 @@ pub mod parameters;
 pub mod password_credentials;
 pub mod saved_views;
 pub mod sessions;
+pub mod sign_in_attempts;
 pub mod tags;
 pub mod team_members;
 pub mod teams;

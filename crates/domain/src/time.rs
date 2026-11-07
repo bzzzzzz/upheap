@@ -16,7 +16,8 @@ pub struct Timestamp(i64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Duration(i64);
 
-const MILLIS_PER_HOUR: i64 = 60 * 60 * 1000;
+const MILLIS_PER_MINUTE: i64 = 60 * 1000;
+const MILLIS_PER_HOUR: i64 = 60 * MILLIS_PER_MINUTE;
 const MILLIS_PER_DAY: i64 = 24 * MILLIS_PER_HOUR;
 
 impl Timestamp {
@@ -71,6 +72,10 @@ impl Duration {
         Self(millis)
     }
 
+    pub const fn from_minutes(minutes: i64) -> Self {
+        Self(minutes * MILLIS_PER_MINUTE)
+    }
+
     pub const fn from_hours(hours: i64) -> Self {
         Self(hours * MILLIS_PER_HOUR)
     }
@@ -81,6 +86,16 @@ impl Duration {
 
     pub const fn as_millis(self) -> i64 {
         self.0
+    }
+
+    /// Whole seconds, rounded up, so a wait given in seconds is never too short.
+    pub const fn as_seconds_ceil(self) -> i64 {
+        (self.0 + 999).div_euclid(1000)
+    }
+
+    /// Whole minutes, rounded up.
+    pub const fn as_minutes_ceil(self) -> i64 {
+        (self.0 + MILLIS_PER_MINUTE - 1).div_euclid(MILLIS_PER_MINUTE)
     }
 
     /// Length in days, with fractions.
@@ -94,6 +109,13 @@ mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn waits_round_up() {
+        expect_that!(Duration::from_millis(60_001).as_minutes_ceil(), eq(2));
+        expect_that!(Duration::from_millis(1_001).as_seconds_ceil(), eq(2));
+        expect_that!(Duration::from_minutes(14).as_seconds_ceil(), eq(840));
+    }
 
     #[gtest]
     fn end_of_day_in_berlin_is_stored_as_utc() {

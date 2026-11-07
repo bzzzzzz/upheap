@@ -43,10 +43,7 @@ impl SessionToken {
     }
 
     fn to_hash(&self) -> String {
-        Sha256::digest(self.0.as_bytes())
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect()
+        sha256_hex(&self.0)
     }
 }
 
@@ -180,11 +177,19 @@ impl Services {
 
     /// Signs in with email and password.
     ///
-    /// Unknown emails and wrong passwords fail the same way, after the same amount of work.
+    /// Unknown emails and wrong passwords fail the same way, after the same amount of work. Attempts are limited
+    /// per email address (`domain::sign_in`): one past the limit fails with
+    /// [`ServiceError::TooManySignInAttempts`] before the password is checked.
     pub async fn sign_in(&self, email: &str, password: &str) -> Result<SessionGrant, ServiceError> {
-        let user = match Email::parse(email) {
-            Ok(email) => store::users::find_user_by_email(&self.db, &email).await?,
-            Err(_) => None,
+        let email = Email::parse(email).ok();
+        // Only a well-formed address can have an account, so only those are counted.
+        let attempts_key = email.as_ref().map(|email| sha256_hex(email.as_str()));
+        if let Some(key) = &attempts_key {
+            self.count_sign_in_attempt(key).await?;
+        }
+        let user = match &email {
+            Some(email) => store::users::find_user_by_email(&self.db, email).await?,
+            None => None,
         };
         let stored_hash = match &user {
             Some(user) => store::users::find_password_hash(&self.db, user.id).await?,
@@ -202,8 +207,37 @@ impl Services {
             return Err(ServiceError::InvalidCredentials);
         };
         let grant = self.open_session(&self.db, user, self.now()).await?;
+        // The session exists by now, so failing to clear the count mustn't fail the sign-in; the count then just
+        // runs out with its window.
+        if let Some(key) = &attempts_key
+            && let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, key).await
+        {
+            tracing::warn!(?error, "can't clear sign-in attempts");
+        }
         tracing::info!(user_id = %grant.user.id, "user signed in");
         Ok(grant)
+    }
+
+    /// Counts a sign-in attempt for the address with this key, and refuses it when the address has used up its
+    /// attempts for now. Also forgets a few addresses whose windows have ended.
+    async fn count_sign_in_attempt(&self, key: &str) -> Result<(), ServiceError> {
+        let now = self.now();
+        let limit = self.settings.sign_in_limit;
+        let window_end = limit
+            .window_end(now)
+            .ok_or(ServiceError::Invalid(domain::ValidationError::TimestampOutOfRange))?;
+        // Housekeeping: a failure here mustn't stop anyone signing in. A few rows per attempt keep up with the
+        // attempts that add them.
+        if let Err(error) = store::sign_in_attempts::delete_ended_sign_in_windows(&self.db, now, 10).await {
+            tracing::warn!(?error, "can't delete ended sign-in windows");
+        }
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let attempts = store::sign_in_attempts::count_sign_in_attempt(&txn, key, now, window_end).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        limit.check(attempts, now).map_err(|retry_after| {
+            tracing::warn!(attempts = attempts.count, "sign-in refused: too many attempts");
+            ServiceError::TooManySignInAttempts { retry_after }
+        })
     }
 
     /// Resolves a session token to its user. Fails with [`ServiceError::Unauthenticated`] when the session is
@@ -238,6 +272,13 @@ impl Services {
             expires_at,
         })
     }
+}
+
+fn sha256_hex(value: &str) -> String {
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn hash_password(password: &str) -> Result<String, ServiceError> {

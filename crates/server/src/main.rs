@@ -44,6 +44,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
         Settings {
             allow_registration: config.allow_registration,
             session_ttl,
+            sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
         },
     );
     let cookies = CookieSettings {

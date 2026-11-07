@@ -2,7 +2,7 @@ use domain::item::ItemError;
 use domain::parameter::ParameterError;
 use domain::permission::Permission;
 use domain::team::TeamError;
-use domain::{HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
+use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -19,6 +19,9 @@ pub enum ServiceError {
     Unauthenticated,
     #[error("email or password is wrong")]
     InvalidCredentials,
+    /// The email address used up its sign-in attempts for now.
+    #[error("too many sign-in attempts; try again in {}", in_minutes(*retry_after))]
+    TooManySignInAttempts { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
     #[error("registration is disabled on this server")]
@@ -64,4 +67,12 @@ pub enum ServiceError {
     PasswordHashing(String),
     #[error("storage failed")]
     Store(#[from] StoreError),
+}
+
+/// "1 minute", "12 minutes": a wait in whole minutes, rounded up.
+fn in_minutes(wait: Duration) -> String {
+    match wait.as_minutes_ceil() {
+        1 => "1 minute".to_owned(),
+        minutes => format!("{minutes} minutes"),
+    }
 }

@@ -5,8 +5,8 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
-list view controls (state modes, sort, filters, search), saved views, custom parameters and the audit log. OIDC and CLI sign-in
-are not started. All 187 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
+list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in rate limiting. OIDC and CLI sign-in
+are not started. All 196 Rust tests pass (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, and the
 web typecheck and lint are clean. CI runs on every pull request.
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -34,7 +34,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history under Edit item and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI sign-in: OAuth with PKCE | Off Auth §4 | ⬜ | |
-| Sign-in rate limiting | TD Auth §4 | ⬜ | |
+| Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
 | Testing and CI | TD Testing | 🟡 | CI runs the store and API suites on SQLite and MySQL; the access-control table is in place; no Playwright |
@@ -87,7 +87,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 - [ ] **Auth**
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
-  - [ ] Sign-in rate limiting
+  - [x] Sign-in rate limiting
 - [ ] **Testing and CI**
   - [x] CI pipeline: fmt, clippy, tests, web checks, OpenAPI drift check (`.github/workflows/ci.yml`)
   - [x] Store and API suites on MySQL in CI (`TEST_DATABASE_URL`, a database per test, `store::testing`)
@@ -97,6 +97,5 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Sign-in rate limiting.
-2. Playwright golden paths.
-3. Later: editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.
+1. Playwright golden paths.
+2. Later: editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.

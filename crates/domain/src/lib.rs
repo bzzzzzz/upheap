@@ -13,6 +13,7 @@ pub mod parameter;
 pub mod permission;
 pub mod ranking;
 pub mod saved_view;
+pub mod sign_in;
 pub mod tag;
 pub mod team;
 pub mod text;

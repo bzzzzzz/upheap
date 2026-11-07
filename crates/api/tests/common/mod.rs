@@ -13,6 +13,7 @@ use api::{AppState, CookieSettings};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
+use domain::sign_in::SignInLimit;
 use domain::team::{Membership, Role};
 use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
@@ -50,6 +51,8 @@ pub struct TestResponse {
     pub status: StatusCode,
     pub body: Value,
     pub session_cookie: Option<String>,
+    /// The `Retry-After` header, in seconds.
+    pub retry_after: Option<String>,
 }
 
 impl TestApp {
@@ -65,6 +68,7 @@ impl TestApp {
             Settings {
                 allow_registration: true,
                 session_ttl: Duration::from_days(30),
+                sign_in_limit: SignInLimit::DEFAULT,
             },
         );
         let cookies = CookieSettings {
@@ -123,6 +127,11 @@ impl TestApp {
             .and_then(|v| v.split(';').next())
             .filter(|v| !v.is_empty())
             .map(str::to_owned);
+        let retry_after = response
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
         let bytes = response.into_body().collect().await?.to_bytes();
         let body = if bytes.is_empty() {
             Value::Null
@@ -133,6 +142,7 @@ impl TestApp {
             status,
             body,
             session_cookie,
+            retry_after,
         })
     }
 

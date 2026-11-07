@@ -296,6 +296,114 @@ async fn sessions_expire_and_sign_out_ends_them() -> Result<()> {
     Ok(())
 }
 
+async fn sign_in(app: &TestApp, email: &str, password: &str) -> Result<common::TestResponse> {
+    app.send(
+        Method::POST,
+        "/api/v1/auth/login",
+        None,
+        Some(json!({ "email": email, "password": password })),
+    )
+    .await
+}
+
+#[gtest]
+#[tokio::test]
+async fn sign_in_attempts_are_limited_per_address_until_the_window_ends() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+    for _ in 0..5 {
+        sign_in(&app, "Ada@Example.test", "not the password").await?;
+        sign_in(&app, "nobody@example.test", "whatever it is").await?;
+    }
+    app.clock.advance(Duration::from_minutes(5));
+
+    // Act
+    let refused = sign_in(&app, "ada@example.test", "a long test password").await?;
+    let unknown = sign_in(&app, "nobody@example.test", "whatever it is").await?;
+    app.register("bob@example.test").await?;
+    let other = sign_in(&app, "bob@example.test", "a long test password").await?;
+    app.clock.advance(Duration::from_minutes(10));
+    let after_window = sign_in(&app, "ada@example.test", "a long test password").await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(refused.body["code"], eq(&json!("too_many_attempts")));
+    expect_that!(
+        refused.body["title"],
+        eq(&json!("too many sign-in attempts; try again in 10 minutes"))
+    );
+    expect_that!(refused.retry_after.as_deref(), some(eq("600")));
+    expect_that!(refused.session_cookie, none());
+    expect_that!(unknown.body["code"], eq(&json!("too_many_attempts")));
+    expect_that!(other.status, eq(StatusCode::OK));
+    expect_that!(after_window.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn signing_in_starts_the_count_over() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+    for _ in 0..4 {
+        sign_in(&app, "ada@example.test", "not the password").await?;
+    }
+    sign_in(&app, "ada@example.test", "a long test password").await?;
+
+    // Act
+    let mut statuses = Vec::new();
+    for _ in 0..5 {
+        statuses.push(sign_in(&app, "ada@example.test", "not the password").await?.status);
+    }
+    let sixth = sign_in(&app, "ada@example.test", "not the password").await?;
+
+    // Assert
+    expect_that!(statuses, each(eq(&StatusCode::UNAUTHORIZED)));
+    expect_that!(sixth.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn malformed_addresses_are_not_counted() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+
+    // Act
+    let mut codes = Vec::new();
+    for _ in 0..7 {
+        codes.push(sign_in(&app, "not an address", "whatever it is").await?.body["code"].clone());
+    }
+
+    // Assert
+    expect_that!(codes, each(eq(&json!("invalid_credentials"))));
+    Ok(())
+}
+
+/// On MySQL, the default collation would find Ada under these spellings, each with attempts of its own.
+#[gtest]
+#[tokio::test]
+async fn an_account_is_found_only_under_its_own_address() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+
+    // Act
+    let accented = sign_in(&app, "ad\u{e1}@example.test", "a long test password").await?;
+    let zero_width = sign_in(&app, "ada\u{200b}@example.test", "a long test password").await?;
+    let fullwidth = sign_in(&app, "\u{ff41}da@example.test", "a long test password").await?;
+    let own = sign_in(&app, "ADA@example.test", "a long test password").await?;
+
+    // Assert
+    expect_that!(accented.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(zero_width.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(fullwidth.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(own.status, eq(StatusCode::OK));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn wrong_password_is_rejected() -> Result<()> {

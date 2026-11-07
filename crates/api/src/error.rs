@@ -150,6 +150,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
         }
+        ServiceError::TooManySignInAttempts { .. } => {
+            simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
+        }
         ServiceError::EmailTaken => simple(StatusCode::CONFLICT, "email_taken", Category::Conflict),
         ServiceError::RegistrationClosed => simple(StatusCode::FORBIDDEN, "registration_closed", Category::Permission),
         ServiceError::HeapArchived { .. } => simple(StatusCode::CONFLICT, "heap_archived", Category::Conflict),
@@ -327,12 +330,18 @@ impl IntoResponse for ApiError {
             field: classified.field,
             request_id,
         };
-        (
+        let mut response = (
             classified.status,
             [(header::CONTENT_TYPE, "application/problem+json")],
             Json(body),
         )
-            .into_response()
+            .into_response();
+        if let ApiError::Service(ServiceError::TooManySignInAttempts { retry_after }) = &self {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, retry_after.as_seconds_ceil().max(1).into());
+        }
+        response
     }
 }
 
