@@ -9,3 +9,6 @@ web/dist
 *.swp
 web/test-results
 web/playwright-report
+
+# The local build's backend, built by wasm-pack (npm run build:backend).
+web/src/local/backend

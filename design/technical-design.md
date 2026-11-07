@@ -34,7 +34,7 @@ crates/
   service/   Use cases: authorization, transactions, audit logging, orchestration
   api/       axum routes, request/response DTOs, OpenAPI, auth flows, sessions
   server/    Binary: config, startup, migrations, embedded web assets
-  local/     WebAssembly entry point for the local build: clock, proxy database, migrations, Router (planned)
+  local/     WebAssembly entry point for the local build: clock, proxy database, migrations, Router
 web/         React app (TypeScript), consumes generated API types only
 ```
 

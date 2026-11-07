@@ -4,3 +4,4 @@ src/api/schema.d.ts
 package-lock.json
 test-results
 playwright-report
+src/local/backend

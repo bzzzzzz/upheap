@@ -102,14 +102,16 @@ TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3307 cargo test -p store -p api
 docker stop upheap-test-mysql
 ```
 
-The local build ([design/local-build.md](design/local-build.md)) is checked as CI does: without accounts, for
-wasm, and run in Node on SQLite-wasm. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14:
+The local build ([design/local-build.md](design/local-build.md)) runs the backend in a worker in the page, on
+SQLite-wasm with its data in the browser. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14.
+Build the backend into the web app, then run it with Vite or check it as CI does:
 
 ```sh
+(cd web && npm run build:backend)   # after every change to the Rust code
+(cd web && npm run dev:local)       # http://localhost:5173, no server needed
 cargo clippy -p service -p api --no-default-features -- -D warnings
 cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
-wasm-pack build crates/local --target web --release --no-typescript --no-pack
-(cd crates/local/spike && npm install && node node.mjs)
+(cd web && npm run typecheck:local && npm run smoke:local && npm run build:local)
 ```
 
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
