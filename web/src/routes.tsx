@@ -164,7 +164,13 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {
-  return createRouter({ routeTree, context: { queryClient }, defaultPreload: "intent" });
+  // The local build may be served below the root, such as `/upheap/` on GitHub Pages.
+  return createRouter({
+    routeTree,
+    context: { queryClient },
+    defaultPreload: "intent",
+    basepath: import.meta.env.BASE_URL,
+  });
 }
 
 declare module "@tanstack/react-router" {

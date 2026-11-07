@@ -29,17 +29,22 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
                                                └─ SQLite-wasm, database file in OPFS
 ```
 
-1. **New crate `crates/local`.** The counterpart of `server`. It builds the clock and the database connection, runs
-   the migrations, builds the `api` Router and exposes one `handle(request) → response` function through
-   `wasm-bindgen`. Dependencies still point one way: `local → api → service → store, domain`.
-2. **Requests go through the Router.** The worker turns a message into an `http::Request`, calls the axum Router as a
-   tower `Service`, and posts the response back. Routes, DTOs, error mapping, `If-Match` and problem+json all stay
-   as they are.
-3. **The web app swaps `fetch`, nothing else.** openapi-fetch takes a custom `fetch`. In the local build it posts the
-   request to the worker instead of the network. TanStack Query, the routes and the components don't change.
-4. **One request at a time.** The worker handles requests in order and finishes one before starting the next. This
-   gives the one-writer behaviour that SQLite already has on the server, and keeps transactions from interleaving
-   when a handler awaits.
+1. **New crate `crates/local`.** The counterpart of `server`. Through `wasm-bindgen` it exposes `Backend`:
+   `Backend.open()` builds the clock and the database connection, runs the migrations, opens the local user and
+   builds the `api` Router, and `backend.handle(method, uri, headers, body)` answers one request. Dependencies
+   still point one way: `local → api → service → store, domain`.
+2. **Requests go through the Router.** `handle` turns its arguments into an `http::Request`, calls the axum Router
+   as a tower `Service`, and returns the status, headers and body. Routes, DTOs, error mapping, `If-Match` and
+   problem+json all stay as they are.
+3. **The web app swaps `fetch`, nothing else.** openapi-fetch takes a custom `fetch`. The API client imports it as
+   `#api-fetch`, which package.json `imports` resolves to none (the browser's) or, under the `local-build`
+   condition that `vite --mode local-build` sets, to `src/local/fetch.ts`. That one starts the worker
+   (`src/local/worker.ts`) on the first request and posts each request to it. TanStack Query, the routes and the
+   components don't change, and the server build holds neither the worker nor the wasm.
+4. **One request at a time.** The worker queues requests and finishes one before starting the next. This gives the
+   one-writer behaviour that SQLite already has on the server, and keeps transactions from interleaving when a
+   handler awaits. A request the worker can't answer at all, such as one made when the backend failed to start,
+   fails like a network error.
 
 ### Database
 
@@ -50,7 +55,7 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
 2. **SeaORM over a proxy connection.** sqlx doesn't build for wasm. SeaORM's `proxy` feature takes our own backend
    (`ProxyDatabaseTrait`), which gets the SQL and values and returns rows. `store`'s `proxy` feature turns it on, and `local`
    opens the connection with `DbBackend::Sqlite`, so SeaORM generates the same SQLite SQL as on the server. The proxy
-   calls SQLite-wasm synchronously through a small JS shim in the same worker.
+   calls SQLite-wasm synchronously through a small JS shim in the same worker (`src/local/sqlite.ts`).
    - **Typing rows.** Proxy rows must hold exactly the value type each entity field reads, and SQLite declares
      `i32` and `i64` columns alike as `integer`. So `store::proxy` lists every column's type from the entities
      (SeaORM's migration table included), and the proxy types each result column by the table and column SQLite
@@ -134,13 +139,15 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 
 ## Build and publish
 
-1. **Rust:** `cargo build -p local --target wasm32-unknown-unknown --release`, then `wasm-bindgen` (version pinned to
-   the crate's) for the JS glue. Release builds use `opt-level = "z"` for this crate.
-2. **Web:** `vite build --mode local` picks the worker `fetch` and the base path for Pages (`/<repo>/`). A copy of
-   `index.html` as `404.html` makes deep links work, since Pages can't rewrite paths.
+1. **Rust:** `npm run build:backend` in `web` runs wasm-pack on `crates/local` (release, `wasm-opt -Oz`) and writes
+   the wasm and its JS glue into `web/src/local/backend`, which git ignores.
+2. **Web:** `vite build --mode local-build` (`npm run build:local`) picks the worker `fetch`, and `UPHEAP_BASE`
+   sets the base path for Pages (`/<repo>/`), which the router uses too. A copy of `index.html` as `404.html` will
+   make deep links work, since Pages can't rewrite paths. `npm run dev:local` runs it with Vite, with no server.
 3. **CI:** the "Local build" job lints `service` and `api` without their features and `local` for wasm, builds the
-   wasm, checks its size and runs it in Node on SQLite-wasm (`spike/node.mjs`), so a change that breaks the local
-   build fails the pull request. A separate workflow will publish to GitHub Pages from `main`.
+   backend and checks its size, typechecks the worker, runs the backend in Node on SQLite-wasm
+   (`web/scripts/local-smoke.ts`), and builds the web app. A change that breaks the local build fails the pull
+   request. A separate workflow will publish to GitHub Pages from `main`.
 4. **Tests:** the Rust suites stay native and cover the shared code. Playwright runs the golden paths that apply
    (add and rank, close and reopen, block and unblock, parameter management) against the static build too, plus one
    test for export and import. The proxy connection is tested only there, because it needs a browser.
@@ -156,7 +163,9 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 1. **Spike: done.** See [Spike results](#spike-results).
 2. **Features: done.** `accounts` in `service` and `api`, the local user, `trace-and-timeout` in `api`, and the CI
    job. The server build doesn't change in behaviour, and `openapi.json` is unchanged.
-3. **`crates/local` and the worker,** plus the custom `fetch` in the web app.
+3. **`crates/local` and the worker: done.** `Backend`, the worker and its `fetch`, the `local-build` mode, and the
+   smoke test in CI. In headless Chromium the app opens on the local user's heap, migrations included, in about
+   220 ms, and items stay across a reload and a browser restart.
 4. **Single-user mode:** `allowed_actions` on `GET /me`, the team without `add_member` and `rename`, and the UI
    that hides missing actions.
 5. **Keeping the data:** persistent storage, export and import, the tab lock.
@@ -164,10 +173,9 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 
 ## Spike results
 
-`crates/local` and `crates/local/spike` hold the spike. `spike/node.mjs` runs it in Node on in-memory SQLite-wasm;
-`spike/index.html` runs it in a module worker on `opfs-sahpool`, and was driven with Playwright in headless Chromium.
-To run it: `wasm-pack build --target web --release --no-typescript --no-pack` in `crates/local`, `npm install` in
-`spike`, then `node node.mjs`, or serve `crates/local` over HTTP and open `/spike/index.html`.
+The spike lived in `crates/local` and `crates/local/spike` until step 3 replaced it with `Backend` and the
+worker. It ran in Node on in-memory SQLite-wasm, and in a module worker on `opfs-sahpool` driven with Playwright in
+headless Chromium.
 
 1. **The backend runs unchanged.** The real migrations, `register`, `create_item` and `list_ranked` ran on
    SQLite-wasm through the proxy, with audit entries, and the items came back ranked with contributors.
@@ -181,9 +189,8 @@ To run it: `wasm-pack build --target web --release --no-typescript --no-pack` in
    migrations, took about 180 ms; HTTP requests take a few milliseconds each.
 6. **The server build is unchanged.** All 196 native tests pass, and clippy is clean natively and for wasm.
 
-One spike shortcut is left: the spike entry points (`spike`, `spike_http`) stand in for the worker's `handle`.
-Since step 2 they run as the local user instead of registering, and CI runs them. The other two, inline password
-hashing on wasm and leaving out the trace and timeout layers by target, went with the features.
+Its shortcuts are gone: inline password hashing on wasm and leaving out the trace and timeout layers by target went
+with the features in step 2, and the spike entry points with `Backend` in step 3.
 
 ## Open questions
 

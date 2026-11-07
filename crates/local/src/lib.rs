@@ -1,8 +1,8 @@
-//! The local build: the backend compiled to WebAssembly, running in the browser on SQLite-wasm.
+//! The local build: the backend compiled to WebAssembly, running in a browser worker on SQLite-wasm.
 //!
-//! Spike: proves that `store` and `service` run unchanged over a SeaORM proxy connection whose SQL is executed by
-//! SQLite-wasm. The JS side is `globalThis.upheapSqlite`, with `query` and `execute` (see `spike/shim.mjs`).
-//! `service` and `api` are built without accounts, so there is one user, made on first start.
+//! The worker (`web/src/local/worker.ts`) opens the database, installs `globalThis.upheapSqlite` (`query` and
+//! `execute`, see `web/src/local/sqlite.ts`), then calls [`Backend::open`] once and [`Backend::handle`] for each
+//! request, one at a time. `service` and `api` are built without accounts, so every request is the one local user.
 //!
 //! Everything here is wasm-only, so a native `cargo build --workspace` builds an empty crate.
 #![cfg(target_arch = "wasm32")]
@@ -12,116 +12,105 @@ mod proxy;
 
 use std::sync::Arc;
 
-use domain::HeapId;
-use domain::item::{NewItem, Size, Title};
-use domain::list_view::ListView;
+use axum::body::Body;
+use axum::http::{HeaderName, HeaderValue, Method, Request, StatusCode, header};
 use sea_orm::{Database, DbBackend};
 use service::{Services, Settings};
+use tower::ServiceExt;
 use wasm_bindgen::prelude::*;
 
-/// Opens the database through the proxy, migrates it, opens the local user, adds three items and ranks them.
-/// Returns what happened as JSON text, for the spike page to show.
+/// The largest response body read back from the Router.
+const MAX_RESPONSE_BYTES: usize = 64 << 20;
+
+/// The backend: the API Router over the local database, as the local user.
 #[wasm_bindgen]
-pub async fn spike() -> Result<String, JsError> {
-    std::panic::set_hook(Box::new(|info| proxy::report(&format!("panic: {info}"))));
-    let proxy: Arc<Box<dyn sea_orm::ProxyDatabaseTrait>> = Arc::new(Box::new(proxy::SqliteWasm::new()));
-    let db = Database::connect_proxy(DbBackend::Sqlite, proxy).await.map_err(to_js)?;
-    let applied = store::run_migrations(&db).await.map_err(to_js)?;
-
-    let services = Services::new(db.clone(), Arc::new(clock::BrowserClock), Settings::default());
-    let principal = services.open_local_user().await.map_err(to_js)?;
-    let reopened = services.open_local_user().await.map_err(to_js)?;
-    let me = services.load_me(principal).await.map_err(to_js)?;
-    let heap_id = first_heap(&me).ok_or_else(|| JsError::new("the local user has no heap"))?;
-
-    for (title, effort, impact) in [
-        ("Small and valuable", Size::S, Size::Xl),
-        ("Big and dull", Size::Xl, Size::S),
-        ("Middling", Size::M, Size::M),
-    ] {
-        let fields = NewItem {
-            title: Title::parse(title).map_err(to_js)?,
-            description: None,
-            effort: Some(effort),
-            impact: Some(impact),
-            due: None,
-            tags: Default::default(),
-            parameters: Default::default(),
-        };
-        services.create_item(principal, heap_id, fields).await.map_err(to_js)?;
-    }
-    let ranked = services
-        .list_ranked(principal, heap_id, None, &ListView::default())
-        .await
-        .map_err(to_js)?;
-
-    if let Some(err) = proxy::take_commit_error() {
-        return Err(JsError::new(&format!("a commit failed: {err}")));
-    }
-
-    let items: Vec<_> = ranked
-        .ranked
-        .iter()
-        .map(|entry| {
-            serde_json::json!({
-                "position": entry.position,
-                "title": entry.view.item.title.as_str(),
-                "contributors": entry.contributors.iter().map(|c| &c.label).collect::<Vec<_>>(),
-            })
-        })
-        .collect();
-    let report = serde_json::json!({
-        "migrations_applied": applied,
-        "same_user_reopened": reopened == principal,
-        "transactions": check_transactions(&db).await.map_err(to_js)?,
-        "user": principal.user_id.to_string(),
-        "heap_id": heap_id.to_string(),
-        "ranked": items,
-    });
-    Ok(report.to_string())
+pub struct Backend {
+    router: axum::Router,
 }
 
-/// A dropped transaction leaves nothing behind, a committed one keeps its row, and a duplicate key is a
-/// [`store::StoreError::Duplicate`].
-async fn check_transactions(db: &sea_orm::DatabaseConnection) -> Result<serde_json::Value, sea_orm::DbErr> {
-    use sea_orm::{ConnectionTrait, TransactionTrait};
-    db.execute_unprepared("CREATE TABLE IF NOT EXISTS spike_unique (n INTEGER UNIQUE)")
-        .await?;
-    db.execute_unprepared("DELETE FROM spike_unique").await?;
-    {
-        let txn = db.begin().await?;
-        txn.execute_unprepared("INSERT INTO spike_unique VALUES (1)").await?;
-        // Dropped without commit: SeaORM rolls it back.
+/// A response for the worker to turn into a `Response`.
+#[wasm_bindgen(getter_with_clone)]
+pub struct HttpResponse {
+    pub status: u16,
+    /// Names and values, alternating.
+    pub headers: Vec<String>,
+    pub body: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl Backend {
+    /// Opens the database through `globalThis.upheapSqlite`, runs the migrations, and opens the local user, whom
+    /// the first start makes with their team and first heap.
+    pub async fn open() -> Result<Backend, JsError> {
+        std::panic::set_hook(Box::new(|info| proxy::report(&format!("panic: {info}"))));
+        let proxy: Arc<Box<dyn sea_orm::ProxyDatabaseTrait>> = Arc::new(Box::new(proxy::SqliteWasm::new()));
+        let db = Database::connect_proxy(DbBackend::Sqlite, proxy).await.map_err(to_js)?;
+        store::run_migrations(&db).await.map_err(to_js)?;
+        let services = Services::new(db, Arc::new(clock::BrowserClock), Settings::default());
+        let local_user = services.open_local_user().await.map_err(to_js)?;
+        let router = api::router(api::AppState {
+            services,
+            authentication: api::Authentication::LocalUser(local_user),
+        });
+        Ok(Backend { router })
     }
-    let after_drop = count_rows(db).await?;
-    let txn = db.begin().await?;
-    txn.execute_unprepared("INSERT INTO spike_unique VALUES (2)").await?;
-    txn.commit().await?;
-    let after_commit = count_rows(db).await?;
-    let duplicate = match db.execute_unprepared("INSERT INTO spike_unique VALUES (2)").await {
-        Ok(_) => "inserted twice".to_owned(),
-        Err(err) => format!("{:?}", store::StoreError::from(err)),
-    };
-    Ok(serde_json::json!({
-        "rows_after_drop": after_drop,
-        "rows_after_commit": after_commit,
-        "duplicate_key": duplicate,
-    }))
+
+    /// Sends one request through the Router. `uri` is the path and query; `headers` alternates names and values.
+    ///
+    /// Call it for one request at a time: a request's transaction must end before the next one starts. A commit
+    /// that failed turns the response into a `500`.
+    pub async fn handle(
+        &self,
+        method: String,
+        uri: String,
+        headers: Vec<String>,
+        body: Vec<u8>,
+    ) -> Result<HttpResponse, JsError> {
+        let mut request = Request::builder()
+            .method(Method::from_bytes(method.as_bytes()).map_err(to_js)?)
+            .uri(uri)
+            .body(Body::from(body))
+            .map_err(to_js)?;
+        for pair in headers.chunks_exact(2) {
+            let name = HeaderName::from_bytes(pair[0].as_bytes()).map_err(to_js)?;
+            let value = HeaderValue::from_str(&pair[1]).map_err(to_js)?;
+            request.headers_mut().append(name, value);
+        }
+
+        let response = self.router.clone().oneshot(request).await.map_err(to_js)?;
+        if let Some(err) = proxy::take_commit_error() {
+            return Ok(commit_failed(&err));
+        }
+        let status = response.status().as_u16();
+        let headers = response
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| Some([name.as_str().to_owned(), value.to_str().ok()?.to_owned()]))
+            .flatten()
+            .collect();
+        let body = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
+            .await
+            .map_err(to_js)?
+            .to_vec();
+        Ok(HttpResponse { status, headers, body })
+    }
 }
 
-async fn count_rows(db: &sea_orm::DatabaseConnection) -> Result<i32, sea_orm::DbErr> {
-    use sea_orm::ConnectionTrait;
-    let row = db
-        .query_one_raw(sea_orm::Statement::from_string(
-            db.get_database_backend(),
-            "SELECT COUNT(*) AS n FROM spike_unique",
-        ))
-        .await?;
-    row.map_or(Ok(0), |row| row.try_get("", "n"))
-}
-
-fn first_heap(me: &service::me::MeView) -> Option<HeapId> {
-    me.teams.first()?.heaps.first().map(|heap| heap.id)
+/// The `500` problem for a request whose commit failed, as the server answers unexpected errors. The proxy rolled
+/// the transaction back, so none of the request was kept, whatever the handler answered.
+fn commit_failed(err: &str) -> HttpResponse {
+    proxy::report(&format!("commit failed: {err}"));
+    let status = StatusCode::INTERNAL_SERVER_ERROR.as_u16();
+    let body =
+        serde_json::json!({ "code": "internal", "title": "Something went wrong on the server", "status": status });
+    HttpResponse {
+        status,
+        headers: vec![
+            header::CONTENT_TYPE.as_str().to_owned(),
+            "application/problem+json".to_owned(),
+        ],
+        body: body.to_string().into_bytes(),
+    }
 }
 
 /// The error and every source under it, since a store error's own message says only which layer failed.
@@ -134,69 +123,4 @@ fn to_js(err: impl std::error::Error) -> JsError {
         source = cause.source();
     }
     JsError::new(&message)
-}
-
-/// Sends requests through the real axum Router as the local user: `/me`, a new item, the heap's ranked list and an
-/// unknown item. Returns each response's status and the start of its body.
-#[wasm_bindgen]
-pub async fn spike_http() -> Result<String, JsError> {
-    use axum::body::Body;
-    use axum::http::{Request, header};
-    use tower::ServiceExt;
-
-    std::panic::set_hook(Box::new(|info| proxy::report(&format!("panic: {info}"))));
-    let proxy: Arc<Box<dyn sea_orm::ProxyDatabaseTrait>> = Arc::new(Box::new(proxy::SqliteWasm::new()));
-    let db = Database::connect_proxy(DbBackend::Sqlite, proxy).await.map_err(to_js)?;
-    store::run_migrations(&db).await.map_err(to_js)?;
-    let services = Services::new(db, Arc::new(clock::BrowserClock), Settings::default());
-    let local_user = services.open_local_user().await.map_err(to_js)?;
-    let router = api::router(api::AppState {
-        services,
-        authentication: api::Authentication::LocalUser(local_user),
-    });
-
-    let send = |request: Request<Body>| {
-        let router = router.clone();
-        async move {
-            let response = router.oneshot(request).await.map_err(to_js)?;
-            let status = response.status().as_u16();
-            let body = axum::body::to_bytes(response.into_body(), 1 << 20)
-                .await
-                .map_err(to_js)?;
-            Ok::<_, JsError>((status, String::from_utf8_lossy(&body).into_owned()))
-        }
-    };
-
-    let me = Request::get("/api/v1/me").body(Body::empty()).map_err(to_js)?;
-    let (me_status, me_body) = send(me).await?;
-    let heap_id = serde_json::from_str::<serde_json::Value>(&me_body)
-        .ok()
-        .and_then(|me| me["teams"][0]["heaps"][0]["id"].as_str().map(str::to_owned))
-        .unwrap_or_default();
-    let create = Request::post(format!("/api/v1/heaps/{heap_id}/items"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("x-csrf-protection", "1")
-        .body(Body::from(
-            serde_json::json!({ "title": "Over HTTP", "effort": "s", "impact": "l" }).to_string(),
-        ))
-        .map_err(to_js)?;
-    let (create_status, create_body) = send(create).await?;
-    let list = Request::get(format!("/api/v1/heaps/{heap_id}/items"))
-        .header("time-zone", "Europe/Berlin")
-        .body(Body::empty())
-        .map_err(to_js)?;
-    let (list_status, list_body) = send(list).await?;
-    let missing = Request::get("/api/v1/items/00000000-0000-0000-0000-000000000000")
-        .body(Body::empty())
-        .map_err(to_js)?;
-    let (missing_status, missing_body) = send(missing).await?;
-
-    let short = |s: &str| s.chars().take(160).collect::<String>();
-    Ok(serde_json::json!({
-        "me": [me_status, short(&me_body)],
-        "create_item": [create_status, short(&create_body)],
-        "ranked_list": [list_status, short(&list_body)],
-        "missing_item": [missing_status, short(&missing_body)],
-    })
-    .to_string())
 }

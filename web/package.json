@@ -4,6 +4,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "imports": {
+    "#api-fetch": {
+      "local-build": "./src/local/fetch.ts",
+      "default": "./src/api/networkFetch.ts"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,9 +18,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gen:api": "openapi-typescript ../openapi.json -o src/api/schema.d.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "dev:local": "vite --mode local-build",
+    "build:local": "tsc -b && vite build --mode local-build",
+    "build:backend": "cd ../crates/local && wasm-pack build --target web --release --no-pack --out-dir ../../web/src/local/backend",
+    "typecheck:local": "tsc -p tsconfig.local.json",
+    "smoke:local": "node scripts/local-smoke.ts"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.53.4-build2",
     "@tanstack/react-query": "^5.106.1",
     "@tanstack/react-router": "^1.170.46",
     "motion": "^14.9.1",
