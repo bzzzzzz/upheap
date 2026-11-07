@@ -14,15 +14,15 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock rustfmt.toml clippy.toml ./
 COPY crates crates
 COPY --from=web /src/web/dist web/dist
-RUN cargo build --release --locked --bin upheap
+RUN cargo build --release --locked --bin upheap-server
 
 FROM alpine:3.22
 RUN addgroup -S heap && adduser -S -G heap heap && mkdir /data && chown heap:heap /data
-COPY --from=server /src/target/release/upheap /usr/local/bin/upheap
+COPY --from=server /src/target/release/upheap-server /usr/local/bin/upheap-server
 USER heap
 ENV DATABASE_URL="sqlite:///data/heap.db?mode=rwc" \
     BIND_ADDR="0.0.0.0:8080"
 VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO /dev/null http://127.0.0.1:8080/readyz || exit 1
-ENTRYPOINT ["upheap"]
+ENTRYPOINT ["upheap-server"]

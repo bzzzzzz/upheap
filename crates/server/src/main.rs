@@ -1,6 +1,6 @@
 //! The upheap server: one binary serving the API and the web app on one port.
 //!
-//! `upheap` runs the server. `upheap openapi` prints the OpenAPI document and exits.
+//! `upheap-server` runs the server. `upheap-server openapi` prints the OpenAPI document and exits.
 
 mod assets;
 mod config;
