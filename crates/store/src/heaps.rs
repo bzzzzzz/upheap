@@ -1,5 +1,6 @@
 //! Heaps and their ranking policy.
 
+use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::text::Name;
 use domain::{HeapId, TeamId, Timestamp, Version};
@@ -11,12 +12,14 @@ use crate::entities::heaps;
 
 const TABLE: &str = "heaps";
 
+/// Inserts `heap`. Fails with [`StoreError::Duplicate`] when another heap of the team has its slug.
 pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Timestamp) -> Result<(), StoreError> {
     let id = id_to_db(heap.id.as_uuid());
     let row = heaps::ActiveModel {
         version: Set(version_to_db(heap.version, TABLE, &id)?),
         id: Set(id),
         team_id: Set(id_to_db(heap.team_id.as_uuid())),
+        slug: Set(heap.slug.as_str().to_owned()),
         name: Set(heap.name.as_str().to_owned()),
         age_weight: Set(i32::from(heap.policy.age_weight)),
         deadline_weight: Set(i32::from(heap.policy.deadline_weight)),
@@ -30,6 +33,20 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
 
 pub async fn find_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<Heap>, StoreError> {
     let row = heaps::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
+    row.map(to_heap).transpose()
+}
+
+/// The heap of `team_id` with `slug`, or `None` if the team has none.
+pub async fn find_heap_by_slug(
+    db: &impl ConnectionTrait,
+    team_id: TeamId,
+    slug: &Handle,
+) -> Result<Option<Heap>, StoreError> {
+    let row = heaps::Entity::find()
+        .filter(heaps::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+        .filter(heaps::Column::Slug.eq(slug.as_str()))
+        .one(db)
+        .await?;
     row.map(to_heap).transpose()
 }
 
@@ -51,8 +68,9 @@ pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<H
     row.map(to_heap).transpose()
 }
 
-/// Writes the name, weights and archive time if the stored row still has version `expected`, and returns the heap
-/// with its new version. Returns `None` when the stored version differs.
+/// Writes the slug, name, weights and archive time if the stored row still has version `expected`, and returns the
+/// heap with its new version. Returns `None` when the stored version differs, and fails with
+/// [`StoreError::Duplicate`] when another heap of the team has the slug.
 pub async fn update_heap(
     db: &impl ConnectionTrait,
     heap: &Heap,
@@ -64,6 +82,7 @@ pub async fn update_heap(
         ..heap.clone()
     };
     let row = heaps::ActiveModel {
+        slug: Set(saved.slug.as_str().to_owned()),
         name: Set(saved.name.as_str().to_owned()),
         age_weight: Set(i32::from(saved.policy.age_weight)),
         deadline_weight: Set(i32::from(saved.policy.deadline_weight)),
@@ -102,6 +121,7 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
     Ok(Heap {
         id: HeapId::from_uuid(read.uuid(&row.id)?),
         team_id: TeamId::from_uuid(read.uuid(&row.team_id)?),
+        slug: read.handle(&row.slug)?,
         name: Name::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?,
         policy: HeapPolicy {
             age_weight: read.weight(row.age_weight)?,

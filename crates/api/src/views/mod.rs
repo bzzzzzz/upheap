@@ -7,7 +7,7 @@ use domain::parameter::ParameterError;
 use domain::permission::{SavedViewAction, SavedViewListAction};
 use domain::saved_view::{NewSavedView, SavedViewPatch};
 use domain::text::Name;
-use domain::{HeapId, SavedViewId, ValidationError};
+use domain::{SavedViewId, ValidationError};
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
 use service::saved_views::SavedViewEntry;
@@ -18,8 +18,9 @@ use uuid::Uuid;
 
 use crate::dto::{HeapSummaryDto, IfMatchHeader};
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, CurrentUser, IfMatch};
+use crate::extract::{ApiJson, ApiPath, IfMatch};
 use crate::list_view::{ListViewDto, ListViewInputDto};
+use crate::paths::{HeapParams, HeapPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -27,6 +28,12 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_views, create_view))
         .routes(routes!(update_view))
         .routes(routes!(archive_view))
+}
+
+/// `{view_id}` in a path below the heap's.
+#[derive(Deserialize)]
+struct ViewPathId {
+    view_id: Uuid,
 }
 
 /// An action the caller can take on a saved view.
@@ -69,7 +76,7 @@ pub(crate) struct SavedViewDto {
     pub id: Uuid,
     pub heap_id: Uuid,
     pub name: String,
-    /// What the view shows. The fields are the query parameters of `GET /heaps/{heap_id}/items`.
+    /// What the view shows. The fields are the query parameters of `GET /teams/{team}/heaps/{heap}/items`.
     pub view: ListViewDto,
     pub created_by: Uuid,
     /// When the view was archived (UTC milliseconds); `null` while it is in use.
@@ -125,17 +132,13 @@ pub(crate) struct SavedViewPatchDto {
 }
 
 /// The heap's saved views that are in use, by name.
-#[utoipa::path(get, path = "/heaps/{heap_id}/views", tag = "views", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/views", tag = "views", security(("session" = [])),
+    params(HeapParams),
     responses((status = 200, body = SavedViewListDto), (status = 404, body = Problem)))]
-async fn list_views(
-    State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
-) -> Result<Json<SavedViewListDto>, ApiError> {
+async fn list_views(State(state): State<AppState>, path: HeapPath) -> Result<Json<SavedViewListDto>, ApiError> {
     let list = state
         .services
-        .list_saved_views(principal, HeapId::from_uuid(heap_id))
+        .list_saved_views(path.principal, path.heap.heap_id)
         .await?;
     Ok(Json(SavedViewListDto {
         heap: HeapSummaryDto::from(&list.heap),
@@ -145,8 +148,8 @@ async fn list_views(
 }
 
 /// Saves a view of the heap, shared with everyone in the team.
-#[utoipa::path(post, path = "/heaps/{heap_id}/views", tag = "views", security(("session" = [])),
-    params(("heap_id" = Uuid, Path)), request_body = CreateSavedViewDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/views", tag = "views", security(("session" = [])),
+    params(HeapParams), request_body = CreateSavedViewDto,
     responses(
         (status = 201, body = SavedViewDto),
         (status = 404, body = Problem),
@@ -155,8 +158,7 @@ async fn list_views(
     ))]
 async fn create_view(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(heap_id): ApiPath<Uuid>,
+    path: HeapPath,
     ApiJson(body): ApiJson<CreateSavedViewDto>,
 ) -> Result<(StatusCode, Json<SavedViewDto>), ApiError> {
     let fields = NewSavedView {
@@ -165,15 +167,15 @@ async fn create_view(
     };
     let entry = state
         .services
-        .create_saved_view(principal, HeapId::from_uuid(heap_id), fields)
+        .create_saved_view(path.principal, path.heap.heap_id, fields)
         .await
         .map_err(name_view_field)?;
     Ok((StatusCode::CREATED, Json(SavedViewDto::from(entry))))
 }
 
 /// Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`.
-#[utoipa::path(patch, path = "/views/{view_id}", tag = "views", security(("session" = [])),
-    params(("view_id" = Uuid, Path), IfMatchHeader), request_body = SavedViewPatchDto,
+#[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/views/{view_id}", tag = "views", security(("session" = [])),
+    params(HeapParams, ("view_id" = Uuid, Path), IfMatchHeader), request_body = SavedViewPatchDto,
     responses(
         (status = 200, body = SavedViewDto),
         (status = 404, body = Problem),
@@ -183,23 +185,29 @@ async fn create_view(
     ))]
 async fn update_view(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     IfMatch(expected): IfMatch,
-    ApiPath(view_id): ApiPath<Uuid>,
+    ApiPath(ViewPathId { view_id }): ApiPath<ViewPathId>,
     ApiJson(body): ApiJson<SavedViewPatchDto>,
 ) -> Result<Json<SavedViewDto>, ApiError> {
     let patch = to_patch(&body).map_err(|e| name_view_field(e.into()))?;
     let entry = state
         .services
-        .update_saved_view(principal, SavedViewId::from_uuid(view_id), patch, expected)
+        .update_saved_view(
+            path.principal,
+            path.heap.heap_id,
+            SavedViewId::from_uuid(view_id),
+            patch,
+            expected,
+        )
         .await
         .map_err(name_view_field)?;
     Ok(Json(SavedViewDto::from(entry)))
 }
 
 /// Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds.
-#[utoipa::path(post, path = "/views/{view_id}/archive", tag = "views", security(("session" = [])),
-    params(("view_id" = Uuid, Path)),
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/views/{view_id}/archive", tag = "views", security(("session" = [])),
+    params(HeapParams, ("view_id" = Uuid, Path)),
     responses(
         (status = 200, body = SavedViewDto),
         (status = 404, body = Problem),
@@ -207,12 +215,12 @@ async fn update_view(
     ))]
 async fn archive_view(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
-    ApiPath(view_id): ApiPath<Uuid>,
+    path: HeapPath,
+    ApiPath(ViewPathId { view_id }): ApiPath<ViewPathId>,
 ) -> Result<Json<SavedViewDto>, ApiError> {
     let entry = state
         .services
-        .archive_saved_view(principal, SavedViewId::from_uuid(view_id))
+        .archive_saved_view(path.principal, path.heap.heap_id, SavedViewId::from_uuid(view_id))
         .await?;
     Ok(Json(SavedViewDto::from(entry)))
 }

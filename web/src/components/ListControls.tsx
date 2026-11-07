@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-import type { BlockedLayout, Parameter, StateMode } from "../api/client";
+import type { BlockedLayout, HeapRef, Parameter, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
 import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PopoverSheet } from "./PopoverSheet";
@@ -24,7 +24,7 @@ export type Panel = "filters" | "view" | null;
  * the server applies; `onChange` gets the whole new view. `/` focuses the search box.
  */
 export function ListControls({
-  heapId,
+  heapRef,
   view,
   onChange,
   search,
@@ -33,7 +33,7 @@ export function ListControls({
   onPanel,
   panelFocus,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   search: string;
@@ -43,7 +43,7 @@ export function ListControls({
   /** Changing it brings the panel's button into view, as the panel opens from it. */
   panelFocus: number;
 }) {
-  const parameters = useParameters(heapId);
+  const parameters = useParameters(heapRef);
   const searchRef = useRef<HTMLInputElement>(null);
   const filtersRef = useRef<HTMLButtonElement>(null);
   const viewRef = useRef<HTMLButtonElement>(null);
@@ -127,7 +127,7 @@ export function ListControls({
       </div>
 
       <PopoverSheet title="Filters" triggerRef={filtersRef} isOpen={panel === "filters"} onClose={() => onPanel(null)}>
-        <FiltersPanel heapId={heapId} view={view} onChange={onChange} />
+        <FiltersPanel heapRef={heapRef} view={view} onChange={onChange} />
       </PopoverSheet>
       <PopoverSheet title="View settings" triggerRef={viewRef} isOpen={panel === "view"} onClose={() => onPanel(null)}>
         <ViewPanel view={view} onChange={onChange} />
@@ -262,16 +262,16 @@ const toggled = (raw: string | undefined, value: string) => {
 };
 
 function FiltersPanel({
-  heapId,
+  heapRef,
   view,
   onChange,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
 }) {
-  const tags = useTags(heapId);
-  const parameters = useParameters(heapId);
+  const tags = useTags(heapRef);
+  const parameters = useParameters(heapRef);
   const chosenTags = splitList(view.tag);
   const chosenOptions = splitList(view.param);
   return (

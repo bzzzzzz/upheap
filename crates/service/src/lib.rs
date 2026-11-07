@@ -14,6 +14,7 @@ pub mod audit_log;
 pub mod auth;
 mod clock;
 mod error;
+pub mod handles;
 pub mod heaps;
 pub mod items;
 pub mod me;

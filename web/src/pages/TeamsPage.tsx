@@ -16,7 +16,7 @@ export function TeamsPage() {
     event.preventDefault();
     if (name.trim() === "") return;
     create.mutate(name, {
-      onSuccess: (team) => void navigate({ to: "/teams/$teamId", params: { teamId: team.id } }),
+      onSuccess: (team) => void navigate({ to: "/teams/$team", params: { team: team.slug } }),
     });
   };
 
@@ -34,8 +34,8 @@ export function TeamsPage() {
               className="flex items-center gap-3 border-b border-stone-200 py-2 last:border-b-0 dark:border-stone-800"
             >
               <Link
-                to="/teams/$teamId"
-                params={{ teamId: team.id }}
+                to="/teams/$team"
+                params={{ team: team.slug }}
                 className="min-w-0 flex-1 text-sm font-medium hover:underline"
               >
                 {team.name}

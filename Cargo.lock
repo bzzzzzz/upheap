@@ -2575,6 +2575,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "domain",
+ "getrandom 0.3.4",
  "googletest",
  "jiff",
  "rand 0.9.5",
@@ -2884,6 +2885,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "domain",
+ "getrandom 0.3.4",
  "googletest",
  "sea-orm",
  "sea-orm-migration",

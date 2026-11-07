@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 
-import type { SavedView } from "../api/client";
+import type { HeapRef, SavedView } from "../api/client";
 import { useArchiveSavedView, useCreateSavedView, useSavedViews, useUpdateSavedView } from "../api/queries";
 import { HistoryDisclosure } from "./AuditHistory";
 import { searchFor, showSameList, toViewInput, type ListSearch } from "./listView";
@@ -17,15 +17,15 @@ type Naming = "new" | "rename" | null;
  * as a new one. Every member sees the same views.
  */
 export function SavedViewsBar({
-  heapId,
+  heapRef,
   view,
   onViewChange,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   view: ListSearch;
   onViewChange: (view: ListSearch) => void;
 }) {
-  const views = useSavedViews(heapId);
+  const views = useSavedViews(heapRef);
   const [naming, setNaming] = useState<Naming>(null);
   // An ID that names no view in use (archived since, say) leaves the URL, so equal lists keep equal URLs. Not while
   // the list is refetching: a view just created may not be in it yet.
@@ -54,13 +54,13 @@ export function SavedViewsBar({
         aria-label="Saved views"
         className="flex items-center gap-1.5 max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none] sm:flex-wrap [&>*]:shrink-0"
       >
-        <ViewLink heapId={heapId} search={{}} current={!selected} changed={changed}>
+        <ViewLink heapRef={heapRef} search={{}} current={!selected} changed={changed}>
           Default
         </ViewLink>
         {views.data.views.map((saved) => (
           <ViewLink
             key={saved.id}
-            heapId={heapId}
+            heapRef={heapRef}
             search={searchFor(saved)}
             current={saved.id === selected?.id}
             changed={changed}
@@ -71,7 +71,7 @@ export function SavedViewsBar({
       </nav>
       {naming === "new" && (
         <CreateView
-          heapId={heapId}
+          heapRef={heapRef}
           view={view}
           onCreated={(created) => {
             setNaming(null);
@@ -81,11 +81,11 @@ export function SavedViewsBar({
         />
       )}
       {naming === "rename" && selected && (
-        <RenameView heapId={heapId} saved={selected} onDone={() => setNaming(null)} />
+        <RenameView heapRef={heapRef} saved={selected} onDone={() => setNaming(null)} />
       )}
       {naming === null && changed && (
         <ChangedActions
-          heapId={heapId}
+          heapRef={heapRef}
           view={view}
           selected={selected}
           canCreate={canCreate}
@@ -95,7 +95,7 @@ export function SavedViewsBar({
       )}
       {naming === null && !changed && selected && (
         <SelectedActions
-          heapId={heapId}
+          heapRef={heapRef}
           saved={selected}
           onRename={() => setNaming("rename")}
           onArchived={() => onViewChange({ ...view, view: undefined })}
@@ -104,7 +104,7 @@ export function SavedViewsBar({
       {selected && (
         <HistoryDisclosure
           key={selected.id}
-          scope={{ heapId }}
+          scope={{ heap: heapRef }}
           entityId={selected.id}
           label={`History of ${selected.name}`}
         />
@@ -114,13 +114,13 @@ export function SavedViewsBar({
 }
 
 function ViewLink({
-  heapId,
+  heapRef,
   search,
   current,
   changed,
   children,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   search: ListSearch;
   current: boolean;
   changed: boolean;
@@ -128,8 +128,8 @@ function ViewLink({
 }) {
   return (
     <Link
-      to="/heaps/$heapId"
-      params={{ heapId }}
+      to="/teams/$team/heaps/$heap"
+      params={heapRef}
       search={search}
       // The open view stays marked while its settings are changed, which the router's own matching wouldn't do.
       activeOptions={{ exact: true, includeSearch: true }}
@@ -149,21 +149,21 @@ function ViewLink({
 
 /** The list differs from the open view: save it into that view, save it as a new one, or go back. */
 function ChangedActions({
-  heapId,
+  heapRef,
   view,
   selected,
   canCreate,
   onSaveAsNew,
   onDiscard,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   view: ListSearch;
   selected: SavedView | undefined;
   canCreate: boolean;
   onSaveAsNew: () => void;
   onDiscard: () => void;
 }) {
-  const update = useUpdateSavedView(heapId);
+  const update = useUpdateSavedView(heapRef);
   const canSave = selected?.allowed_actions.includes("edit") === true;
   return (
     <div className="flex flex-wrap items-center gap-1 text-sm">
@@ -191,17 +191,17 @@ function ChangedActions({
 }
 
 function SelectedActions({
-  heapId,
+  heapRef,
   saved,
   onRename,
   onArchived,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   saved: SavedView;
   onRename: () => void;
   onArchived: () => void;
 }) {
-  const archive = useArchiveSavedView(heapId);
+  const archive = useArchiveSavedView(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   const can = (action: SavedView["allowed_actions"][number]) => saved.allowed_actions.includes(action);
   if (!can("edit") && !can("archive")) return null;
@@ -241,17 +241,17 @@ function SelectedActions({
 }
 
 function CreateView({
-  heapId,
+  heapRef,
   view,
   onCreated,
   onCancel,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   view: ListSearch;
   onCreated: (created: SavedView) => void;
   onCancel: () => void;
 }) {
-  const create = useCreateSavedView(heapId);
+  const create = useCreateSavedView(heapRef);
   return (
     <NameEntry
       label="Name of the new view"
@@ -265,8 +265,8 @@ function CreateView({
   );
 }
 
-function RenameView({ heapId, saved, onDone }: { heapId: string; saved: SavedView; onDone: () => void }) {
-  const update = useUpdateSavedView(heapId);
+function RenameView({ heapRef, saved, onDone }: { heapRef: HeapRef; saved: SavedView; onDone: () => void }) {
+  const update = useUpdateSavedView(heapRef);
   return (
     <NameEntry
       label={`New name for ${saved.name}`}

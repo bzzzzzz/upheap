@@ -29,6 +29,10 @@ pub struct Problem {
     /// The input field the error is about, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<&'static str>,
+    /// A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
+    /// at, such as `my-team` for `My-Team`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
@@ -100,6 +104,7 @@ struct Classified {
     code: &'static str,
     title: String,
     field: Option<&'static str>,
+    hint: Option<String>,
     category: Category,
 }
 
@@ -109,6 +114,7 @@ fn classify(err: &ApiError) -> Classified {
         code,
         title: title.to_owned(),
         field: None,
+        hint: None,
         category,
     };
     match err {
@@ -140,6 +146,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         code,
         title: err.to_string(),
         field: None,
+        hint: None,
         category,
     };
     match err {
@@ -154,6 +161,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
         ServiceError::EmailTaken => simple(StatusCode::CONFLICT, "email_taken", Category::Conflict),
+        ServiceError::HandleTaken { field } => Classified {
+            field: Some(field.as_str()),
+            ..simple(StatusCode::CONFLICT, "handle_taken", Category::Conflict)
+        },
         ServiceError::RegistrationClosed => simple(StatusCode::FORBIDDEN, "registration_closed", Category::Permission),
         ServiceError::HeapArchived { .. } => simple(StatusCode::CONFLICT, "heap_archived", Category::Conflict),
         ServiceError::VersionConflict { .. } => simple(StatusCode::CONFLICT, "version_conflict", Category::Conflict),
@@ -188,6 +199,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Team(TeamError::LastAdmin { .. }) => {
             simple(StatusCode::CONFLICT, "last_admin", Category::Conflict)
         }
+        ServiceError::Team(TeamError::PersonalTeam { .. }) => {
+            simple(StatusCode::CONFLICT, "personal_team", Category::Conflict)
+        }
         ServiceError::UserNotFound { .. } => Classified {
             field: Some("user_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "user_not_found", Category::Caller)
@@ -209,13 +223,14 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("param"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "option_not_in_heap", Category::Caller)
         },
-        ServiceError::PasswordHashing(_) => unexpected(),
+        ServiceError::PasswordHashing(_) | ServiceError::RandomSource(_) => unexpected(),
         ServiceError::Store(store) => match StoreErrorKind::of(store) {
             StoreErrorKind::Unavailable => Classified {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 code: "unavailable",
                 title: "The database is unavailable; try again shortly".to_owned(),
                 field: None,
+                hint: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -273,6 +288,10 @@ fn classify_parameter(
 }
 
 fn classify_validation(err: &ValidationError) -> Classified {
+    let hint = match err {
+        ValidationError::HandleInvalid { hint, .. } => hint.clone(),
+        _ => None,
+    };
     let (code, field) = match err {
         ValidationError::Empty { field } => ("field_empty", Some(field.as_str())),
         ValidationError::TooLong { field, .. } => ("field_too_long", Some(field.as_str())),
@@ -286,12 +305,15 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),
         ValidationError::WeightOutOfRange { .. } => ("weight_out_of_range", Some("weight")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
+        ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
+        ValidationError::ItemKeyInvalid => ("invalid_item_key", None),
     };
     Classified {
         status: StatusCode::UNPROCESSABLE_ENTITY,
         code,
         title: err.to_string(),
         field,
+        hint,
         category: Category::Caller,
     }
 }
@@ -302,6 +324,7 @@ fn unexpected() -> Classified {
         code: "internal",
         title: "Something went wrong on the server".to_owned(),
         field: None,
+        hint: None,
         category: Category::Unexpected,
     }
 }
@@ -328,6 +351,7 @@ impl IntoResponse for ApiError {
             title: classified.title,
             status: classified.status.as_u16(),
             field: classified.field,
+            hint: classified.hint,
             request_id,
         };
         let mut response = (

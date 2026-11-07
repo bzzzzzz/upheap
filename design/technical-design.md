@@ -51,6 +51,7 @@ Dependencies point one way: `server → api → service → store, domain`, and 
 Conventions:
 
 - **IDs** are UUIDv7, stored as `CHAR(36)`. They are sortable by creation time and safe to expose.
+- **Handles** name things in URLs, API paths and the CLI ([readable-ids.md](readable-ids.md)): usernames, team slugs, heap slugs (unique per team) and item keys (five random characters, unique per heap). They are extra columns with unique indexes; every foreign key still points at the UUID.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`. This avoids differences between the SQLite and MySQL date types. No timezone is stored anywhere (see [Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is serialized JSON in `TEXT` and never queried inside the database.
 - **Archiving** uses a nullable `archived_at`. There are no hard deletes.
@@ -68,10 +69,10 @@ Tables:
 | `sessions` | token_hash (SHA-256 of a random 256-bit token), user_id, created_at, expires_at |
 | `oauth_auth_codes` | code hash, user_id, client_id, PKCE challenge, redirect_uri, expires_at |
 | `oauth_tokens` | token hash, user_id, client_id, kind (access/refresh), expires_at, revoked_at |
-| `teams` | id, name, created_at, version |
+| `teams` | id, name, slug (unique; for a personal team, its owner's username), personal_user_id (unique, nullable: set on a user's personal team), created_at, version |
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
-| `heaps` | id, team_id, name, age_weight, deadline_weight, value_weight, archived_at, version |
-| `items` | id, heap_id, title, description, state, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
+| `heaps` | id, team_id, name, slug (unique per team), age_weight, deadline_weight, value_weight, archived_at, version |
+| `items` | id, heap_id, key (unique per heap), title, description, state, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
 | `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
 | `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
 | `parameters` | id, heap_id, name, weight, created_at, archived_at, version |
@@ -85,6 +86,7 @@ Notes:
 
 - Effort and impact are columns on `items` rather than custom parameters. They are fixed, apply to every heap, and share one weight (`heaps.value_weight`).
 - The age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
+- A user's username is the slug of their personal team, so usernames and team slugs share one namespace under one unique index. A personal team has its owner as its only member, can't take others, and its slug never changes.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
 - The application can only insert into `audit_log`. There is no update or delete code path for it.
 - Tag names are unique per heap ignoring case. The check runs on `name_key` rather than the column collation, because MySQL compares case-insensitively by default and SQLite doesn't.
@@ -133,7 +135,7 @@ The score is a deterministic function of item data and time. A stable session th
    - `param=` takes option IDs of the heap's parameters, comma-separated. For each parameter they belong to, it keeps items with any of its listed options, and the parameters combine like the other filters. An archived option matches the items that switched to its replacement, so a saved view keeps working after an option is archived. An unknown option is `422` `option_not_in_heap` with `field` `param`.
    - `sort=` is `priority`, `due` (soonest first), `effort` (smallest first), `impact` (largest first) or `parameter`, with the parameter in `sort_parameter=` (its first option first). `sort_parameter` without `sort=parameter`, or the reverse, is `422` `sort_parameter_mismatch`; a parameter of another heap is `parameter_not_in_heap`. Archived parameters and options are accepted in filters and sorts, for the same reason as above; options of an archived parameter don't filter, and a sort by one keeps priority order, since archived parameters count nowhere else either. Items without the value come last, and ties keep priority order. Grouped blocked items always stay in priority order (Req Views: List items §3). `position` is the place in the returned group.
    - The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text: it changes on every keystroke and is a momentary narrowing rather than part of the view. Saved views store the URL's view: the same settings, under the query parameters' names, so a client turns a saved view into a list query field by field. The web app adds `view=<id>` to the URL when a list is opened from a saved view, and keeps it while the settings are changed, so it can offer to save the change into that view.
-4. If heaps grow beyond this size, search moves to the server with per-database full-text indexes. Clients would then call `GET /heaps/{id}/items?q=`.
+4. If heaps grow beyond this size, search moves to the server with per-database full-text indexes. Clients would then call `GET /teams/{team}/heaps/{heap}/items?q=`.
 
 ### Time and timezones
 
@@ -172,17 +174,19 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | --- | --- |
 | Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/oidc/{provider}/start`, `GET /auth/oidc/{provider}/callback`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/revoke` |
 | Me | `GET /me`, `PATCH /me` (display name), `GET /me/tokens`, `POST /me/tokens/{id}/revoke` |
-| Teams | `POST /teams`, `GET/PATCH /teams/{id}` (the team with its members and heaps; rename), `POST /teams/{id}/members`, `PATCH/DELETE /teams/{id}/members/{user_id}` (role change, removal), `POST /teams/{id}/leave`. The caller's teams are listed by `GET /me` |
-| Users | `GET /users?query=` (lookup for adding members, for admins of some team) |
-| Heaps | `POST /teams/{id}/heaps`, `GET/PATCH /heaps/{id}` (rename), `POST /heaps/{id}/archive`, `POST /heaps/{id}/unarchive` |
-| Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value |
-| Closed items | `GET /heaps/{id}/items/closed?cursor=` |
-| Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
+| Teams | `POST /teams`, `GET/PATCH /teams/{team}` (the team with its members and heaps; name and slug), `POST /teams/{team}/members`, `PATCH/DELETE /teams/{team}/members/{username}` (role change, removal), `POST /teams/{team}/leave`. The caller's teams are listed by `GET /me` |
+| Users | `GET /users?query=` (lookup for adding members, for admins of a shared team) |
+| Heaps | `POST /teams/{team}/heaps`, `GET/PATCH /teams/{team}/heaps/{heap}` (name and slug), `POST /teams/{team}/heaps/{heap}/archive`, `POST /teams/{team}/heaps/{heap}/unarchive` |
+| Ranked list | `GET /teams/{team}/heaps/{heap}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value |
+| Closed items | `GET /teams/{team}/heaps/{heap}/items/closed?cursor=` |
+| Items | `POST /teams/{team}/heaps/{heap}/items`, `GET/PATCH /teams/{team}/heaps/{heap}/items/{item}`, `POST /teams/{team}/heaps/{heap}/items/{item}/reopen` |
 | Due choices | `GET /due-choices`: the rough due times a due picker offers ("next week"), each with its date in the request's timezone and the label an item due then reads back with |
-| Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |
-| Parameters | `GET/POST /heaps/{id}/parameters` (in use and archived; add one), `PATCH /parameters/{id}` (name, weight), `POST /parameters/{id}/archive`, `POST /parameters/{id}/options` (add one last), `PATCH /parameters/{id}/options` (every option in use, in the new order, with its label), `POST /options/{id}/archive` (with `replacement_option_id`), `PUT /parameters/{id}/tags` |
-| Saved views | `GET/POST /heaps/{id}/views` (the views in use, by name; save one), `PATCH /views/{id}` (rename, or replace the whole view), `POST /views/{id}/archive` |
-| Audit | `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, newest first, cursor-paged, `entity_id=` for one entity's history; filtered by what the caller may do |
+| Tags | `GET/POST /teams/{team}/heaps/{heap}/tags`, `PATCH /teams/{team}/heaps/{heap}/tags/{id}` |
+| Parameters | `GET/POST /teams/{team}/heaps/{heap}/parameters` (in use and archived; add one), and under it `PATCH /parameters/{id}` (name, weight), `POST /parameters/{id}/archive`, `POST /parameters/{id}/options` (add one last), `PATCH /parameters/{id}/options` (every option in use, in the new order, with its label), `POST /options/{id}/archive` (with `replacement_option_id`), `PUT /parameters/{id}/tags` |
+| Saved views | `GET/POST /teams/{team}/heaps/{heap}/views` (the views in use, by name; save one), `PATCH /teams/{team}/heaps/{heap}/views/{id}` (rename, or replace the whole view), `POST /teams/{team}/heaps/{heap}/views/{id}/archive` |
+| Audit | `GET /teams/{team}/heaps/{heap}/audit`, `GET /teams/{team}/audit`, newest first, cursor-paged, `entity_id=` for one entity's history; filtered by what the caller may do |
+
+Paths name things by handle: `{team}` is a team slug, `{heap}` a heap slug, `{item}` an item key and `{username}` a username. Tags, parameters, options and views have no handle and keep their IDs, checked against the heap in the path. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both the `id` and the handle; request bodies refer to other things by ID (`tag_ids`, `blocked_by_item_id`). Creating a team or heap takes an optional `slug`, derived from the name when left out; a taken one is `409 handle_taken` and a malformed one `422 invalid_handle` with a `hint`. A personal team refuses members, leaving and slug changes with `409 personal_team`.
 
 The `DELETE` on a team member removes the membership. That is the one place where a relationship row goes away, and it is audited. The membership history stays in the audit log.
 
@@ -228,7 +232,7 @@ A display name change is audited once in each of the user's teams, since the aud
 2. If the caller isn't a member of the owning team, the API returns `404 Not Found`, the same as for a resource that doesn't exist. An outsider can't probe for IDs.
 3. If the caller is a member but lacks the permission (for example, a member trying to configure a heap), the API returns `403 Forbidden`.
 4. Every repository query that loads heap-level data filters by the resolved `heap_id`, so an ID from a different heap can never leak in. For example, a `blocked_by_item_id` or a `tag_id` from another heap is rejected with `422` (`tag_not_in_heap` for tags).
-5. `GET /users?query=` (for adding members) is for admins of some team, and every user is the admin of their personal team, so in practice any signed-in user can call it. It is therefore built so it can't list addresses: a name matches when one of its words starts with the query, an email matches only when the query has its whole local part, the `@` and at least one character of the domain, and a match shows the email only when the email matched. It needs at least 3 characters (`field_too_short`) and returns at most 10, with IDs and display names.
+5. `GET /users?query=` (for adding members) is for admins of a shared team; everyone is admin of their personal team, which doesn't count. It is still built so it can't list addresses: a name matches when one of its words starts with the query, an email matches only when the query has its whole local part, the `@` and at least one character of the domain, and a match shows the email only when the email matched. It needs at least 3 characters (`field_too_short`), or a whole username shorter than that, which then matches only that user, and returns at most 10, with IDs, usernames and display names.
 
 ### Archived heaps
 
@@ -272,7 +276,7 @@ These checks run in the same transaction as the write, after the permission chec
 3. Each action is shown to those who hold the permission it takes (`audit_permission` in `domain::permission`), and the read filters on it in SQL so paging stays exact:
    - Members see item, tag and saved view changes, and display name changes.
    - Admins additionally see heap, parameter, team and membership changes. Leaving a team is a membership change, so only admins see it, although any member may leave.
-4. `GET /heaps/{id}/audit` reads what is recorded against the heap. `GET /teams/{id}/audit` reads the team's own entries (`heap_id` is `NULL`) and the heaps' own entries (created, renamed, archived), but not what happens inside the heaps. With `entity_id`, either reads one entity's history; `idx_audit_log_entity` serves it.
+4. `GET /teams/{team}/heaps/{heap}/audit` reads what is recorded against the heap. `GET /teams/{team}/audit` reads the team's own entries (`heap_id` is `NULL`) and the heaps' own entries (created, renamed, archived), but not what happens inside the heaps. With `entity_id`, either reads one entity's history; `idx_audit_log_entity` serves it.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone, a `phrase` to read after the actor's name ("edited item", or "joined the team" when the entry is about the actor, with `names_entity` false), and `changes`, one per changed field with its label and the values before and after as text. IDs in diffs (tags, options, parameters, blockers) are replaced by current names, due times become fixed dates, and an item's parameter values become one change per parameter. The raw `diff` is returned too. The service reads diffs by action: created entries hold the values set, ended memberships the role held, edits before/after pairs.
 6. The web app shows the history where things are edited: under the Edit item view, in a collapsed History on each tag, parameter, heap and member, and for the open saved view. Parameters and heaps offer `view_history` in `allowed_actions` only to those who may see their entries, so members aren't shown histories that are always empty. Archived saved views have no place of their own; their history is on the heap's Activity page. The heap's Activity page and the team's Activity page show the whole logs. Any mutation invalidates every loaded history.
 

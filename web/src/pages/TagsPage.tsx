@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import { ApiProblem, type Tag } from "../api/client";
+import { ApiProblem, type Tag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags, useUpdateTag } from "../api/queries";
 import { HistoryDisclosure } from "../components/AuditHistory";
 
@@ -8,8 +8,8 @@ const inputClass =
   "rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100";
 
 /** Any member can add tags, rename them and edit their descriptions. Tags can't be deleted. */
-export function TagsPage({ heapId }: { heapId: string }) {
-  const tags = useTags(heapId);
+export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
+  const tags = useTags(heapRef);
 
   if (tags.isPending) {
     return <p className="py-16 text-center text-stone-500">Loading…</p>;
@@ -29,13 +29,13 @@ export function TagsPage({ heapId }: { heapId: string }) {
       <p className="mb-4 text-sm text-stone-500">
         Tags group similar items in {heap.name}. They can be renamed but not deleted.
       </p>
-      {allowed_actions.includes("create") && <NewTagForm heapId={heapId} />}
+      {allowed_actions.includes("create") && <NewTagForm heapRef={heapRef} />}
       {tags.data.tags.length === 0 ? (
         <p className="py-12 text-center text-stone-500">No tags yet.</p>
       ) : (
         <ul className="rounded-lg border border-stone-200 bg-white px-3 dark:border-stone-800 dark:bg-stone-900">
           {tags.data.tags.map((tag) => (
-            <TagRow key={tag.id} tag={tag} heapId={heapId} />
+            <TagRow key={tag.id} tag={tag} heapRef={heapRef} />
           ))}
         </ul>
       )}
@@ -43,8 +43,8 @@ export function TagsPage({ heapId }: { heapId: string }) {
   );
 }
 
-function NewTagForm({ heapId }: { heapId: string }) {
-  const create = useCreateTag(heapId);
+function NewTagForm({ heapRef }: { heapRef: HeapRef }) {
+  const create = useCreateTag(heapRef);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -91,8 +91,8 @@ function NewTagForm({ heapId }: { heapId: string }) {
   );
 }
 
-function TagRow({ tag, heapId }: { tag: Tag; heapId: string }) {
-  const update = useUpdateTag(heapId);
+function TagRow({ tag, heapRef }: { tag: Tag; heapRef: HeapRef }) {
+  const update = useUpdateTag(heapRef);
   const canEdit = tag.allowed_actions.includes("edit");
   const [name, setName] = useState(tag.name);
   const [description, setDescription] = useState(tag.description ?? "");
@@ -158,7 +158,7 @@ function TagRow({ tag, heapId }: { tag: Tag; heapId: string }) {
         )}
         <ProblemText error={update.error} />
       </form>
-      <HistoryDisclosure scope={{ heapId }} entityId={tag.id} />
+      <HistoryDisclosure scope={{ heap: heapRef }} entityId={tag.id} />
     </li>
   );
 }

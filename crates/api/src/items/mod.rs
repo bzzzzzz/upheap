@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use domain::list_view::ListView;
 use domain::parameter::ParameterError;
 use domain::tag::parse_tag_set;
-use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
+use domain::{ItemId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -25,8 +25,9 @@ use crate::dto::{
     to_item_dto, to_ranked_dto,
 };
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
+use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, IfMatch, TimeZoneHeader};
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
+use crate::paths::{HeapParams, HeapPath, ItemParams, ItemPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -221,14 +222,13 @@ impl ItemPatchDto {
 
 /// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
 /// item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
-#[utoipa::path(get, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
-    params(("heap_id" = Uuid, Path), RankedQuery, TimeZoneHeader),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
+    params(HeapParams, RankedQuery, TimeZoneHeader),
     responses((status = 200, body = RankedListDto), (status = 400, description = "`invalid_query`", body = Problem), (status = 404, body = Problem), (status = 422, description = "`tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`)", body = Problem)))]
 async fn list_ranked(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(heap_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<RankedQuery>,
 ) -> Result<Json<RankedListDto>, ApiError> {
     let as_of = query
@@ -239,7 +239,7 @@ async fn list_ranked(
     let view = query.to_view().map_err(ServiceError::from)?;
     let list = state
         .services
-        .list_ranked(principal, HeapId::from_uuid(heap_id), as_of, &view)
+        .list_ranked(path.principal, path.heap.heap_id, as_of, &view)
         .await
         .map_err(|error| match error {
             ServiceError::TagNotInHeap { .. } => ApiError::InField { error, field: "tag" },
@@ -262,20 +262,19 @@ async fn list_ranked(
 }
 
 /// Closed items, most recently closed first.
-#[utoipa::path(get, path = "/heaps/{heap_id}/items/closed", tag = "items", security(("session" = [])),
-    params(("heap_id" = Uuid, Path), ClosedQuery, TimeZoneHeader),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/items/closed", tag = "items", security(("session" = [])),
+    params(HeapParams, ClosedQuery, TimeZoneHeader),
     responses((status = 200, body = ClosedItemsDto), (status = 404, body = Problem)))]
 async fn list_closed(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(heap_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<ClosedQuery>,
 ) -> Result<Json<ClosedItemsDto>, ApiError> {
     let cursor = query.cursor.as_deref().map(parse_cursor).transpose()?;
     let page = state
         .services
-        .list_closed(principal, HeapId::from_uuid(heap_id), cursor, query.limit.unwrap_or(50))
+        .list_closed(path.principal, path.heap.heap_id, cursor, query.limit.unwrap_or(50))
         .await?;
     let now = state.services.now();
     Ok(Json(ClosedItemsDto {
@@ -286,40 +285,38 @@ async fn list_closed(
 }
 
 /// Adds an item. Only the title is required.
-#[utoipa::path(post, path = "/heaps/{heap_id}/items", tag = "items", security(("session" = [])),
-    params(("heap_id" = Uuid, Path), TimeZoneHeader), request_body = CreateItemDto,
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
+    params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
     responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
 async fn create_item(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: HeapPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(heap_id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<CreateItemDto>,
 ) -> Result<(StatusCode, Json<ItemDto>), ApiError> {
     let fields = to_new_item(&body, &tz).map_err(ServiceError::from)?;
     let view = state
         .services
-        .create_item(principal, HeapId::from_uuid(heap_id), fields)
+        .create_item(path.principal, path.heap.heap_id, fields)
         .await?;
     Ok((StatusCode::CREATED, Json(to_item_dto(view, state.services.now(), &tz))))
 }
 
-#[utoipa::path(get, path = "/items/{item_id}", tag = "items", security(("session" = [])),
-    params(("item_id" = Uuid, Path), TimeZoneHeader),
+#[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/items/{item}", tag = "items", security(("session" = [])),
+    params(ItemParams, TimeZoneHeader),
     responses((status = 200, body = ItemDto), (status = 404, body = Problem)))]
 async fn get_item(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: ItemPath,
     ClientTimeZone(tz): ClientTimeZone,
-    ApiPath(item_id): ApiPath<Uuid>,
 ) -> Result<Json<ItemDto>, ApiError> {
-    let view = state.services.find_item(principal, ItemId::from_uuid(item_id)).await?;
+    let view = state.services.find_item(path.principal, path.item_id).await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
 /// Edits an item. Send the item's `version` in `If-Match`.
-#[utoipa::path(patch, path = "/items/{item_id}", tag = "items", security(("session" = [])),
-    params(("item_id" = Uuid, Path), IfMatchHeader, TimeZoneHeader), request_body = ItemPatchDto,
+#[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/items/{item}", tag = "items", security(("session" = [])),
+    params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemPatchDto,
     responses(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
@@ -329,23 +326,22 @@ async fn get_item(
     ))]
 async fn update_item(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: ItemPath,
     ClientTimeZone(tz): ClientTimeZone,
     IfMatch(expected): IfMatch,
-    ApiPath(item_id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<ItemPatchDto>,
 ) -> Result<Json<ItemDto>, ApiError> {
     let patch = body.to_patch(&tz).map_err(ServiceError::from)?;
     let view = state
         .services
-        .update_item(principal, ItemId::from_uuid(item_id), patch, expected)
+        .update_item(path.principal, path.item_id, patch, expected)
         .await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
 /// Reopens a closed item, within a week of closing it.
-#[utoipa::path(post, path = "/items/{item_id}/reopen", tag = "items", security(("session" = [])),
-    params(("item_id" = Uuid, Path), IfMatchHeader, TimeZoneHeader),
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/reopen", tag = "items", security(("session" = [])),
+    params(ItemParams, IfMatchHeader, TimeZoneHeader),
     responses(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
@@ -353,10 +349,9 @@ async fn update_item(
     ))]
 async fn reopen_item(
     State(state): State<AppState>,
-    CurrentUser(principal): CurrentUser,
+    path: ItemPath,
     ClientTimeZone(tz): ClientTimeZone,
     IfMatch(expected): IfMatch,
-    ApiPath(item_id): ApiPath<Uuid>,
 ) -> Result<Json<ItemDto>, ApiError> {
     let patch = ItemPatch {
         state: Some(StateKind::Open),
@@ -364,7 +359,7 @@ async fn reopen_item(
     };
     let view = state
         .services
-        .update_item(principal, ItemId::from_uuid(item_id), patch, expected)
+        .update_item(path.principal, path.item_id, patch, expected)
         .await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }

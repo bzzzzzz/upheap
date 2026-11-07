@@ -49,7 +49,7 @@ async fn duplicate_email_is_rejected() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     app.register("ada@example.test").await?;
-    let again = json!({ "email": "ADA@example.test", "display_name": "Ada", "password": "a long test password" });
+    let again = json!({ "email": "ADA@example.test", "username": "ada2", "display_name": "Ada", "password": "a long test password" });
 
     // Act
     let response = app
@@ -68,7 +68,7 @@ async fn items_are_ranked_with_contributors() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
-    let items = format!("/api/v1/heaps/{heap}/items");
+    let items = format!("{}/items", app.heap_url(&heap).await?);
     app.send(
         Method::POST,
         &items,
@@ -108,12 +108,12 @@ async fn edits_need_the_current_version() -> Result<()> {
     let created = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&session),
             Some(json!({ "title": "Task" })),
         )
         .await?;
-    let item = format!("/api/v1/items/{}", created.body["id"].as_str().unwrap_or_default());
+    let item = app.item_url(created.body["id"].as_str().unwrap_or_default()).await?;
     let rename = json!({ "title": "Renamed" });
     let csrf = ("x-csrf-protection", "1");
 
@@ -161,7 +161,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
         let created = app
             .send(
                 Method::POST,
-                &format!("/api/v1/heaps/{heap}/items"),
+                &format!("{}/items", app.heap_url(&heap).await?),
                 Some(&session),
                 Some(json!({ "title": title })),
             )
@@ -169,7 +169,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
         let id = created.body["id"].as_str().unwrap_or_default().to_owned();
         app.send_with(
             Method::PATCH,
-            &format!("/api/v1/items/{id}"),
+            &app.item_url(&id).await?,
             Some(&session),
             Some(json!({ "state": "done" })),
             &[csrf, ("if-match", "1")],
@@ -183,7 +183,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
     let inside = app
         .send_with(
             Method::POST,
-            &format!("/api/v1/items/{}/reopen", ids[0]),
+            &format!("{}/reopen", app.item_url(&ids[0]).await?),
             Some(&session),
             None,
             &[csrf, ("if-match", "2")],
@@ -193,7 +193,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
     let outside = app
         .send_with(
             Method::POST,
-            &format!("/api/v1/items/{}/reopen", ids[1]),
+            &format!("{}/reopen", app.item_url(&ids[1]).await?),
             Some(&session),
             None,
             &[csrf, ("if-match", "2")],
@@ -202,7 +202,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
     let closed = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items/closed"),
+            &format!("{}/items/closed", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -229,7 +229,7 @@ async fn outsiders_get_not_found() -> Result<()> {
     let list = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&outsider),
             None,
         )
@@ -237,7 +237,7 @@ async fn outsiders_get_not_found() -> Result<()> {
     let create = app
         .send(
             Method::POST,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&outsider),
             Some(json!({ "title": "x" })),
         )
@@ -254,7 +254,7 @@ async fn outsiders_get_not_found() -> Result<()> {
 async fn writes_without_the_csrf_header_are_refused() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
-    let body = json!({ "email": "ada@example.test", "display_name": "Ada", "password": "a long test password" });
+    let body = json!({ "email": "ada@example.test", "username": "ada", "display_name": "Ada", "password": "a long test password" });
 
     // Act
     let response = app

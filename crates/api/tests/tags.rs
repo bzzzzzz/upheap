@@ -35,13 +35,18 @@ async fn items_carry_their_tags_by_name() -> Result<()> {
     let list = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items"),
+            &format!("{}/items", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
         .await?;
     let tags = app
-        .send(Method::GET, &format!("/api/v1/heaps/{heap}/tags"), Some(&session), None)
+        .send(
+            Method::GET,
+            &format!("{}/tags", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
         .await?;
 
     // Assert
@@ -66,7 +71,11 @@ async fn tag_names_are_unique_per_heap_ignoring_case() -> Result<()> {
     let (other_session, other_heap) = app.register("bob@example.test").await?;
     app.new_tag_id(&session, &heap, "Infra").await?;
     let ops = app.create_tag(&session, &heap, "ops").await?;
-    let ops_path = format!("/api/v1/tags/{}", ops.body["id"].as_str().unwrap_or_default());
+    let ops_path = format!(
+        "{}/tags/{}",
+        app.heap_url(&heap).await?,
+        ops.body["id"].as_str().unwrap_or_default()
+    );
 
     // Act
     let same_heap = app.create_tag(&session, &heap, "  infra ").await?;
@@ -105,7 +114,7 @@ async fn renaming_a_tag_renames_it_on_every_item() -> Result<()> {
     let renamed = app
         .patch(
             &session,
-            &format!("/api/v1/tags/{tag_id}"),
+            &format!("{}/tags/{tag_id}", app.heap_url(&heap).await?),
             &tag.body["version"],
             json!({ "name": "platform", "description": "Shared services" }),
         )
@@ -113,7 +122,7 @@ async fn renaming_a_tag_renames_it_on_every_item() -> Result<()> {
     let reloaded = app
         .send(
             Method::GET,
-            &format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default()),
+            &app.item_url(item.body["id"].as_str().unwrap_or_default()).await?,
             Some(&session),
             None,
         )
@@ -136,7 +145,7 @@ async fn tags_can_be_removed_from_an_item_and_added_back() -> Result<()> {
     let item = app
         .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
         .await?;
-    let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
+    let path = app.item_url(item.body["id"].as_str().unwrap_or_default()).await?;
 
     // Act
     let swapped = app
@@ -179,7 +188,7 @@ async fn tags_from_another_heap_are_refused() -> Result<()> {
     let (other_session, other_heap) = app.register("bob@example.test").await?;
     let foreign = app.new_tag_id(&other_session, &other_heap, "theirs").await?;
     let item = app.create_item(&session, &heap, json!({ "title": "Task" })).await?;
-    let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
+    let path = app.item_url(item.body["id"].as_str().unwrap_or_default()).await?;
 
     // Act
     let on_create = app
@@ -215,7 +224,7 @@ async fn closed_items_keep_their_tags_until_reopened() -> Result<()> {
     let item = app
         .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
         .await?;
-    let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
+    let path = app.item_url(item.body["id"].as_str().unwrap_or_default()).await?;
     let done = app
         .patch(&session, &path, &item.body["version"], json!({ "state": "done" }))
         .await?;
@@ -227,7 +236,7 @@ async fn closed_items_keep_their_tags_until_reopened() -> Result<()> {
     let closed = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items/closed"),
+            &format!("{}/items/closed", app.heap_url(&heap).await?),
             Some(&session),
             None,
         )
@@ -255,7 +264,7 @@ async fn taking_a_tag_off_an_item_is_audited() -> Result<()> {
     // Act
     app.patch(
         &session,
-        &format!("/api/v1/items/{item_id}"),
+        &app.item_url(&item_id).await?,
         &item.body["version"],
         json!({ "tag_ids": [] }),
     )
@@ -281,7 +290,7 @@ async fn null_tag_ids_are_refused_rather_than_ignored() -> Result<()> {
     let item = app
         .create_item(&session, &heap, json!({ "title": "Task", "tag_ids": [ops] }))
         .await?;
-    let path = format!("/api/v1/items/{}", item.body["id"].as_str().unwrap_or_default());
+    let path = app.item_url(item.body["id"].as_str().unwrap_or_default()).await?;
 
     // Act
     let null = app

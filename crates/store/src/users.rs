@@ -1,5 +1,11 @@
 //! Users and their local password credentials.
+//!
+//! A user's username is the slug of their personal team (`teams.personal_user_id`), so one unique index covers
+//! both and no team can take a username. Every function that returns a user reads it from there.
 
+use std::collections::HashMap;
+
+use domain::handle::Handle;
 use domain::user::{DisplayName, Email, User, UserQuery};
 use domain::{Timestamp, UserId, Version};
 use sea_orm::ExprTrait;
@@ -10,11 +16,12 @@ use sea_orm::{
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
-use crate::entities::{password_credentials, users};
+use crate::entities::{password_credentials, teams, users};
 
 const TABLE: &str = "users";
 
-/// Inserts `user`. Fails with [`StoreError::Duplicate`] when the email is taken.
+/// Inserts `user`. Fails with [`StoreError::Duplicate`] when the email is taken. Their username is held by their
+/// personal team, which the caller inserts next ([`crate::teams::insert_team`]).
 pub async fn insert_user(db: &impl ConnectionTrait, user: &User) -> Result<(), StoreError> {
     let id = id_to_db(user.id.as_uuid());
     let row = users::ActiveModel {
@@ -30,7 +37,21 @@ pub async fn insert_user(db: &impl ConnectionTrait, user: &User) -> Result<(), S
 
 pub async fn find_user(db: &impl ConnectionTrait, id: UserId) -> Result<Option<User>, StoreError> {
     let row = users::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
-    row.map(to_user).transpose()
+    Ok(to_users(db, row.into_iter().collect()).await?.pop())
+}
+
+/// The user whose username is `username`, or `None` if there is none.
+pub async fn find_user_by_username(db: &impl ConnectionTrait, username: &Handle) -> Result<Option<User>, StoreError> {
+    let team = teams::Entity::find()
+        .filter(teams::Column::Slug.eq(username.as_str()))
+        .filter(teams::Column::PersonalUserId.is_not_null())
+        .one(db)
+        .await?;
+    let Some(user_id) = team.and_then(|team| team.personal_user_id) else {
+        return Ok(None);
+    };
+    let row = users::Entity::find_by_id(user_id).one(db).await?;
+    Ok(to_users(db, row.into_iter().collect()).await?.pop())
 }
 
 pub async fn find_user_by_email(db: &impl ConnectionTrait, email: &Email) -> Result<Option<User>, StoreError> {
@@ -38,7 +59,7 @@ pub async fn find_user_by_email(db: &impl ConnectionTrait, email: &Email) -> Res
         .filter(users::Column::Email.eq(email.as_str()))
         .one(db)
         .await?;
-    row.map(to_user).transpose()
+    Ok(to_users(db, row.into_iter().collect()).await?.pop())
 }
 
 /// The user who was created first, if there is any. The local build has only one.
@@ -48,7 +69,7 @@ pub async fn find_first_user(db: &impl ConnectionTrait) -> Result<Option<User>, 
         .order_by_asc(users::Column::Id)
         .one(db)
         .await?;
-    row.map(to_user).transpose()
+    Ok(to_users(db, row.into_iter().collect()).await?.pop())
 }
 
 /// The users among `ids`, in no particular order. Unknown IDs are left out.
@@ -56,13 +77,11 @@ pub async fn list_users(db: &impl ConnectionTrait, ids: &[UserId]) -> Result<Vec
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    users::Entity::find()
+    let rows = users::Entity::find()
         .filter(users::Column::Id.is_in(ids.iter().map(|id| id_to_db(id.as_uuid()))))
         .all(db)
-        .await?
-        .into_iter()
-        .map(to_user)
-        .collect()
+        .await?;
+    to_users(db, rows).await
 }
 
 /// Up to `limit` users with a word of their display name starting with `query`, ignoring ASCII case, by display name.
@@ -76,7 +95,7 @@ pub async fn find_users_by_name(
     let text = escape_like(query.as_str());
     let name = || Expr::expr(Func::lower(Expr::col(users::Column::DisplayName)));
     let like = |pattern: String| LikeExpr::new(pattern).escape('\\');
-    users::Entity::find()
+    let rows = users::Entity::find()
         .filter(
             Condition::any()
                 .add(name().like(like(format!("{text}%"))))
@@ -86,10 +105,8 @@ pub async fn find_users_by_name(
         .order_by_asc(users::Column::Id)
         .limit(limit)
         .all(db)
-        .await?
-        .into_iter()
-        .map(to_user)
-        .collect()
+        .await?;
+    to_users(db, rows).await
 }
 
 /// Up to `limit` users whose email starts with `prefix`, by email. Emails are stored lowercased.
@@ -99,15 +116,13 @@ pub async fn find_users_by_email_prefix(
     limit: u64,
 ) -> Result<Vec<User>, StoreError> {
     let pattern = format!("{}%", escape_like(prefix));
-    users::Entity::find()
+    let rows = users::Entity::find()
         .filter(Expr::col(users::Column::Email).like(LikeExpr::new(pattern).escape('\\')))
         .order_by_asc(users::Column::Email)
         .limit(limit)
         .all(db)
-        .await?
-        .into_iter()
-        .map(to_user)
-        .collect()
+        .await?;
+    to_users(db, rows).await
 }
 
 /// Writes the display name if the stored row still has version `expected`, and returns the user with its new
@@ -167,13 +182,35 @@ pub async fn find_password_hash(db: &impl ConnectionTrait, user_id: UserId) -> R
     Ok(row.map(|r| r.password_hash))
 }
 
-fn to_user(row: users::Model) -> Result<User, StoreError> {
+/// The users of `rows`, in the same order, with their usernames from their personal teams.
+async fn to_users(db: &impl ConnectionTrait, rows: Vec<users::Model>) -> Result<Vec<User>, StoreError> {
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let usernames: HashMap<String, String> = teams::Entity::find()
+        .filter(teams::Column::PersonalUserId.is_in(rows.iter().map(|row| row.id.as_str())))
+        .all(db)
+        .await?
+        .into_iter()
+        .filter_map(|team| Some((team.personal_user_id?, team.slug)))
+        .collect();
+    rows.into_iter()
+        .map(|row| {
+            let username = usernames.get(&row.id).cloned();
+            to_user(row, username)
+        })
+        .collect()
+}
+
+fn to_user(row: users::Model, username: Option<String>) -> Result<User, StoreError> {
     let read = RowReader {
         table: TABLE,
         id: &row.id,
     };
+    let username = username.ok_or_else(|| read.corrupt("user has no personal team".to_owned()))?;
     Ok(User {
         id: UserId::from_uuid(read.uuid(&row.id)?),
+        username: read.handle(&username)?,
         email: Email::parse(&row.email).map_err(|e| read.corrupt(e.to_string()))?,
         display_name: DisplayName::parse(&row.display_name).map_err(|e| read.corrupt(e.to_string()))?,
         created_at: read.timestamp(row.created_at)?,

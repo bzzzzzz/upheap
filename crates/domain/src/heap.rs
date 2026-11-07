@@ -1,5 +1,6 @@
 //! Heaps and their ranking policy.
 
+use crate::handle::Handle;
 use crate::text::Name;
 use crate::{HeapId, TeamId, Timestamp, Version};
 
@@ -27,6 +28,8 @@ impl Default for HeapPolicy {
 pub struct Heap {
     pub id: HeapId,
     pub team_id: TeamId,
+    /// Unique within the team.
+    pub slug: Handle,
     pub name: Name,
     pub policy: HeapPolicy,
     /// `None` while the heap is active.

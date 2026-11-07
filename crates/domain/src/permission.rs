@@ -5,7 +5,7 @@ use crate::heap::Heap;
 use crate::item::Item;
 use crate::parameter::Parameter;
 use crate::saved_view::SavedView;
-use crate::team::{Membership, Role, admin_remains};
+use crate::team::{Membership, Role, Team, admin_remains};
 use crate::{Timestamp, UserId};
 
 /// Something a team member may be allowed to do.
@@ -222,27 +222,33 @@ const fn can_configure(heap: &Heap, role: Role) -> bool {
 pub enum TeamAction {
     /// Change the team's name.
     Rename,
-    /// Add a user as a member.
+    /// Change the team's slug. Not offered on a personal team.
+    ChangeSlug,
+    /// Add a user as a member. Not offered on a personal team.
     AddMember,
     /// Add a heap to the team.
     CreateHeap,
-    /// Leave the team. Not offered to the last admin.
+    /// Leave the team. Not offered to the last admin, nor on a personal team.
     Leave,
 }
 
-/// What `user_id` can do with the team whose memberships are `members`. Empty for non-members.
-pub fn allowed_team_actions(members: &[Membership], user_id: UserId) -> Vec<TeamAction> {
+/// What `user_id` can do with `team`, whose memberships are `members`. Empty for non-members.
+pub fn allowed_team_actions(team: &Team, members: &[Membership], user_id: UserId) -> Vec<TeamAction> {
     let Some(role) = members.iter().find(|m| m.user_id == user_id).map(|m| m.role) else {
         return Vec::new();
     };
     let mut actions = Vec::new();
+    let shared = !team.is_personal();
     if Permission::ManageTeam.is_granted_to(role) {
-        actions.extend([TeamAction::Rename, TeamAction::AddMember]);
+        actions.push(TeamAction::Rename);
+        if shared {
+            actions.extend([TeamAction::ChangeSlug, TeamAction::AddMember]);
+        }
     }
     if Permission::ManageHeaps.is_granted_to(role) {
         actions.push(TeamAction::CreateHeap);
     }
-    if Permission::LeaveTeam.is_granted_to(role) && admin_remains(members, user_id, None) {
+    if shared && Permission::LeaveTeam.is_granted_to(role) && admin_remains(members, user_id, None) {
         actions.push(TeamAction::Leave);
     }
     actions
@@ -281,7 +287,7 @@ pub fn allowed_member_actions(members: &[Membership], caller: &Membership, targe
 /// An action a client may offer on a heap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeapAction {
-    /// Change the heap's name. Not offered while it is archived.
+    /// Change the heap's name or slug. Not offered while it is archived.
     Rename,
     /// Make the heap read-only.
     Archive,
@@ -310,6 +316,21 @@ mod tests {
 
     use super::*;
     use crate::TeamId;
+    use crate::Version;
+    use crate::handle::Handle;
+    use crate::text::Name;
+    use crate::validation::Field;
+
+    fn team(personal_user: Option<UserId>) -> Team {
+        Team {
+            id: TeamId::from_uuid(Uuid::from_u128(1)),
+            slug: Handle::parse("ops", Field::Slug).expect("valid"),
+            name: Name::parse("Ops").expect("valid"),
+            personal_user,
+            created_at: Timestamp::EPOCH,
+            version: Version::INITIAL,
+        }
+    }
 
     fn member(n: u128, role: Role) -> Membership {
         Membership {
@@ -350,9 +371,10 @@ mod tests {
         let members = [admin, other];
 
         expect_that!(
-            allowed_team_actions(&members, admin.user_id),
+            allowed_team_actions(&team(None), &members, admin.user_id),
             elements_are![
                 eq(&TeamAction::Rename),
+                eq(&TeamAction::ChangeSlug),
                 eq(&TeamAction::AddMember),
                 eq(&TeamAction::CreateHeap)
             ]
@@ -371,7 +393,7 @@ mod tests {
         let members = [first, second];
 
         expect_that!(
-            allowed_team_actions(&members, first.user_id),
+            allowed_team_actions(&team(None), &members, first.user_id),
             contains(eq(&TeamAction::Leave))
         );
         expect_that!(
@@ -385,18 +407,29 @@ mod tests {
     }
 
     #[gtest]
+    fn a_personal_team_offers_no_member_changes() {
+        let owner = member(10, Role::Admin);
+        let personal = team(Some(owner.user_id));
+
+        expect_that!(
+            allowed_team_actions(&personal, &[owner], owner.user_id),
+            elements_are![eq(&TeamAction::Rename), eq(&TeamAction::CreateHeap)]
+        );
+    }
+
+    #[gtest]
     fn members_can_only_leave() {
         let admin = member(10, Role::Admin);
         let plain = member(11, Role::Member);
         let members = [admin, plain];
 
         expect_that!(
-            allowed_team_actions(&members, plain.user_id),
+            allowed_team_actions(&team(None), &members, plain.user_id),
             elements_are![eq(&TeamAction::Leave)]
         );
         expect_that!(allowed_member_actions(&members, &plain, &admin), is_empty());
         expect_that!(
-            allowed_team_actions(&members, UserId::from_uuid(Uuid::from_u128(99))),
+            allowed_team_actions(&team(None), &members, UserId::from_uuid(Uuid::from_u128(99))),
             is_empty()
         );
     }

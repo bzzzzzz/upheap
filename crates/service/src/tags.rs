@@ -83,10 +83,12 @@ impl Services {
 
     /// Renames a tag or changes its description, if it is still at version `expected`.
     ///
-    /// A patch that changes nothing succeeds and returns the tag unchanged, without an audit entry.
+    /// A patch that changes nothing succeeds and returns the tag unchanged, without an audit entry. A tag of another
+    /// heap than `heap_id` is [`ServiceError::NotFound`].
     pub async fn update_tag(
         &self,
         principal: Principal,
+        heap_id: HeapId,
         tag_id: TagId,
         patch: TagPatch,
         expected: Version,
@@ -94,6 +96,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let current = store::tags::find_tag(&txn, tag_id)
             .await?
+            .filter(|tag| tag.heap_id == heap_id)
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap_write(&txn, principal, current.heap_id, Permission::EditItems).await?;
         if current.version != expected {

@@ -1,6 +1,6 @@
 import { useId, useState, type KeyboardEvent } from "react";
 
-import { ApiProblem, type ItemTag } from "../api/client";
+import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags } from "../api/queries";
 
 const MAX_SUGGESTIONS = 6;
@@ -10,18 +10,18 @@ const MAX_SUGGESTIONS = 6;
  * when nothing matches the typed name exactly. Backspace in the empty input removes the last tag.
  */
 export function TagPicker({
-  heapId,
+  heapRef,
   value,
   onChange,
   disabled,
 }: {
-  heapId: string;
+  heapRef: HeapRef;
   value: ItemTag[];
   onChange: (tags: ItemTag[]) => void;
   disabled?: boolean;
 }) {
-  const tags = useTags(heapId);
-  const create = useCreateTag(heapId);
+  const tags = useTags(heapRef);
+  const create = useCreateTag(heapRef);
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);

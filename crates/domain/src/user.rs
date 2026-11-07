@@ -1,5 +1,6 @@
 //! Users and their credentials rules.
 
+use crate::handle::Handle;
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
 use crate::{Timestamp, UserId, Version};
@@ -52,6 +53,8 @@ impl DisplayName {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct User {
     pub id: UserId,
+    /// The slug of the user's personal team, so no team can take it. Never changes.
+    pub username: Handle,
     pub email: Email,
     pub display_name: DisplayName,
     pub created_at: Timestamp,
@@ -61,7 +64,8 @@ pub struct User {
 /// The shortest text a user lookup matches on, so a lookup can't list every user one letter at a time.
 pub const USER_QUERY_MIN_CHARS: usize = 3;
 
-/// A user lookup: trimmed, ASCII letters lowercased, at least [`USER_QUERY_MIN_CHARS`] characters.
+/// A user lookup: trimmed, ASCII letters lowercased, at least [`USER_QUERY_MIN_CHARS`] characters, or a whole
+/// username shorter than that, which then matches only that username.
 ///
 /// Only ASCII is lowercased because SQLite's `LOWER` changes nothing else: a fully lowercased `öla` could never match
 /// a stored `Ölaf` there, while `Öla` does. MySQL compares case-insensitively anyway.
@@ -73,7 +77,7 @@ impl UserQuery {
 
     pub fn parse(raw: &str) -> Result<Self, ValidationError> {
         let text = parse_required(raw, Field::Query, Self::MAX_CHARS)?.to_ascii_lowercase();
-        if text.chars().count() < USER_QUERY_MIN_CHARS {
+        if text.chars().count() < USER_QUERY_MIN_CHARS && Handle::parse(&text, Field::Username).is_err() {
             return Err(ValidationError::TooShort {
                 field: Field::Query,
                 min: USER_QUERY_MIN_CHARS,
@@ -84,6 +88,12 @@ impl UserQuery {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Whether names may match the query. A query shorter than [`USER_QUERY_MIN_CHARS`] matches only a username
+    /// exactly.
+    pub fn matches_names(&self) -> bool {
+        self.0.chars().count() >= USER_QUERY_MIN_CHARS
     }
 
     /// The query as the start of an email address, when it has the whole local part, the `@` and at least one
@@ -135,15 +145,17 @@ mod tests {
     }
 
     #[gtest]
-    fn user_query_needs_three_characters() {
+    fn user_query_needs_three_characters_or_a_whole_username() {
         expect_that!(
-            UserQuery::parse(" ad "),
+            UserQuery::parse(" a- "),
             err(eq(&ValidationError::TooShort {
                 field: Field::Query,
                 min: USER_QUERY_MIN_CHARS
             }))
         );
-        expect_that!(UserQuery::parse(" Ada ").map(|q| q.as_str().to_owned()), ok(eq("ada")));
+        expect_that!(UserQuery::parse(" Ada ").map(|q| q.matches_names()), ok(eq(&true)));
+        expect_that!(UserQuery::parse(" Ab ").map(|q| q.as_str().to_owned()), ok(eq("ab")));
+        expect_that!(UserQuery::parse("ab").map(|q| q.matches_names()), ok(eq(&false)));
         expect_that!(UserQuery::parse("Öla").map(|q| q.as_str().to_owned()), ok(eq("Öla")));
     }
 

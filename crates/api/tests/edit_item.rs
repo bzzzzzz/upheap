@@ -18,7 +18,7 @@ async fn create(app: &TestApp, session: &str, heap: &str, body: Value) -> Result
 
 /// Sends a `PATCH` for item `item` at `version`.
 async fn patch(app: &TestApp, session: &str, item: &str, version: u64, body: Value) -> Result<TestResponse> {
-    app.patch(session, &format!("/api/v1/items/{item}"), &json!(version), body)
+    app.patch(session, &app.item_url(&item).await?, &json!(version), body)
         .await
 }
 
@@ -53,7 +53,7 @@ async fn one_save_changes_every_field_in_one_version_and_one_audit_entry() -> Re
     )
     .await?;
     let fetched = app
-        .send(Method::GET, &format!("/api/v1/items/{item}"), Some(&session), None)
+        .send(Method::GET, &app.item_url(&item).await?, Some(&session), None)
         .await?;
     let audit = app.audit_entries(&item).await?;
 

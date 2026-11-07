@@ -24,6 +24,10 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct RegisterRequest {
     pub email: String,
+    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
+    /// the personal team, and can't be changed later.
+    #[schema(example = "eugene")]
+    pub username: String,
     pub display_name: String,
     pub password: String,
 }
@@ -38,8 +42,8 @@ pub(crate) struct SignInRequest {
 #[utoipa::path(post, path = "/auth/register", tag = "auth", request_body = RegisterRequest,
     responses(
         (status = 201, description = "Registered and signed in; sets the session cookie", body = UserDto),
-        (status = 409, description = "`email_taken`", body = Problem),
-        (status = 422, description = "Invalid email, name or password", body = Problem),
+        (status = 409, description = "`email_taken`, or `handle_taken` (`field` `username`)", body = Problem),
+        (status = 422, description = "Invalid email, name or password, or `invalid_handle` with a `hint`", body = Problem),
     ))]
 async fn register(
     State(state): State<AppState>,
@@ -47,6 +51,7 @@ async fn register(
 ) -> Result<Response, ApiError> {
     let registration = Registration {
         email: &body.email,
+        username: &body.username,
         display_name: &body.display_name,
         password: &body.password,
     };

@@ -18,7 +18,7 @@ fn id(item: &Value) -> Result<&str> {
 
 /// Sends a `PATCH` for `item` at its current version.
 async fn patch(app: &TestApp, session: &str, item: &Value, body: Value) -> Result<TestResponse> {
-    app.patch(session, &format!("/api/v1/items/{}", id(item)?), &item["version"], body)
+    app.patch(session, &app.item_url(id(item)?).await?, &item["version"], body)
         .await
 }
 
@@ -40,7 +40,7 @@ async fn ranked(app: &TestApp, session: &str, heap: &str) -> Result<Value> {
     let list = app
         .send(
             Method::GET,
-            &format!("/api/v1/heaps/{heap}/items?blocked=shown"),
+            &format!("{}/items?blocked=shown", app.heap_url(&heap).await?),
             Some(session),
             None,
         )
@@ -73,7 +73,7 @@ async fn a_blocker_takes_on_the_priority_of_what_it_blocks() -> Result<()> {
     expect_that!(blocked["state"], eq(&json!("blocked")));
     expect_that!(
         blocked["blocked_by"],
-        eq(&json!({ "id": id(&blocker)?, "title": "Upgrade database", "state": "open" }))
+        eq(&json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "Upgrade database", "state": "open" }))
     );
     expect_that!(list["ranked"][0]["item"]["title"], eq(&json!("Upgrade database")));
     expect_that!(list["ranked"][0]["contributors"][0]["factor"], eq(&json!("blocks")));
@@ -116,7 +116,7 @@ async fn a_block_that_would_close_a_cycle_is_refused() -> Result<()> {
     )
     .await?;
     let unchanged = app
-        .send(Method::GET, &format!("/api/v1/items/{}", id(&a)?), Some(&session), None)
+        .send(Method::GET, &app.item_url(id(&a)?).await?, Some(&session), None)
         .await?;
 
     // Assert
@@ -258,7 +258,7 @@ async fn a_closed_blocker_still_shows_on_what_waits_for_it() -> Result<()> {
     expect_that!(closed.status, eq(StatusCode::OK));
     expect_that!(
         list["blocked"][0]["item"]["blocked_by"],
-        eq(&json!({ "id": id(&blocker)?, "title": "First", "state": "done" }))
+        eq(&json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "First", "state": "done" }))
     );
     Ok(())
 }

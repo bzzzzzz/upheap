@@ -292,6 +292,7 @@ mod tests {
         Item::new(
             ItemId::from_uuid(Uuid::from_u128(n)),
             HeapId::from_uuid(Uuid::nil()),
+            crate::handle::ItemKey::parse("k3x9a").expect("valid"),
             fields,
             created,
         )

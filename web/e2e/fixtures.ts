@@ -7,29 +7,28 @@ type Size = "S" | "M" | "L" | "XL";
 /** The option the local build's config sets. */
 export type LocalBuildOptions = { localBuild: boolean };
 
-export const test = base.extend<{ heapId: string } & LocalBuildOptions>({
+export const test = base.extend<{ heapPath: string } & LocalBuildOptions>({
   /** Whether the tests run against the local build, which has one user and nothing to sign in to. */
   localBuild: [false, { option: true }],
   /**
    * Opens a heap of the test's own: on the server, a new account's personal heap, which registering through the API
    * signs the page in to (the sign-up form has its own test); in the local build, the local user's first heap, as
    * every test's browser context starts with empty storage. So tests can run in parallel. Automatic, so a test that
-   * doesn't need the heap's ID gets its heap too.
+   * doesn't need the heap's path gets its heap too.
    */
-  heapId: [
+  heapPath: [
     async ({ page, localBuild }, use) => {
       if (!localBuild) {
         const registered = await page.request.post("/api/v1/auth/register", {
           headers: { "x-csrf-protection": "1" },
-          data: { email: uniqueEmail(), display_name: "Tester", password: "a long test password" },
+          data: { ...uniqueUser(), display_name: "Tester", password: "a long test password" },
         });
         expect(registered.status()).toBe(201);
       }
       // Relative, so the local build's base path stays.
       await page.goto("./");
-      await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
-      const heapId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
-      await use(heapId);
+      await expect(page).toHaveURL(HEAP_URL);
+      await use(new URL(page.url()).pathname);
     },
     { auto: true },
   ],
@@ -37,8 +36,14 @@ export const test = base.extend<{ heapId: string } & LocalBuildOptions>({
 
 export { expect };
 
-/** An address no other test uses, also across repeats and parallel workers. */
-export const uniqueEmail = () => `e2e-${crypto.randomUUID()}@example.test`;
+/** A heap's address: `/teams/{team}/heaps/{heap}`, under the local build's base path too. */
+export const HEAP_URL = /\/teams\/[^/]+\/heaps\/[^/]+$/;
+
+/** An email and username no other test uses, also across repeats and parallel workers. */
+export function uniqueUser() {
+  const id = crypto.randomUUID().replaceAll("-", "");
+  return { email: `e2e-${id}@example.test`, username: `e2e-${id.slice(0, 20)}` };
+}
 
 /** The list row of the item titled `title`. */
 export const row = (page: Page, title: string): Locator =>
