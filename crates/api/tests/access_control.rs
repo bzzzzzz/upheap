@@ -178,6 +178,14 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::DisplayName,
             StatusCode::OK,
         ),
+        row(
+            Method::GET,
+            "/due-choices",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
         // Every user is the admin of their personal team, so every signed-in caller here may look users up. The
         // refusal for a user who is no team's admin is tested in `teams.rs`.
         row(

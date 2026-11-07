@@ -1,0 +1,18 @@
+import { ApiProblem } from "../api/client";
+
+/** Messages for the errors a change to an item can bring back, by code. */
+const PROBLEM_MESSAGES: Record<string, string> = {
+  version_conflict: "Someone else changed this item meanwhile. It now shows their version.",
+  blocking_cycle: "That item already waits for this one, so it can't block it.",
+  blocker_closed: "That item is closed, so nothing can wait for it.",
+  blocker_not_in_heap: "That item isn't in this heap any more.",
+  item_not_blocked: "Only a blocked item can wait for another one.",
+  item_closed: "This item is closed, so only its state can change.",
+  option_not_in_parameter: "That option was archived meanwhile. Pick another one.",
+  parameter_not_in_heap: "That parameter was archived meanwhile.",
+  reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
+};
+
+/** What to tell the user about a failed change to an item. */
+export const itemProblem = (error: Error) =>
+  (error instanceof ApiProblem && PROBLEM_MESSAGES[error.code]) || error.message;

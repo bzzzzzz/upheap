@@ -1,6 +1,14 @@
 // The URL is the state: the heap and the page live in the route, so links and reloads work.
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, createRoute, createRouter, Link, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Link,
+  Outlet,
+  redirect,
+  useParams,
+} from "@tanstack/react-router";
 
 import { isUnauthenticated } from "./api/client";
 import { meQuery, soleTeam, useMe } from "./api/queries";
@@ -10,7 +18,6 @@ import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
-import { EditItemPage } from "./pages/EditItemPage";
 import { HeapPage } from "./pages/HeapPage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { TagsPage } from "./pages/TagsPage";
@@ -81,6 +88,8 @@ const heapRoute = createRoute({
   validateSearch: parseListSearch,
   component: function HeapRoute() {
     const { heapId } = heapRoute.useParams();
+    // The item route is a child, so the list stays mounted, and keeps its place, while an item opens over it.
+    const { itemId } = useParams({ strict: false });
     const view = heapRoute.useSearch();
     const navigate = heapRoute.useNavigate();
     // A new key per heap resets the session-stable ranking time. View changes replace the history entry, so Back
@@ -89,12 +98,16 @@ const heapRoute = createRoute({
       <HeapPage
         key={heapId}
         heapId={heapId}
+        itemId={itemId}
         view={view}
         onViewChange={(next) => void navigate({ search: parseListSearch(next), replace: true })}
       />
     );
   },
 });
+
+/** An item, open over its heap's list (app-ux.md, The item). `HeapPage` shows it. */
+const itemRoute = createRoute({ getParentRoute: () => heapRoute, path: "items/$itemId" });
 
 const closedRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -129,15 +142,6 @@ const heapActivityRoute = createRoute({
   component: function HeapActivityRoute() {
     const { heapId } = heapActivityRoute.useParams();
     return <HeapActivityPage key={heapId} heapId={heapId} />;
-  },
-});
-
-const editItemRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/heaps/$heapId/items/$itemId",
-  component: function EditItemRoute() {
-    const { heapId, itemId } = editItemRoute.useParams();
-    return <EditItemPage key={itemId} heapId={heapId} itemId={itemId} />;
   },
 });
 
@@ -178,12 +182,11 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
     indexRoute,
-    heapRoute,
+    heapRoute.addChildren([itemRoute]),
     closedRoute,
     tagsRoute,
     parametersRoute,
     heapActivityRoute,
-    editItemRoute,
     teamsRoute,
     teamRoute,
     teamActivityRoute,
@@ -204,5 +207,12 @@ export function createAppRouter(queryClient: QueryClient) {
 declare module "@tanstack/react-router" {
   interface Register {
     router: ReturnType<typeof createAppRouter>;
+  }
+}
+
+declare module "@tanstack/history" {
+  interface HistoryState {
+    /** Set on the way into an item from a page of the app, so closing the item goes back there. */
+    closesBack?: boolean;
   }
 }

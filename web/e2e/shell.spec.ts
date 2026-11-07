@@ -50,3 +50,22 @@ test("the heap switcher opens another heap", async ({ page }) => {
   await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
   await expect(heaps).toHaveCount(0);
 });
+
+test("More on a phone opens above the tabs, so releasing on it picks nothing", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone has the tabs.");
+
+  const more = page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" });
+  const box = await more.boundingBox();
+  if (!box) throw new Error("More is not laid out");
+  // A slow click: the menu opens on mouse down, and picks whatever item the mouse is released over.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  const menu = page.getByRole("menu", { name: "More" });
+  await expect(menu).toBeVisible();
+  await page.mouse.up();
+
+  await expect(menu).toBeVisible();
+  await expect(page).toHaveURL(/\/heaps\/[^/]+$/);
+  const sheet = await menu.boundingBox();
+  expect(sheet && sheet.y + sheet.height).toBeLessThanOrEqual(box.y);
+});

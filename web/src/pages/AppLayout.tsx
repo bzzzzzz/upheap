@@ -17,29 +17,32 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button, Header, Menu, MenuItem, MenuSection, MenuTrigger, Popover } from "react-aria-components";
 
 import type { Me } from "../api/client";
 import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
 import { StorageNote } from "../components/LocalDatabase";
+import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { ProblemText } from "../components/ProblemText";
 
 export function AppLayout() {
   const { data: me } = useMe();
+  useKeyboardInset();
   const { heapId } = useParams({ strict: false });
 
   return (
     // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
     // menu stays next to what it opens. The left half behind it takes the sidebar's colour, so the sidebar reaches
-    // the edge of the screen.
+    // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
+    // right-hand padding.
     <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
-      <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem]">
+      <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
         {me && <Sidebar me={me} heapId={heapId} />}
         <div className="min-w-0 flex-1 bg-canvas">
           {me && <PhoneTopBar me={me} heapId={heapId} />}
           {/* On a phone, room at the bottom for the tabs. */}
-          <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24">
+          <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
             {heapId && <ArchivedNotice key={heapId} heapId={heapId} />}
             <Outlet />
             <div className="lg:hidden">
@@ -73,19 +76,30 @@ function useShellLinks(me: Me, heapId: string | undefined) {
 const navItemClass =
   "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
-function NavLink({ icon: Icon, label, ...link }: LinkProps & { icon: LucideIcon; label: string }) {
+/** With `current`, the link shows as active also where the router wouldn't say so. */
+function NavLink({
+  icon: Icon,
+  label,
+  current,
+  ...link
+}: LinkProps & { icon: LucideIcon; label: string; current?: boolean }) {
   return (
-    <Link {...link} className={navItemClass}>
+    <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
     </Link>
   );
 }
 
-/** The heap's views, from both the sidebar and the phone's tabs. */
-function heapViews(heapId: string) {
+/** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
+function heapViews(heapId: string, itemOpen: boolean) {
   return {
-    open: { to: "/heaps/$heapId", params: { heapId }, activeOptions: { exact: true, includeSearch: false } },
+    open: {
+      to: "/heaps/$heapId",
+      params: { heapId },
+      activeOptions: { exact: true, includeSearch: false },
+      current: itemOpen,
+    },
     closed: { to: "/heaps/$heapId/closed", params: { heapId } },
     activity: { to: "/heaps/$heapId/activity", params: { heapId } },
     tags: { to: "/heaps/$heapId/tags", params: { heapId } },
@@ -96,7 +110,8 @@ function heapViews(heapId: string) {
 /** The sidebar on a wide screen, folded into a rail on a tablet; hidden on a phone. */
 function Sidebar({ me, heapId }: { me: Me; heapId: string | undefined }) {
   const links = useShellLinks(me, heapId);
-  const views = heapId && heapViews(heapId);
+  const { itemId } = useParams({ strict: false });
+  const views = heapId && heapViews(heapId, itemId !== undefined);
 
   return (
     <aside
@@ -197,12 +212,16 @@ function PhoneTopBar({ me, heapId }: { me: Me; heapId: string | undefined }) {
 /** The phone's tabs: the three views used most, and More for the rest. */
 function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
   const links = useShellLinks(me, heapId);
-  const views = heapViews(heapId);
+  const { itemId } = useParams({ strict: false });
+  const views = heapViews(heapId, itemId !== undefined);
   const navigate = useNavigate();
   const signOut = useSignOut();
+  const tabs = useRef<HTMLElement>(null);
+  usePhoneTabsHeight(tabs);
 
   return (
     <nav
+      ref={tabs}
       aria-label="Heap views"
       className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
@@ -216,7 +235,7 @@ function PhoneTabs({ me, heapId }: { me: Me; heapId: string }) {
           <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
           <span>More</span>
         </Button>
-        <MenuPopover placement="top end">
+        <MenuPopover placement="top end" aboveTabs>
           <Menu
             aria-label="More"
             className="outline-none"
@@ -313,18 +332,29 @@ function HeapMenu({
   );
 }
 
+/**
+ * A menu's popover. On a phone it's a sheet from the bottom, over a dimmed page (the spread shadow), whatever its
+ * anchor. `aboveTabs` puts the sheet above the phone's tabs, for More: a menu opens on mouse down and picks the item
+ * the button is released over, so a sheet over its own button would pick its bottom item (Sign out) on a click.
+ */
 function MenuPopover({
   placement,
+  aboveTabs = false,
   children,
 }: {
   placement: "end top" | "bottom start" | "top end";
+  aboveTabs?: boolean;
   children: ReactNode;
 }) {
   return (
     <Popover
       placement={placement}
       offset={6}
-      className="max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none"
+      className={`max-h-[70dvh] min-w-52 overflow-y-auto rounded-xl border border-line bg-surface p-1 text-ink shadow-lg outline-none max-sm:fixed! max-sm:inset-x-0! max-sm:top-auto! max-sm:max-h-[75dvh]! max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:p-2 max-sm:shadow-[0_0_0_100vmax_rgb(0_0_0/0.4)] ${
+        aboveTabs
+          ? "max-sm:bottom-(--phone-tabs-height)!"
+          : "max-sm:bottom-0! max-sm:pb-[max(env(safe-area-inset-bottom),0.5rem)]"
+      }`}
     >
       {children}
     </Popover>

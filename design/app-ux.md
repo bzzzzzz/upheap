@@ -74,7 +74,18 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 ### Phone details
 
 Phone pages respect the safe-area insets (`viewport-fit=cover`) under the bottom tabs and sheets, and inputs are at
-least 16 px so iOS doesn't zoom in on focus.
+least 16 px so iOS doesn't zoom in on focus. Sheets sit above the on-screen keyboard: Android Chrome resizes the page
+for it (`interactive-widget=resizes-content`), and on iOS, which doesn't, the sheets are lifted by the height the
+keyboard covers, from the visual viewport. The heap switcher and More open as sheets too; More's sits above the
+tabs, since a menu opened with a mouse picks the item the button is released over.
+
+Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
+
+1. A row dragged right past about 100 px slides away and marks the item done; dragged left, it stays open on two
+   buttons, In progress and Blocked (Open in place of the state it's in), until one is picked or the row is tapped.
+   Each is followed by the undo toast. A tap just after a drag doesn't open the item.
+2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
+   springs it back.
 
 ### The list
 
@@ -101,7 +112,10 @@ least 16 px so iOS doesn't zoom in on focus.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
    the tag is added, in Add item too, as it does today.
-4. Changes save as they are made, as the list's inline edits do now, each with its own `If-Match`.
+4. Changes save as they are made, each with its own `If-Match`. They go one at a time, each with the version the
+   previous one brought back, so quick changes don't conflict with each other.
+5. Closing it (✕, Escape, or Back) goes back where it was opened from: Back when the app opened it, the list when it
+   was opened from a link. Opening another row while one is open replaces it in the history.
 
 ### Adding an item
 
@@ -124,8 +138,9 @@ least 16 px so iOS doesn't zoom in on focus.
    field opens the same picker, with the current choice selected.
 4. **The server owns the choices.** Which dates the rough choices stand for, and what they're called, must agree
    with the fuzzy labels the server gives back, or "Next week" could come back as "in a few days". So the server
-   lists the choices, each with its label and date in the request's timezone, and the client only shows them
-   (an addition to the API, made in step 2 of the plan).
+   lists the choices (`GET /due-choices`), each with its label and date in the request's timezone, and the client
+   only shows them. The fuzzy terms include "next week" and "next month", and their bands leave room around each
+   choice, so a picked choice reads back as itself whatever the time of day.
 
 ## Testing
 
@@ -136,9 +151,12 @@ Chromium, against both the server and the local build.
 
 1. **Foundations.** Tokens, icons, React Aria, and the app shell at each width: sidebar, rail, bottom tabs, safe
    areas. The phone and tablet Playwright projects start here.
-2. **List and item.** Compact rows with the state circle, the item pane and sheet in place of the Edit item page,
-   the Add dialog, the due picker and its choices from the server, undo toast, keyboard navigation.
-3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions, Filters and View sheets, heap switcher.
+2. **List and item**, in two changes:
+   1. The due picker and its choices from the server, the S M L XL buttons, and the Add dialog.
+   2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
+      keyboard navigation.
+3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
+   sheet down and swiping the tablet panel right to close them, Filters and View sheets, heap switcher.
 4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 
 ## Later: an installable app

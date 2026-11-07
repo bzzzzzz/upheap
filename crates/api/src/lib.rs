@@ -13,6 +13,7 @@ mod audit;
 #[cfg(feature = "accounts")]
 mod auth;
 mod dto;
+mod due_choices;
 mod error;
 mod extract;
 mod health;
@@ -123,6 +124,7 @@ fn api_router() -> OpenApiRouter<AppState> {
     let v1 = v1.merge(auth::routes()).merge(users::routes());
     let v1 = v1
         .merge(me::routes())
+        .merge(due_choices::routes())
         .merge(items::routes())
         .merge(tags::routes())
         .merge(teams::routes())

@@ -1,53 +1,81 @@
 import { Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
-import { useState, type KeyboardEvent } from "react";
+import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import { ApiProblem, type ItemPatch, type ItemRef, type ItemState, type RankedItem } from "../api/client";
-import { useUpdateItem } from "../api/queries";
-import { BlockerSelect } from "./BlockerSelect";
-import { STATE_LABELS, STATES } from "./labels";
-import { ParameterChips } from "./ParameterSelect";
-import { SizeSelect } from "./SizeSelect";
+import type { Item, ItemState, RankedItem } from "../api/client";
+import { SIZE_LABELS, STATE_LABELS } from "./labels";
+import { TOUCH, useMedia } from "./media";
+import { ParameterChips } from "./ParameterPicker";
 import { TagChips } from "./TagChips";
 
-/** Messages for the errors an edit can bring back, by code. */
-const PROBLEM_MESSAGES: Record<string, string> = {
-  version_conflict: "Someone else changed this item. It now shows their version.",
-  blocking_cycle: "That item already waits for this one, so it can't block it.",
-  blocker_closed: "That item is closed, so nothing can wait for it.",
-  blocker_not_in_heap: "That item isn't in this heap any more.",
-  item_not_blocked: "Only a blocked item can wait for another one.",
-};
+/**
+ * Changes an item's state from the list, and says so with an undo toast. `onError` runs if it fails, for a row to
+ * come back from a swipe.
+ */
+export type ChangeState = (item: Item, state: ItemState, onError?: () => void) => void;
+
+/** How far a row slides left to show its two actions, and how far right marks it done. */
+const ACTIONS_WIDTH = 176;
+const DONE_DISTANCE = 96;
+
+/** What marks a row's link, for moving between rows with the arrow keys. */
+const ROW_LINK = "data-row-link";
+
+/** Focuses the row link `step` rows away from `from`, across the list's sections. */
+function focusRow(from: HTMLElement, step: number) {
+  const links = [...document.querySelectorAll<HTMLElement>(`[${ROW_LINK}]`)];
+  links[links.indexOf(from) + step]?.focus();
+}
+
+/** Focuses the first row, for the arrow keys when nothing is focused yet. */
+export function focusFirstRow() {
+  document.querySelector<HTMLElement>(`[${ROW_LINK}]`)?.focus();
+}
+
+/** Focuses the row of `itemId`, for when its item closes. */
+export function focusRowOf(itemId: string) {
+  document.querySelector<HTMLElement>(`[${ROW_LINK}="${CSS.escape(itemId)}"]`)?.focus();
+}
 
 /**
- * One ranked item. Controls appear only for actions the server allows. `blockerCandidates` are the heap's
- * non-closed items this one may wait for, offered as blockers when the item is blocked.
+ * One ranked item, for reading and ordering (app-ux.md, The list): the state circle, the position, the title, the due
+ * chip and tags, and below them why it ranks where it does. The whole row opens the item; editing happens there.
+ * `selected` marks the open item's row, and `itemOpen` makes opening another one replace it in the history, so Back
+ * still closes the item instead of stepping through every row looked at.
+ *
+ * With a finger, a row swipes (app-ux.md, The list §5): right marks it done, left shows two other states to pick.
  */
 export function ItemRow({
   entry,
   heapId,
-  blockerCandidates,
+  selected,
+  itemOpen,
   compact = false,
+  onChangeState,
 }: {
   entry: RankedItem;
   heapId: string;
-  blockerCandidates: ItemRef[];
+  selected: boolean;
+  itemOpen: boolean;
   compact?: boolean;
+  onChangeState: ChangeState;
 }) {
   const { item, position, contributors } = entry;
-  const update = useUpdateItem(heapId);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const canEdit = item.allowed_actions.includes("edit");
-  const canChangeState = item.allowed_actions.includes("change_state");
-  const save = (patch: ItemPatch) => update.mutate({ item, patch });
+  const canMarkDone = item.allowed_actions.includes("change_state");
+  const onMarkDone = () => onChangeState(item, "done");
+  const touch = useMedia(TOUCH);
+  const swipe = useSwipe(canMarkDone && touch, (state, onError) => onChangeState(item, state, onError));
 
-  const onTitleKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      setEditingTitle(false);
-    } else if (event.key === "Enter") {
-      const title = event.currentTarget.value;
-      setEditingTitle(false);
-      if (title.trim() !== "" && title !== item.title) save({ title });
+  const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      focusRow(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "x" && canMarkDone) {
+      event.preventDefault();
+      // The row goes away, so the next one takes the focus.
+      focusRow(event.currentTarget, 1);
+      onMarkDone();
     }
   };
 
@@ -58,138 +86,214 @@ export function ItemRow({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="flex gap-3 border-b border-stone-200 py-3 last:border-b-0 dark:border-stone-800"
+      className="relative overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
     >
-      <span
-        className="w-6 shrink-0 pt-0.5 text-right text-sm tabular-nums text-stone-400"
-        aria-label={`Position ${position}`}
+      {swipe.showActions && <SwipeActions item={item} open={swipe.open} onPick={swipe.pick} />}
+      <motion.div
+        {...swipe.dragProps}
+        className={`relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
+          selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
+        }`}
       >
-        {position}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {editingTitle ? (
-            <input
-              autoFocus
-              defaultValue={item.title}
-              onKeyDown={onTitleKey}
-              onBlur={() => setEditingTitle(false)}
-              aria-label="Title"
-              className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-1 dark:border-stone-700 dark:bg-stone-900"
-            />
-          ) : (
-            <button
-              type="button"
-              disabled={!canEdit}
-              onClick={() => setEditingTitle(true)}
-              className="text-left font-medium disabled:cursor-default"
+        <StateCircle item={item} disabled={!canMarkDone} onPress={onMarkDone} />
+        <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
+          {position}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {/* The link covers the whole row, under the state circle. */}
+            <Link
+              to="/heaps/$heapId/items/$itemId"
+              params={{ heapId, itemId: item.id }}
+              search={true}
+              replace={itemOpen}
+              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              onKeyDown={onKeyDown}
+              // A swipe moves the row, not a dragged copy of the link.
+              draggable={false}
+              {...{ [ROW_LINK]: item.id }}
+              aria-current={selected ? "true" : undefined}
+              className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
             >
               {item.title}
-            </button>
-          )}
-          {item.due && (
-            <span
-              className={
-                item.due.overdue
-                  ? "rounded bg-red-100 px-1.5 text-xs font-medium text-red-800 dark:bg-red-950 dark:text-red-300"
-                  : "rounded bg-stone-100 px-1.5 text-xs text-stone-600 dark:bg-stone-800 dark:text-stone-300"
-              }
-            >
-              {item.due.overdue ? "Overdue · " : item.due.firm ? "Due " : ""}
-              {item.due.label}
-            </span>
-          )}
-          <TagChips
-            tags={item.tags}
-            onRemove={
-              canEdit
-                ? (removed) => save({ tag_ids: item.tags.filter((t) => t.id !== removed.id).map((t) => t.id) })
-                : undefined
-            }
-          />
-          <ParameterChips parameters={item.parameters} />
-        </div>
-        {!compact && contributors.length > 0 && (
-          <p className="mt-0.5 text-xs text-stone-500">{contributors.map((c) => c.label).join(" · ")}</p>
-        )}
-        {!compact && (
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <SizeSelect
-              label="Effort"
-              value={item.effort}
-              disabled={!canEdit}
-              onChange={(effort) => save({ effort })}
-            />
-            <SizeSelect
-              label="Impact"
-              value={item.impact}
-              disabled={!canEdit}
-              onChange={(impact) => save({ impact })}
-            />
-            <label className="inline-flex items-center gap-1 text-xs text-stone-500">
-              Due
-              <input
-                type="date"
-                value={item.due?.date ?? ""}
-                disabled={!canEdit}
-                onChange={(e) =>
-                  save({ due: e.target.value ? { date: e.target.value, firm: item.due?.firm ?? false } : null })
-                }
-                className="rounded border border-stone-300 bg-white px-1 py-0.5 text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
-              />
-            </label>
-            {item.due && (
-              <label className="inline-flex items-center gap-1 text-xs text-stone-500">
-                <input
-                  type="checkbox"
-                  checked={item.due.firm}
-                  disabled={!canEdit}
-                  onChange={(e) => item.due && save({ due: { date: item.due.date, firm: e.target.checked } })}
-                />
-                Exact
-              </label>
-            )}
-            {item.state === "blocked" && (
-              <BlockerSelect
-                value={item.blocked_by}
-                candidates={blockerCandidates}
-                disabled={!canChangeState}
-                onChange={(blockerId) => save({ blocked_by_item_id: blockerId })}
-              />
-            )}
+            </Link>
+            {item.due && <DueChip due={item.due} />}
+            <TagChips tags={item.tags} />
+            <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />
           </div>
+          {!compact && contributors.length > 0 && (
+            <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
+          )}
+          {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
+          <ParameterChips parameters={item.parameters} className="mt-1 flex lg:hidden" />
+        </div>
+        {(item.effort || item.impact) && (
+          <span className="hidden shrink-0 text-xs text-ink-soft tabular-nums sm:inline">
+            <span className="sr-only">Effort </span>
+            {item.effort ? SIZE_LABELS[item.effort] : "–"}
+            <span aria-hidden="true"> · </span>
+            <span className="sr-only">, impact </span>
+            {item.impact ? SIZE_LABELS[item.impact] : "–"}
+          </span>
         )}
-        {update.error && (
-          <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-400">
-            {(update.error instanceof ApiProblem && PROBLEM_MESSAGES[update.error.code]) || update.error.message}
-          </p>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-3 self-start">
-        <Link
-          to="/heaps/$heapId/items/$itemId"
-          params={{ heapId, itemId: item.id }}
-          aria-label={`Edit ${item.title}`}
-          className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-        >
-          Edit
-        </Link>
-        <label>
-          <span className="sr-only">State</span>
-          <select
-            value={item.state}
-            disabled={!canChangeState}
-            onChange={(e) => save({ state: e.target.value as ItemState })}
-            className="rounded border border-stone-300 bg-white px-1 py-0.5 text-sm disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900"
-          >
-            {STATES.map((state) => (
-              <option key={state} value={state}>
-                {STATE_LABELS[state]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      </motion.div>
     </motion.li>
+  );
+}
+
+/**
+ * The row's swipe: dragged right past `DONE_DISTANCE` it slides away and marks the item done; dragged left it stays
+ * open on its actions until one is picked or the row is tapped. A tap right after a drag doesn't open the item.
+ */
+function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => void) => void) {
+  const x = useMotionValue(0);
+  const [open, setOpen] = useState(false);
+  // The actions are drawn only while the row moves or is open, so their colours never edge a row at rest.
+  const [moving, setMoving] = useState(false);
+  const dragged = useRef(false);
+  const settle = (to: number) => animate(x, to, { type: "spring", bounce: 0, duration: 0.3 });
+  const close = () => {
+    setOpen(false);
+    void settle(0).then(() => setMoving(false));
+  };
+
+  const onDragEnd = (event: globalThis.MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    window.setTimeout(() => (dragged.current = false));
+    if (info.offset.x > DONE_DISTANCE) {
+      const width = (event.target as HTMLElement | null)?.closest("li")?.offsetWidth ?? 400;
+      void animate(x, width, { duration: 0.2 }).then(() => change("done", close));
+    } else if (info.offset.x < -ACTIONS_WIDTH / 3 || (open && info.offset.x < 0)) {
+      setOpen(true);
+      void settle(-ACTIONS_WIDTH);
+    } else {
+      close();
+    }
+  };
+
+  // Taps while open close the row instead of opening the item.
+  const onClickCapture = (event: MouseEvent) => {
+    if (dragged.current || open) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (open) close();
+    }
+  };
+
+  return {
+    enabled,
+    open,
+    showActions: enabled && (moving || open),
+    pick: (state: ItemState) => {
+      close();
+      change(state, close);
+    },
+    dragProps: enabled
+      ? {
+          style: { x, touchAction: "pan-y" },
+          drag: "x" as const,
+          dragDirectionLock: true,
+          dragConstraints: { left: -ACTIONS_WIDTH, right: 0 },
+          dragElastic: { left: 0.1, right: 0.7 },
+          dragMomentum: false,
+          onDragStart: () => {
+            dragged.current = true;
+            setMoving(true);
+          },
+          onDragEnd,
+          onClickCapture,
+        }
+      : {},
+  };
+}
+
+/**
+ * What a swipe shows under the row: Done on the left, for a swipe right; on the right, the two states besides open
+ * and done, with Open in place of the one the item is in already.
+ */
+function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPick: (state: ItemState) => void }) {
+  const states: ItemState[] = [
+    item.state === "in_progress" ? "open" : "in_progress",
+    item.state === "blocked" ? "open" : "blocked",
+  ];
+  return (
+    <div className="absolute inset-0 flex">
+      <div aria-hidden="true" className="flex flex-1 items-center bg-done pl-5 text-sm font-semibold text-canvas">
+        Done
+      </div>
+      {/* Out of the tab order and hidden from screen readers until the row is open; the item pane has them too. */}
+      <div inert={!open} className="flex flex-1 justify-end">
+        {states.map((state) => (
+          <button
+            key={state}
+            type="button"
+            onClick={() => onPick(state)}
+            className={`w-[88px] text-sm font-semibold text-canvas ${state === "blocked" ? "bg-overdue-ink" : "bg-accent"}`}
+          >
+            {STATE_LABELS[state]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A due time as the server labels it. Only an exact due time says "Due", and only it can be overdue. */
+export function DueChip({ due }: { due: NonNullable<Item["due"]> }) {
+  return (
+    <span
+      className={
+        due.overdue
+          ? "rounded-md bg-overdue-soft px-1.5 text-xs font-medium text-overdue-ink"
+          : "rounded-md bg-sunken px-1.5 text-xs text-ink-soft"
+      }
+    >
+      {due.overdue ? "Overdue · " : due.firm ? "Due " : ""}
+      {due.label}
+    </span>
+  );
+}
+
+/**
+ * The state at a glance, and the one-tap way to mark an item done: an empty circle for open, half filled for in
+ * progress, dashed for blocked. Above the row's link, so a tap on it doesn't open the item.
+ */
+function StateCircle({ item, disabled, onPress }: { item: Item; disabled: boolean; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onPress}
+      aria-label={`Mark ${item.title} done`}
+      title="Mark done"
+      className="group relative z-10 -m-2 flex size-10 shrink-0 items-center justify-center rounded-full p-2 text-muted hover:text-done disabled:cursor-default disabled:opacity-50"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+        {item.state === "in_progress" ? (
+          <>
+            <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" strokeWidth="2" />
+            <path d="M12 3a9 9 0 0 1 0 18z" fill="var(--accent)" />
+          </>
+        ) : (
+          <circle
+            cx="12"
+            cy="12"
+            r="9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeDasharray={item.state === "blocked" ? "3 3" : undefined}
+          />
+        )}
+        <path
+          d="m8 12.5 2.5 2.5 5.5-5.5"
+          fill="none"
+          stroke="var(--done)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="opacity-0 group-enabled:group-hover:opacity-100"
+        />
+      </svg>
+    </button>
   );
 }

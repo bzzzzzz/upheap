@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import type { BlockedLayout, Parameter, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
 import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { PopoverSheet } from "./PopoverSheet";
 import {
   DEFAULT_MODES,
   filterCount,
@@ -39,20 +40,16 @@ export function ListControls({
   onSearch: (text: string) => void;
   panel: Panel;
   onPanel: (panel: Panel) => void;
-  /** Changing it moves focus into the open panel and scrolls it into view. */
+  /** Changing it brings the panel's button into view, as the panel opens from it. */
   panelFocus: number;
 }) {
   const parameters = useParameters(heapId);
   const searchRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const filtersId = useId();
-  const viewId = useId();
+  const filtersRef = useRef<HTMLButtonElement>(null);
+  const viewRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (panelFocus > 0) {
-      panelRef.current?.focus();
-      panelRef.current?.scrollIntoView({ block: "nearest" });
-    }
+    if (panelFocus > 0) viewRef.current?.scrollIntoView({ block: "nearest" });
   }, [panelFocus]);
   const filters = filterCount(view);
   const viewChanged = SHOWN_STATES.some((state) => view[state] !== undefined) || view.blocked_layout !== undefined;
@@ -88,14 +85,14 @@ export function ListControls({
           }}
           placeholder="Search titles and descriptions  /"
           aria-label="Search items"
-          className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm dark:border-stone-700 dark:bg-stone-900"
+          className="h-9 min-w-0 flex-1 basis-48 rounded-lg border border-line bg-surface px-3 text-sm placeholder:text-muted pointer-coarse:h-11"
         />
-        <label className="inline-flex items-center gap-1 text-sm text-stone-500">
+        <label className="inline-flex items-center gap-1 text-sm text-muted">
           <span>Sort</span>
           <select
             value={view.sort === "parameter" ? `parameter:${view.sort_parameter}` : (view.sort ?? "priority")}
             onChange={(e) => onChange({ ...view, ...sortFrom(e.target.value) })}
-            className="rounded border border-stone-300 bg-white px-1 py-1 text-stone-900 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
+            className="h-9 max-w-44 rounded-lg border border-line bg-surface px-1.5 text-ink pointer-coarse:h-11"
           >
             {SORTS.map((sort) => (
               <option key={sort} value={sort}>
@@ -117,72 +114,50 @@ export function ListControls({
           </select>
         </label>
         <PanelButton
+          buttonRef={filtersRef}
           open={panel === "filters"}
-          controls={filtersId}
           onClick={() => toggle("filters")}
           active={filters > 0}
         >
           Filters{filters > 0 && ` (${filters})`}
         </PanelButton>
-        <PanelButton open={panel === "view"} controls={viewId} onClick={() => toggle("view")} active={viewChanged}>
+        <PanelButton buttonRef={viewRef} open={panel === "view"} onClick={() => toggle("view")} active={viewChanged}>
           View
         </PanelButton>
       </div>
 
-      {panel === "filters" && (
-        <div ref={panelRef} id={filtersId} tabIndex={-1} aria-label="Filters" role="region" className={panelClass}>
-          <FiltersPanel heapId={heapId} view={view} onChange={onChange} />
-        </div>
-      )}
-      {panel === "view" && (
-        <div ref={panelRef} id={viewId} tabIndex={-1} aria-label="View settings" role="region" className={panelClass}>
-          <ViewPanel view={view} onChange={onChange} />
-        </div>
-      )}
+      <PopoverSheet title="Filters" triggerRef={filtersRef} isOpen={panel === "filters"} onClose={() => onPanel(null)}>
+        <FiltersPanel heapId={heapId} view={view} onChange={onChange} />
+      </PopoverSheet>
+      <PopoverSheet title="View settings" triggerRef={viewRef} isOpen={panel === "view"} onClose={() => onPanel(null)}>
+        <ViewPanel view={view} onChange={onChange} />
+      </PopoverSheet>
     </div>
   );
 }
 
 function PanelButton({
+  buttonRef,
   open,
-  controls,
   active,
   onClick,
   children,
 }: {
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
   open: boolean;
-  controls: string;
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       aria-expanded={open}
-      aria-controls={open ? controls : undefined}
-      className={`rounded-md border px-2.5 py-1 text-sm ${
-        active
-          ? "border-sky-400 text-sky-800 dark:border-sky-600 dark:text-sky-300"
-          : "border-stone-300 text-stone-600 dark:border-stone-700 dark:text-stone-300"
-      } hover:bg-stone-100 dark:hover:bg-stone-800`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`rounded px-1.5 py-0.5 text-xs ${
-        pressed
-          ? "bg-sky-600 text-white dark:bg-sky-500 dark:text-stone-950"
-          : "bg-stone-100 text-stone-700 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700"
+      aria-haspopup="dialog"
+      className={`h-9 rounded-lg border px-3 text-sm hover:bg-sunken pointer-coarse:h-11 ${
+        active ? "border-accent text-accent-ink" : "border-line text-ink-soft"
       }`}
     >
       {children}
@@ -190,17 +165,32 @@ function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () 
   );
 }
 
-function PanelRow({ label, children }: { label: string; children: React.ReactNode }) {
+/** A chip's look, filled once it's on, for the filters' toggles and the view's choices. */
+const chipClass =
+  "inline-flex h-8 items-center rounded-full border border-line px-3 text-sm text-ink-soft hover:border-muted pointer-coarse:h-10";
+const chipOnClass = "border-ink bg-ink text-canvas hover:border-ink";
+
+function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1.5">
-      <span className="w-24 shrink-0 text-xs text-stone-500">{label}</span>
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`${chipClass} ${pressed ? chipOnClass : ""}`}
+    >
       {children}
-    </div>
+    </button>
   );
 }
 
-const panelClass =
-  "mt-2 flex flex-col gap-2 rounded-lg border border-stone-200 bg-white p-3 outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-stone-800 dark:bg-stone-900";
+function PanelRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-ink-soft">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
 
 /** One choice out of a few, as a radio group styled like the toggles. */
 function Choice<T extends string>({
@@ -220,24 +210,28 @@ function Choice<T extends string>({
 }) {
   const name = useId();
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-1.5">
-      <span className="w-24 shrink-0 text-xs text-stone-500">{label}</span>
-      {options.map((option) => (
-        <label key={option} className="inline-flex">
-          <input
-            type="radio"
-            name={name}
-            value={option}
-            checked={value === option}
-            disabled={disabled}
-            onChange={() => onChange(option)}
-            className="peer sr-only"
-          />
-          <span className="rounded bg-stone-100 px-1.5 py-0.5 text-xs text-stone-700 peer-checked:bg-sky-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-sky-500 peer-disabled:opacity-50 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:peer-checked:bg-sky-500 dark:peer-checked:text-stone-950 dark:hover:bg-stone-700">
-            {labels[option]}
-          </span>
-        </label>
-      ))}
+    <div role="radiogroup" aria-label={label} className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-ink-soft">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {options.map((option) => (
+          <label key={option} className="inline-flex">
+            <input
+              type="radio"
+              name={name}
+              value={option}
+              checked={value === option}
+              disabled={disabled}
+              onChange={() => onChange(option)}
+              className="peer sr-only"
+            />
+            <span
+              className={`${chipClass} peer-checked:border-ink peer-checked:bg-ink peer-checked:text-canvas peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:opacity-50`}
+            >
+              {labels[option]}
+            </span>
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
@@ -283,7 +277,7 @@ function FiltersPanel({
   return (
     <>
       <PanelRow label="Tags (any)">
-        {tags.data?.tags.length === 0 && <span className="text-xs text-stone-500">This heap has no tags yet.</span>}
+        {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}
         {tags.data?.tags.map((tag) => (
           <Toggle
             key={tag.id}
@@ -345,7 +339,7 @@ function FiltersPanel({
         <button
           type="button"
           onClick={() => onChange({ ...view, tag: undefined, effort: undefined, impact: undefined, param: undefined })}
-          className="self-start text-xs text-stone-500 underline hover:text-stone-900 dark:hover:text-stone-100"
+          className="self-start text-sm text-muted underline hover:text-ink"
         >
           Clear filters
         </button>
@@ -385,7 +379,7 @@ function ViewPanel({ view, onChange }: { view: ListSearch; onChange: (view: List
         onClick={() =>
           onChange({ ...view, open: undefined, in_progress: undefined, blocked: undefined, blocked_layout: undefined })
         }
-        className="self-start text-xs text-stone-500 underline hover:text-stone-900 dark:hover:text-stone-100"
+        className="self-start text-sm text-muted underline hover:text-ink"
       >
         Reset to the default view
       </button>

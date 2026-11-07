@@ -4,7 +4,7 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 [technical-design.md](technical-design.md). Last reviewed 2026-11-07.
 
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
-renamed and archived, the ranked list with add, edit, close and reopen, the Edit item view, tags, blockers, the
+renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
 rate limiting. OIDC and CLI sign-in are not started. All 196 Rust tests pass (`cargo test --workspace`), the store and
 API suites also pass on MySQL 8.4, the 5 Playwright golden paths pass, and 6 against the local build, and the web typecheck and lint are clean. CI
@@ -23,8 +23,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Ranking: age, deadline, value per effort, custom parameters | Req Priority §1–10 | 🟡 | Placeholder formula `V1` with blocker inheritance and custom parameters; the heap's own weights can't be changed yet |
 | Main list view | Req Views: List items | ✅ | Per-state pinned/shown/hidden, blocked grouped or mixed in, `sort=`, tag/effort/impact/option filters and sort by a parameter, client text search (`/`), inline edits, `N`; the view lives in the URL |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
-| Add item | Req Views: Add item | ✅ | Tags, created by typing a new name; picking a tag brings up its linked parameters |
-| Edit item view | Req Views: Edit item | ✅ | Every field, tags, parameter values, state and blocker in one save; a closed item is reopened and edited in the same save |
+| Add item | Req Views: Add item | ✅ | A dialog (`N`) with every field: rough due choices or an exact date, S M L XL buttons, tags created by typing a new name, and the parameters linked to the chosen tags; Add another for several in a row |
+| Edit item view | Req Views: Edit item | ✅ | The item pane over the list (beside it on a wide screen, a panel on a tablet, a sheet on a phone): every field, tags, parameter values, state and blocker, each change saved as it's made; a closed item is reopened from its state |
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; filterable in the list |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters, Manage parameters | ✅ | Admins add, rename and weigh parameters, add, relabel, reorder and archive options (open items switch to the replacement), link tags, archive unused parameters. Values on items, in ranking and contributors |
@@ -32,14 +32,14 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
 | Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
-| Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history under Edit item and on tags, parameters, saved views, heaps and members; Activity pages |
+| Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history in the item pane and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI sign-in: OAuth with PKCE | Off Auth §4 | ⬜ | |
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per email address per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite or MySQL chosen at startup |
 | Local build: static, single user, data in the browser | [local-build.md](local-build.md) | ✅ | The backend and the Router run in a browser worker on SQLite-wasm in OPFS, without accounts. The web app offers only what one user can do, keeps its data with export and import and one tab at a time, and CI runs the golden paths against the static build. The Pages workflow publishes it from `main` after every merge, to https://bzzzzzz.github.io/upheap/ |
-| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Next: the list and item, with the due choices from the server. Installing (PWA) comes later |
+| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Step 2 done: the Add dialog with the due choices from the server (`GET /due-choices`) and S M L XL buttons; compact rows with the state circle and an undo toast; the item pane in place of the Edit item page; keyboard (arrows, Enter, `x`, Escape). Step 3 done: sheets sit above the on-screen keyboard; rows swipe right to mark done and left for In progress or Blocked; the item sheet drags down and the tablet panel right to close; Filters and View are a popover on a tablet or wide screen and a sheet on a phone, as are the heap switcher and More; saved views scroll sideways on a phone. Next: step 4, every other page at phone width. Installing (PWA) comes later |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite and MySQL, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work
@@ -54,10 +54,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] `blocked_by_item_id` column; a blocker from another heap is rejected with 422
   - [x] Cycle detection inside the write transaction (`blocking_cycle`)
   - [x] Blocker inheritance in `rank()` (memoized walk, 1.1 boost)
-  - [x] Pick the blocking item, in the list row and in Edit item
+  - [x] Pick the blocking item, in the item pane
 - [x] **Edit item view**
-  - [x] Every field including description, tags, state and blocker, saved as one patch (one version, one audit entry)
-  - [x] Opened from the list (Edit) and from Closed (the title); a closed item can be reopened and edited in one save
+  - [x] Every field including description, tags, state and blocker, each saved as it's made with its own `If-Match`
+  - [x] Opened from a list row and from Closed (the title), over the list; Back closes it; a closed item is reopened from its state
   - [x] Custom parameter values
 - [x] **List view controls**
   - [x] Per-state pinned / shown / hidden (`open=`, `in_progress=`, `blocked=`); blocked items mixed in or grouped
@@ -86,7 +86,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 - [x] **Audit log reading**
   - [x] `GET /heaps/{id}/audit`, `GET /teams/{id}/audit`, filtered by permission, with `entity_id=` and cursor paging
   - [x] Changes described by the server, with current names for IDs
-  - [x] History under Edit item and on tags, parameters, saved views, heaps and members; heap and team Activity pages
+  - [x] History in the item pane and on tags, parameters, saved views, heaps and members; heap and team Activity pages
 - [ ] **Auth**
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
   - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`

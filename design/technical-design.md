@@ -178,6 +178,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Ranked list | `GET /heaps/{id}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value |
 | Closed items | `GET /heaps/{id}/items/closed?cursor=` |
 | Items | `POST /heaps/{id}/items`, `GET/PATCH /items/{id}`, `POST /items/{id}/reopen` |
+| Due choices | `GET /due-choices`: the rough due times a due picker offers ("next week"), each with its date in the request's timezone and the label an item due then reads back with |
 | Tags | `GET/POST /heaps/{id}/tags`, `PATCH /tags/{id}` |
 | Parameters | `GET/POST /heaps/{id}/parameters` (in use and archived; add one), `PATCH /parameters/{id}` (name, weight), `POST /parameters/{id}/archive`, `POST /parameters/{id}/options` (add one last), `PATCH /parameters/{id}/options` (every option in use, in the new order, with its label), `POST /options/{id}/archive` (with `replacement_option_id`), `PUT /parameters/{id}/tags` |
 | Saved views | `GET/POST /heaps/{id}/views` (the views in use, by name; save one), `PATCH /views/{id}` (rename, or replace the whole view), `POST /views/{id}/archive` |

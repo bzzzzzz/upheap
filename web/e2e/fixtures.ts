@@ -42,7 +42,30 @@ export const uniqueEmail = () => `e2e-${crypto.randomUUID()}@example.test`;
 
 /** The list row of the item titled `title`. */
 export const row = (page: Page, title: string): Locator =>
-  page.getByRole("listitem").filter({ has: page.getByRole("button", { name: title, exact: true }) });
+  page.getByRole("listitem").filter({ has: page.getByRole("link", { name: title, exact: true }) });
+
+/** The open item: a pane beside the list, a panel over it or a sheet, by the width. */
+export const itemPane = (page: Page): Locator => page.getByRole("region", { name: "Item", exact: true });
+
+/** Opens the item titled `title` from its row. */
+export async function openItem(page: Page, title: string) {
+  await row(page, title).getByRole("link", { name: title, exact: true }).click();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
+}
+
+/** Closes the open item with its ✕. */
+export async function closeItem(page: Page) {
+  await itemPane(page).getByRole("button", { name: "Close", exact: true }).click();
+  await expect(itemPane(page)).toHaveCount(0);
+}
+
+/** Picks `option` in the item pane's radio group `group`: a state, a size, a parameter's option. */
+export async function pick(page: Page, group: string, option: string) {
+  await itemPane(page)
+    .getByRole("radiogroup", { name: group, exact: true })
+    .getByRole("radio", { name: option, exact: true })
+    .click();
+}
 
 /** Expects the rows of the open list to show these titles, in this order. */
 export async function expectOrder(page: Page, titles: string[]) {
@@ -51,19 +74,21 @@ export async function expectOrder(page: Page, titles: string[]) {
   }
 }
 
-/** Adds an item from the Add item form of the open list. */
+/** Adds an item through the Add dialog of the open list. */
 export async function addItem(page: Page, title: string, sizes: { effort?: Size; impact?: Size } = {}) {
-  const form = page.locator("form").filter({ has: page.getByLabel("New item title") });
-  await form.getByLabel("New item title").fill(title);
-  if (sizes.effort || sizes.impact) {
-    const more = form.getByRole("button", { name: "More" });
-    if (await more.isVisible()) await more.click();
-    if (sizes.effort) await form.getByLabel("Effort").selectOption(sizes.effort);
-    if (sizes.impact) await form.getByLabel("Impact").selectOption(sizes.impact);
+  await page.getByRole("button", { name: "Add an item" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add an item" });
+  await dialog.getByLabel("Title").fill(title);
+  for (const [field, size] of [
+    ["Effort", sizes.effort],
+    ["Impact", sizes.impact],
+  ] as const) {
+    if (size)
+      await dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { name: size, exact: true }).click();
   }
-  await form.getByLabel("New item title").press("Enter");
+  await dialog.getByLabel("Title").press("Enter");
+  await expect(dialog).toHaveCount(0);
   await expect(row(page, title)).toBeVisible();
-  await expect(form.getByLabel("New item title")).toHaveValue("");
 }
 
 /** A page the app's navigation leads to. */

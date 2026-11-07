@@ -37,6 +37,7 @@ export function ClosedPage({ heapId }: { heapId: string }) {
                   <Link
                     to="/heaps/$heapId/items/$itemId"
                     params={{ heapId, itemId: item.id }}
+                    state={(prev) => ({ ...prev, closesBack: true })}
                     className="font-medium text-stone-600 hover:underline dark:text-stone-300"
                   >
                     {item.title}

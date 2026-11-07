@@ -70,14 +70,51 @@ pub fn describe_time(at: Timestamp, tz: &TimeZone) -> String {
 }
 
 /// The nearest fuzzy term for a loose due time. Past dates count as "in a few days".
+///
+/// The bands leave room around each of the [due choices](list_due_choices), so a picked choice reads back as itself
+/// whatever the time of day.
 pub fn fuzzy_label(at: Timestamp, as_of: Timestamp) -> &'static str {
     let days = at.since(as_of).as_days_f64();
     match days {
-        d if d <= 7.0 => "in a few days",
-        d if d <= 31.0 => "in a few weeks",
+        d if d <= 5.0 => "in a few days",
+        d if d <= 10.0 => "next week",
+        d if d <= 24.0 => "in a few weeks",
+        d if d <= 45.0 => "next month",
         d if d <= 182.0 => "in a few months",
         _ => "in several months",
     }
+}
+
+/// A rough due time offered in place of a date: the date it stands for and what it's called.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DueChoice {
+    /// The fuzzy label a loose due time on `date` has when picked, such as "next week".
+    pub label: &'static str,
+    /// The calendar date, in the timezone the choices were listed for.
+    pub date: Date,
+}
+
+/// Days from today that the due choices stand for: in a few days, next week, in a few weeks, next month, in a few
+/// months.
+const DUE_CHOICE_DAYS: [i8; 5] = [3, 7, 14, 30, 90];
+
+/// The rough due times to offer at `as_of` to a user in `tz`, nearest first.
+///
+/// Each label is the one [`describe_due`] gives a loose due time on that date at `as_of`, stored as the end of the
+/// day like any entered date, so a picked choice reads back with the label it was picked by.
+pub fn list_due_choices(as_of: Timestamp, tz: &TimeZone) -> Vec<DueChoice> {
+    let today = local_date(as_of, tz);
+    DUE_CHOICE_DAYS
+        .iter()
+        .filter_map(|&days| {
+            let date = today.checked_add(jiff::Span::new().days(days)).ok()?;
+            let at = Timestamp::at_end_of_day(date, tz)?;
+            Some(DueChoice {
+                label: fuzzy_label(at, as_of),
+                date,
+            })
+        })
+        .collect()
 }
 
 fn local_date(at: Timestamp, tz: &TimeZone) -> Date {
@@ -171,6 +208,57 @@ mod tests {
             ),
             eq("around 2 Jan 2027")
         );
+    }
+
+    #[gtest]
+    fn due_choices_are_the_rough_terms_in_order() {
+        let choices = list_due_choices(day(0), &utc());
+
+        let labels: Vec<_> = choices.iter().map(|choice| choice.label).collect();
+        expect_that!(
+            labels,
+            elements_are![
+                eq(&"in a few days"),
+                eq(&"next week"),
+                eq(&"in a few weeks"),
+                eq(&"next month"),
+                eq(&"in a few months")
+            ]
+        );
+        expect_that!(choices[1].date.to_string(), eq("2027-01-08"));
+    }
+
+    #[gtest]
+    fn a_picked_due_choice_reads_back_with_its_label() {
+        // At every hour of a day, in timezones either side of UTC and across a DST change, a choice stored as a loose
+        // due time at the end of its day is described with the label it was offered with.
+        let zones = [
+            "UTC",
+            "Pacific/Kiritimati",
+            "Pacific/Pago_Pago",
+            "Europe/Berlin",
+            "America/New_York",
+        ];
+        // 2027-03-10, so the choices span the March DST changes.
+        let start = day(68);
+        for zone in zones {
+            let tz = TimeZone::get(zone).expect("bundled");
+            for hour in 0..24 {
+                let as_of = start.checked_add(Duration::from_hours(hour)).expect("in range");
+                for choice in list_due_choices(as_of, &tz) {
+                    let due = Due {
+                        at: Timestamp::at_end_of_day(choice.date, &tz).expect("in range"),
+                        firm: false,
+                    };
+                    expect_that!(
+                        describe_due(due, as_of, &tz).label,
+                        eq(choice.label),
+                        "{zone} at {hour}:00, {}",
+                        choice.date
+                    );
+                }
+            }
+        }
     }
 
     #[gtest]
