@@ -15,7 +15,8 @@ const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }
 
 /**
  * The way in to adding an item (app-ux.md, Adding an item): a field-like button above the list, or `N`, opens the Add
- * dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone.
+ * dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone, where the
+ * + in the middle of the tabs opens it instead of this button (ux-overview.md, What comes first §1).
  */
 export function AddItem({ heapRef, disabled }: { heapRef: HeapRef; disabled: boolean }) {
   const [open, setOpen] = useState(false);
@@ -43,7 +44,7 @@ export function AddItem({ heapRef, disabled }: { heapRef: HeapRef; disabled: boo
         onClick={() => setOpen(true)}
         disabled={disabled}
         aria-keyshortcuts="n"
-        className="my-4 flex min-h-12 w-full items-center gap-2 rounded-xl border border-line bg-surface px-4 text-left text-muted shadow-sm hover:border-muted disabled:opacity-50"
+        className="my-4 flex min-h-12 w-full max-sm:hidden items-center gap-2 rounded-xl border border-line bg-surface px-4 text-left text-muted shadow-sm hover:border-muted disabled:opacity-50"
       >
         <Plus aria-hidden="true" className="size-4 shrink-0" />
         <span className="flex-1">Add an item</span>
@@ -97,7 +98,7 @@ const EMPTY: Draft = {
  * clears for the next item instead of closing. Closing with a title typed asks first, so a stray tap outside doesn't
  * lose it.
  */
-function AddItemDialog({
+export function AddItemDialog({
   heapRef,
   addAnother,
   onAddAnother,

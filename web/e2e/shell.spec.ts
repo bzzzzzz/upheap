@@ -1,6 +1,6 @@
 // The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
-import { addItem, expect, goTo, HEAP_URL, test, type AppPage } from "./fixtures";
+import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
 const pages: AppPage[] = ["Closed", "Activity", "Tags", "Parameters", "Open", "Account"];
@@ -43,29 +43,43 @@ test("the heap switcher opens another heap", async ({ page }) => {
   test.skip(width >= 1024, "A wide screen lists the heaps in the sidebar instead.");
 
   await page.getByRole("button", { name: /^Switch heap/ }).click();
-  // The menu takes its name from the button.
-  const heaps = page.getByRole("menu");
-  await expect(heaps.getByRole("menuitem")).not.toHaveCount(0);
-  await heaps.getByRole("menuitem").first().click();
+  const heaps = page.getByRole("dialog", { name: "Heaps" });
+  // The heap on screen is checked.
+  await expect(heaps.locator("a[aria-current=page]")).toHaveCount(1);
+  await heaps.getByRole("link").first().click();
   await expect(page).toHaveURL(HEAP_URL);
   await expect(heaps).toHaveCount(0);
 });
 
-test("More on a phone opens above the tabs, so releasing on it picks nothing", async ({ page }) => {
+test("the heap switcher starts a new heap in the heap's team", async ({ page }) => {
+  const width = page.viewportSize()?.width ?? 0;
+  test.skip(width >= 1024, "A wide screen lists the heaps in the sidebar instead.");
+
+  await page.getByRole("button", { name: /^Switch heap/ }).click();
+  const heaps = page.getByRole("dialog", { name: "Heaps" });
+  await heaps.getByRole("button", { name: /^New heap in / }).click();
+  await heaps.getByLabel(/^Name of the new heap in /).fill("Garden");
+  await heaps.getByRole("button", { name: "Add heap" }).click();
+  await expect(heaps).toHaveCount(0);
+  await expect(page).toHaveURL(/\/heaps\/garden$/);
+  await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
+});
+
+test("on a phone, More opens above the tabs, and + adds an item from any of the heap's pages", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone has the tabs.");
 
-  const more = page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" });
-  const box = await more.boundingBox();
-  if (!box) throw new Error("More is not laid out");
-  // A slow click: the menu opens on mouse down, and picks whatever item the mouse is released over.
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  const menu = page.getByRole("menu", { name: "More" });
-  await expect(menu).toBeVisible();
-  await page.mouse.up();
+  const tabs = page.getByRole("navigation", { name: "Heap views" });
+  await tabs.getByRole("button", { name: "More" }).click();
+  const more = page.getByRole("dialog", { name: "More" });
+  await expect(more.getByRole("link", { name: "Tags", exact: true })).toBeVisible();
+  const tabsBox = await tabs.boundingBox();
+  const sheet = await more.boundingBox();
+  expect(sheet && tabsBox && sheet.y + sheet.height).toBeLessThanOrEqual(tabsBox?.y ?? 0);
+  await page.keyboard.press("Escape");
+  await expect(more).toHaveCount(0);
 
-  await expect(menu).toBeVisible();
-  await expect(page).toHaveURL(HEAP_URL);
-  const sheet = await menu.boundingBox();
-  expect(sheet && sheet.y + sheet.height).toBeLessThanOrEqual(box.y);
+  await goTo(page, "Closed");
+  await addItem(page, "Water the plants", {}, { listed: false });
+  await goTo(page, "Open");
+  await expect(row(page, "Water the plants")).toBeVisible();
 });

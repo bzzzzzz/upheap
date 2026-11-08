@@ -11,21 +11,23 @@ import {
   Layers,
   List,
   LogOut,
+  Plus,
   SlidersHorizontal,
   Tag,
   User,
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useRef, type ReactNode } from "react";
-import { Button, Header, Menu, MenuSection, MenuTrigger } from "react-aria-components";
+import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useHeap, useMe, useSetHeapArchived, useSignOut } from "../api/queries";
+import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useSignOut, useTeam } from "../api/queries";
+import { AddItemDialog } from "../components/AddItem";
 import { StorageNote } from "../components/LocalDatabase";
-import { MenuEntry, MenuPopover } from "../components/Menu";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
+import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
+import { Sheet, sheetRowClass } from "../components/Sheet";
 
 export function AppLayout() {
   const { data: me } = useMe();
@@ -126,14 +128,18 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       </div>
 
       <div className="lg:hidden">
-        <HeapMenu me={me} heapRef={heapRef} placement="end top">
-          <Button
-            aria-label={`Switch heap${links.heap ? `: ${links.heap.name}` : ""}`}
-            className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink text-lg font-semibold text-canvas outline-offset-2 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
-          >
-            {(links.heap?.name ?? "Upheap").charAt(0).toUpperCase()}
-          </Button>
-        </HeapMenu>
+        <HeapSwitcher me={me} heapRef={heapRef} placement="end top">
+          {(props) => (
+            <button
+              type="button"
+              {...props}
+              aria-label={`Switch heap${links.heap ? `: ${links.heap.name}` : ""}`}
+              className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink text-lg font-semibold text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              {(links.heap?.name ?? "Upheap").charAt(0).toUpperCase()}
+            </button>
+          )}
+        </HeapSwitcher>
       </div>
 
       <nav aria-label="Heaps" className="hidden flex-col gap-0.5 lg:flex">
@@ -198,142 +204,270 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
   const { heap } = useShellLinks(me, heapRef);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
-      <HeapMenu me={me} heapRef={heapRef} placement="bottom start">
-        <Button
-          aria-label={`Switch heap${heap ? `: ${heap.name}` : ""}`}
-          className="-ml-1 flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg px-1 text-xl font-semibold tracking-tight outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
-        >
-          <span className="truncate">{heap?.name ?? "Upheap"}</span>
-          <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-soft" />
-        </Button>
-      </HeapMenu>
+      <HeapSwitcher me={me} heapRef={heapRef}>
+        {(props) => (
+          <button
+            type="button"
+            {...props}
+            aria-label={`Switch heap${heap ? `: ${heap.name}` : ""}`}
+            className="-ml-1 flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg px-1 text-xl font-semibold tracking-tight outline-none focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <span className="truncate">{heap?.name ?? "Upheap"}</span>
+            <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-soft" />
+          </button>
+        )}
+      </HeapSwitcher>
     </header>
   );
 }
 
-/** The phone's tabs: the three views used most, and More for the rest. */
+/**
+ * The phone's tabs (ux-overview.md, What comes first §1): Open, Closed, Add in the middle under the thumb, Activity,
+ * and More for the rest.
+ */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const links = useShellLinks(me, heapRef);
   const { item: itemKey } = useParams({ strict: false });
   const views = heapViews(heapRef, itemKey !== undefined);
-  const navigate = useNavigate();
-  const signOut = useSignOut();
   const tabs = useRef<HTMLElement>(null);
   usePhoneTabsHeight(tabs);
+  const [adding, setAdding] = useState(false);
+  // Kept while the app is open, for entering several items in a row over more than one visit to the dialog.
+  const [addAnother, setAddAnother] = useState(false);
+  const [more, setMore] = useState(false);
 
   return (
     <nav
       ref={tabs}
       aria-label="Heap views"
-      className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 items-end gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
       <NavLink {...views.open} icon={List} label="Open" />
       <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
+      <button
+        type="button"
+        aria-label="Add an item"
+        disabled={links.heap?.archived ?? false}
+        onClick={() => setAdding(true)}
+        className="-mt-6 size-14 justify-self-center rounded-[18px] bg-ink text-canvas shadow-lg outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+      >
+        <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
+      </button>
       <NavLink {...views.activity} icon={Activity} label="Activity" />
-      <MenuTrigger>
-        <Button
-          className={`${navItemClass} outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent`}
-        >
-          <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
-          <span>More</span>
-        </Button>
-        <MenuPopover placement="top end" aboveTabs>
-          <Menu
-            aria-label="More"
-            className="outline-none"
-            onAction={(key) => {
-              if (key === "sign-out") {
-                signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) });
-              } else if (key === "tags") {
-                void navigate(views.tags);
-              } else if (key === "parameters") {
-                void navigate(views.parameters);
-              } else if (key === "team" && links.heapTeam) {
-                void navigate({ to: "/teams/$team", params: { team: links.heapTeam.slug } });
-              } else if (key === "teams") {
-                void navigate(links.teams);
-              } else if (key === "account") {
-                void navigate({ to: "/account" });
-              }
-            }}
-          >
-            <MenuEntry id="tags" icon={Tag}>
-              Tags
-            </MenuEntry>
-            <MenuEntry id="parameters" icon={SlidersHorizontal}>
-              Parameters
-            </MenuEntry>
-            {links.heapTeam && (
-              <MenuEntry id="team" icon={Users}>
-                Team
-              </MenuEntry>
-            )}
-            <MenuEntry id="teams" icon={Users}>
-              {links.teams.label}
-            </MenuEntry>
-            <MenuEntry id="account" icon={User}>
-              Account
-            </MenuEntry>
-            {me.allowed_actions.includes("sign_out") && (
-              <MenuEntry id="sign-out" icon={LogOut}>
-                Sign out
-              </MenuEntry>
-            )}
-          </Menu>
-        </MenuPopover>
-      </MenuTrigger>
+      <button
+        type="button"
+        aria-expanded={more}
+        onClick={() => setMore(true)}
+        className={`${navItemClass} outline-none focus-visible:outline-2 focus-visible:outline-accent aria-expanded:text-ink`}
+      >
+        <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
+        <span>More</span>
+      </button>
+      {adding && (
+        <AddItemDialog
+          heapRef={heapRef}
+          addAnother={addAnother}
+          onAddAnother={setAddAnother}
+          onClose={() => setAdding(false)}
+        />
+      )}
+      <MoreSheet me={me} heapRef={heapRef} isOpen={more} onClose={() => setMore(false)} />
     </nav>
   );
 }
 
-/** A menu of every heap, by team, that opens the one picked. */
-function HeapMenu({
+/**
+ * More on a phone: the heap's other views and the account pages, as a card of 52 px rows above the tabs. It opens on
+ * release, as a button does, so lifting the finger never picks a row.
+ */
+function MoreSheet({
   me,
   heapRef,
-  placement,
+  isOpen,
+  onClose,
+}: {
+  me: Me;
+  heapRef: HeapRef;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const links = useShellLinks(me, heapRef);
+  const views = heapViews(heapRef, false);
+  const navigate = useNavigate();
+  const signOut = useSignOut();
+  const row = (label: string, note?: string) => (
+    <>
+      <span className="flex-1">{label}</span>
+      {note && <span className="text-[13px] text-muted">{note}</span>}
+    </>
+  );
+
+  return (
+    <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
+      <nav aria-label="More" className="flex flex-col">
+        {links.heapTeam && (
+          <Link
+            to="/teams/$team"
+            params={{ team: links.heapTeam.slug }}
+            // Not marked from the heap's own pages, which sit under the team's path.
+            activeOptions={{ exact: true }}
+            onClick={onClose}
+            className={sheetRowClass}
+          >
+            {row("Team", links.heapTeam.name)}
+          </Link>
+        )}
+        <Link {...links.teams} activeOptions={{ exact: true }} onClick={onClose} className={sheetRowClass}>
+          {row(links.teams.label, links.teams.to === "/teams" ? String(me.teams.length) : undefined)}
+        </Link>
+        <Link {...views.tags} onClick={onClose} className={sheetRowClass}>
+          {row("Tags")}
+        </Link>
+        <Link {...views.parameters} onClick={onClose} className={sheetRowClass}>
+          {row("Parameters")}
+        </Link>
+        <Link to="/account" onClick={onClose} className={sheetRowClass}>
+          {row("Account", `@${me.user.username}`)}
+        </Link>
+        {me.allowed_actions.includes("sign_out") && (
+          <button
+            type="button"
+            onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
+            className={`${sheetRowClass} mt-1 rounded-t-none border-t border-line text-overdue-ink`}
+          >
+            <LogOut aria-hidden="true" className="size-4" />
+            Sign out
+          </button>
+        )}
+      </nav>
+    </Sheet>
+  );
+}
+
+/**
+ * Every heap, by team, with a check on the one on screen (ux-overview.md, What comes first §3): a popover beside the
+ * rail on a tablet, a sheet of 52 px rows on a phone. It ends with a new heap in the heap's own team, where the user
+ * may create one.
+ */
+function HeapSwitcher({
+  me,
+  heapRef,
+  placement = "bottom end",
   children,
 }: {
   me: Me;
   heapRef: HeapRef | undefined;
-  placement: "end top" | "bottom start";
-  children: ReactNode;
+  placement?: "bottom end" | "end top";
+  children: (props: {
+    ref: RefObject<HTMLButtonElement | null>;
+    onClick: () => void;
+    "aria-expanded": boolean;
+  }) => ReactNode;
 }) {
-  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => setOpen(false);
+  const team = me.teams.find((t) => t.slug === heapRef?.team);
+
   return (
-    <MenuTrigger>
-      {children}
-      <MenuPopover placement={placement}>
-        <Menu
-          aria-label="Heaps"
-          className="outline-none"
-          onAction={(key) => {
-            const [team = "", heap = ""] = String(key).split("/");
-            void navigate({ to: "/teams/$team/heaps/$heap", params: { team, heap } });
-          }}
-        >
-          {me.teams.map((team) => (
-            <MenuSection key={team.id} aria-label={team.name} className="not-first:mt-1">
+    <>
+      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open })}
+      <PopoverSheet title="Heaps" triggerRef={trigger} isOpen={open} onClose={close} placement={placement}>
+        <nav aria-label="Heaps" className="-mx-1 flex flex-col">
+          {me.teams.map((t) => (
+            <section key={t.id} aria-label={t.name} className="flex flex-col">
               {me.teams.length > 1 && (
-                <Header className="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">
-                  {team.name}
-                </Header>
+                <h3 className="px-3 pt-2.5 pb-0.5 text-xs font-semibold tracking-wide text-muted uppercase">
+                  {t.name}
+                </h3>
               )}
-              {team.heaps.map((heap) => (
-                <MenuEntry
-                  key={heap.id}
-                  id={`${team.slug}/${heap.slug}`}
-                  textValue={heap.name}
-                  icon={team.slug === heapRef?.team && heap.slug === heapRef.heap ? Check : undefined}
-                >
-                  {heap.name}
-                  {heap.archived && <span className="text-muted"> (archived)</span>}
-                </MenuEntry>
-              ))}
-            </MenuSection>
+              {t.heaps.map((heap) => {
+                const current = t.slug === heapRef?.team && heap.slug === heapRef.heap;
+                return (
+                  <Link
+                    key={heap.id}
+                    to="/teams/$team/heaps/$heap"
+                    params={{ team: t.slug, heap: heap.slug }}
+                    // The heap on screen, on any of its pages.
+                    activeOptions={{ includeSearch: false }}
+                    onClick={close}
+                    className={sheetRowClass}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {heap.name}
+                      {heap.archived && <span className="font-normal text-muted"> (archived)</span>}
+                    </span>
+                    <span aria-hidden="true" className="w-5 text-accent-ink">
+                      {current && <Check className="size-4" strokeWidth={3} />}
+                    </span>
+                  </Link>
+                );
+              })}
+            </section>
           ))}
-        </Menu>
-      </MenuPopover>
-    </MenuTrigger>
+        </nav>
+        {team && <NewHeap team={team} onCreated={close} />}
+      </PopoverSheet>
+    </>
+  );
+}
+
+/** "New heap in <team>", which becomes a name field, for those the team lets create heaps. */
+function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: () => void }) {
+  const { data } = useTeam(team.slug);
+  const create = useCreateHeap(team.slug);
+  const navigate = useNavigate();
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  if (!data?.allowed_actions.includes("create_heap")) return null;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (name.trim() === "") return;
+    create.mutate(name.trim(), {
+      onSuccess: (heap) => {
+        onCreated();
+        void navigate({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
+      },
+    });
+  };
+
+  const buttonClass =
+    "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:opacity-50";
+  return (
+    <div className="border-t border-line pt-3">
+      {naming ? (
+        <form onSubmit={submit} className="flex flex-col gap-2">
+          <input
+            aria-label={`Name of the new heap in ${team.name}`}
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+            placeholder="Heap name"
+            className="h-12 rounded-xl border border-line bg-surface px-3 text-base"
+          />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setNaming(false)} className={buttonClass}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={create.isPending || name.trim() === ""}
+              className={`${buttonClass} border-ink bg-ink font-medium text-canvas`}
+            >
+              Add heap
+            </button>
+          </div>
+          <ProblemText error={create.error} />
+        </form>
+      ) : (
+        <button type="button" onClick={() => setNaming(true)} className={buttonClass + " w-full"}>
+          <Plus aria-hidden="true" className="size-4" />
+          New heap in {team.name}
+        </button>
+      )}
+    </div>
   );
 }
 
