@@ -253,9 +253,7 @@ function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPic
 function RowActions({ item, onChangeState }: { item: Item; onChangeState: ChangeState }) {
   const start = item.state === "open";
   const next = isClosed(item.state) ? [] : NEXT_STATES[item.state as keyof typeof NEXT_STATES];
-  const more = [...next, "wont_do" as const].filter(
-    (state) => state !== "done" && !(start && state === "in_progress"),
-  );
+  const more = [...next, "wont_do" as const].filter((state) => state !== "done" && !(start && state === "in_progress"));
   return (
     <div className="absolute inset-y-0 right-0 z-10 flex items-center gap-0.5 bg-inherit pr-1.5 pl-2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">
       {start && (
