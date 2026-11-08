@@ -210,3 +210,32 @@ test("a short link opens the item it names", async ({ page, heapPath }) => {
   await expect(page).toHaveURL(new RegExp(`${heapPath}/items/${key}$`));
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
 });
+
+test("on a phone, the item's fields open sheets, and the state buttons sit at the bottom", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone shows the fields as rows.");
+  await addItem(page, "Plan the offsite");
+  await openItem(page, "Plan the offsite");
+  const pane = itemPane(page);
+
+  // The description saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
+  await (await field(page, "Description")).getByLabel("Description").fill("Venue first");
+  await page.keyboard.press("Escape");
+  await expect(pane.getByRole("button", { name: "Description Venue first" })).toBeVisible();
+  await (await field(page, "Description")).getByLabel("Description").fill("Venue, then dates");
+  await page.mouse.click(200, 20);
+  await expect(pane.getByRole("button", { name: "Description Venue, then dates" })).toBeVisible();
+
+  // A new tag from the Tags sheet, its offer in view under the field.
+  const tags = await field(page, "Tags");
+  await tags.getByLabel("Add a tag").fill("travel");
+  await tags.getByRole("option", { name: "Create tag “travel”" }).click();
+  await closeField(page);
+  await expect(pane.getByRole("button", { name: "Tags travel" })).toBeVisible();
+
+  // Won't do is under ⋯ at the end of the bar; a closed item shows all its fields, unchangeable.
+  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More states" }).click();
+  await page.getByRole("dialog", { name: "More states" }).getByRole("button", { name: "Won't do" }).click();
+  await expect(pane.getByText("Venue, then dates", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: /^Description/ })).toHaveCount(0);
+  await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
+});

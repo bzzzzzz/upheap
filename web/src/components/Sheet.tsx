@@ -1,6 +1,6 @@
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import { Dialog, Heading, Modal, ModalOverlay, ToggleButton, type Key } from "react-aria-components";
 
 /**
  * A sheet from the bottom of a phone's screen, over a dimmed page (ux-overview.md: overlays on the phone are bottom
@@ -60,6 +60,12 @@ export function Sheet({
             </div>
           )}
           {children}
+          {!showTitle && (
+            // Without the title bar there's no ✕, and a screen reader can't tap outside.
+            <button type="button" onClick={onClose} className="sr-only">
+              Close
+            </button>
+          )}
         </Dialog>
       </Modal>
     </ModalOverlay>
@@ -71,4 +77,38 @@ export function Sheet({
  * value on the right, and a check on the current choice.
  */
 export const sheetRowClass =
-  "flex min-h-13 w-full items-center gap-3 rounded-xl px-3 text-left text-[15px] text-ink outline-none hover:bg-sunken focus-visible:outline-2 focus-visible:outline-accent data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent aria-[current=page]:bg-accent-soft aria-[current=page]:font-semibold aria-checked:bg-accent-soft aria-checked:font-semibold disabled:opacity-50";
+  "flex min-h-13 w-full items-center gap-3 rounded-xl px-3 text-left text-[15px] text-ink outline-none hover:bg-sunken focus-visible:outline-2 focus-visible:outline-accent data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent aria-[current=page]:bg-accent-soft aria-[current=page]:font-semibold data-[selected]:bg-accent-soft data-[selected]:font-semibold disabled:opacity-50";
+
+/**
+ * One choice among the rows of a sheet, inside a single-selection `ToggleButtonGroup`, which makes them a radio group
+ * the arrows move through. `note` sits before the check and describes the choice without naming it.
+ */
+export function SheetChoice({
+  id,
+  muted = false,
+  note,
+  children,
+}: {
+  id: Key;
+  muted?: boolean;
+  note?: { id: string; text: string };
+  children: ReactNode;
+}) {
+  return (
+    <ToggleButton id={id} aria-describedby={note?.id} className={sheetRowClass}>
+      {({ isSelected }) => (
+        <>
+          <span className={`flex-1 ${muted && !isSelected ? "text-ink-soft" : ""}`}>{children}</span>
+          {note && (
+            <span id={note.id} aria-hidden="true" className="text-[13px] font-normal text-muted">
+              {note.text}
+            </span>
+          )}
+          <span aria-hidden="true" className="w-5 text-accent-ink">
+            {isSelected && <Check className="size-4" strokeWidth={3} />}
+          </span>
+        </>
+      )}
+    </ToggleButton>
+  );
+}

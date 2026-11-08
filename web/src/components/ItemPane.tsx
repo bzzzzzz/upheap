@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Check, ChevronDown, ChevronRight, ChevronUp, Ellipsis, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Ellipsis, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, Menu, MenuTrigger } from "react-aria-components";
+import { Button, Menu, MenuTrigger, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
@@ -18,7 +18,7 @@ import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
-import { Sheet, sheetRowClass } from "./Sheet";
+import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
@@ -406,7 +406,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       </section>
 
       {phone && (
-        <StateBar
+        <StateActions
+          variant="bar"
           item={item}
           disabled={!canChangeState}
           canReopen={canReopen}
@@ -467,12 +468,8 @@ function FieldRows({
                   label={parameter.name}
                   options={parameter.options}
                   value={current.option?.id ?? null}
-                  onChange={(option) => {
-                    if (option !== (current.option?.id ?? null)) {
-                      save({ parameter_values: { [current.parameter_id]: option } });
-                    }
-                    close();
-                  }}
+                  onChange={(option) => save({ parameter_values: { [current.parameter_id]: option } })}
+                  onDone={close}
                 />
               </Sheet>
             )}
@@ -481,7 +478,8 @@ function FieldRows({
       })}
       <FieldRow
         label="Description"
-        value={item.description?.split("\n")[0] ?? null}
+        // The first line names it; the sheet, or the read-only row, shows all of it.
+        value={(canEdit ? item.description?.split("\n")[0] : item.description) ?? null}
         disabled={!canEdit}
         onOpen={() => setOpen("description")}
       />
@@ -500,20 +498,22 @@ function FieldRows({
           <TagPicker
             heapRef={heapRef}
             value={item.tags}
+            inline
             onChange={(picked) => save({ tag_ids: picked.map((tag) => tag.id) })}
           />
         </div>
       </Sheet>
-      <DescriptionSheet
-        description={item.description ?? ""}
-        {...sheet("description")}
-        onSave={(text) => saveText("description", text)}
-      />
+      <Sheet title="Description" {...sheet("description")}>
+        <DescriptionEditor description={item.description ?? ""} onSave={(text) => saveText("description", text)} />
+      </Sheet>
     </div>
   );
 }
 
-/** A field as a phone shows it: its label, and its value or what it reads as unset, with a chevron to change it. */
+/**
+ * A field as a phone shows it: its label, and its value or what it reads as unset, with a chevron to change it. A
+ * field that can't be changed is a plain row showing all of its value, as there's no sheet to read the rest in.
+ */
 function FieldRow({
   label,
   value,
@@ -529,159 +529,103 @@ function FieldRow({
   disabled: boolean;
   onOpen: () => void;
 }) {
+  const rowClass = "flex min-h-13 gap-3 border-b border-line/60 text-left text-[15px]";
+  const labelClass = `shrink-0 ${tone === "param" ? "text-param-ink" : "text-ink-soft"}`;
+  const valueClass = value === null ? "text-muted" : "text-ink";
+  if (disabled) {
+    return (
+      <div className={`${rowClass} items-baseline py-3.5`}>
+        <span className={labelClass}>{label}</span>
+        <span className={`min-w-0 flex-1 text-right break-words whitespace-pre-line ${valueClass}`}>
+          {value ?? empty}
+        </span>
+      </div>
+    );
+  }
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onOpen}
-      className="flex min-h-13 items-center gap-3 border-b border-line/60 text-left text-[15px] outline-none focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default"
+      className={`${rowClass} items-center outline-none focus-visible:outline-2 focus-visible:outline-accent`}
     >
-      <span className={`shrink-0 ${tone === "param" ? "text-param-ink" : "text-ink-soft"}`}>{label}</span>
-      <span className={`min-w-0 flex-1 truncate text-right ${value === null ? "text-muted" : "text-ink"}`}>
-        {value ?? empty}
-      </span>
-      {!disabled && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />}
+      <span className={labelClass}>{label}</span>
+      <span className={`min-w-0 flex-1 truncate text-right ${valueClass}`}>{value ?? empty}</span>
+      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
     </button>
   );
 }
 
-/** One option out of a list, as 52 px rows with a check on the picked one, and Not set to clear it. */
+/** The value a choice row stands for when it clears the field. */
+const NOT_SET = "";
+
+/**
+ * One option out of a list, as 52 px rows with a check on the picked one, and Not set to clear it. A radio group, so
+ * the arrows move through it. Picking is the whole job, so `onDone` follows, also when the picked row is tapped again.
+ */
 function OptionRows({
   label,
   options,
   value,
   onChange,
+  onDone,
 }: {
   label: string;
   options: readonly { id: string; label: string }[];
   value: string | null;
   onChange: (value: string | null) => void;
+  onDone: () => void;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-col pb-1">
-      {[...options, { id: "", label: "Not set" }].map((option) => {
-        const on = (value ?? "") === option.id;
-        return (
-          <button
-            key={option.id}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onChange(option.id === "" ? null : option.id)}
-            className={sheetRowClass}
-          >
-            <span className={`flex-1 ${option.id === "" ? "font-normal text-ink-soft" : ""}`}>{option.label}</span>
-            <span aria-hidden="true" className="w-5 text-accent-ink">
-              {on && <Check className="size-4" strokeWidth={3} />}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** The description in a sheet, saved as the sheet closes, however it closes. */
-function DescriptionSheet({
-  description,
-  isOpen,
-  onClose,
-  aside,
-  onSave,
-}: {
-  description: string;
-  isOpen: boolean;
-  onClose: () => void;
-  aside: string;
-  onSave: (text: string) => void;
-}) {
-  const [text, setText] = useState(description);
-  const close = () => {
-    onSave(text);
-    onClose();
-  };
-  return (
-    <Sheet title="Description" isOpen={isOpen} onClose={close} aside={aside}>
-      <textarea
-        aria-label="Description"
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={6}
-        className="mt-1 mb-2 min-h-40 rounded-xl border border-line bg-surface px-3 py-2 text-base"
-      />
-    </Sheet>
+    <ToggleButtonGroup
+      aria-label={label}
+      selectionMode="single"
+      orientation="vertical"
+      selectedKeys={[value ?? NOT_SET]}
+      onSelectionChange={(keys) => {
+        const [picked] = [...keys];
+        // An empty selection is the picked row tapped again: nothing to change.
+        if (picked !== undefined) onChange(picked === NOT_SET ? null : String(picked));
+        onDone();
+      }}
+      className="flex flex-col pb-1"
+    >
+      {[...options, { id: NOT_SET, label: "Not set" }].map((option) => (
+        <SheetChoice key={option.id} id={option.id} muted={option.id === NOT_SET}>
+          {option.label}
+        </SheetChoice>
+      ))}
+    </ToggleButtonGroup>
   );
 }
 
 /**
- * The phone's state buttons, in a bar at the bottom of the sheet within reach of the thumb (ux-overview.md, What
- * comes first §2): the likeliest next state, wider, then the other two, and Won't do under ⋯. A closed item gets
- * Reopen while it can be reopened.
+ * The description in a phone's sheet. It starts from the saved text each time the sheet opens, and saves as the sheet
+ * goes away, however it goes (✕, Escape, a tap outside, Back, a turn of the phone), and only if it was changed, so an
+ * untouched sheet never writes back what it was opened with.
  */
-function StateBar({
-  item,
-  disabled,
-  canReopen,
-  onChange,
-}: {
-  item: Item;
-  disabled: boolean;
-  canReopen: boolean;
-  onChange: (state: ItemState) => void;
-}) {
-  const barClass =
-    "sticky bottom-0 z-10 -mx-4 mt-auto grid gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)]";
-  const buttonClass = (main: boolean) =>
-    `h-13 rounded-[14px] text-[15px] font-medium disabled:opacity-50 ${
-      main ? "bg-accent font-semibold text-stone-950" : "bg-sunken text-ink"
-    }`;
-
-  if (item.state === "done" || item.state === "wont_do") {
-    if (!canReopen) return null;
-    return (
-      <div role="group" aria-label="State" data-state-bar="" className={barClass}>
-        <button type="button" onClick={() => onChange("open")} className={buttonClass(true)}>
-          {changeLabel(item.state, "open")}
-        </button>
-      </div>
-    );
-  }
-
-  const [main, ...others] = NEXT_STATES[item.state];
+function DescriptionEditor({ description, onSave }: { description: string; onSave: (text: string) => void }) {
+  const [opened] = useState(description);
+  const [text, setText] = useState(opened);
+  // What the cleanup reads as the sheet goes away: the text as last typed, and the save of that moment.
+  const latest = useRef({ text, onSave });
+  useEffect(() => {
+    latest.current = { text, onSave };
+  });
+  useEffect(
+    () => () => {
+      if (latest.current.text !== opened) latest.current.onSave(latest.current.text);
+    },
+    [opened],
+  );
   return (
-    <div
-      role="group"
-      aria-label="State"
-      data-state-bar=""
-      className={`${barClass} grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]`}
-    >
-      {[main, ...others].map((state) => (
-        <button
-          key={state}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(state)}
-          className={buttonClass(state === main)}
-        >
-          {changeLabel(item.state, state)}
-        </button>
-      ))}
-      <MenuTrigger>
-        <Button
-          aria-label="More states"
-          isDisabled={disabled}
-          className="flex size-13 items-center justify-center rounded-[14px] bg-sunken text-ink-soft outline-none data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
-        >
-          <Ellipsis aria-hidden="true" className="size-5" />
-        </Button>
-        <MenuPopover placement="top end">
-          <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
-            <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
-          </Menu>
-        </MenuPopover>
-      </MenuTrigger>
-    </div>
+    <textarea
+      aria-label="Description"
+      autoFocus
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      rows={6}
+      className="mt-1 mb-2 min-h-40 rounded-xl border border-line bg-surface px-3 py-2 text-base"
+    />
   );
 }
 
@@ -734,79 +678,136 @@ function WhyItRanks({ entry }: { entry: RankedItem }) {
 /**
  * The item's state and the ways out of it (ux-overview.md, The item §1): the likeliest next state as the main button,
  * the other states beside it, and Won't do under ⋯, as it's rarely the one wanted. A closed item says when it closed,
- * and offers Reopen while it still can be.
+ * and offers Reopen while it still can be. As a `bar`, for a phone, the buttons sit at the bottom of the sheet within
+ * reach of the thumb, the main one wider, and the state itself is a line under the title (ux-overview.md, What comes
+ * first §2).
  */
 function StateActions({
   item,
   disabled,
   canReopen,
   onChange,
+  variant = "inline",
 }: {
   item: Item;
   disabled: boolean;
   canReopen: boolean;
   onChange: (state: ItemState) => void;
+  variant?: "inline" | "bar";
 }) {
   const labelId = useId();
-  const header = (
-    <div className="flex items-baseline gap-2">
-      <FieldLabel id={labelId}>State</FieldLabel>
-      <span className={`text-sm font-medium ${item.state === "in_progress" ? "text-accent-ink" : "text-ink"}`}>
-        {STATE_LABELS[item.state]}
-        {item.closed_label && <span className="font-normal text-muted"> · {item.closed_label}</span>}
-      </span>
-    </div>
+  const bar = variant === "bar";
+  const closed = item.state === "done" || item.state === "wont_do";
+  if (bar && closed && !canReopen) return null;
+
+  const button = (state: ItemState, main: boolean, isDisabled = false) => (
+    <button
+      key={state}
+      type="button"
+      disabled={isDisabled}
+      onClick={() => onChange(state)}
+      className={bar ? barButtonClass(main) : stateButtonClass(main)}
+    >
+      {changeLabel(item.state, state)}
+    </button>
   );
 
+  let actions: ReactNode;
   if (item.state === "done" || item.state === "wont_do") {
-    return (
-      <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
-        {header}
-        {canReopen ? (
-          <div>
-            <button type="button" onClick={() => onChange("open")} className={stateButtonClass(true)}>
-              {changeLabel(item.state, "open")}
-            </button>
-          </div>
+    actions = canReopen ? button("open", true) : <p className="text-xs text-muted">It can't be reopened.</p>;
+  } else {
+    const [main, ...others] = NEXT_STATES[item.state];
+    actions = (
+      <>
+        {[main, ...others].map((state) => button(state, state === main, disabled))}
+        {bar ? (
+          <MoreStatesSheet item={item} disabled={disabled} onChange={onChange} />
         ) : (
-          <p className="text-xs text-muted">It can't be reopened.</p>
+          <MenuTrigger>
+            <Button
+              aria-label="More states"
+              isDisabled={disabled}
+              className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
+            >
+              <Ellipsis aria-hidden="true" className="size-4" />
+            </Button>
+            <MenuPopover placement="bottom end">
+              <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
+                <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
+              </Menu>
+            </MenuPopover>
+          </MenuTrigger>
         )}
-      </div>
+      </>
     );
   }
 
-  const [main, ...others] = NEXT_STATES[item.state];
+  if (bar) {
+    return (
+      <div
+        role="group"
+        aria-label="State"
+        data-state-bar=""
+        className={`sticky bottom-0 z-10 -mx-4 grid gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] ${
+          closed ? "" : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+        }`}
+      >
+        {actions}
+      </div>
+    );
+  }
   return (
     <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
-      {header}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {[main, ...others].map((state) => (
-          <button
-            key={state}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(state)}
-            className={stateButtonClass(state === main)}
-          >
-            {changeLabel(item.state, state)}
-          </button>
-        ))}
-        <MenuTrigger>
-          <Button
-            aria-label="More states"
-            isDisabled={disabled}
-            className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
-          >
-            <Ellipsis aria-hidden="true" className="size-4" />
-          </Button>
-          <MenuPopover placement="bottom end">
-            <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
-              <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
-            </Menu>
-          </MenuPopover>
-        </MenuTrigger>
+      <div className="flex items-baseline gap-2">
+        <FieldLabel id={labelId}>State</FieldLabel>
+        <span className={`text-sm font-medium ${item.state === "in_progress" ? "text-accent-ink" : "text-ink"}`}>
+          {STATE_LABELS[item.state]}
+          {item.closed_label && <span className="font-normal text-muted"> · {item.closed_label}</span>}
+        </span>
       </div>
+      <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
     </div>
+  );
+}
+
+/**
+ * Won't do from the phone's bar, in a sheet that opens as the finger lifts. A menu opens as it's pressed and picks
+ * the entry the finger lifts over, and on a phone its sheet comes up right under the ⋯ at the bottom of the screen.
+ */
+function MoreStatesSheet({
+  item,
+  disabled,
+  onChange,
+}: {
+  item: Item;
+  disabled: boolean;
+  onChange: (state: ItemState) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="More states"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className="flex size-13 items-center justify-center rounded-[14px] bg-sunken text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+      >
+        <Ellipsis aria-hidden="true" className="size-5" />
+      </button>
+      <Sheet title="More states" isOpen={open} onClose={() => setOpen(false)} aside={item.title}>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            onChange("wont_do");
+          }}
+          className={`${sheetRowClass} mb-1`}
+        >
+          {changeLabel(item.state, "wont_do")}
+        </button>
+      </Sheet>
+    </>
   );
 }
 
@@ -814,4 +815,10 @@ function StateActions({
 const stateButtonClass = (main: boolean) =>
   `h-9 rounded-lg px-3 text-sm font-medium disabled:opacity-50 pointer-coarse:h-11 ${
     main ? "bg-accent text-stone-950 hover:brightness-95" : "border border-line bg-surface text-ink hover:border-muted"
+  }`;
+
+/** The same, as the phone's bar shows it: 52 px tall, the others on a sunken ground. */
+const barButtonClass = (main: boolean) =>
+  `h-13 rounded-[14px] text-[15px] disabled:opacity-50 ${
+    main ? "bg-accent font-semibold text-stone-950" : "bg-sunken font-medium text-ink"
   }`;

@@ -403,7 +403,7 @@ overlays are the same components.
 - **Actions:** pick a heap; "New heap in \<team\>" for the current heap's team, when the team allows it, asks for a
   name and opens the new heap.
 - **Presentation:** popover beside the rail on a tablet; bottom sheet on a phone.
-- **Freq 4:** most users have a personal and a team heap. **Source:** app-ux.md Layout; `HeapMenu`. Built.
+- **Freq 4:** most users have a personal and a team heap. **Source:** app-ux.md Layout; `HeapSwitcher`. Built, apart from open counts.
 - **Must:** local 2, server 4. Server: most users move between a personal and a team heap every day, and on a phone
   the only other route is through Team. On a wide screen the sidebar plays this role. Local: one heap is usual.
 
@@ -1045,7 +1045,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 6. **Item key and Copy link.** Settled: the key is the copy-link button in the item's header.
 7. **Finding what blocks archiving a parameter.** `parameter_in_use` doesn't say which open items hold a value. A
    link to the list filtered by that parameter's options would answer it.
-8. **New heap from the switcher.** Heaps are created only on S-team; the switcher has no "New heap".
+8. **New heap from the switcher.** Settled: the switcher ends with "New heap in \<team\>" for the heap's own team.
 9. **Where an added item landed.** M-add-item closes without saying the new item's position; the CLI does.
 10. **Onboarding.** No first-run explanation of how ranking works, what effort, impact and loose due times mean, or
     that items are never deleted. Only E-heap-empty's one line.

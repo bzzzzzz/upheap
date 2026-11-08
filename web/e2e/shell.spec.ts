@@ -74,7 +74,8 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await expect(more.getByRole("link", { name: "Tags", exact: true })).toBeVisible();
   const tabsBox = await tabs.boundingBox();
   const sheet = await more.boundingBox();
-  expect(sheet && tabsBox && sheet.y + sheet.height).toBeLessThanOrEqual(tabsBox?.y ?? 0);
+  if (!tabsBox || !sheet) throw new Error("the tabs or More are not laid out");
+  expect(sheet.y + sheet.height).toBeLessThanOrEqual(tabsBox.y);
   await page.keyboard.press("Escape");
   await expect(more).toHaveCount(0);
 
