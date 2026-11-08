@@ -26,7 +26,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Built: the state buttons in a bar at the bottom of the sheet, the likeliest next state wider, with Won't do under ⋯ at the end of the bar rather than in the header; the state as a line under the title; due, tags, parameters and description as rows that open sheets. The buttons keep the wide screen's names (Block, not Blocked). Left: the "Added" row among the fields; until then "Added by" shows beside History |
 | Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone, in the item: built, a sheet of 52 px rows, Exact date with its date field, and Clear due; a rough choice or Clear closes it. Phone, in Add: a row of chips that scrolls sideways, the rough choices then Exact date, a second tap clearing the picked one. Add on a wide screen starts at None. Left: the browser pane's dropdown isn't mocked yet |
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
-| Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | ✅ | Built: "Add to \<heap\> ▾" chooses the heap (tags and parameter values clear, the rest stays); the list's filters prefill tags, and effort, impact or a parameter where they pick one value, silently, also after each Add another; "Added “X” at #4 in Up next" with Open it, in the dialog with Add another and in the toast without, the position read from the list refetched after the add; Add another remembered per device; due starts at None. Phone: a sheet with chips for need, effort, impact, tags and due, and More fields for the description and parameters. Need stays, as its own row of chips, though the mockups predate it |
+| Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | ✅ | Built: "Add to \<heap\> ▾" chooses the heap (tags and parameter values clear, the rest stays); the list's filters prefill tags, and effort, impact or a parameter where they pick one value, silently, also after each Add another; "Added “X” at #4 in Up next" with Open it, in the dialog with Add another and in the toast without, the position read from the list refetched after the add; Add another remembered per device; due starts at None. Phone: a sheet with chips for need, effort, impact, tags and due, and More fields for the description and parameters. Need stays, as its own row of chips, though the mockups predate it. Left: on a phone, a parameter that a newly added tag asks for sits under More fields, closed, unless the prefill opened it; a badge on More fields, or opening it, would show it |
 | Conflicts | E-conflict | n/a / 4 | Main | 🟡 | 🟡 | Says what was lost ("your change (due: next week) wasn't saved") with Apply mine again |
 | Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | 🟡 | Grouped by day; one intro line explains the week limit; who closed it; Reopen while allowed, nothing after |
 | Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | 🟡 | The confirm names the file, compares item counts and offers Download current first. No phone board yet |
@@ -50,7 +50,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    on screen is fetched again after an add anyway, and the position is read from it. An item added to another heap,
    or one the view hides, gets "Added to \<heap\>" without a position.
 5. **Username suggestions** when the chosen one is taken: worth the server work?
-6. **Links:** screens.md, ux-overview.md and this file aren't linked from CLAUDE.md, app-ux.md or progress.md yet.
+6. **Who can add to which heap:** the heap chooser in Add offers every unarchived heap, as every role can add
+   items today. If a role that can't add ever appears, the server should say so per heap (as `allowed_actions`), not
+   the client.
+7. **Links:** screens.md, ux-overview.md and this file aren't linked from CLAUDE.md, app-ux.md or progress.md yet.
 
 ## Next steps
 
