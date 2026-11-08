@@ -9,6 +9,7 @@ import {
   Outlet,
   redirect,
   useParams,
+  useRouter,
 } from "@tanstack/react-router";
 
 import { isUnauthenticated } from "./api/client";
@@ -29,17 +30,75 @@ const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: AuthPage });
+/**
+ * Sign-in's search for a user sent there from `href`, a path in the app with its search and hash, so signing in
+ * returns there. Nothing for `/`, where signing in lands anyway.
+ */
+export function signInSearch(href: string): { redirect?: string } {
+  return href === "/" ? {} : { redirect: href };
+}
+
+/** Whether `pathname` is sign-in's, by the router's matching, so `/LOGIN` counts too. */
+export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: string): boolean {
+  return router.matchRoutes(pathname, {}).some((match) => match.routeId === loginRoute.id);
+}
+
+/**
+ * An item key as `domain::handle::ItemKey` makes them: five characters of lowercase Crockford base32, at least one a
+ * digit. The notice names an item only when its segment has this shape, so a crafted link can't put its own words
+ * there.
+ */
+const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
+
+/**
+ * `redirect` as a page of the app to return to after sign-in, with the router's matches for it, or nothing when it
+ * isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to another site, and
+ * sign-in itself, or any other path outside the signed-in app, isn't worth returning to. A path inside it that no
+ * page answers, such as `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless.
+ */
+function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
+  if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
+  // The URL parser drops tabs and newlines and resolves dot segments, so `/\t/evil.example` is another origin and
+  // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
+  const url = new URL(redirect, window.location.origin);
+  if (url.origin !== window.location.origin || url.pathname.startsWith("//")) return undefined;
+  // Only the signed-in app sends users here; sign-in is outside it, whatever the case of `/LOGIN`.
+  const matches = router.matchRoutes(url.pathname, {});
+  if (!matches.some((match) => match.routeId === appRoute.id)) return undefined;
+  return { href: url.pathname + url.search + url.hash, matches };
+}
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
+    typeof search.redirect === "string" ? { redirect: search.redirect } : {},
+  component: function LoginRoute() {
+    const router = useRouter();
+    const page = toAppPage(router, loginRoute.useSearch().redirect);
+    // The router's own matching says whether the link is to an item, and which.
+    const item = page?.matches.find((match) => match.routeId === itemRoute.id);
+    const segment = item && "item" in item.params ? String(item.params.item) : undefined;
+    const itemKey = segment && ITEM_KEY.test(segment) ? segment : undefined;
+    let notice: string | undefined;
+    if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
+    // With `href`, the router takes the whole location from it; without, it goes to `to`.
+    return (
+      <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: page?.href, replace: true })} />
+    );
+  },
+});
 
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
-  beforeLoad: async ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     try {
       await context.queryClient.ensureQueryData(meQuery);
     } catch (error) {
       if (isUnauthenticated(error)) {
-        throw redirect({ to: "/login" });
+        // `href` is the router's, without the base path, as `redirect` wants it.
+        throw redirect({ to: "/login", search: signInSearch(location.href) });
       }
       throw error;
     }

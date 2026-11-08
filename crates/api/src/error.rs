@@ -11,6 +11,7 @@ use domain::ValidationError;
 use domain::item::ItemError;
 use domain::parameter::ParameterError;
 use domain::team::TeamError;
+use domain::validation::Field;
 use serde::Serialize;
 use service::ServiceError;
 use store_error::StoreErrorKind;
@@ -160,7 +161,10 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::TooManySignInAttempts { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
-        ServiceError::EmailTaken => simple(StatusCode::CONFLICT, "email_taken", Category::Conflict),
+        ServiceError::EmailTaken => Classified {
+            field: Some(Field::Email.as_str()),
+            ..simple(StatusCode::CONFLICT, "email_taken", Category::Conflict)
+        },
         ServiceError::HandleTaken { field } => Classified {
             field: Some(field.as_str()),
             ..simple(StatusCode::CONFLICT, "handle_taken", Category::Conflict)
@@ -296,9 +300,9 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::Empty { field } => ("field_empty", Some(field.as_str())),
         ValidationError::TooLong { field, .. } => ("field_too_long", Some(field.as_str())),
         ValidationError::TooShort { field, .. } => ("field_too_short", Some(field.as_str())),
-        ValidationError::EmailInvalid => ("email_invalid", Some("email")),
-        ValidationError::PasswordTooShort { .. } => ("password_too_short", Some("password")),
-        ValidationError::PasswordTooLong { .. } => ("password_too_long", Some("password")),
+        ValidationError::EmailInvalid => ("email_invalid", Some(Field::Email.as_str())),
+        ValidationError::PasswordTooShort { .. } => ("password_too_short", Some(Field::Password.as_str())),
+        ValidationError::PasswordTooLong { .. } => ("password_too_long", Some(Field::Password.as_str())),
         ValidationError::DueDateInvalid => ("due_date_invalid", Some("due")),
         ValidationError::TimestampOutOfRange => ("timestamp_out_of_range", None),
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),

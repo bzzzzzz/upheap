@@ -1433,6 +1433,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `field_empty` (`field` `email` or `password`); not counted as an attempt */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {
@@ -1486,7 +1495,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description `email_taken`, or `handle_taken` (`field` `username`) */
+            /** @description `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
             409: {
                 headers: {
                     [name: string]: unknown;

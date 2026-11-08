@@ -121,6 +121,10 @@ function toProblem(error: unknown, response: Response): ApiProblem {
   return new ApiProblem(response.status, "unexpected_response", `The server answered ${response.status}.`);
 }
 
+/**
+ * Whether the request had no live session. By `code`: a wrong password at sign-in is a `401` too
+ * (`invalid_credentials`), and isn't this.
+ */
 export function isUnauthenticated(error: unknown): boolean {
-  return error instanceof ApiProblem && error.status === 401;
+  return error instanceof ApiProblem && error.code === "unauthenticated";
 }

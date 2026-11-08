@@ -456,9 +456,15 @@ overlays are the same components.
 
 ### G-session-expired: Session expired
 
-- **Behaviour:** any `401` sends the user to S-sign-in (`main.tsx` query cache). The page they were on is not kept,
-  so after signing in they land on their first heap.
-- **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built (redirect only).
+- **Behaviour:** any `unauthenticated` problem, from a query or a write (`main.tsx`, the query and mutation caches),
+  drops the query cache and sends the user to S-sign-in with the page they were on as `redirect`, as the route
+  guard does for a signed-out visit, so after signing in they're back there. It replaces the page in history, so
+  Back doesn't return to it signed out, and the dropped cache means neither Back nor a sign-in in another tab shows
+  the last user's data. During a pending navigation the page is the one being opened, so the guard and the handler
+  agree. The handler goes by `code`, so a wrong password on S-sign-in (`401` `invalid_credentials`) isn't one, and a
+  later failure of the old page doesn't replace sign-in's `redirect`. Signing in drops the query cache too. The
+  notice reads "Sign in to open that page." or names the item; there's no "your session ended" line.
+- **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built.
 - **Must:** local n/a, server 4. Without it a `401` leaves every page failing, with no way back to sign-in.
 
 ### G-offline: Can't reach the server
@@ -491,33 +497,48 @@ order §4–5). See Gaps.
 
 - **Route:** `/login`. **Who:** signed-out visitors (server build only; the local build never shows it).
 - **Purpose:** sign in with a local account (Off Auth §2).
-- **Shows:** "Upheap", the tagline "Add what comes up. The list keeps itself in order.", Email, Password, Sign in,
-  and "New here? Create an account" to switch to S-register. Errors inline (`invalid_credentials`).
-- **Exits:** to `/`, which redirects to the first unarchived heap.
+- **Shows:** the Upheap mark, a Sign in / Create account switch (tabs; S-register is the other tab), Email,
+  Password and Sign in, in a 380 px card on a wide screen (WideSignIn). A problem whose `field` names one of the
+  inputs shows under it, which gets focus; any other (`invalid_credentials`, E-throttled, E-registration-closed) is
+  one line above the button. Editing an input clears its error. The board has no tagline, so the page has none.
+- **From a link:** a signed-out visit to any page of the app goes to `/login?redirect=<path>` (a plain visit to `/`
+  to `/login`). A notice above the switch says where it leads: "Sign in to open the link to 3n2ay." for an item
+  whose segment has an item key's shape (five lowercase Crockford base32 characters, one a digit), so a crafted
+  link can't put its own words there, and "Sign in to open that page." otherwise.
+- **Exits:** to `redirect` when, as the URL parser normalises it, it's a same-origin path that the router matches
+  into the signed-in app; otherwise (`//evil.example`, `/.//evil.example`, `javascript:…`, `/LOGIN`, any path
+  outside the signed-in app) to `/`, which redirects to the first unarchived heap. A path inside the app that no
+  page answers, such as `/teams/a/zzz`, is kept and opens the app's not-found.
+- **Empty inputs:** an empty email or password gets `field_empty` with that field before the server counts the
+  attempt, so a form sent before a password manager fills it doesn't use one up.
 - **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, TD Auth §3.
-- **Phone:** same single column; step 4 of app-ux.md's plan still has to fit it to phone width.
+  The phone board's "Email or username" waits on signing in by username, which the server doesn't do.
+- **Phone:** the bare form at full width (PhoneSignIn): 48 px inputs with 16 px text, a 52 px button, and the
+  keyboard each input wants (`type=email`, no autocapitalise or autocorrect for email and username).
 - **Freq 2.** **Source:** `AuthPage.tsx`. Built.
 - **Must:** local n/a, server 5. No way into the server build without it.
 
 #### E-throttled: Too many sign-in attempts
 
 - `429` `too_many_attempts` after five attempts in 15 minutes per address, with `Retry-After`. The server's message
-  says how long to wait; the page shows it in the error line. A countdown, or disabling Sign in until then, isn't
-  designed.
+  says how long to wait; the page shows it in the line above Sign in. A countdown, or disabling Sign in until then,
+  isn't designed.
 - **Freq 1.** **Source:** TD Auth §4. Built (message only).
 - **Must:** local n/a, server 2.
 
 ### S-register: Create account
 
 - **Route:** `/login`, register mode. **Who:** anyone, unless `ALLOW_REGISTRATION=false`.
-- **Shows:** Name, Email, Password (at least 10 characters), Create account, "Have an account? Sign in".
-- **Designed:** a **Username** field (readable-ids.md Sign-up): 2–39 characters, lowercase letters, digits and
-  single dashes, starting with a letter; permanent; becomes the personal team's slug. Errors `invalid_handle` (with
-  a hint such as `my-team`) and `handle_taken`. The API on this branch already requires `username`; the form
-  doesn't send it yet.
-- **Exits:** to the new personal heap "Personal" (`/teams/{username}/heaps/personal`), empty (E-heap-empty).
-- **Errors:** `email_taken`, `email_invalid`, `password_too_short`, `password_too_long`, `field_empty`.
-- **Freq 1.** **Source:** Off Auth §3, Teams §3; `AuthPage.tsx`. Built (username designed).
+- **Shows:** Name, Username, Email, Password with the hint "At least 10 characters", Create account, and under it
+  "You'll start in your own heap. Teams come next." The Username field (readable-ids.md Sign-up): 2–39
+  characters, lowercase letters, digits and single dashes, starting with a letter; permanent; becomes the personal
+  team's slug.
+- **Exits:** to `redirect`, as S-sign-in, or else to the new personal heap "Personal"
+  (`/teams/{username}/heaps/personal`), empty (E-heap-empty).
+- **Errors,** each under its input: `invalid_handle` (with a hint such as `my-team`) and `handle_taken` (field
+  `username`), `email_taken` and `email_invalid` (`email`), `password_too_short` and `password_too_long`
+  (`password`), `field_empty` (`display_name`). `registration_closed` shows above the button.
+- **Freq 1.** **Source:** Off Auth §3, Teams §3; `AuthPage.tsx`. Built.
 - **Must:** local n/a, server 5. The only way to get an account: there are no admin-made users, and OIDC isn't built.
 
 #### E-registration-closed
@@ -1083,7 +1104,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
     unarchive, by design.
 15. **Blocked on a closed blocker.** "Closing a blocker later doesn't unblock what waits for it" (TD Cycle
     detection §3). Nothing nudges the user to move the blocked item on.
-16. **Return to page after sign-in.** G-session-expired drops the page the user was on.
+16. ~~**Return to page after sign-in.**~~ Settled: a signed-out visit and an expired session both return to their
+    page after sign-in (S-sign-in, From a link; G-session-expired).
 
 ### Conflicts between docs, or between docs and code
 
@@ -1099,8 +1121,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    `service/src/personal.rs`: team slug `me`, first heap "Personal". local-build.md is stale.
 6. **More menu.** app-ux.md lists Tags, Parameters, Team, Account, Sign out; the code adds Teams (or the team's
    name).
-7. **Sign-up on this branch.** The API now requires `username` at registration; S-register doesn't send it, so
-   sign-up is broken until the web step of readable-ids.md lands.
+7. ~~**Sign-up on this branch.**~~ Settled: S-register sends the username.
 8. **"Removable from items in the list"** (progress.md Tags) predates the compact rows; tags are now removed in
    M-item only.
 
@@ -1112,7 +1133,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 2. **Inline confirms vs dialogs.** Every confirmation today replaces its button in place. On a phone a bottom-sheet
    confirmation may read better; app-ux.md doesn't say.
 3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity, S-tags,
-   S-parameters, S-team, S-teams, S-sign-in. They still use the older stone palette rather than the design tokens.
+   S-parameters, S-team, S-teams. They still use the older stone palette rather than the design tokens.
    S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.
