@@ -66,7 +66,7 @@ than SQLite. For Cloud Run with Neon, see [design/cloud-run-postgres.md](design/
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | required | `sqlite://path?mode=rwc`, `mysql://…` or `postgres://…` |
-| `DATABASE_MAX_CONNECTIONS` | `5` | Most database connections the server keeps open |
+| `DATABASE_MAX_CONNECTIONS` | `5` | Most database connections the server keeps open. Size it to the database's limit divided by the instances that may run; earlier versions used 10. In-memory SQLite always keeps one |
 | `BASE_URL` | required | Public URL. Cookies are `Secure` unless it starts with `http://` |
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address |
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups |

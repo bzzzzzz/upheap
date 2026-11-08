@@ -68,7 +68,8 @@ pub const USER_QUERY_MIN_CHARS: usize = 3;
 /// username shorter than that, which then matches only that username.
 ///
 /// Only ASCII is lowercased because SQLite's `LOWER` changes nothing else: a fully lowercased `öla` could never match
-/// a stored `Ölaf` there, while `Öla` does. MySQL compares case-insensitively anyway.
+/// a stored `Ölaf` there, while `Öla` does. The store lowercases the query again with the database's `LOWER`, as it
+/// does the names, so Postgres, which lowercases all of Unicode, matches `Öla` too.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserQuery(String);
 

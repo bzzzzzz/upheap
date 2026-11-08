@@ -135,6 +135,16 @@ mod tests {
         assert!(config(&[base[0], base[1], ("ALLOW_REGISTRATION", "yes")]).is_err());
         assert!(config(&[base[0], base[1], ("DATABASE_URL", "mssql://x")]).is_err());
         assert!(config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "0")]).is_err());
+        assert!(config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "five")]).is_err());
+    }
+
+    #[test]
+    fn sets_the_pool_size() -> anyhow::Result<()> {
+        let base = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
+        assert_eq!(config(&base)?.database_max_connections, 5);
+        let config = config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "20")])?;
+        assert_eq!(config.database_max_connections, 20);
+        Ok(())
     }
 
     #[test]

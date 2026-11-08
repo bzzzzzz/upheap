@@ -43,6 +43,11 @@ pub async fn database_before_migration(migrations: u32) -> Result<DatabaseConnec
     Ok(db)
 }
 
+/// How many migrations there are, so a test can check a run applied them all.
+pub fn migration_count() -> usize {
+    crate::migration::Migrator::migrations().len()
+}
+
 /// Connections each test database keeps at most: enough for the tests that race several requests. Pools open
 /// connections only as they're needed, so most tests use one or two.
 const TEST_POOL_SIZE: u32 = 10;

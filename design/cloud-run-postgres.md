@@ -40,7 +40,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Postgres job in the CI matrix | ✅ | Service container, as for MySQL |
 | Playwright golden paths against Postgres | ⬜ | Optional; the config starts the server on in-memory SQLite |
 | Connection pool size set from config | ✅ | `DATABASE_MAX_CONNECTIONS`, default 5 |
-| Migrations safe when several instances start at once | ✅ | Advisory lock around the run; `crates/store/tests/concurrent_migrations.rs` |
+| Migrations safe when several instances start at once | ✅ | Advisory lock around the run; `crates/store/tests/postgres_migrations.rs` |
 | Docs updated: Postgres supported for production | ✅ | [offering.md](offering.md) §4, [technical-design.md](technical-design.md), README |
 | Neon project and Cloud Run service set up | ⬜ | |
 | Deploy from CI on merge to `main` | ⬜ | |
@@ -55,6 +55,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   the value written. Every `char` column holds values of exactly its length (UUIDs, SHA-256 hex, item keys), so
   only a test with short stand-in hashes was affected.
 - **Identifier quoting.** One migration test quoted `key` with MySQL's backticks; it now quotes per backend.
+- **`LOWER` beyond ASCII.** SQLite's `LOWER` lowercases ASCII only and Postgres's all of Unicode, so a user lookup
+  for "Öla" missed "Ölaf" on Postgres: the name was lowercased in SQL and the query only in Rust, for ASCII. The
+  query now goes through the same `LOWER` as the name. A review found this; the suites had no such name.
 - Nothing else: no use case carries on after a failed statement, and no query relied on row order or implicit
   casts.
 
@@ -71,6 +74,11 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 - **Prepared statements through the pooler.** sqlx prepares statements. Neon's PgBouncer supports protocol-level
   prepared statements in transaction mode, but this hasn't been tried against Neon yet; check it on the first
   deploy, and fall back to the direct endpoint if it fails.
+- **Startup parameters through the pooler.** sqlx sets `extra_float_digits` when it connects, and PgBouncer refuses
+  startup parameters it doesn't know unless they are listed in `ignore_startup_parameters`. Neon's pooler is
+  expected to accept it, but this is untried too. If connecting through the pooler fails on it, use the direct
+  endpoint, or have `store::connect` stop sqlx sending it (`PgConnectOptions::extra_float_digits(None)`); no column
+  is a float, so nothing depends on it.
 - **No work between requests.** Cloud Run pauses the CPU between requests. The server has no background timers
   today; any added later must be triggered by Cloud Scheduler calling an endpoint instead.
 - **Neon free tier limits.** About 0.5 GB of storage and a short restore window. Decide whether a paid plan is

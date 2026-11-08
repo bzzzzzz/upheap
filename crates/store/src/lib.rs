@@ -88,6 +88,7 @@ pub async fn run_migrations(db: &DatabaseConnection) -> Result<usize, StoreError
         return apply_pending_migrations(db).await;
     }
     let txn = db.begin().await?;
+    tracing::info!("waiting for the migration lock");
     txn.execute_unprepared(&format!("SELECT pg_advisory_xact_lock({MIGRATION_LOCK_KEY})"))
         .await?;
     let applied = apply_pending_migrations(&txn).await?;
