@@ -57,7 +57,7 @@ Conventions:
 - **Archiving** uses a nullable `archived_at`. There are no hard deletes.
 - **Foreign keys** never cascade. They use `ON DELETE RESTRICT`, so even an accidental `DELETE` fails instead of removing related rows.
 - **Optimistic concurrency:** mutable rows carry a `version` integer. Updates require the expected version and fail with `409 Conflict` otherwise.
-- **State and `closed_at`:** in the database, `closed_at` is set exactly when `state` is done or won't do. In `domain`, the state is an enum where only the closed variants carry `closed_at`, so an open item with a close time can't be built. The store converts between the two and rejects rows that break the rule.
+- **State and `closed_at`:** in the database, `closed_at` is set exactly when `state` is done or won't do, and `closed_by` only then. In `domain`, the state is an enum where only the closed variants carry `closed_at` and `closed_by`, so an open item with a close time or a closer can't be built. The store converts between the two and rejects rows that break the rule.
 
 Tables:
 
@@ -72,7 +72,7 @@ Tables:
 | `teams` | id, name, slug (unique; for a personal team, its owner's username), personal_user_id (unique, nullable: set on a user's personal team), created_at, version |
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
 | `heaps` | id, team_id, name, slug (unique per team), age_weight, deadline_weight, value_weight, archived_at, version |
-| `items` | id, heap_id, key (unique per heap), title, description, state, need, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, created_by (nullable), closed_at, version |
+| `items` | id, heap_id, key (unique per heap), title, description, state, need, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, created_by (nullable), closed_at, closed_by (nullable), version |
 | `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
 | `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
 | `parameters` | id, heap_id, name, weight, created_at, archived_at, version |
@@ -87,6 +87,7 @@ Notes:
 - Effort and impact are columns on `items` rather than custom parameters. They are fixed, apply to every heap, and share one weight (`heaps.value_weight`).
 - Need is a column on `items` too, for the same reasons, and is never null. Its weight is `heaps.need_weight`.
 - `items.created_by` is the user who added the item. The migration that added it filled it in from each item's `item_created` audit entry; it stays nullable, so an item whose entry is missing keeps no creator instead of failing the migration, and the API returns `created_by: null` for it.
+- `items.closed_by` is the user who closed the item, set on closing and cleared on reopening. Items closed before it was added keep `NULL`: filling it in from the audit log would mean reading JSON diffs, which has no portable SQL. The API returns `closed_by: null` for them, and for open items.
 - The need, age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
 - A user's username is the slug of their personal team, so usernames and team slugs share one namespace under one unique index. A personal team has its owner as its only member, can't take others, and its slug never changes.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
@@ -170,6 +171,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
    - `due`: `{ at, firm, label, overdue }`, where `label` is the fuzzy text ("in a few weeks") for loose dates or a formatted date for exact ones, in the timezone from the request's `Time-Zone` header.
    - `contributors`: a list of labelled factors.
    - `created_by` and `created_label` on items: who added it (`{ id, display_name }`, the `UserRef` audit entries use for their actor) and how long ago ("4 days ago"), in the request's timezone. `UserRef` was called `AuditActor` until items used it too. The JSON didn't change, and the schema was renamed in place because the API has no outside clients yet.
+   - `closed_by` and `closed_group` on items: who closed it (a `UserRef`) and which part of the closed list it belongs in, "Today", "This week" (1 to 6 calendar days before) or "Earlier", in the request's timezone. Both are `null` for open items. Clients group consecutive closed items by `closed_group` rather than comparing dates.
    - `allowed_actions`: for example `["edit", "reopen", "set_blocked"]`.
    - `unset` markers for parameters with no value.
 
@@ -183,7 +185,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Users | `GET /users?query=` (lookup for adding members, for admins of a shared team) |
 | Heaps | `POST /teams/{team}/heaps`, `GET/PATCH /teams/{team}/heaps/{heap}` (name and slug), `POST /teams/{team}/heaps/{heap}/archive`, `POST /teams/{team}/heaps/{heap}/unarchive` |
 | Ranked list | `GET /teams/{team}/heaps/{heap}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, `unfiltered_count`, `in_progress_count`, and the `as_of` value |
-| Closed items | `GET /teams/{team}/heaps/{heap}/items/closed?cursor=` |
+| Closed items | `GET /teams/{team}/heaps/{heap}/items/closed?cursor=` returns closed items, most recently closed first, each with its `closed_by` and `closed_group` |
 | Items | `POST /teams/{team}/heaps/{heap}/items`, `GET/PATCH /teams/{team}/heaps/{heap}/items/{item}`, `POST /teams/{team}/heaps/{heap}/items/{item}/reopen` |
 | Due choices | `GET /due-choices`: the rough due times a due picker offers ("next week"), each with its date in the request's timezone and the label an item due then reads back with |
 | Tags | `GET/POST /teams/{team}/heaps/{heap}/tags`, `PATCH /teams/{team}/heaps/{heap}/tags/{id}` |

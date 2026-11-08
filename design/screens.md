@@ -294,8 +294,8 @@ M-add-item, with P-due and P-tag-picker as in M-item.
 
 S-closed, P-reopen.
 
-- **Browser:** closed items, newest first, each with "Done · yesterday" or "Won't do · 3 Nov" and Reopen inside its
-  week; Load more; a row opens M-item.
+- **Browser:** closed items, newest first, under Today, This week and Earlier, each with "Done · today by you" or
+  "Won't do · Tuesday by Sam" and Reopen inside its week; Load more; a row opens M-item.
 - **Phone:** the same list at full width from the Closed tab, with Reopen as a 44 px target.
 
 ### S-account: Your data (local build)
@@ -789,9 +789,11 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 - **Route:** `/heaps/$heapId/closed`; designed `/teams/{team}/heaps/{heap}/closed`.
 - **Purpose:** done and won't-do items, most recently closed first (Req Views: Closed items).
-- **Shows:** rows with title (opens M-item), tag chips, "Done · yesterday" or "Won't do · 3 Nov", and Reopen while
-  the item is inside its week (`reopen` in `allowed_actions`). Load more (cursor paging). Empty: "Nothing closed
-  yet."
+- **Shows:** an intro line on the week limit, then sections Today, This week and Earlier (the item's
+  `closed_group`). Rows have a state mark on wide screens, the title (opens M-item), "Done · today by you" or
+  "Won't do · Tuesday by Sam" (no "by" for items closed before closers were recorded), and Reopen while the item is
+  inside its week (`reopen` in `allowed_actions`), 44 px on a phone. No tag chips. Load more (cursor paging). Empty:
+  "Nothing closed yet."
 - **Freq 3.** **Source:** `ClosedPage.tsx`. Built.
 - **Must:** local 4, server 4. The only route back to a closed item once the toast is gone, and the weekly review's
   screen.
@@ -1100,7 +1102,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    affects the whole team or the user's own access; undo for the rest).
 2. **Inline confirms vs dialogs.** Every confirmation today replaces its button in place. On a phone a bottom-sheet
    confirmation may read better; app-ux.md doesn't say.
-3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-closed, S-heap-activity, S-tags,
+3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity, S-tags,
    S-parameters, S-team, S-teams, S-account, S-sign-in. They still use the older stone palette rather than the
    design tokens.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
