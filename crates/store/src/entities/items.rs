@@ -17,6 +17,7 @@ pub struct Model {
     pub due_at: Option<i64>,
     pub due_firm: Option<bool>,
     pub created_at: i64,
+    pub created_by: Option<String>,
     pub closed_at: Option<i64>,
     pub blocked_by_item_id: Option<String>,
     pub version: i32,

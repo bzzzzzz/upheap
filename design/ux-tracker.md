@@ -20,10 +20,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Shell, browser | G-shell-wide, G-storage-note | 4 / 4 | Main | 🟡 | 🟡 | Heaps grouped by team with open counts; Team, Account, Sign out at the bottom; storage note mentions the last download only when it's over two weeks old or never happened |
 | Shell, phone | G-shell-phone, M-more | 4 / 4 | PhoneList, PhoneMore | 🟡 | ✅ | Built: tabs Open, Closed, +, Activity, More, with + opening Add from any of the heap's pages; More as a card of 52 px rows above the tabs, with the team's name, the team count and the username as notes. Left: the member count beside Team, which needs it from the server |
 | Heap switcher | M-heap-switcher | 2 / 4 | PhoneSwitcher | 🟡 | 🟡 | Built: a sheet of 52 px rows by team (a popover beside the rail on a tablet), a check on the current heap, "New heap in \<team\>" when the team allows it, which asks for a name and opens the new heap. Left: open counts, which need the server |
-| The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is a second list request while filtering, until the list response carries it); the changed view's dot, with Save and Undo behind the chip; "Show them" |
-| Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else is in progress. Left: it only sees the items the view shows, so an in-progress item hidden by the view or a filter doesn't stop the offer; the list response should say whether anything in the heap is in progress |
-| Item, browser | M-item | 5 / 5 | Main | 🟡 | 🟡 | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars. Left: "Added by Sam 4 days ago" beside History, which needs `created_by` and a created label on Item from the server |
-| Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Built: the state buttons in a bar at the bottom of the sheet, the likeliest next state wider, with Won't do under ⋯ at the end of the bar rather than in the header; the state as a line under the title; due, tags, parameters and description as rows that open sheets. The buttons keep the wide screen's names (Block, not Blocked). Left: the "Added" row, once Item carries `created_by` |
+| The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is the list response's `unfiltered_count`); the changed view's dot, with Save and Undo behind the chip; "Show them" |
+| Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else in the heap is in progress, counting items the view or a filter hides (the list response's `in_progress_count`) |
+| Item, browser | M-item | 5 / 5 | Main | 🟡 | ✅ | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars; "Added by Sam 4 days ago" beside History, from the item's `created_by` and `created_label` ("by you" for the viewer's own, as History says "You") |
+| Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Built: the state buttons in a bar at the bottom of the sheet, the likeliest next state wider, with Won't do under ⋯ at the end of the bar rather than in the header; the state as a line under the title; due, tags, parameters and description as rows that open sheets. The buttons keep the wide screen's names (Block, not Blocked). Left: the "Added" row among the fields; until then "Added by" shows beside History |
 | Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone, in the item: built, a sheet of 52 px rows, Exact date with its date field, and Clear due; a rough choice or Clear closes it. Left: the phone Add dialog still has the pills (step 4.3), and the browser pane's dropdown isn't mocked yet |
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
 | Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | 🟡 | Heap chooser in the title; prefill from the active filter, without a label; "Added at #4 · Open it" (needs the position from the server); Add another remembered per device; due starts at None. Phone: one-tap chips and More fields |
@@ -57,11 +57,12 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    confirm.
 3. Settle the open questions and bring app-ux.md in line.
 4. Build in this order, the core loop first:
-   1. ~~The list and item changes.~~ Done, apart from "Added by", which waits on the server. One API change can
-      bring "Added by" (`created_by` and a created label on Item), the unfiltered total for "6 of 14", and whether
-      anything in the heap is in progress, for "Start next".
-   2. ~~The phone tabs, item bar and sheets.~~ Done, apart from open counts in the heap switcher, the member
-      count in More and the item's "Added" row, which wait on the server.
+   1. ~~The list and item changes.~~ Done. One API change brought what they waited on: `created_by` and
+      `created_label` on Item for "Added by", and `unfiltered_count` (the "14" in "6 of 14", so the client makes no
+      second list request) and `in_progress_count` (for "Start next") on the ranked list. A count rather than a
+      yes or no, because the item just marked done may be the one in progress.
+   2. ~~The phone tabs, item bar and sheets.~~ Done, apart from open counts in the heap switcher and the member
+      count in More, which wait on the server, and the "Added" row among the phone's fields.
    3. Add.
    4. Closed.
    5. Your data.

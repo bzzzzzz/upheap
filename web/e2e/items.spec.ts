@@ -53,6 +53,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await expect(pane.getByRole("region", { name: "History" })).toContainText("In progress");
   // The user's own changes read as theirs.
   await expect(pane.getByRole("region", { name: "History" })).toContainText("You added item");
+  await expect(pane.getByRole("region", { name: "History" })).toContainText("Added by you today");
 
   // Done leaves the item open in the pane, which offers to reopen it.
   await changeState(page, "Done");

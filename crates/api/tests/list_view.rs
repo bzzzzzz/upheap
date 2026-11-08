@@ -416,6 +416,32 @@ async fn the_hidden_count_only_counts_items_the_filters_keep() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_list_counts_what_the_filters_leave_out_and_what_is_in_progress() -> Result<()> {
+    // Arrange: an open, an in-progress and a blocked item, and a small open one, which the filter keeps alone.
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    one_of_each_state(&app, &session, &heap).await?;
+    add(&app, &session, &heap, json!({ "title": "Small", "effort": "s" })).await?;
+
+    // Act
+    let unfiltered = list(&app, &session, &heap, "").await?;
+    let filtered = list(&app, &session, &heap, "effort=s").await?;
+    let in_progress_hidden = list(&app, &session, &heap, "effort=s&in_progress=hidden").await?;
+
+    // Assert: blocked is hidden by default, so the view lists three items without its filters.
+    expect_that!(unfiltered.body["unfiltered_count"], eq(&json!(3)));
+    expect_that!(unfiltered.body["in_progress_count"], eq(&json!(1)));
+    expect_that!(titles(&filtered.body["ranked"]), elements_are![eq("Small")]);
+    expect_that!(filtered.body["unfiltered_count"], eq(&json!(3)));
+    expect_that!(filtered.body["in_progress_count"], eq(&json!(1)));
+    // Hiding a state takes its items out of the total, but not out of the in-progress count.
+    expect_that!(in_progress_hidden.body["unfiltered_count"], eq(&json!(2)));
+    expect_that!(in_progress_hidden.body["in_progress_count"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn malformed_list_values_are_bad_requests() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

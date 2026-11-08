@@ -636,12 +636,6 @@ export interface components {
          * @enum {string}
          */
         AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived";
-        AuditActor: {
-            /** @description Their display name now. */
-            display_name: string;
-            /** Format: uuid */
-            id: string;
-        };
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -666,7 +660,7 @@ export interface components {
         AuditEntityType: "user" | "team" | "heap" | "item" | "tag" | "saved_view" | "parameter";
         AuditEntry: {
             action: components["schemas"]["AuditAction"];
-            actor: components["schemas"]["AuditActor"];
+            actor: components["schemas"]["UserRef"];
             /** @description The changed fields, in the order the entity's form shows them. Names are the current ones. */
             changes: components["schemas"]["AuditChange"][];
             /**
@@ -866,6 +860,12 @@ export interface components {
              * @description UTC milliseconds.
              */
             created_at: number;
+            created_by?: null | components["schemas"]["UserRef"];
+            /**
+             * @description How long ago it was added, ready to show: "today", "yesterday", "4 days ago", "3 weeks ago", in the request's
+             *     timezone.
+             */
+            created_label: string;
             description?: string | null;
             due?: null | components["schemas"]["Due"];
             effort?: null | components["schemas"]["Size"];
@@ -1164,10 +1164,21 @@ export interface components {
              * @description How many items the filters keep but are left out because their state is hidden.
              */
             hidden_count: number;
+            /**
+             * Format: int32
+             * @description How many of the heap's items are in progress, whatever the view and its filters leave out.
+             */
+            in_progress_count: number;
             /** @description Items in pinned states (in progress by default), above the rest. */
             pinned: components["schemas"]["RankedItem"][];
             /** @description Items in shown states, including blocked items when they're mixed in. */
             ranked: components["schemas"]["RankedItem"][];
+            /**
+             * Format: int32
+             * @description How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the "14" in
+             *     "6 of 14". Hidden states still leave theirs out.
+             */
+            unfiltered_count: number;
         };
         RegisterRequest: {
             display_name: string;
@@ -1366,6 +1377,13 @@ export interface components {
         UserMatches: {
             /** @description Up to 10, by display name. */
             users: components["schemas"]["UserMatch"][];
+        };
+        /** @description A user, named where something refers to them: who made an audit entry, who added an item. */
+        UserRef: {
+            /** @description Their display name now. */
+            display_name: string;
+            /** Format: uuid */
+            id: string;
         };
     };
     responses: never;

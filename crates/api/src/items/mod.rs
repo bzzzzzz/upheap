@@ -121,6 +121,11 @@ pub(crate) struct RankedListDto {
     pub blocked: Vec<RankedItemDto>,
     /// How many items the filters keep but are left out because their state is hidden.
     pub hidden_count: u32,
+    /// How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the "14" in
+    /// "6 of 14". Hidden states still leave theirs out.
+    pub unfiltered_count: u32,
+    /// How many of the heap's items are in progress, whatever the view and its filters leave out.
+    pub in_progress_count: u32,
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -265,6 +270,8 @@ async fn list_ranked(
         ranked: group(list.ranked),
         blocked: group(list.blocked),
         hidden_count: list.hidden_count,
+        unfiltered_count: list.unfiltered_count,
+        in_progress_count: list.in_progress_count,
     }))
 }
 

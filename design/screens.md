@@ -722,9 +722,10 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
   handle, above the on-screen keyboard.
 - **Phone:** the state buttons in a bar at the bottom of the sheet (app-ux.md The item §2); due, tags, parameters
   and the description as rows that open sheets.
-- **Designed, not built:** "Added by Sam 4 days ago" beside History, and the phone's "Added" row, which need the
-  item's creator and a time label from the server.
-- **Freq 5.** **Source:** app-ux.md The item; Req Views: Edit item; `ItemPane.tsx`. Built.
+- **Designed, not built:** the phone's "Added" row among the fields; until then "Added by" shows beside History
+  there too.
+- **Freq 5.** **Source:** app-ux.md The item; Req Views: Edit item; `ItemPane.tsx`. Built, including "Added by Sam 4
+  days ago" beside History.
 - **Must:** local 5, server 5. The only place to re-size, re-date, block or unblock an item and see why it ranks where
   it does. Rated as one role: the wide pane, tablet panel and phone sheet are presentations of it.
 

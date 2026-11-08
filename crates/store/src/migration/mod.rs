@@ -13,6 +13,7 @@ mod m20261111_000007_sign_in_attempts;
 mod m20261111_000008_exact_email;
 mod m20261112_000009_handles;
 mod m20261113_000010_need;
+mod m20261114_000011_item_creator;
 
 pub struct Migrator;
 
@@ -30,6 +31,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261111_000008_exact_email::Migration),
             Box::new(m20261112_000009_handles::Migration),
             Box::new(m20261113_000010_need::Migration),
+            Box::new(m20261114_000011_item_creator::Migration),
         ]
     }
 }

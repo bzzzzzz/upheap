@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::handle::ItemKey;
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
-use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
+use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
 
 /// A closed item can be reopened for exactly 7 × 24 hours after it was closed, independent of timezones.
 pub const REOPEN_WINDOW: Duration = Duration::from_days(7);
@@ -342,12 +342,15 @@ pub struct Item {
     /// brings them up to date (`parameter::current_values`).
     pub parameters: BTreeMap<ParameterId, OptionId>,
     pub created_at: Timestamp,
+    /// Who added it. `None` only for an item added before creators were stored whose `item_created` audit entry
+    /// couldn't be found to fill it in.
+    pub created_by: Option<UserId>,
     pub version: Version,
 }
 
 impl Item {
-    /// A new open item created at `now`.
-    pub fn new(id: ItemId, heap_id: HeapId, key: ItemKey, fields: NewItem, now: Timestamp) -> Self {
+    /// A new open item added by `created_by` at `now`.
+    pub fn new(id: ItemId, heap_id: HeapId, key: ItemKey, fields: NewItem, created_by: UserId, now: Timestamp) -> Self {
         Self {
             id,
             heap_id,
@@ -362,6 +365,7 @@ impl Item {
             tags: fields.tags,
             parameters: fields.parameters,
             created_at: now,
+            created_by: Some(created_by),
             version: Version::INITIAL,
         }
     }
@@ -484,6 +488,7 @@ mod tests {
             HeapId::from_uuid(Uuid::nil()),
             crate::handle::ItemKey::parse("k3x9a").expect("valid"),
             fields,
+            UserId::from_uuid(Uuid::nil()),
             at(0),
         )
     }

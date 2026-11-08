@@ -2,13 +2,14 @@
 //!
 //! These are separate from domain types even where fields match, because the API changes for different reasons.
 
-use domain::due::{describe_date, describe_due};
+use domain::due::{describe_ago, describe_date, describe_due};
 use domain::heap::Heap;
 use domain::item::{Due, ItemSummary, Need, Size, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
 use domain::team::Role;
+use domain::user::User;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -245,6 +246,24 @@ impl From<Role> for RoleDto {
     }
 }
 
+/// A user, named where something refers to them: who made an audit entry, who added an item.
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(as = UserRef)]
+pub(crate) struct UserRefDto {
+    pub id: Uuid,
+    /// Their display name now.
+    pub display_name: String,
+}
+
+impl From<&User> for UserRefDto {
+    fn from(user: &User) -> Self {
+        Self {
+            id: *user.id.as_uuid(),
+            display_name: user.display_name.as_str().to_owned(),
+        }
+    }
+}
+
 /// A due time, ready to show.
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(as = Due)]
@@ -306,6 +325,11 @@ pub(crate) struct ItemDto {
     pub parameters: Vec<ItemParameterDto>,
     /// UTC milliseconds.
     pub created_at: i64,
+    /// How long ago it was added, ready to show: "today", "yesterday", "4 days ago", "3 weeks ago", in the request's
+    /// timezone.
+    pub created_label: String,
+    /// Who added it. `null` only for an item added before creators were recorded, whose creation couldn't be traced.
+    pub created_by: Option<UserRefDto>,
     /// UTC milliseconds; set exactly when the item is closed.
     pub closed_at: Option<i64>,
     /// When it was closed, ready to show ("yesterday", "3 Nov").
@@ -420,6 +444,8 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         tags: view.tags.iter().map(ItemTagDto::from).collect(),
         parameters: view.parameters.into_iter().map(ItemParameterDto::from).collect(),
         created_at: item.created_at.as_millis(),
+        created_label: describe_ago(item.created_at, as_of, tz),
+        created_by: view.created_by.as_ref().map(UserRefDto::from),
         closed_at: closed_at.map(Timestamp::as_millis),
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),
         version: item.version.get(),

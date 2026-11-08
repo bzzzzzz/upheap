@@ -101,6 +101,48 @@ async fn items_are_ranked_with_contributors() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn items_say_who_added_them_and_how_long_ago() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register_as("ada@example.test", "Ada").await?;
+    let created = app
+        .new_item(&session, &heap, json!({ "title": "Write the docs" }))
+        .await?;
+    let me = app.send(Method::GET, "/api/v1/me", Some(&session), None).await?;
+    app.clock.advance(Duration::from_days(4));
+
+    // Act
+    let item = app
+        .send(
+            Method::GET,
+            &app.item_url(created["id"].as_str().unwrap_or_default()).await?,
+            Some(&session),
+            None,
+        )
+        .await?;
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(created["created_label"], eq(&json!("today")));
+    expect_that!(created["created_by"]["display_name"], eq(&json!("Ada")));
+    expect_that!(created["created_by"]["id"], eq(&me.body["user"]["id"]));
+    expect_that!(item.body["created_label"], eq(&json!("4 days ago")));
+    expect_that!(item.body["created_by"]["display_name"], eq(&json!("Ada")));
+    let listed = &list.body["ranked"][0]["item"];
+    expect_that!(listed["created_label"], eq(&json!("4 days ago")));
+    expect_that!(listed["created_by"]["display_name"], eq(&json!("Ada")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn edits_need_the_current_version() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
