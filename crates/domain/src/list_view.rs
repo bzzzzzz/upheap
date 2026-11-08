@@ -295,6 +295,7 @@ mod tests {
             HeapId::from_uuid(Uuid::nil()),
             crate::handle::ItemKey::parse("k3x9a").expect("valid"),
             fields,
+            crate::UserId::from_uuid(Uuid::nil()),
             created,
         )
     }

@@ -11,6 +11,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
+use crate::dto::UserRefDto;
 use crate::error::Problem;
 use crate::extract::{ApiQuery, ClientTimeZone, TimeZoneHeader};
 use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
@@ -134,14 +135,6 @@ impl From<EntityType> for EntityTypeDto {
 }
 
 #[derive(Serialize, ToSchema)]
-#[schema(as = AuditActor)]
-pub(crate) struct AuditActorDto {
-    pub id: Uuid,
-    /// Their display name now.
-    pub display_name: String,
-}
-
-#[derive(Serialize, ToSchema)]
 #[schema(as = AuditEntity)]
 pub(crate) struct AuditEntityDto {
     #[serde(rename = "type")]
@@ -183,7 +176,7 @@ pub(crate) struct AuditEntryDto {
     pub created_at: i64,
     /// `created_at` in the request's timezone, such as "12 Mar 2027, 14:05".
     pub created_label: String,
-    pub actor: AuditActorDto,
+    pub actor: UserRefDto,
     pub action: AuditActionDto,
     /// What was done, to show after the actor's name: "edited item", "joined the team".
     pub phrase: String,
@@ -204,7 +197,7 @@ impl From<AuditEntryView> for AuditEntryDto {
             id: view.id,
             created_at: view.created_at.as_millis(),
             created_label: view.created_label,
-            actor: AuditActorDto {
+            actor: UserRefDto {
                 id: *view.actor.as_uuid(),
                 display_name: view.actor_name,
             },

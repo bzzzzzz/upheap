@@ -6,7 +6,7 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
-rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 245 Rust tests pass
+rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 250 Rust tests pass
 (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4 and Postgres 17, the 15 Playwright tests pass at each of
 three widths, and 16 against the local build, and the web typecheck and lint are clean. CI
 runs all of them on every pull request.
@@ -43,7 +43,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite, MySQL or Postgres chosen at startup |
 | Postgres support, Cloud Run with Neon | [cloud-run-postgres.md](cloud-run-postgres.md) | 🟡 | Postgres supported and in CI; the Neon and Cloud Run setup is next. Tracked in its own doc |
 | Local build: static, single user, data in the browser | [local-build.md](local-build.md) | ✅ | The backend and the Router run in a browser worker on SQLite-wasm in OPFS, without accounts. The web app offers only what one user can do, keeps its data with export and import and one tab at a time, and CI runs the golden paths against the static build. The Pages workflow publishes it from `main` after every merge, to https://bzzzzzz.github.io/upheap/ |
-| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Step 2 done: the Add dialog with the due choices from the server (`GET /due-choices`) and S M L XL buttons; compact rows with the state circle and an undo toast; the item pane in place of the Edit item page; keyboard (arrows, Enter, `x`, Escape). Step 3 done: sheets sit above the on-screen keyboard; rows swipe right to mark done and left for In progress or Blocked; the item sheet drags down and the tablet panel right to close; Filters and View are a popover on a tablet or wide screen and a sheet on a phone, as are the heap switcher and More; saved views scroll sideways on a phone. First-set build ([ux-tracker.md](ux-tracker.md)) step 1 done: hover Start and ⋯ on rows, "Start next" in the toast, filter chips with "6 of 14", the changed view's dot with Save and Undo, "Show them" for hidden items; in the item, the likeliest next state as the main button, ↑ ↓, the key as the copy-link button and contributor bars. Next: step 4, every other page at phone width. Installing (PWA) comes later |
+| Web app UX for phones and wide screens | [app-ux.md](app-ux.md) | 🟡 | Step 1 done: design tokens, the app shell at each width (sidebar, rail, phone tabs), phone and tablet test projects. Step 2 done: the Add dialog with the due choices from the server (`GET /due-choices`) and S M L XL buttons; compact rows with the state circle and an undo toast; the item pane in place of the Edit item page; keyboard (arrows, Enter, `x`, Escape). Step 3 done: sheets sit above the on-screen keyboard; rows swipe right to mark done and left for In progress or Blocked; the item sheet drags down and the tablet panel right to close; Filters and View are a popover on a tablet or wide screen and a sheet on a phone, as are the heap switcher and More; saved views scroll sideways on a phone. First-set build ([ux-tracker.md](ux-tracker.md)) step 1 done: hover Start and ⋯ on rows, "Start next" in the toast, filter chips with "6 of 14", the changed view's dot with Save and Undo, "Show them" for hidden items; in the item, the likeliest next state as the main button, ↑ ↓, the key as the copy-link button, contributor bars and "Added by Sam 4 days ago" (`created_by` and `created_label` on items; the ranked list also carries `unfiltered_count` for "6 of 14" and `in_progress_count` for "Start next"). Next: step 4, every other page at phone width. Installing (PWA) comes later |
 | Testing and CI | TD Testing | ✅ | CI runs the store and API suites on SQLite, MySQL and Postgres, and Playwright golden paths in Chromium; the access-control table is in place |
 
 ## Remaining work
@@ -65,7 +65,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] Custom parameter values
 - [x] **List view controls**
   - [x] Per-state pinned / shown / hidden (`open=`, `in_progress=`, `blocked=`); blocked items mixed in or grouped
-    (`blocked_layout=`); `hidden_count` says how many the view leaves out
+    (`blocked_layout=`); `hidden_count` says how many the view leaves out, `unfiltered_count` how many it would
+    list without its filters, and `in_progress_count` how many of the heap's items are in progress
   - [x] Sort by a single parameter (`sort=priority|due|effort|impact`), ties in priority order
   - [x] Server-side filters by tag, effort and impact (comma-separated, any of); ranking still runs over every item
   - [x] Client-side text search over title and description

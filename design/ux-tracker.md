@@ -20,9 +20,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Shell, browser | G-shell-wide, G-storage-note | 4 / 4 | Main | 🟡 | 🟡 | Heaps grouped by team with open counts; Team, Account, Sign out at the bottom; storage note mentions the last download only when it's over two weeks old or never happened |
 | Shell, phone | G-shell-phone, M-more | 4 / 4 | PhoneList, PhoneMore | 🟡 | 🟡 | Tabs become Open, Closed, +, Activity, More, with Add in the middle; More as a list of 52 px rows |
 | Heap switcher | M-heap-switcher | 2 / 4 | PhoneSwitcher | 🟡 | 🟡 | Open counts, a check on the current heap, "New heap in \<team\>" at the end |
-| The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is a second list request while filtering, until the list response carries it); the changed view's dot, with Save and Undo behind the chip; "Show them" |
-| Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else is in progress. Left: it only sees the items the view shows, so an in-progress item hidden by the view or a filter doesn't stop the offer; the list response should say whether anything in the heap is in progress |
-| Item, browser | M-item | 5 / 5 | Main | 🟡 | 🟡 | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars. Left: "Added by Sam 4 days ago" beside History, which needs `created_by` and a created label on Item from the server |
+| The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is the list response's `unfiltered_count`); the changed view's dot, with Save and Undo behind the chip; "Show them" |
+| Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else in the heap is in progress, counting items the view or a filter hides (the list response's `in_progress_count`) |
+| Item, browser | M-item | 5 / 5 | Main | 🟡 | ✅ | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars; "Added by Sam 4 days ago" beside History, from the item's `created_by` and `created_label` ("by you" for the viewer's own, as History says "You") |
 | Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Start / Blocked / Done in a bar at the bottom of the sheet (today it's the pane's Start / Block / Done buttons); fields as rows; an "Added" row |
 | Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone: a sheet of 52 px rows plus an Exact date block and Clear due. Browser: the pane's dropdown when open isn't mocked yet |
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
@@ -57,9 +57,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    confirm.
 3. Settle the open questions and bring app-ux.md in line.
 4. Build in this order, the core loop first:
-   1. ~~The list and item changes.~~ Done, apart from "Added by", which waits on the server. One API change can
-      bring "Added by" (`created_by` and a created label on Item), the unfiltered total for "6 of 14", and whether
-      anything in the heap is in progress, for "Start next".
+   1. ~~The list and item changes.~~ Done. One API change brought what they waited on: `created_by` and
+      `created_label` on Item for "Added by", and `unfiltered_count` (the "14" in "6 of 14", so the client makes no
+      second list request) and `in_progress_count` (for "Start next") on the ranked list. A count rather than a
+      yes or no, because the item just marked done may be the one in progress.
    2. The phone tabs, item bar and sheets.
    3. Add.
    4. Closed.

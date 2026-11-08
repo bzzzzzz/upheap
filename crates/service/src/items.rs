@@ -12,7 +12,8 @@ use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
 use domain::team::Role;
-use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
+use domain::user::User;
+use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
@@ -39,6 +40,8 @@ pub struct ItemView {
     pub parameters: Vec<ParameterValue>,
     /// The item it waits for, when it's blocked and one was picked.
     pub blocked_by: Option<ItemSummary>,
+    /// Who added it, when that is known (see [`Item::created_by`]).
+    pub created_by: Option<User>,
     pub allowed_actions: Vec<ItemAction>,
 }
 
@@ -86,6 +89,10 @@ pub struct RankedList {
     pub blocked: Vec<RankedEntry>,
     /// Items the filters keep but whose state is hidden.
     pub hidden_count: u32,
+    /// Items the view would list without its filters: those in pinned and shown states.
+    pub unfiltered_count: u32,
+    /// Items of the heap in progress, whatever the view and its filters leave out.
+    pub in_progress_count: u32,
 }
 
 #[derive(Debug)]
@@ -127,7 +134,10 @@ impl Services {
             rank(CURRENT_FORMULA, &access.heap.policy, &parameters, &inputs, as_of)
         };
         let item_count = items.len();
+        let unfiltered_count = count_items(&items, |item| view.group_of(item.state.kind()).is_some());
+        let in_progress_count = count_items(&items, |item| item.state.kind() == StateKind::InProgress);
         let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
+        let creators = load_creators(&self.db, &items).await?;
 
         let role = access.membership.role;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
@@ -153,12 +163,14 @@ impl Services {
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
+            let created_by = item.created_by.and_then(|id| creators.get(&id).cloned());
             group.push(RankedEntry {
                 view: ItemView {
                     item,
                     tags,
                     parameters: values,
                     blocked_by,
+                    created_by,
                     allowed_actions,
                 },
                 position: 0,
@@ -185,6 +197,8 @@ impl Services {
             ranked,
             blocked,
             hidden_count,
+            unfiltered_count,
+            in_progress_count,
         })
     }
 
@@ -214,6 +228,7 @@ impl Services {
 
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
+        let creators = load_creators(&self.db, &items).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
@@ -222,12 +237,14 @@ impl Services {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
+                let created_by = item.created_by.and_then(|id| creators.get(&id).cloned());
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
                     tags,
                     parameters: values,
                     blocked_by: None,
+                    created_by,
                     allowed_actions,
                 }
             })
@@ -256,7 +273,14 @@ impl Services {
 
         let now = self.now();
         let key = new_item_key(&txn, &*self.random, heap_id).await?;
-        let item = Item::new(ItemId::from_uuid(self.new_id(now)), heap_id, key, fields, now);
+        let item = Item::new(
+            ItemId::from_uuid(self.new_id(now)),
+            heap_id,
+            key,
+            fields,
+            principal.user_id,
+            now,
+        );
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
             &access.heap,
@@ -267,6 +291,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        let created_by = find_creator(&txn, &item).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
@@ -278,6 +303,7 @@ impl Services {
             tags,
             parameters: values,
             blocked_by: None,
+            created_by,
             allowed_actions,
         })
     }
@@ -291,11 +317,13 @@ impl Services {
         let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
         let parameters = store::parameters::list_parameters(&self.db, item.heap_id).await?;
         let blocked_by = find_blocker(&self.db, &item).await?;
+        let created_by = find_creator(&self.db, &item).await?;
         Ok(ItemView {
             parameters: describe_values(&item, &parameters),
             item,
             tags,
             blocked_by,
+            created_by,
             allowed_actions,
         })
     }
@@ -350,11 +378,13 @@ impl Services {
             let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
             let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
             let blocked_by = find_blocker(&txn, &current).await?;
+            let created_by = find_creator(&txn, &current).await?;
             return Ok(ItemView {
                 parameters: describe_values(&current, &parameters),
                 item: current,
                 tags,
                 blocked_by,
+                created_by,
                 allowed_actions,
             });
         };
@@ -376,6 +406,7 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let tags = load_heap_tags(&txn, saved.heap_id, &saved.tags).await?;
         let blocked_by = find_blocker(&txn, &saved).await?;
+        let created_by = find_creator(&txn, &saved).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
@@ -385,6 +416,7 @@ impl Services {
             item: saved,
             tags,
             blocked_by,
+            created_by,
             allowed_actions,
         })
     }
@@ -449,6 +481,31 @@ async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<I
         return Ok(None);
     };
     Ok(store::items::list_item_summaries(db, item.heap_id, [id]).await?.pop())
+}
+
+/// How many of `items` `keep` is true for.
+fn count_items(items: &[Item], keep: impl Fn(&Item) -> bool) -> u32 {
+    u32::try_from(items.iter().filter(|item| keep(item)).count()).unwrap_or(u32::MAX)
+}
+
+/// The user who added `item`, if it's known.
+async fn find_creator(db: &impl ConnectionTrait, item: &Item) -> Result<Option<User>, ServiceError> {
+    let Some(id) = item.created_by else {
+        return Ok(None);
+    };
+    Ok(store::users::find_user(db, id).await?)
+}
+
+/// The users who added `items`, by ID. A heap's items are added by its team's members, so these are few.
+async fn load_creators(db: &impl ConnectionTrait, items: &[Item]) -> Result<HashMap<UserId, User>, ServiceError> {
+    let ids: Vec<UserId> = items
+        .iter()
+        .filter_map(|item| item.created_by)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let users = store::users::list_users(db, &ids).await?;
+    Ok(users.into_iter().map(|user| (user.id, user)).collect())
 }
 
 /// Every blocker of `items`, by ID. Blockers among `items` are taken from there; closed ones are loaded.
