@@ -1,8 +1,17 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
 
-/** A message about a change just made, with a way to take it back. `id` tells one toast from the next. */
-export type Toast = { id: number; message: string; undo?: () => void; error?: boolean };
+/**
+ * A message about a change just made, with a way to take it back, and sometimes the likely next step as `action`.
+ * `id` tells one toast from the next.
+ */
+export type Toast = {
+  id: number;
+  message: string;
+  undo?: () => void;
+  action?: { label: string; run: () => void } | undefined;
+  error?: boolean;
+};
 
 /** How long a toast stays. */
 const SHOW_FOR_MS = 6000;
@@ -41,6 +50,18 @@ export function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss
               className="h-9 shrink-0 rounded-lg px-3 font-semibold text-accent hover:bg-white/10 pointer-coarse:h-11"
             >
               Undo
+            </button>
+          )}
+          {toast.action && (
+            <button
+              type="button"
+              onClick={() => {
+                toast.action?.run();
+                onDismiss();
+              }}
+              className="h-9 max-w-48 min-w-0 shrink truncate rounded-lg px-3 font-semibold text-accent hover:bg-white/10 pointer-coarse:h-11"
+            >
+              {toast.action.label}
             </button>
           )}
           <button

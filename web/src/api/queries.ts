@@ -72,10 +72,12 @@ const usersKey = (query: string) => ["users", query] as const;
  * refetch and view change, so only edited items move. `refresh` drops it and ranks at the current time. While a
  * new view loads, the previous one stays on screen.
  */
-export function useRankedList(heap: HeapRef, view: ListViewQuery) {
+/** The ranked list for `view`. Fetched only while `enabled`. */
+export function useRankedList(heap: HeapRef, view: ListViewQuery, enabled = true) {
   const asOf = useRef<number | undefined>(undefined);
   const query = useQuery({
     queryKey: rankedViewKey(heap, view),
+    enabled,
     queryFn: async () => {
       const data = unwrap(
         await api.GET("/api/v1/teams/{team}/heaps/{heap}/items", {

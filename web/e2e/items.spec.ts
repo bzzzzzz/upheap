@@ -1,5 +1,6 @@
 import {
   addItem,
+  changeState,
   closeItem,
   dayFromToday,
   expect,
@@ -40,8 +41,9 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await pane.getByLabel("Title", { exact: true }).fill("Write the team rota");
   await pane.getByLabel("Title", { exact: true }).press("Enter");
   await pane.getByLabel("Description").fill("For the next quarter");
-  await pick(page, "State", "In progress");
-  await expect(pane.getByRole("radio", { name: "In progress", exact: true })).toBeChecked();
+  // The likeliest next state is the first button: Start, for an open item, then Done once it's started.
+  await changeState(page, "Start");
+  await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
   await expect(row(page, "Write the team rota")).toBeVisible();
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
   await expect(pane.getByRole("region", { name: "History" })).toContainText("In progress");
@@ -112,15 +114,13 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
   // Blocked items are hidden by default.
   await openItem(page, "Deploy");
-  await pick(page, "State", "Blocked");
+  await changeState(page, "Block");
   await expect(row(page, "Deploy")).toHaveCount(0);
   await closeItem(page);
-  await expect(page.getByText("1 item is hidden by the view settings.")).toBeVisible();
-  await page.getByRole("button", { name: "Change view" }).click();
-  const viewSettings = page.getByRole("dialog", { name: "View settings" });
-  await viewSettings.getByRole("radiogroup", { name: "Blocked" }).getByText("Shown", { exact: true }).click();
-  await viewSettings.getByRole("button", { name: "Close" }).click();
-  await expect(viewSettings).toHaveCount(0);
+  // The note under the list says what's hidden, and brings it back.
+  await expect(page.getByText("1 blocked item is hidden.")).toBeVisible();
+  await page.getByRole("button", { name: "Show it" }).click();
+  await expect(row(page, "Deploy")).toBeVisible();
 
   await openItem(page, "Deploy");
   await itemPane(page).getByLabel("Waiting for").selectOption({ label: "Get approval" });
@@ -131,14 +131,14 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
   // The blocker isn't offered the item it blocks to wait for, which would be a cycle.
   await openItem(page, "Get approval");
-  await pick(page, "State", "Blocked");
+  await changeState(page, "Block");
   await expect(itemPane(page).getByLabel("Waiting for")).toBeVisible();
   await expect(itemPane(page).getByLabel("Waiting for").getByRole("option")).toHaveText(["Nothing picked"]);
-  await pick(page, "State", "Open");
+  await changeState(page, "Unblock");
   await closeItem(page);
 
   await openItem(page, "Deploy");
-  await pick(page, "State", "Open");
+  await changeState(page, "Unblock");
   await expect(itemPane(page).getByLabel("Waiting for")).toHaveCount(0);
   await closeItem(page);
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");

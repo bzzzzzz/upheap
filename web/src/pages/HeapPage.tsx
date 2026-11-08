@@ -10,10 +10,18 @@ import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../compone
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
 import { itemProblem } from "../components/itemProblems";
-import { ListControls, type Panel } from "../components/ListControls";
+import { FilterChips, ListControls, type Panel } from "../components/ListControls";
 import { SavedViewsBar } from "../components/SavedViewsBar";
 import { UndoToast, type Toast } from "../components/UndoToast";
-import { filterCount, matchesSearch, toListQuery, type ListSearch } from "../components/listView";
+import {
+  DEFAULT_MODES,
+  filterCount,
+  matchesSearch,
+  SHOWN_STATES,
+  toListQuery,
+  withoutFilters,
+  type ListSearch,
+} from "../components/listView";
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
@@ -34,9 +42,7 @@ export function HeapPage({
   const list = useRankedList(heapRef, toListQuery(view));
   const [search, setSearch] = useState("");
   const [panel, setPanel] = useState<Panel>(null);
-  // Bumped to move focus into the open panel, for "Change view" below the list.
-  const [panelFocus, setPanelFocus] = useState(0);
-  const changeState = useChangeState(heapRef);
+  const changeState = useChangeState(heapRef, list.data);
   const closeItem = useCloseItem(heapRef, itemKey);
 
   // The list's keys (app-ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
@@ -57,6 +63,9 @@ export function HeapPage({
   }, [closeItem]);
 
   const place = itemKey && list.data ? placeOf(list.data, itemKey) : undefined;
+  // The rows on screen, top to bottom, for the pane's ↑ ↓.
+  const onScreen = list.data ? everyEntry(shownSections(list.data, search)) : [];
+  const index = onScreen.findIndex((entry) => entry.item.key === itemKey);
   const pane = itemKey && closeItem && (
     <ItemPane
       key={itemKey}
@@ -64,6 +73,8 @@ export function HeapPage({
       itemKey={itemKey}
       entry={place?.entry}
       section={place?.section}
+      previousKey={index > 0 ? onScreen[index - 1]?.item.key : undefined}
+      nextKey={index >= 0 ? onScreen[index + 1]?.item.key : undefined}
       onClose={closeItem}
     />
   );
@@ -82,8 +93,6 @@ export function HeapPage({
           onSearch={setSearch}
           panel={panel}
           onPanel={setPanel}
-          panelFocus={panelFocus}
-          onPanelFocus={() => setPanelFocus((n) => n + 1)}
           onChangeState={changeState.run}
         />
       </div>
@@ -111,16 +120,18 @@ const pinnedTitle = (pinned: RankedItem[]) =>
   pinned.every((entry) => entry.item.state === "in_progress") ? "In progress" : "Pinned";
 
 /**
- * Changes an item's state from the list, by its circle, `x` or a swipe, then offers to undo it (app-ux.md, The list
- * §3). Undo puts back the state it had, and the blocker with it.
+ * Changes an item's state from the list, by its circle, `x`, a swipe or a row's buttons, then offers to undo it
+ * (app-ux.md, The list §3). Undo puts back the state it had, and the blocker with it. After Done, when nothing else is
+ * in progress, the toast also offers to start the top open item (ux-overview.md, The list §2).
  */
-function useChangeState(heapRef: HeapRef) {
+function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
   const [toast, setToast] = useState<Toast | null>(null);
   const dismiss = useCallback(() => setToast(null), []);
   const failed = (error: Error) => setToast({ id: Date.now(), message: itemProblem(error), error: true });
 
-  const run: ChangeState = (item, state, onError) =>
+  const run: ChangeState = (item, state, onError) => {
+    const next = state === "done" && list ? nextToStart(list, item.id) : undefined;
     update.mutate(
       { item, patch: { state } },
       {
@@ -131,6 +142,7 @@ function useChangeState(heapRef: HeapRef) {
             id: Date.now(),
             message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
             undo: () => update.mutate({ item: saved, patch: restore }, { onError: failed }),
+            action: next && { label: `Start next: ${next.title}`, run: () => run(next, "in_progress") },
           });
         },
         onError: (error) => {
@@ -139,7 +151,18 @@ function useChangeState(heapRef: HeapRef) {
         },
       },
     );
+  };
   return { run, toast, dismiss };
+}
+
+/**
+ * The item to offer starting once `doneId` is done: the top open item, but only when no other item is in progress.
+ * If one is, the user is carrying on with it, and the offer would be noise.
+ */
+function nextToStart(list: RankedList, doneId: string) {
+  const others = everyEntry(list).filter((entry) => entry.item.id !== doneId);
+  if (others.some((entry) => entry.item.state === "in_progress")) return undefined;
+  return others.find((entry) => entry.item.state === "open")?.item;
 }
 
 /**
@@ -173,8 +196,6 @@ function ListPage({
   onSearch,
   panel,
   onPanel,
-  panelFocus,
-  onPanelFocus,
   onChangeState,
 }: {
   heapRef: HeapRef;
@@ -186,10 +207,11 @@ function ListPage({
   onSearch: (search: string) => void;
   panel: Panel;
   onPanel: (panel: Panel) => void;
-  panelFocus: number;
-  onPanelFocus: () => void;
   onChangeState: ChangeState;
 }) {
+  const filters = filterCount(view);
+  // The same view without its filters, to say how much they leave out ("6 of 14"). Only fetched while filtering.
+  const unfiltered = useRankedList(heapRef, toListQuery(withoutFilters(view)), filters > 0);
   if (list.isPending) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
@@ -203,7 +225,6 @@ function ListPage({
       onSearch={onSearch}
       panel={panel}
       onPanel={onPanel}
-      panelFocus={panelFocus}
     />
   );
 
@@ -235,13 +256,10 @@ function ListPage({
   }
 
   const { heap, hidden_count } = list.data;
-  const matching = (group: RankedItem[]) => group.filter((entry) => matchesSearch(entry, search));
-  const pinned = matching(list.data.pinned);
-  const ranked = matching(list.data.ranked);
-  const blocked = matching(list.data.blocked);
+  const { pinned, ranked, blocked } = shownSections(list.data, search);
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length;
-  const narrowed = search.trim() !== "" || filterCount(view) > 0;
+  const narrowed = search.trim() !== "" || filters > 0;
   const rows = (entries: RankedItem[], pinned?: boolean) => (
     <ItemList
       entries={entries}
@@ -276,6 +294,16 @@ function ListPage({
 
       {controls}
 
+      {filters > 0 && (
+        <FilterChips
+          heapRef={heapRef}
+          view={view}
+          onChange={onViewChange}
+          shown={shown}
+          total={unfiltered.data && everyEntry(shownSections(unfiltered.data, search)).length}
+        />
+      )}
+
       {search.trim() !== "" && (
         <p role="status" className="sr-only">
           {shown === 1 ? "1 item matches" : `${shown} items match`}
@@ -299,26 +327,52 @@ function ListPage({
         {blocked.length > 0 && <Section title="Blocked">{rows(blocked)}</Section>}
       </div>
 
-      {hidden_count > 0 && (
-        <p className="mt-6 text-center text-sm text-stone-500">
-          {hidden_count === 1 ? "1 item is" : `${hidden_count} items are`} hidden by the view settings.{" "}
-          <button
-            type="button"
-            onClick={() => {
-              onPanel("view");
-              onPanelFocus();
-            }}
-            className="underline hover:text-stone-900 dark:hover:text-stone-100"
-          >
-            Change view
-          </button>
-        </p>
-      )}
+      {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
     </main>
   );
 }
 
-const everyEntry = (list: RankedList) => [...list.pinned, ...list.ranked, ...list.blocked];
+/** The list's groups, narrowed by the search text. */
+function shownSections(list: RankedList, search: string) {
+  const matching = (group: RankedItem[]) => group.filter((entry) => matchesSearch(entry, search));
+  return { pinned: matching(list.pinned), ranked: matching(list.ranked), blocked: matching(list.blocked) };
+}
+
+const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => [
+  ...list.pinned,
+  ...list.ranked,
+  ...list.blocked,
+];
+
+/**
+ * How many items the view hides by their state, with the fix (ux-overview.md, The list §4): Show them puts every
+ * hidden state back in the list. Under the default view that's the blocked items, and the note says so.
+ */
+function HiddenNote({
+  count,
+  view,
+  onViewChange,
+}: {
+  count: number;
+  view: ListSearch;
+  onViewChange: (view: ListSearch) => void;
+}) {
+  const hidden = SHOWN_STATES.filter((state) => (view[state] ?? DEFAULT_MODES[state]) === "hidden");
+  const kind = hidden.length === 1 && hidden[0] === "blocked" ? "blocked " : "";
+  const show = () =>
+    onViewChange({
+      ...view,
+      ...Object.fromEntries(hidden.map((state) => [state, DEFAULT_MODES[state] === "shown" ? undefined : "shown"])),
+    });
+  return (
+    <p className="mt-6 text-center text-sm text-muted">
+      {count === 1 ? `1 ${kind}item is` : `${count} ${kind}items are`} hidden.{" "}
+      <button type="button" onClick={show} className="underline hover:text-ink">
+        {count === 1 ? "Show it" : "Show them"}
+      </button>
+    </p>
+  );
+}
 
 function Section({ title, children }: { title: string | undefined; children: ReactNode }) {
   return (

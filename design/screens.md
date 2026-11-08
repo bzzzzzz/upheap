@@ -596,8 +596,9 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
   parameter chips (violet, "Energy: Low", only when set), and under them up to two contributors ("Due in 3 days ·
   S impact, XL effort").
 - **Actions:** tap the row to open M-item; tap the circle to mark done (`change_state` needed); keyboard ↑ ↓ Enter
-  `x`. With a finger: drag right past about 100 px marks done; drag left opens two buttons, In progress and Blocked,
-  with Open in place of the current state. Each change shows G-toast.
+  `x`. With a mouse, hovering a row shows Start (open rows only) and ⋯ with the other states, Done excepted, as the
+  circle does it. With a finger: drag right past about 100 px marks done; drag left opens two buttons, In progress
+  and Blocked, with Open in place of the current state. Each change shows G-toast.
 - **Selected:** the open item's row is highlighted while M-item is open.
 - **Freq 5.** **Source:** app-ux.md The list §1–5, Phone details; `ItemRow.tsx`. Built.
 - **Must:** local 5, server 5. The rows are the list: every item is opened from one, and the state circle and swipes
@@ -631,7 +632,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 #### M-view-settings: View settings
 
-- **Trigger:** View button, or "Change view" in P-hidden-count. **Contents:** Open, In progress, Blocked, each
+- **Trigger:** View button. **Contents:** Open, In progress, Blocked, each
   Pinned / Shown / Hidden (defaults: open shown, in progress pinned, blocked hidden); "Shown blocked": In their own
   group / Mixed in (only when blocked is shown); Reset to the default view.
 - **Presentation:** as M-filters.
@@ -641,7 +642,8 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 #### P-hidden-count: Hidden items note
 
-- "3 items are hidden by the view settings. Change view" under the list, from `hidden_count`. Shows whenever a
+- "3 blocked items are hidden. Show them" under the list, from `hidden_count` ("3 items are hidden" when states
+  other than blocked are hidden too). Show them puts every hidden state back in the list. Shows whenever a
   blocked item exists under the default view.
 - **Freq 3.** Built.
 - **Must:** local 4, server 4. Blocked items are hidden by default; without the note they vanish, and unblocking
@@ -656,7 +658,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 #### P-saved-views: Saved views bar
 
-- **Shows:** chips, Default first, then the heap's views by name; the open one filled, with "(changed)" when the
+- **Shows:** chips, Default first, then the heap's views by name; the open one filled, with a dot when the
   list differs from it. Scrolls sideways on a phone.
 - **Actions by state:**
   - Unchanged saved view open: Rename, Archive (M-view-archive), and a collapsed "History of {name}"
@@ -670,7 +672,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 | ID | Purpose | Trigger | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
 | --- | --- | --- | --- | :---: | :---: | :---: | --- |
-| P-view-changed | Keep or drop a change to the list | Any view change | Save to {name}; Save as a new view…; Back to {name} | 2 | 2 | 2 | Inline row under the chips |
+| P-view-changed | Keep or drop a change to the list | The open chip, once it shows the dot | Save to {name} (not for Default); Save as a new view…; Undo changes | 2 | 2 | 2 | Menu under the chip |
 | P-view-name | Name a new view, or rename one | Save as a new view…, Rename | Name field (100 chars), Save view or Rename, Cancel; Escape cancels | 2 | 2 | 2 | Inline row |
 | M-view-archive | Confirm archiving a shared view | Archive | "Archive {name} for everyone in the team?" Archive, Cancel. No unarchive | 1 | 1 | 1 | Inline confirm replacing the buttons |
 | P-view-history | Who changed the view | "History of {name}" | P-item-history's layout | 1 | 1 | 1 | Collapsed disclosure |
@@ -692,13 +694,15 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
 - **Purpose:** see and edit every field of an item, change its state, pick a blocker, see why it ranks where it
   does, and read its history (Req Views: Edit item). **Who:** every member; read-only when the heap is archived or
   the item is closed (only state, via reopen).
-- **Header:** "#3 · Up next" (position and group, when the item is in the list on screen) and ✕.
+- **Header:** "#3 · Up next" (position and group, when the item is in the list on screen); ↑ ↓ to open the row above
+  or below without closing the pane (wide and tablet); the key (`k3x9a`) as the copy-link button; ✕.
 - **Body, top to bottom:**
   1. Title (inline, saves on blur; Enter saves, Escape reverts). Max 300 characters.
-  2. State: segmented Open, In progress, Blocked, Done, with Won't do as a separate small button. For a closed item:
-     "Done · yesterday" and, when the week is over, "It can't be reopened."; picking an open state reopens it.
+  2. State: the current state, then the likeliest next one as the main button (Start for open, Done for in
+     progress, Unblock for blocked), the other states beside it, and Won't do under ⋯. For a closed item: "Done ·
+     yesterday" and Reopen, or "It can't be reopened." when the week is over.
   3. When blocked: P-blocker.
-  4. "Why it's #3": the contributors, as one line ("Overdue by 2 days · Blocks “Ship release”").
+  4. "Why it's #3": each contributor ("Overdue by 2 days") with a bar for its `share_percent`.
   5. Need: Idea, Nice to have, Expected, Critical, with a line saying what the picked one means; it can't be cleared.
      Effort and Impact: S M L XL buttons; pressing the picked one clears it.
   6. P-due.
@@ -714,8 +718,8 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
 - **Presentation:** wide: a 26 rem pane beside the list, which widens the shell. Tablet: a 400 px panel over the
   right of the list, the list still live beside it. Phone: a bottom sheet up to 88% of the height, with a grab
   handle, above the on-screen keyboard.
-- **Designed, not built:** on a phone the state is Start, Blocked and Done buttons rather than the segmented control
-  (app-ux.md The item §2); the item key and Copy link (readable-ids.md).
+- **Designed, not built:** on a phone, Start, Blocked and Done in a bar at the bottom of the sheet (app-ux.md The
+  item §2); "Added by Sam 4 days ago" beside History, which needs the item's creator and a time label from the server.
 - **Freq 5.** **Source:** app-ux.md The item; Req Views: Edit item; `ItemPane.tsx`. Built.
 - **Must:** local 5, server 5. The only place to re-size, re-date, block or unblock an item and see why it ranks where
   it does. Rated as one role: the wide pane, tablet panel and phone sheet are presentations of it.
@@ -1034,8 +1038,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 4. **CLI tokens.** `/me/tokens` and P-tokens are designed but have no layout, and the OAuth consent step is
    undecided (S-oauth-authorize).
 5. **Invitations.** Planned for later; S-invite and an Invite panel on S-team are placeholders.
-6. **Item key and Copy link.** Keys exist for the CLI (`upheap done k3x9a`), but nothing says where the web app
-   shows an item's key so a user can type it. The Copy link button has no placement.
+6. **Item key and Copy link.** Settled: the key is the copy-link button in the item's header.
 7. **Finding what blocks archiving a parameter.** `parameter_in_use` doesn't say which open items hold a value. A
    link to the list filtered by that parameter's options would answer it.
 8. **New heap from the switcher.** Heaps are created only on S-team; the switcher has no "New heap".
@@ -1058,7 +1061,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 1. **Inline edits in the list.** Req Views: List items §7 says title, effort, impact, due and state are edited in the
    list. app-ux.md moved editing into the item; rows only change state. requirements.md should follow.
 2. **Phone item state controls.** app-ux.md The item §2 and Tablet §3 call for Start, Blocked and Done buttons on a
-   phone and tablet; the code shows the segmented control at every width.
+   phone and tablet; the code shows the main-state buttons at every width.
 3. **Add item return.** Req Add item §4: "saving takes the user back… ready to add another item." The dialog closes
    unless Add another is ticked, and that box starts unticked.
 4. **Personal team.** offering.md Teams §3 says a personal heap's team "works like any other team"; readable-ids.md

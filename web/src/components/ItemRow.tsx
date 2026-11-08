@@ -1,10 +1,13 @@
 import { Link } from "@tanstack/react-router";
+import { Ellipsis } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, Item, ItemState, RankedItem } from "../api/client";
-import { SIZE_LABELS, STATE_LABELS } from "./labels";
+import { changeLabel, SIZE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
+import { MenuEntry, MenuPopover } from "./Menu";
 import { ParameterChips } from "./ParameterPicker";
 import { TagChips } from "./TagChips";
 
@@ -44,6 +47,7 @@ export function focusRowOf(key: string) {
  * still closes the item instead of stepping through every row looked at.
  *
  * With a finger, a row swipes (app-ux.md, The list §5): right marks it done, left shows two other states to pick.
+ * With a mouse, hovering an open row shows Start and ⋯ for the other states (ux-overview.md, The list §1).
  */
 export function ItemRow({
   entry,
@@ -91,7 +95,7 @@ export function ItemRow({
       {swipe.showActions && <SwipeActions item={item} open={swipe.open} onPick={swipe.pick} />}
       <motion.div
         {...swipe.dragProps}
-        className={`relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
+        className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
         }`}
       >
@@ -136,6 +140,7 @@ export function ItemRow({
             {item.impact ? SIZE_LABELS[item.impact] : "–"}
           </span>
         )}
+        {canMarkDone && !touch && <RowActions item={item} onChangeState={onChangeState} />}
       </motion.div>
     </motion.li>
   );
@@ -233,6 +238,54 @@ function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPic
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What a hovered row offers besides its circle: Start for an open item, and ⋯ for the other states. Over the row's
+ * right edge, on the row's own background, so they cover the sizes rather than push the title. Shown while the row
+ * is hovered, has the focus (so the keyboard reaches them too) or has its menu open.
+ */
+function RowActions({ item, onChangeState }: { item: Item; onChangeState: ChangeState }) {
+  const start = item.state === "open";
+  // Done is the circle's job, and Start has its own button.
+  const more = (["open", "in_progress", "blocked", "wont_do"] as const).filter(
+    (state) => state !== item.state && !(start && state === "in_progress"),
+  );
+  return (
+    <div className="absolute inset-y-0 right-0 z-10 flex items-center gap-0.5 bg-inherit pr-1.5 pl-2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">
+      {start && (
+        <button
+          type="button"
+          onClick={() => onChangeState(item, "in_progress")}
+          aria-label={`Start ${item.title}`}
+          className="h-8 rounded-lg px-2.5 text-xs font-medium text-ink-soft hover:bg-canvas hover:text-ink"
+        >
+          Start
+        </button>
+      )}
+      <MenuTrigger>
+        <Button
+          aria-label={`More for ${item.title}`}
+          className="flex size-8 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-canvas data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
+        >
+          <Ellipsis aria-hidden="true" className="size-4" />
+        </Button>
+        <MenuPopover placement="bottom end">
+          <Menu
+            aria-label={`More for ${item.title}`}
+            className="outline-none"
+            onAction={(key) => onChangeState(item, key as ItemState)}
+          >
+            {more.map((state) => (
+              <MenuEntry key={state} id={state}>
+                {changeLabel(item.state, state)}
+              </MenuEntry>
+            ))}
+          </Menu>
+        </MenuPopover>
+      </MenuTrigger>
     </div>
   );
 }

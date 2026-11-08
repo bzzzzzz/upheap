@@ -72,6 +72,14 @@ export async function pick(page: Page, group: string, option: string) {
     .click();
 }
 
+/** Presses the item pane's state button `label`: Start, Block, Done, Unblock, Back to open or Reopen. */
+export async function changeState(page: Page, label: string) {
+  await itemPane(page)
+    .getByRole("group", { name: "State", exact: true })
+    .getByRole("button", { name: label, exact: true })
+    .click();
+}
+
 /** Expects the rows of the open list to show these titles, in this order. */
 export async function expectOrder(page: Page, titles: string[]) {
   for (const [index, title] of titles.entries()) {
