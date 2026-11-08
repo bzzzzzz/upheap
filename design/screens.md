@@ -434,8 +434,10 @@ overlays are the same components.
 ### G-storage-note: Storage note (local build)
 
 - **Purpose:** say the data lives only in this browser, and whether the browser may clear it.
-- **Shows:** "Your heaps are stored only in this browser[, which may clear them when it runs low on space].
-  Download a copy to keep them safe or move them to another browser." The link goes to S-account.
+- **Shows:** normally "Stored only in this browser · Download a copy". It becomes sentences when there's more to
+  say: ", which may clear it when space runs low" when the browser hasn't agreed to keep the data, and "Last copy
+  downloaded 3 weeks ago." or "No copy downloaded yet." when the last download is over two weeks old or never
+  happened (the date is kept in this browser's localStorage). The link goes to S-account.
 - **Where:** sidebar footer on a wide screen; under the content on a tablet and phone.
 - **Freq 5** (always visible, passive). **Source:** local-build.md Keeping the data §1; `StorageNote`. Built.
 - **Must:** local 4, server n/a. The only thing that tells a user their heaps can vanish with the browser's storage,
@@ -950,7 +952,11 @@ Why the 4s and 5s:
 ### S-account: Account
 
 - **Route:** `/account`. **Who:** everyone signed in, and the local user.
-- **Shows:** P-display-name; Email (read-only). In the local build, "Your data" (P-local-export, P-local-import).
+- **Shows:** P-display-name; Email (read-only). In the local build, the "Your data" card (P-local-export,
+  P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that removes it,
+  loses it. Download a copy now and then, and open it here or in another browser to carry on." Download a copy
+  (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
+  downloaded").
 - **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
 - **Freq 1.** **Source:** TD API Me; `AccountPage.tsx`. Built.
 - **Must:** local 4, server 1. Local: it holds export and import, the local build's only data safety. Server: display
@@ -997,17 +1003,20 @@ The local build runs the same app with no accounts (local-build.md). What differ
 
 ### P-local-export: Download a copy
 
-- "Your heaps are stored only in this browser. A copy is one SQLite file…" Download a copy saves
-  `upheap-YYYY-MM-DD.sqlite3`.
+- Download a copy, on the Your data card, saves `upheap-YYYY-MM-DD.sqlite3` and records the time in this
+  browser for G-storage-note and the card's "last downloaded".
 - **Freq 2.** **Source:** local-build.md Keeping the data §2; `LocalDataSection`. Built.
 - **Must:** local 4, server n/a. The only copy outside the browser, which can clear its storage.
 
 ### P-local-import and M-local-import-confirm: Open a copy
 
-- Open a copy… picks a file, then an inline warning: "Replace everything here with {file}? What's here now will be
-  gone, so download a copy first if you want to keep it." Replace, Cancel. On success the page reloads from the
-  top. A file that isn't an Upheap database, or comes from a newer version, is refused with the data left as it was
-  (error inline).
+- Open a copy… picks a file, then M-local-import-confirm: a modal alert dialog on a wide screen and a sheet on a
+  phone. "Replace everything here with {file}?" and "The copy has 2 heaps and 38 items, from 1 Nov. What's in this
+  browser now (41 items) is replaced and can't be brought back." The worker counts the file first, without storing
+  it ("Reading the copy…" meanwhile). Cancel, Download current first (downloads and stays open, then says
+  "Downloaded"), and Replace in the danger colour. On success the page reloads from the top. Escape or Cancel close
+  it and focus goes back to Open a copy…. A file that isn't an Upheap database is refused in the confirm, with only
+  Cancel; one from a newer version is refused on Replace, with the data left as it was.
 - **Freq 1.** Built.
 - **Must:** local 4, server n/a, for both. Without it a downloaded copy can't be restored, so export protects nothing.
   The confirm: an import replaces everything and can't be undone; this is its only guard.

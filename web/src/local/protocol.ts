@@ -15,12 +15,27 @@ export type WorkerRequest =
   /** The database file, for a download. */
   | { id: number; kind: "export" }
   /** Replaces the database with `file`, after checking it opens. */
-  | { id: number; kind: "import"; file: ArrayBuffer };
+  | { id: number; kind: "import"; file: ArrayBuffer }
+  /**
+   * Counts the open database, or with `file` that file, which it checks as `import` does but leaves where it is.
+   */
+  | { id: number; kind: "count"; file?: ArrayBuffer };
+
+/** What a database holds, for the replace confirm and the Your data card. */
+export type DatabaseCounts = {
+  /** Every row, archived heaps included. */
+  heaps: number;
+  /** Every row, closed items included. */
+  items: number;
+  /** Epoch milliseconds of the newest audit entry, or null when there is none. */
+  lastChangedAt: number | null;
+};
 
 export type WorkerReply =
   | { id: number; kind: "http"; status: number; headers: string[]; body: ArrayBuffer }
   | { id: number; kind: "export"; file: ArrayBuffer }
   | { id: number; kind: "import" }
+  | ({ id: number; kind: "count" } & DatabaseCounts)
   /** The backend couldn't start or couldn't do what was asked at all. `message` is fit to show. */
   | { id: number; kind: "failure"; message: string };
 

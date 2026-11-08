@@ -20,6 +20,7 @@ Companion to [technical-design.md](technical-design.md). These are the rules we 
 1. Clients render what the server returns. Ranking, permissions, contributors, fuzzy due-date labels and validation all live on the server.
 2. Client-side logic is limited to text search, local UI state and animation. Anything else is a bug.
 3. Clients never infer permissions. They show or hide actions only from `allowed_actions`.
+4. The one exception: the local build counts and words facts about its own browser-held database and last download date in the client ([local-build.md](local-build.md), Keeping the data), since no server is involved.
 
 ### Domain and ranking
 

@@ -5,7 +5,8 @@ import { Dialog, Heading, Modal, ModalOverlay, ToggleButton, type Key } from "re
 /**
  * A sheet from the bottom of a phone's screen, over a dimmed page (ux-overview.md: overlays on the phone are bottom
  * sheets). It sits above the on-screen keyboard, or with `aboveTabs` above the phone's tabs as a card, for More.
- * Escape, ✕ or a tap on the dimmed page closes it. Without `showTitle` the title only names the dialog.
+ * Escape, ✕ or a tap on the dimmed page closes it. Without `showTitle` the title only names the dialog. `role` is
+ * `alertdialog` for a confirm that needs an answer.
  */
 export function Sheet({
   title,
@@ -13,6 +14,8 @@ export function Sheet({
   onClose,
   aboveTabs = false,
   showTitle = true,
+  role = "dialog",
+  describedBy,
   aside,
   children,
 }: {
@@ -21,6 +24,9 @@ export function Sheet({
   onClose: () => void;
   aboveTabs?: boolean;
   showTitle?: boolean;
+  role?: "dialog" | "alertdialog";
+  /** The id of what describes the dialog, such as a confirm's question. */
+  describedBy?: string;
   /** Beside the title: what the sheet is for, such as the item's title. */
   aside?: ReactNode;
   children: ReactNode;
@@ -41,11 +47,16 @@ export function Sheet({
           aboveTabs ? "mx-2 rounded-2xl p-2" : "rounded-t-2xl px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),1rem)]"
         }`}
       >
-        <Dialog aria-label={title} className="flex flex-col gap-1 outline-none">
+        <Dialog
+          aria-label={title}
+          aria-describedby={describedBy}
+          role={role}
+          className="flex flex-col gap-1 outline-none"
+        >
           {!aboveTabs && <span aria-hidden="true" className="mx-auto h-1 w-10 rounded-full bg-line" />}
           {showTitle && (
             <div className="flex items-center gap-2 pt-1 pb-1">
-              <Heading slot="title" className="text-[17px] font-semibold">
+              <Heading slot="title" className="min-w-0 text-[17px] font-semibold break-words">
                 {title}
               </Heading>
               <span className="min-w-0 flex-1 truncate text-right text-[13px] text-muted">{aside}</span>

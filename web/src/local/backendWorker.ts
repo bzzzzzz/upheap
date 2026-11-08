@@ -1,5 +1,5 @@
 // The page's side of the backend's worker, which both the API client's `fetch` (fetch.ts) and the local database's
-// export and import (database.ts) talk to. The worker starts with the first message or subscriber.
+// export, import and count (database.ts) talk to. The worker starts with the first message or subscriber.
 import type { WorkerMessage, WorkerReply, WorkerRequest, WorkerStatus } from "./protocol.ts";
 
 /** Each kind of request without its `id`, which `send` gives it. */
