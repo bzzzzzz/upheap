@@ -22,7 +22,11 @@ web app, on SQLite or MySQL.
 - [design/local-build.md](design/local-build.md): the static, single-user build that runs in the browser.
 - [design/app-ux.md](design/app-ux.md): the web app's layout and interactions for phones and wide screens.
 - [design/cli.md](design/cli.md): the `upheap` command-line client for everyday item and tag work.
+- [design/cloud-run-postgres.md](design/cloud-run-postgres.md): Postgres support and deploying on Cloud Run with Neon.
 - [design/progress.md](design/progress.md): what's done and what's next. Keep it current.
+
+When asked to write a "doc", write it as a Markdown file in `design/` and add it to this list, not as an
+external document (Claude Docs, Notion, Google Docs).
 
 Build, run and check commands are in [README.md](README.md).
 
