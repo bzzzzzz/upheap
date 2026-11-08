@@ -1,0 +1,86 @@
+# Deploys the server to Cloud Run (design/cloud-run-postgres.md) once CI has passed on a push to main: builds the
+# Docker image of that commit, pushes it to Artifact Registry tagged with it, and rolls out a new revision. CI runs on
+# main as well as on pull requests, because pull requests may merge without being rebased onto the latest main.
+# Google Cloud is reached through Workload Identity Federation, so no key is stored here; the repository variables
+# below come from the one-time setup in the design doc.
+#
+# This is the only job that holds a cloud credential, so its actions are pinned to commits, not tags.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # By hand from the Actions tab, for main's latest commit. It doesn't wait for CI.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deployment at a time; a newer one waits rather than cancelling one that is going out.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    name: Build and deploy
+    # Only CI runs for pushes to main that passed; not pull requests from a branch named main.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/upheap/upheap-server:${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      - name: Sign Docker in to Artifact Registry
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # The layer cache lets an unchanged web app or dependency set skip its stage.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Every setting listed here is set again on each deploy, so a manual change to one is undone. Settings not
+      # listed keep their values on the service; the public (allUsers) binding is one, as it isn't part of a revision.
+      - name: Deploy to Cloud Run
+        run: >-
+          gcloud run deploy upheap
+          --image "$IMAGE"
+          --region "$REGION"
+          --service-account "${{ vars.GCP_PROJECT_NUMBER }}-compute@developer.gserviceaccount.com"
+          --port 8080
+          --set-secrets DATABASE_URL=upheap-database-url:latest
+          --set-env-vars "BASE_URL=${{ vars.BASE_URL }},DATABASE_MAX_CONNECTIONS=3,ALLOW_REGISTRATION=false"
+          --cpu 1
+          --memory 512Mi
+          --concurrency 80
+          --timeout 300
+          --max-instances 3
+          --cpu-boost
+          --startup-probe httpGet.path=/readyz,periodSeconds=2,failureThreshold=30
+          --quiet
