@@ -68,6 +68,7 @@ async fn register(
     responses(
         (status = 200, description = "Signed in; sets the session cookie", body = UserDto),
         (status = 401, description = "`invalid_credentials`", body = Problem),
+        (status = 422, description = "`field_empty` (`field` `email` or `password`); not counted as an attempt", body = Problem),
         (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
             headers(("Retry-After" = i64, description = "Seconds until the address may try again"))),
     ))]

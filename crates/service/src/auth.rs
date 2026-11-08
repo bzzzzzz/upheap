@@ -13,7 +13,7 @@ use domain::Timestamp;
 use domain::handle::Handle;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
-use domain::validation::Field;
+use domain::validation::{Field, ValidationError};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use store::{StoreError, TransactionTrait};
@@ -104,8 +104,16 @@ impl Services {
     ///
     /// Unknown emails and wrong passwords fail the same way, after the same amount of work. Attempts are limited
     /// per email address (`domain::sign_in`): one past the limit fails with
-    /// [`ServiceError::TooManySignInAttempts`] before the password is checked.
+    /// [`ServiceError::TooManySignInAttempts`] before the password is checked. An empty email or password fails
+    /// with [`ValidationError::Empty`] before anything is counted, so a form sent before a password manager filled
+    /// it doesn't use up an attempt.
     pub async fn sign_in(&self, email: &str, password: &str) -> Result<SessionGrant, ServiceError> {
+        if email.trim().is_empty() {
+            return Err(ValidationError::Empty { field: Field::Email }.into());
+        }
+        if password.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Password }.into());
+        }
         let email = Email::parse(email).ok();
         // Only a well-formed address can have an account, so only those are counted.
         let attempts_key = email.as_ref().map(|email| sha256_hex(email.as_str()));

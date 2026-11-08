@@ -531,6 +531,33 @@ async fn signing_in_starts_the_count_over() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn empty_sign_in_fields_are_rejected_without_counting_an_attempt() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+
+    // Act
+    let mut empty = Vec::new();
+    for _ in 0..7 {
+        empty.push(sign_in(&app, "ada@example.test", "").await?);
+        empty.push(sign_in(&app, " ", "a long test password").await?);
+    }
+    let real = sign_in(&app, "ada@example.test", "a long test password").await?;
+
+    // Assert
+    let statuses: Vec<_> = empty.iter().map(|response| response.status).collect();
+    let codes: Vec<_> = empty.iter().map(|response| response.body["code"].clone()).collect();
+    let fields: Vec<_> = empty.iter().map(|response| response.body["field"].clone()).collect();
+    expect_that!(statuses, each(eq(&StatusCode::UNPROCESSABLE_ENTITY)));
+    expect_that!(codes, each(eq(&json!("field_empty"))));
+    expect_that!(fields.first(), some(eq(&json!("password"))));
+    expect_that!(fields.get(1), some(eq(&json!("email"))));
+    expect_that!(real.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn malformed_addresses_are_not_counted() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

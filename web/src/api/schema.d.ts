@@ -1433,6 +1433,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `field_empty` (`field` `email` or `password`); not counted as an attempt */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {

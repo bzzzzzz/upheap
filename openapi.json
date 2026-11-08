@@ -49,6 +49,16 @@
               }
             }
           },
+          "422": {
+            "description": "`field_empty` (`field` `email` or `password`); not counted as an attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`too_many_attempts`; `Retry-After` gives the seconds to wait",
             "headers": {

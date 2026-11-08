@@ -49,6 +49,8 @@ pub enum Field {
     Username,
     /// A team's or heap's slug.
     Slug,
+    Email,
+    Password,
 }
 
 impl Field {
@@ -63,6 +65,8 @@ impl Field {
             Self::Query => "query",
             Self::Username => "username",
             Self::Slug => "slug",
+            Self::Email => "email",
+            Self::Password => "password",
         }
     }
 }
