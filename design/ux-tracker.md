@@ -90,3 +90,6 @@ before the "only where it pays" pass, and needs that pass when it moves up.
 Not designed: tablet, keyboard shortcuts help, sort and view settings, saved-view editing, tags, parameters,
 activity, heap settings, history views, the remaining team and account pages, error pages, and the installable app.
 The full list is in screens.md, "Deferred".
+
+**Sign in by username**, as the PhoneSignIn board has it ("Email or username"), waits on the server: sign-in
+takes an email only today. The server side is in progress.md.
