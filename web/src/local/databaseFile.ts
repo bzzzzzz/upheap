@@ -51,6 +51,10 @@ export function countDatabase(db: Database): DatabaseCounts {
  */
 export function countFile(sqlite3: Sqlite3Static, file: Uint8Array): DatabaseCounts {
   checkHeader(file);
+  // Shorter than its own header, so no database; and bytes 18 and 19 are written below.
+  if (file.byteLength < 100) {
+    throw new FileRefused(NOT_UPHEAP);
+  }
   const { capi, wasm } = sqlite3;
   const db = new sqlite3.oo1.DB(":memory:");
   try {
