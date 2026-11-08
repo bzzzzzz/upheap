@@ -8,12 +8,14 @@ import { readFile } from "node:fs/promises";
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 
 import init, { Backend } from "../src/local/backend/local.js";
+import { countDatabase, countFile, FileRefused } from "../src/local/databaseFile.ts";
 import { installSqlite } from "../src/local/sqlite.ts";
 
 type Answer = { status: number; body: unknown };
 
 const sqlite3 = await sqlite3InitModule();
-installSqlite(sqlite3, new sqlite3.oo1.DB(":memory:"));
+const db = new sqlite3.oo1.DB(":memory:");
+installSqlite(sqlite3, db);
 await init({ module_or_path: await readFile(new URL("../src/local/backend/local_bg.wasm", import.meta.url)) });
 
 const backend = await Backend.open();
@@ -77,5 +79,16 @@ const reopened = await Backend.open();
 const meAgain = await reopened.handle("GET", "/api/v1/me", [], new Uint8Array());
 const user = JSON.parse(new TextDecoder().decode(meAgain.body)) as { user: { id: string } };
 assert.equal(user.user.id, field(me.body, "user", "id"), "opening again finds the same user");
+
+// The worker's count, of the open database and of a copy of it, which opens in memory beside it.
+const counts = countDatabase(db);
+assert.equal(counts.heaps, 1, "count: the first heap");
+assert.equal(counts.items, 2, "count: the items added");
+assert.ok(counts.lastChangedAt !== null && counts.lastChangedAt > 0, "count: the newest audit entry");
+assert.deepEqual(countFile(sqlite3, sqlite3.capi.sqlite3_js_db_export(db)), counts, "count: a copy holds the same");
+assert.throws(() => countFile(sqlite3, new TextEncoder().encode("not a database")), FileRefused, "count: not SQLite");
+const other = new sqlite3.oo1.DB(":memory:");
+other.exec("CREATE TABLE notes (body TEXT)");
+assert.throws(() => countFile(sqlite3, sqlite3.capi.sqlite3_js_db_export(other)), FileRefused, "count: not Upheap");
 
 console.log("local backend: all checks passed");

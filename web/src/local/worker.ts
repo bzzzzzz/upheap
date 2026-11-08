@@ -1,5 +1,5 @@
 // The local build's backend: SQLite-wasm with its database file in OPFS, and the Rust backend compiled to wasm
-// (crates/local), answering the page's API requests and exporting and importing the database
+// (crates/local), answering the page's API requests, and exporting, importing and counting the database
 // (design/local-build.md).
 //
 // `opfs-sahpool` keeps the database in the Origin Private File System without the COOP and COEP headers GitHub
@@ -13,16 +13,12 @@ import sqlite3InitModule, {
 } from "@sqlite.org/sqlite-wasm";
 
 import init, { Backend } from "./backend/local.js";
+import { checkHeader, checkUpheapDatabase, countDatabase, countFile, FileRefused } from "./databaseFile.ts";
 import type { WorkerMessage, WorkerReply, WorkerRequest, WorkerStatus } from "./protocol.ts";
 import { installSqlite } from "./sqlite.ts";
 
 const DATABASE_FILE = "/upheap.sqlite3";
 const LOCK_NAME = "upheap-database";
-/** The first 16 bytes of every SQLite database file. */
-const SQLITE_HEADER = "SQLite format 3\0";
-
-/** An error whose message is fit to show as it is. */
-class ImportRefused extends Error {}
 
 /** The open database and the backend over it. */
 type Opened = { db: OpfsSAHPoolDatabase; backend: Backend };
@@ -80,35 +76,27 @@ function closeDatabase(): void {
  * included, and put back if it doesn't.
  */
 async function importDatabase(file: Uint8Array): Promise<void> {
-  if (new TextDecoder().decode(file.subarray(0, SQLITE_HEADER.length)) !== SQLITE_HEADER) {
-    throw new ImportRefused("This file isn't an Upheap database.");
-  }
+  checkHeader(file);
   const current = pool.exportFile(DATABASE_FILE);
   closeDatabase();
   try {
     await pool.importDb(DATABASE_FILE, file);
-    checkUpheapDatabase();
+    checkImported();
     opened = await openDatabase();
   } catch (error) {
     await pool.importDb(DATABASE_FILE, current);
     opened = await openDatabase();
-    throw error instanceof ImportRefused
+    throw error instanceof FileRefused
       ? error
-      : new ImportRefused(`Upheap couldn't open this file, so nothing changed: ${String(error)}`);
+      : new FileRefused(`Upheap couldn't open this file, so nothing changed: ${String(error)}`);
   }
 }
 
-/** Refuses a database that isn't sound or that no Upheap has migrated, before the migrations would fill it in. */
-function checkUpheapDatabase(): void {
+/** Refuses the file just swapped in unless it's an Upheap database. */
+function checkImported(): void {
   const db = new pool.OpfsSAHPoolDb(DATABASE_FILE);
   try {
-    const sound = db.selectValue("PRAGMA quick_check") === "ok";
-    const migrated = db.selectValue("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'seaql_migrations'");
-    if (!sound || migrated !== 1) {
-      throw new ImportRefused("This file isn't an Upheap database.");
-    }
-  } catch (error) {
-    throw error instanceof ImportRefused ? error : new ImportRefused("This file isn't an Upheap database.");
+    checkUpheapDatabase(db);
   } finally {
     db.close();
   }
@@ -156,11 +144,16 @@ async function answer(request: WorkerRequest): Promise<[WorkerReply, Transferabl
     case "import":
       await importDatabase(new Uint8Array(request.file));
       return [{ id: request.id, kind: "import" }, []];
+    case "count": {
+      const counts = request.file ? countFile(sqlite3, new Uint8Array(request.file)) : countDatabase(opened.db);
+      return [{ id: request.id, kind: "count", ...counts }, []];
+    }
   }
 }
 
 // Requests run one after the other, each to its end: the backend has one connection, a transaction must not see
-// another request's statements in between, and an import must not swap the database under one.
+// another request's statements in between, and an import must not swap the database under one, or a count read
+// half of a change.
 let queue: Promise<void> = Promise.resolve();
 
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
@@ -170,7 +163,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       const [reply, transfer] = await answer(request);
       post(reply, transfer);
     } catch (error) {
-      if (!(error instanceof ImportRefused)) {
+      if (!(error instanceof FileRefused)) {
         console.error("local backend failed", error);
       }
       post({ id: request.id, kind: "failure", message: error instanceof Error ? error.message : String(error) });
