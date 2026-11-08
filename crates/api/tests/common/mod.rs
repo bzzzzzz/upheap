@@ -18,7 +18,7 @@ use domain::team::{Membership, Role};
 use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
 use serde_json::Value;
-use service::{Clock, ManualClock, Services, Settings};
+use service::{Clock, ManualClock, RandomSource, Services, Settings, SystemRandom};
 use store::{ConnectionTrait, DatabaseConnection, Statement};
 use tower::ServiceExt;
 
@@ -57,6 +57,11 @@ pub struct TestResponse {
 
 impl TestApp {
     pub async fn start() -> Result<Self> {
+        Self::start_with_random(Arc::new(SystemRandom)).await
+    }
+
+    /// [`TestApp::start`], with item keys drawn from `random`.
+    pub async fn start_with_random(random: Arc<dyn RandomSource>) -> Result<Self> {
         init_tracing();
         let db = store::testing::fresh_database().await?;
         let clock = Arc::new(ManualClock::new(
@@ -70,7 +75,8 @@ impl TestApp {
                 session_ttl: Duration::from_days(30),
                 sign_in_limit: SignInLimit::DEFAULT,
             },
-        );
+        )
+        .with_random(random);
         let cookies = CookieSettings {
             secure: true,
             max_age: StdDuration::from_secs(3600),
