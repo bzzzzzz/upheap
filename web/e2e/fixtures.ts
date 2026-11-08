@@ -18,13 +18,7 @@ export const test = base.extend<{ heapPath: string } & LocalBuildOptions>({
    */
   heapPath: [
     async ({ page, localBuild }, use) => {
-      if (!localBuild) {
-        const registered = await page.request.post("/api/v1/auth/register", {
-          headers: { "x-csrf-protection": "1" },
-          data: { ...uniqueUser(), display_name: "Tester", password: "a long test password" },
-        });
-        expect(registered.status()).toBe(201);
-      }
+      if (!localBuild) await registerThroughApi(page);
       // Relative, so the local build's base path stays.
       await page.goto("./");
       await expect(page).toHaveURL(HEAP_URL);
@@ -43,6 +37,23 @@ export const HEAP_URL = /\/teams\/[^/]+\/heaps\/[^/]+$/;
 export function uniqueUser() {
   const id = crypto.randomUUID().replaceAll("-", "");
   return { email: `e2e-${id}@example.test`, username: `e2e-${id.slice(0, 20)}` };
+}
+
+/** The password every account the tests register has. */
+export const PASSWORD = "a long test password";
+
+/**
+ * Registers a new account through the API, which signs the page in to it (server only). Returns its email and
+ * username; the password is `PASSWORD`.
+ */
+export async function registerThroughApi(page: Page) {
+  const user = uniqueUser();
+  const registered = await page.request.post("/api/v1/auth/register", {
+    headers: { "x-csrf-protection": "1" },
+    data: { ...user, display_name: "Tester", password: PASSWORD },
+  });
+  expect(registered.status()).toBe(201);
+  return user;
 }
 
 /** The list row of the item titled `title`. */

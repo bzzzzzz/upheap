@@ -1,19 +1,16 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { addItem, closeItem, HEAP_URL, itemPane, openItem, signOut, uniqueUser } from "./fixtures";
-
-const password = "a long test password";
-
-/** Registers a new account through the API, which signs the page in to it, and returns its email. */
-async function registerThroughApi(page: Page): Promise<string> {
-  const user = uniqueUser();
-  const registered = await page.request.post("/api/v1/auth/register", {
-    headers: { "x-csrf-protection": "1" },
-    data: { ...user, display_name: "Tester", password },
-  });
-  expect(registered.status()).toBe(201);
-  return user.email;
-}
+import {
+  addItem,
+  closeItem,
+  HEAP_URL,
+  itemPane,
+  openItem,
+  PASSWORD as password,
+  registerThroughApi,
+  signOut,
+  uniqueUser,
+} from "./fixtures";
 
 test("a new user registers, signs out and signs back in", async ({ page }) => {
   const { email, username } = uniqueUser();
@@ -35,6 +32,10 @@ test("a new user registers, signs out and signs back in", async ({ page }) => {
 
   await signOut(page);
   await expect(page).toHaveURL(/\/login$/);
+  // Sent empty, as before a password manager fills it: the server says which input, and counts no attempt.
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByLabel("Email")).toHaveAccessibleDescription("Enter your email address.");
+  await expect(page.getByLabel("Email")).toBeFocused();
   await page.getByLabel("Password").fill("not the password");
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -48,7 +49,7 @@ test("a new user registers, signs out and signs back in", async ({ page }) => {
 });
 
 test("a taken email and a short password show their errors under the field", async ({ page }) => {
-  const email = await registerThroughApi(page);
+  const { email } = await registerThroughApi(page);
   await page.context().clearCookies();
 
   await page.goto("/login");
@@ -63,7 +64,8 @@ test("a taken email and a short password show their errors under the field", asy
   await expect(emailInput).toHaveAttribute("aria-invalid", "true");
   await expect(emailInput).toHaveAccessibleDescription("There's already an account with this email. Sign in instead.");
   await expect(emailInput).toBeFocused();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // An alert, so it's announced also when focus was already in the input.
+  await expect(page.getByRole("alert")).toHaveText("There's already an account with this email. Sign in instead.");
 
   // Editing the email clears its error.
   await emailInput.fill(uniqueUser().email);
@@ -74,12 +76,12 @@ test("a taken email and a short password show their errors under the field", asy
   await passwordInput.fill("short");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(passwordInput).toHaveAttribute("aria-invalid", "true");
-  await expect(passwordInput).toHaveAccessibleDescription("Password must be at least 10 characters.");
+  await expect(passwordInput).toHaveAccessibleDescription("Use at least 10 characters.");
   await expect(passwordInput).toBeFocused();
 });
 
 test("an item link opened while signed out signs in and opens the item", async ({ page }) => {
-  const email = await registerThroughApi(page);
+  const { email } = await registerThroughApi(page);
   await page.goto("/");
   await expect(page).toHaveURL(HEAP_URL);
   await addItem(page, "Fix the gate");
@@ -101,16 +103,28 @@ test("an item link opened while signed out signs in and opens the item", async (
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Fix the gate");
 });
 
-test("a redirect to another site is ignored", async ({ page, baseURL }) => {
-  const email = await registerThroughApi(page);
-  await page.context().clearCookies();
+test("a redirect that isn't a page of the app is ignored", async ({ page, baseURL }) => {
+  const { email } = await registerThroughApi(page);
+  const origin = new URL(baseURL ?? "").origin;
+  const payloads = [
+    "//evil.example/steal",
+    "https://evil.example",
+    "/\\evil.example",
+    "/%09/evil.example",
+    "/.//evil.example",
+    "javascript:alert(1)",
+  ];
 
-  await page.goto("/login?redirect=//evil.example/steal");
-  await expect(page.getByText(/^Sign in to open/)).toHaveCount(0);
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  for (const payload of payloads) {
+    await page.context().clearCookies();
+    await page.goto(`/login?redirect=${encodeURIComponent(payload)}`);
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByText(/^Sign in to open/), payload).toHaveCount(0);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(HEAP_URL);
-  expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
+    await expect(page, payload).toHaveURL(HEAP_URL);
+    expect(new URL(page.url()).origin, payload).toBe(origin);
+  }
 });

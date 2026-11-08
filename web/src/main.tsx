@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
 import { LocalDatabaseGate } from "./components/LocalDatabase";
-import { createAppRouter } from "./routes";
+import { createAppRouter, signInSearch } from "./routes";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -19,11 +19,12 @@ const queryClient = new QueryClient({
   }),
   queryCache: new QueryCache({
     onError: (error) => {
-      // While the router loads a page, its guard (`appRoute`) sends a signed-out user to sign-in itself, with the way
-      // back to that page; navigating here as well would race it and lose the way back.
-      if (isUnauthenticated(error) && router.state.status !== "pending") {
-        void router.navigate({ to: "/login" });
-      }
+      if (!isUnauthenticated(error)) return;
+      // Sign-in returns to the page, as from the guard (`appRoute`). While a navigation is pending, `location` is
+      // already where it's going, so the two send the user to the same place.
+      const { location } = router.state;
+      if (router.matchRoutes(location.pathname, {}).some((match) => match.routeId === "/login")) return;
+      void router.navigate({ to: "/login", search: signInSearch(location.href) });
     },
   }),
   defaultOptions: {

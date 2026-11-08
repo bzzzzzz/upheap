@@ -39,15 +39,20 @@ export function signInSearch(href: string): { redirect?: string } {
 }
 
 /**
- * `redirect` as a path in this app, or nothing when it isn't one: a crafted link such as `?redirect=//evil.example`
- * mustn't send a user who signs in to another site. Sign-in itself doesn't count, so it can't loop.
+ * `redirect` as a page of the app to return to after sign-in, with the router's matches for it, or nothing when it
+ * isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to another site, and
+ * sign-in itself, or a path no page answers, isn't worth returning to.
  */
-function toInAppPath(redirect: string | undefined): string | undefined {
+function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
-  // The URL parser drops tabs and newlines, so `/\t/evil.example` is another origin too.
+  // The URL parser drops tabs and newlines and resolves dot segments, so `/\t/evil.example` is another origin and
+  // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
   const url = new URL(redirect, window.location.origin);
-  if (url.origin !== window.location.origin || url.pathname.replace(/\/+$/, "") === "/login") return undefined;
-  return url.pathname + url.search + url.hash;
+  if (url.origin !== window.location.origin || url.pathname.startsWith("//")) return undefined;
+  // Only the signed-in pages send users here; sign-in is outside them, whatever the case of `/LOGIN`.
+  const matches = router.matchRoutes(url.pathname, {});
+  if (!matches.some((match) => match.routeId === appRoute.id)) return undefined;
+  return { href: url.pathname + url.search + url.hash, matches };
 }
 
 const loginRoute = createRoute({
@@ -56,18 +61,16 @@ const loginRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
     typeof search.redirect === "string" ? { redirect: search.redirect } : {},
   component: function LoginRoute() {
-    const target = toInAppPath(loginRoute.useSearch().redirect);
     const router = useRouter();
+    const page = toAppPage(router, loginRoute.useSearch().redirect);
+    // The router's own matching says whether the link is to an item, and which.
+    const item = page?.matches.find((match) => match.routeId === itemRoute.id);
+    const itemKey = item && "item" in item.params ? String(item.params.item) : undefined;
     let notice: string | undefined;
-    if (target) {
-      // The router's own matching says whether the link is to an item, and which.
-      const [, params, route] = router.getMatchedRoutes(new URL(target, window.location.origin).pathname);
-      const isItem = route?.id === itemRoute.id || route?.id === shortItemRoute.id;
-      notice = isItem && params.item ? `Sign in to open the link to ${params.item}.` : "Sign in to open that page.";
-    }
+    if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
     // With `href`, the router takes the whole location from it; without, it goes to `to`.
     return (
-      <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: target, replace: true })} />
+      <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: page?.href, replace: true })} />
     );
   },
 });

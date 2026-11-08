@@ -1,6 +1,9 @@
 import { ApiProblem } from "../api/client";
 
-/** What to tell the user for problem codes they can act on. Anything else shows the server's title. */
+/**
+ * What to tell the user for problem codes they can act on, by `code`, or by `code.field` where the field changes the
+ * words. Anything else shows the server's title.
+ */
 const MESSAGES: Record<string, string> = {
   last_admin: "A team needs an admin. Make someone else an admin first.",
   version_conflict: "Someone else changed this. It now shows their version.",
@@ -19,13 +22,23 @@ const MESSAGES: Record<string, string> = {
   handle_taken: "That's taken. Pick another.",
   invalid_handle: "Use lowercase letters, digits and single dashes, starting with a letter.",
   personal_team: "A personal team is yours alone, so nobody can join it and its link stays the same.",
+  // The sign-in and create-account form. The problems don't carry the limits, so the 10-character minimum is today's
+  // `PASSWORD_MIN_CHARS` (domain::user), as the form's hint says.
   email_taken: "There's already an account with this email. Sign in instead.",
+  email_invalid: "That doesn't look like an email address.",
+  "field_empty.email": "Enter your email address.",
+  "field_empty.password": "Enter your password.",
+  "field_too_long.display_name": "That name is too long.",
+  password_too_short: "Use at least 10 characters.",
+  password_too_long: "That password is too long.",
   invalid_credentials: "That email and password don't match an account.",
-  registration_closed: "This server doesn't take new accounts. Ask whoever runs it to make you one.",
+  registration_closed: "This server isn't taking new accounts.",
 };
 
 export function problemMessage(error: Error): string {
-  const message = (error instanceof ApiProblem && MESSAGES[error.code]) || error.message;
+  const message =
+    (error instanceof ApiProblem && (MESSAGES[`${error.code}.${error.field}`] ?? MESSAGES[error.code])) ||
+    error.message;
   // A handle the server would take, such as `my-team` for `My-Team`.
   return error instanceof ApiProblem && error.hint ? `${message} Try “${error.hint}”.` : message;
 }

@@ -23,12 +23,21 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
   const [mode, setMode] = useState<Mode>("sign_in");
   // Kept across the switch, so an email typed under Sign in stays for Create account.
   const [values, setValues] = useState<Values>({ display_name: "", username: "", email: "", password: "" });
+  // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
+  const signIn = useSignIn();
+  const register = useRegister();
+  const pending = signIn.isPending || register.isPending;
   const form = (formMode: Mode) => (
     <AuthForm
       mode={formMode}
+      mutation={formMode === "sign_in" ? signIn : register}
+      onSubmit={() =>
+        formMode === "sign_in"
+          ? signIn.mutate({ email: values.email, password: values.password }, { onSuccess: onSignedIn })
+          : register.mutate(values, { onSuccess: onSignedIn })
+      }
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
-      onSignedIn={onSignedIn}
     />
   );
 
@@ -41,7 +50,17 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
         </h1>
         {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
         {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
-        <Tabs selectedKey={mode} onSelectionChange={(key) => setMode(key === "register" ? "register" : "sign_in")}>
+        {/* Held while a submit is pending, so its result lands on the form that sent it. */}
+        <Tabs
+          selectedKey={mode}
+          isDisabled={pending}
+          onSelectionChange={(key) => {
+            setMode(key === "register" ? "register" : "sign_in");
+            // Each form starts clean.
+            signIn.reset();
+            register.reset();
+          }}
+        >
           <TabList
             aria-label="Sign in or create account"
             className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
@@ -88,18 +107,18 @@ function UpheapMark() {
 
 function AuthForm({
   mode,
+  mutation,
+  onSubmit,
   values,
   onChange,
-  onSignedIn,
 }: {
   mode: Mode;
+  /** The form's request: its error and whether it's pending. */
+  mutation: { error: Error | null; isPending: boolean; reset: () => void };
+  onSubmit: () => void;
   values: Values;
   onChange: (name: FieldName, value: string) => void;
-  onSignedIn: () => void;
 }) {
-  const signIn = useSignIn();
-  const register = useRegister();
-  const mutation = mode === "sign_in" ? signIn : register;
   const { error } = mutation;
   // A problem about one of this form's inputs shows under it; any other, above the button.
   const errorField = error instanceof ApiProblem ? FIELDS[mode].find((name) => name === error.field) : undefined;
@@ -113,18 +132,13 @@ function AuthForm({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const done = { onSuccess: onSignedIn };
-    if (mode === "sign_in") {
-      signIn.mutate({ email: values.email, password: values.password }, done);
-    } else {
-      register.mutate(values, done);
-    }
+    onSubmit();
   };
 
   const field = (name: FieldName) => ({
     name,
     value: values[name],
-    error: errorField === name && error ? sentence(problemMessage(error)) : undefined,
+    error: errorField === name && error ? problemMessage(error) : undefined,
     onChange: (value: string) => {
       onChange(name, value);
       // Editing the input clears its own error.
@@ -172,7 +186,7 @@ function AuthForm({
       />
       {error && !errorField && (
         <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-          {sentence(problemMessage(error))}
+          {problemMessage(error)}
         </p>
       )}
       <button
@@ -190,8 +204,8 @@ function AuthForm({
 }
 
 /**
- * A labelled input with a hint or an error under it, in the first-set sizes. The shared `Field` keeps today's look on
- * the pages not yet fitted to the design tokens.
+ * A labelled input with a hint or an error under it, in the first-set sizes. The error is an alert, so it's announced
+ * also when focus is already in the input, as after submitting with Enter.
  */
 function AuthField({
   label,
@@ -221,17 +235,17 @@ function AuthField({
         aria-describedby={note ? noteId : undefined}
         className="h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink aria-invalid:border-overdue-ink aria-invalid:ring-[3px] aria-invalid:ring-overdue-soft aria-invalid:outline-overdue-ink sm:h-auto sm:rounded-[9px] sm:py-[9px]"
       />
-      {note && (
-        <p id={noteId} className={error ? "text-xs font-medium text-overdue-ink" : "text-xs text-muted"}>
-          {note}
+      {error ? (
+        <p key="error" id={noteId} role="alert" className="text-xs font-medium text-overdue-ink">
+          {error}
         </p>
+      ) : (
+        hint && (
+          <p key="hint" id={noteId} className="text-xs text-muted">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );
-}
-
-/** The server's titles start in lower case ("password must be at least 10 characters"); a line on its own doesn't. */
-function sentence(text: string): string {
-  const capitalised = text.charAt(0).toUpperCase() + text.slice(1);
-  return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
 }
