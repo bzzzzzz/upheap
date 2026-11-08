@@ -379,7 +379,7 @@ overlays are the same components.
 
 - **Purpose:** phone navigation.
 - **Shows:** the heap name with a chevron at the top (opens M-heap-switcher as a sheet; also serves as the page
-  title); bottom tabs Open, Closed, Activity, More. Respects safe-area insets.
+  title); bottom tabs Open, Closed, + (opens M-add-item), Activity, More. Respects safe-area insets.
 - **Freq 5.** **Source:** app-ux.md Layout, Phone details; `PhoneTopBar`, `PhoneTabs`. Built.
 - **Must:** local 4, server 4. The phone's only route to Closed and More. One role with G-shell-wide.
 - Note: on pages outside a heap (Teams, Account) the tabs aren't shown and the top bar says "Upheap".
@@ -387,10 +387,9 @@ overlays are the same components.
 #### M-more: More menu (phone)
 
 - **Purpose:** the heap views and account pages that don't fit in the tabs.
-- **Trigger:** More tab. **Contents:** Tags, Parameters, Team (not in the local build), Teams or the team's name,
-  Account, Sign out (server build only).
-- **Phone:** a bottom sheet over a dimmed page, sitting above the tabs (a menu opened on press picks the item under
-  the release point, so a sheet over the button would pick Sign out).
+- **Trigger:** More tab. **Contents:** Team (not in the local build) with the team's name, Teams with their count
+  or the team's name, Tags, Parameters, Account with the username, Sign out (server build only), as 52 px rows.
+- **Phone:** a card over a dimmed page, sitting above the tabs. It opens on release, like any button.
 - **Freq 3:** Tags and Parameters are occasional. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
 - **Must:** local 4, server 4. On a phone, the only route to Account (export, local build), Team and Sign out (server
   build). Part of the phone shell's role.
@@ -399,10 +398,12 @@ overlays are the same components.
 
 - **Purpose:** move between heaps (Req Heaps §3).
 - **Trigger:** heap name (phone), heap initial (tablet). On a wide screen the sidebar list is the switcher.
-- **Contents:** heaps grouped by team, a check on the current one, "(archived)" on archived heaps.
-- **Actions:** pick a heap. No "New heap" entry (see Gaps).
+- **Contents:** heaps grouped by team as 52 px rows, a check on the current one, "(archived)" on archived heaps.
+  Open counts are designed, not built: they need the server.
+- **Actions:** pick a heap; "New heap in \<team\>" for the current heap's team, when the team allows it, asks for a
+  name and opens the new heap.
 - **Presentation:** popover beside the rail on a tablet; bottom sheet on a phone.
-- **Freq 4:** most users have a personal and a team heap. **Source:** app-ux.md Layout; `HeapMenu`. Built.
+- **Freq 4:** most users have a personal and a team heap. **Source:** app-ux.md Layout; `HeapSwitcher`. Built, apart from open counts.
 - **Must:** local 2, server 4. Server: most users move between a personal and a team heap every day, and on a phone
   the only other route is through Team. On a wide screen the sidebar plays this role. Local: one heap is usual.
 
@@ -719,8 +720,10 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
 - **Presentation:** wide: a 26 rem pane beside the list, which widens the shell. Tablet: a 400 px panel over the
   right of the list, the list still live beside it. Phone: a bottom sheet up to 88% of the height, with a grab
   handle, above the on-screen keyboard.
-- **Designed, not built:** on a phone, Start, Blocked and Done in a bar at the bottom of the sheet (app-ux.md The
-  item §2).
+- **Phone:** the state buttons in a bar at the bottom of the sheet (app-ux.md The item §2); due, tags, parameters
+  and the description as rows that open sheets.
+- **Designed, not built:** the phone's "Added" row among the fields; until then "Added by" shows beside History
+  there too.
 - **Freq 5.** **Source:** app-ux.md The item; Req Views: Edit item; `ItemPane.tsx`. Built, including "Added by Sam 4
   days ago" beside History.
 - **Must:** local 5, server 5. The only place to re-size, re-date, block or unblock an item and see why it ranks where
@@ -1043,7 +1046,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 6. **Item key and Copy link.** Settled: the key is the copy-link button in the item's header.
 7. **Finding what blocks archiving a parameter.** `parameter_in_use` doesn't say which open items hold a value. A
    link to the list filtered by that parameter's options would answer it.
-8. **New heap from the switcher.** Heaps are created only on S-team; the switcher has no "New heap".
+8. **New heap from the switcher.** Settled: the switcher ends with "New heap in \<team\>" for the heap's own team.
 9. **Where an added item landed.** M-add-item closes without saying the new item's position; the CLI does.
 10. **Onboarding.** No first-run explanation of how ranking works, what effort, impact and loose due times mean, or
     that items are never deleted. Only E-heap-empty's one line.

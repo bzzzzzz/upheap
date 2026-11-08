@@ -47,11 +47,13 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width | Navigation | List | Item |
 | --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, Activity, More | Full width, compact rows | Bottom sheet over the list |
+| Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, + (Add), Activity, More | Full width, compact rows | Bottom sheet over the list |
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: heaps, then the heap's views, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Tags, Parameters, Team, Account (with Your data in the local build) and Sign out.
+**More** on a phone holds Team, Teams, Tags, Parameters, Account (with Your data in the local build) and Sign out,
+as a card of 52 px rows above the tabs. The **+** in the middle of the tabs opens the Add dialog from any of the
+heap's pages, so the Add field above the list shows only from a tablet up.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
 wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
@@ -77,7 +79,7 @@ Phone pages respect the safe-area insets (`viewport-fit=cover`) under the bottom
 least 16 px so iOS doesn't zoom in on focus. Sheets sit above the on-screen keyboard: Android Chrome resizes the page
 for it (`interactive-widget=resizes-content`), and on iOS, which doesn't, the sheets are lifted by the height the
 keyboard covers, from the visual viewport. The heap switcher and More open as sheets too; More's sits above the
-tabs, since a menu opened with a mouse picks the item the button is released over.
+tabs. Lists in a sheet (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
@@ -107,10 +109,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it, instead of a
    separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens with the state (the likeliest next state as the main button, then the others, with Won't do under ⋯, on
-   a wide screen; Start, Blocked and Done buttons on a phone), then
+   a wide screen; on a phone the same buttons sit in a bar at the bottom of the sheet, the main one wider, with Won't
+   do under ⋯, and the state is a line under the title), then
    "Why it's #3" from the contributors, then the need's four steps, effort and impact as S M L XL buttons, due, tags,
    parameters, the
-   description and the history.
+   description and the history. On a phone due, tags, parameters and the description are rows of label and value,
+   each opening a sheet; the description saves as its sheet closes.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
    the tag is added, in Add item too, as it does today.

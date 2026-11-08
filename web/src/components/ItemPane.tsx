@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, Ellipsis, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Ellipsis, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { Button, Menu, MenuTrigger } from "react-aria-components";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Button, Menu, MenuTrigger, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useMe, useParameters, useUpdateItem } from "../api/queries";
@@ -11,13 +11,14 @@ import { BlockerSelect } from "./BlockerSelect";
 import { CopyLink } from "./CopyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
-import { DuePicker } from "./DuePicker";
+import { DuePicker, DueRows } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
+import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
@@ -142,7 +143,9 @@ export function ItemPane({
             <X aria-hidden="true" className="size-4" />
           </button>
         </div>
-        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] sm:px-5">{body}</div>
+        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] has-[[data-state-bar]]:pb-0 sm:px-5">
+          {body}
+        </div>
       </motion.section>
     </>
   );
@@ -234,6 +237,7 @@ function useDragToClose(onClose: () => void) {
 
 /** The item's fields, each saving on its own with the item's version in `If-Match`. */
 function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; entry: RankedItem | undefined }) {
+  const phone = useMedia(PHONE);
   const update = useUpdateItem(heapRef);
   const parameters = useParameters(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
@@ -279,12 +283,16 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         className="field-sizing-content resize-none bg-transparent text-lg leading-snug font-semibold outline-none disabled:opacity-100"
       />
 
-      <StateActions
-        item={item}
-        disabled={!canChangeState}
-        canReopen={canReopen}
-        onChange={(state) => state !== item.state && save({ state })}
-      />
+      {phone ? (
+        <StateLine item={item} canReopen={canReopen} />
+      ) : (
+        <StateActions
+          item={item}
+          disabled={!canChangeState}
+          canReopen={canReopen}
+          onChange={(state) => state !== item.state && save({ state })}
+        />
+      )}
       {item.state === "blocked" && (
         <BlockerSelect
           value={item.blocked_by}
@@ -304,7 +312,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         }}
       />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <ChoiceButtons
           label="Effort"
           options={SIZE_OPTIONS}
@@ -321,64 +329,70 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         />
       </div>
 
-      <DuePicker
-        value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
-        current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
-        disabled={!canEdit}
-        onChange={(due) => {
-          if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
-        }}
-      />
+      {phone ? (
+        <FieldRows heapRef={heapRef} item={item} canEdit={canEdit} save={save} saveText={saveText} />
+      ) : (
+        <>
+          <DuePicker
+            value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
+            current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
+            disabled={!canEdit}
+            onChange={(due) => {
+              if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
+            }}
+          />
 
-      <TagPicker
-        heapRef={heapRef}
-        value={item.tags}
-        disabled={!canEdit}
-        onChange={(tags) => save({ tag_ids: tags.map((tag) => tag.id) })}
-      />
+          <TagPicker
+            heapRef={heapRef}
+            value={item.tags}
+            disabled={!canEdit}
+            onChange={(tags) => save({ tag_ids: tags.map((tag) => tag.id) })}
+          />
 
-      {item.parameters.length > 0 && (
-        <div className="flex flex-col gap-3" role="group" aria-label="Parameters">
-          {item.parameters.map((current) => {
-            const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
-            // An archived parameter, or an archived option a closed item keeps, can only be looked at.
-            const archivedOption =
-              current.option !== null && !parameter?.options.some((option) => option.id === current.option?.id);
-            return parameter && !archivedOption ? (
-              <ParameterPicker
-                key={current.parameter_id}
-                parameter={parameter}
-                value={current.option?.id ?? null}
-                disabled={!canEdit}
-                onChange={(option) => save({ parameter_values: { [current.parameter_id]: option } })}
-              />
-            ) : (
-              <p key={current.parameter_id} className="text-sm">
-                <span className="text-xs font-medium text-param-ink">
-                  {current.name}
-                  {current.parameter_archived && " (archived)"}
-                </span>{" "}
-                {current.option ? `${current.option.label}${archivedOption ? " (archived)" : ""}` : "Not set"}
-              </p>
-            );
-          })}
-        </div>
+          {item.parameters.length > 0 && (
+            <div className="flex flex-col gap-3" role="group" aria-label="Parameters">
+              {item.parameters.map((current) => {
+                const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
+                // An archived parameter, or an archived option a closed item keeps, can only be looked at.
+                const archivedOption =
+                  current.option !== null && !parameter?.options.some((option) => option.id === current.option?.id);
+                return parameter && !archivedOption ? (
+                  <ParameterPicker
+                    key={current.parameter_id}
+                    parameter={parameter}
+                    value={current.option?.id ?? null}
+                    disabled={!canEdit}
+                    onChange={(option) => save({ parameter_values: { [current.parameter_id]: option } })}
+                  />
+                ) : (
+                  <p key={current.parameter_id} className="text-sm">
+                    <span className="text-xs font-medium text-param-ink">
+                      {current.name}
+                      {current.parameter_archived && " (archived)"}
+                    </span>{" "}
+                    {current.option ? `${current.option.label}${archivedOption ? " (archived)" : ""}` : "Not set"}
+                  </p>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={descriptionId} className="text-xs font-medium text-ink-soft">
+              Description
+            </label>
+            <textarea
+              id={descriptionId}
+              key={item.description ?? ""}
+              defaultValue={item.description ?? ""}
+              disabled={!canEdit}
+              rows={3}
+              onBlur={(e) => saveText("description", e.target.value)}
+              className="field-sizing-content min-h-20 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm disabled:opacity-60"
+            />
+          </div>
+        </>
       )}
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={descriptionId} className="text-xs font-medium text-ink-soft">
-          Description
-        </label>
-        <textarea
-          id={descriptionId}
-          key={item.description ?? ""}
-          defaultValue={item.description ?? ""}
-          disabled={!canEdit}
-          rows={3}
-          onBlur={(e) => saveText("description", e.target.value)}
-          className="field-sizing-content min-h-20 rounded-lg border border-line bg-surface px-2 py-1.5 text-sm disabled:opacity-60"
-        />
-      </div>
 
       {update.error && (
         <p role="alert" className="text-sm text-overdue-ink">
@@ -393,7 +407,242 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         </div>
         <AuditHistory scope={{ heap: heapRef }} entityId={item.id} />
       </section>
+
+      {phone && (
+        <StateActions
+          variant="bar"
+          item={item}
+          disabled={!canChangeState}
+          canReopen={canReopen}
+          onChange={(state) => state !== item.state && save({ state })}
+        />
+      )}
     </div>
+  );
+}
+
+/** The item's longer fields on a phone, as rows of label and value, each opening a sheet to change it. */
+function FieldRows({
+  heapRef,
+  item,
+  canEdit,
+  save,
+  saveText,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  canEdit: boolean;
+  save: (patch: ItemPatch) => void;
+  saveText: (field: "title" | "description", text: string) => void;
+}) {
+  const parameters = useParameters(heapRef);
+  const [open, setOpen] = useState<string | null>(null);
+  const close = () => setOpen(null);
+  const sheet = (field: string) => ({ isOpen: open === field, onClose: close, aside: item.title });
+
+  const due = item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : null;
+  const tags = item.tags.length > 0 ? item.tags.map((tag) => tag.name).join(", ") : null;
+
+  return (
+    <div className="-mt-2 flex flex-col border-t border-line/60">
+      <FieldRow label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
+      <FieldRow label="Tags" value={tags} disabled={!canEdit} onOpen={() => setOpen("tags")} />
+      {item.parameters.map((current) => {
+        const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
+        // An archived parameter, or an archived option a closed item keeps, can only be looked at.
+        const archivedOption =
+          current.option !== null && !parameter?.options.some((option) => option.id === current.option?.id);
+        const editable = canEdit && parameter !== undefined && !archivedOption;
+        const label = `${current.name}${current.parameter_archived ? " (archived)" : ""}`;
+        const value = current.option ? `${current.option.label}${archivedOption ? " (archived)" : ""}` : null;
+        return (
+          <Fragment key={current.parameter_id}>
+            <FieldRow
+              label={label}
+              value={value}
+              empty="Not set"
+              tone="param"
+              disabled={!editable}
+              onOpen={() => setOpen(current.parameter_id)}
+            />
+            {parameter && (
+              <Sheet title={parameter.name} {...sheet(current.parameter_id)}>
+                <OptionRows
+                  label={parameter.name}
+                  options={parameter.options}
+                  value={current.option?.id ?? null}
+                  onChange={(option) => save({ parameter_values: { [current.parameter_id]: option } })}
+                  onDone={close}
+                />
+              </Sheet>
+            )}
+          </Fragment>
+        );
+      })}
+      <FieldRow
+        label="Description"
+        // The first line names it; the sheet, or the read-only row, shows all of it.
+        value={(canEdit ? item.description?.split("\n")[0] : item.description) ?? null}
+        disabled={!canEdit}
+        onOpen={() => setOpen("description")}
+      />
+
+      <Sheet title="Due" {...sheet("due")}>
+        <DueRows
+          value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
+          onChange={(value) => {
+            if (value?.date !== item.due?.date || value?.firm !== item.due?.firm) save({ due: value });
+          }}
+          onDone={close}
+        />
+      </Sheet>
+      <Sheet title="Tags" {...sheet("tags")}>
+        <div className="pt-1 pb-2">
+          <TagPicker
+            heapRef={heapRef}
+            value={item.tags}
+            inline
+            onChange={(picked) => save({ tag_ids: picked.map((tag) => tag.id) })}
+          />
+        </div>
+      </Sheet>
+      <Sheet title="Description" {...sheet("description")}>
+        <DescriptionEditor description={item.description ?? ""} onSave={(text) => saveText("description", text)} />
+      </Sheet>
+    </div>
+  );
+}
+
+/**
+ * A field as a phone shows it: its label, and its value or what it reads as unset, with a chevron to change it. A
+ * field that can't be changed is a plain row showing all of its value, as there's no sheet to read the rest in.
+ */
+function FieldRow({
+  label,
+  value,
+  empty = "None",
+  tone = "ink",
+  disabled,
+  onOpen,
+}: {
+  label: string;
+  value: string | null;
+  empty?: string;
+  tone?: "ink" | "param";
+  disabled: boolean;
+  onOpen: () => void;
+}) {
+  const rowClass = "flex min-h-13 gap-3 border-b border-line/60 text-left text-[15px]";
+  const labelClass = `shrink-0 ${tone === "param" ? "text-param-ink" : "text-ink-soft"}`;
+  const valueClass = value === null ? "text-muted" : "text-ink";
+  if (disabled) {
+    return (
+      <div className={`${rowClass} items-baseline py-3.5`}>
+        <span className={labelClass}>{label}</span>
+        <span className={`min-w-0 flex-1 text-right break-words whitespace-pre-line ${valueClass}`}>
+          {value ?? empty}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`${rowClass} items-center outline-none focus-visible:outline-2 focus-visible:outline-accent`}
+    >
+      <span className={labelClass}>{label}</span>
+      <span className={`min-w-0 flex-1 truncate text-right ${valueClass}`}>{value ?? empty}</span>
+      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
+    </button>
+  );
+}
+
+/** The value a choice row stands for when it clears the field. */
+const NOT_SET = "";
+
+/**
+ * One option out of a list, as 52 px rows with a check on the picked one, and Not set to clear it. A radio group, so
+ * the arrows move through it. Picking is the whole job, so `onDone` follows, also when the picked row is tapped again.
+ */
+function OptionRows({
+  label,
+  options,
+  value,
+  onChange,
+  onDone,
+}: {
+  label: string;
+  options: readonly { id: string; label: string }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onDone: () => void;
+}) {
+  return (
+    <ToggleButtonGroup
+      aria-label={label}
+      selectionMode="single"
+      orientation="vertical"
+      selectedKeys={[value ?? NOT_SET]}
+      onSelectionChange={(keys) => {
+        const [picked] = [...keys];
+        // An empty selection is the picked row tapped again: nothing to change.
+        if (picked !== undefined) onChange(picked === NOT_SET ? null : String(picked));
+        onDone();
+      }}
+      className="flex flex-col pb-1"
+    >
+      {[...options, { id: NOT_SET, label: "Not set" }].map((option) => (
+        <SheetChoice key={option.id} id={option.id} muted={option.id === NOT_SET}>
+          {option.label}
+        </SheetChoice>
+      ))}
+    </ToggleButtonGroup>
+  );
+}
+
+/**
+ * The description in a phone's sheet. It starts from the saved text each time the sheet opens, and saves as the sheet
+ * goes away, however it goes (✕, Escape, a tap outside, Back, a turn of the phone), and only if it was changed, so an
+ * untouched sheet never writes back what it was opened with.
+ */
+function DescriptionEditor({ description, onSave }: { description: string; onSave: (text: string) => void }) {
+  const [opened] = useState(description);
+  const [text, setText] = useState(opened);
+  // What the cleanup reads as the sheet goes away: the text as last typed, and the save of that moment.
+  const latest = useRef({ text, onSave });
+  useEffect(() => {
+    latest.current = { text, onSave };
+  });
+  useEffect(
+    () => () => {
+      if (latest.current.text !== opened) latest.current.onSave(latest.current.text);
+    },
+    [opened],
+  );
+  return (
+    <textarea
+      aria-label="Description"
+      autoFocus
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      rows={6}
+      className="mt-1 mb-2 min-h-40 rounded-xl border border-line bg-surface px-3 py-2 text-base"
+    />
+  );
+}
+
+/** What state the item is in, as a phone shows it above the fields; its buttons are in the bar at the bottom. */
+function StateLine({ item, canReopen }: { item: Item; canReopen: boolean }) {
+  const closed = isClosed(item.state);
+  return (
+    <p className="-mt-2 text-sm text-ink-soft">
+      <span className={item.state === "in_progress" ? "font-medium text-accent-ink" : "font-medium text-ink"}>
+        {STATE_LABELS[item.state]}
+      </span>
+      {item.closed_label && <span className="text-muted"> · {item.closed_label}</span>}
+      {closed && !canReopen && <span className="text-muted"> · It can't be reopened.</span>}
+    </p>
   );
 }
 
@@ -446,79 +695,136 @@ function WhyItRanks({ entry }: { entry: RankedItem }) {
 /**
  * The item's state and the ways out of it (ux-overview.md, The item §1): the likeliest next state as the main button,
  * the other states beside it, and Won't do under ⋯, as it's rarely the one wanted. A closed item says when it closed,
- * and offers Reopen while it still can be.
+ * and offers Reopen while it still can be. As a `bar`, for a phone, the buttons sit at the bottom of the sheet within
+ * reach of the thumb, the main one wider, and the state itself is a line under the title (ux-overview.md, What comes
+ * first §2).
  */
 function StateActions({
   item,
   disabled,
   canReopen,
   onChange,
+  variant = "inline",
 }: {
   item: Item;
   disabled: boolean;
   canReopen: boolean;
   onChange: (state: ItemState) => void;
+  variant?: "inline" | "bar";
 }) {
   const labelId = useId();
-  const header = (
-    <div className="flex items-baseline gap-2">
-      <FieldLabel id={labelId}>State</FieldLabel>
-      <span className={`text-sm font-medium ${item.state === "in_progress" ? "text-accent-ink" : "text-ink"}`}>
-        {STATE_LABELS[item.state]}
-        {item.closed_label && <span className="font-normal text-muted"> · {item.closed_label}</span>}
-      </span>
-    </div>
+  const bar = variant === "bar";
+  const closed = item.state === "done" || item.state === "wont_do";
+  if (bar && closed && !canReopen) return null;
+
+  const button = (state: ItemState, main: boolean, isDisabled = false) => (
+    <button
+      key={state}
+      type="button"
+      disabled={isDisabled}
+      onClick={() => onChange(state)}
+      className={bar ? barButtonClass(main) : stateButtonClass(main)}
+    >
+      {changeLabel(item.state, state)}
+    </button>
   );
 
+  let actions: ReactNode;
   if (item.state === "done" || item.state === "wont_do") {
-    return (
-      <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
-        {header}
-        {canReopen ? (
-          <div>
-            <button type="button" onClick={() => onChange("open")} className={stateButtonClass(true)}>
-              {changeLabel(item.state, "open")}
-            </button>
-          </div>
+    actions = canReopen ? button("open", true) : <p className="text-xs text-muted">It can't be reopened.</p>;
+  } else {
+    const [main, ...others] = NEXT_STATES[item.state];
+    actions = (
+      <>
+        {[main, ...others].map((state) => button(state, state === main, disabled))}
+        {bar ? (
+          <MoreStatesSheet item={item} disabled={disabled} onChange={onChange} />
         ) : (
-          <p className="text-xs text-muted">It can't be reopened.</p>
+          <MenuTrigger>
+            <Button
+              aria-label="More states"
+              isDisabled={disabled}
+              className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
+            >
+              <Ellipsis aria-hidden="true" className="size-4" />
+            </Button>
+            <MenuPopover placement="bottom end">
+              <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
+                <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
+              </Menu>
+            </MenuPopover>
+          </MenuTrigger>
         )}
-      </div>
+      </>
     );
   }
 
-  const [main, ...others] = NEXT_STATES[item.state];
+  if (bar) {
+    return (
+      <div
+        role="group"
+        aria-label="State"
+        data-state-bar=""
+        className={`sticky bottom-0 z-10 -mx-4 grid gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] ${
+          closed ? "" : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+        }`}
+      >
+        {actions}
+      </div>
+    );
+  }
   return (
     <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
-      {header}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {[main, ...others].map((state) => (
-          <button
-            key={state}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(state)}
-            className={stateButtonClass(state === main)}
-          >
-            {changeLabel(item.state, state)}
-          </button>
-        ))}
-        <MenuTrigger>
-          <Button
-            aria-label="More states"
-            isDisabled={disabled}
-            className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
-          >
-            <Ellipsis aria-hidden="true" className="size-4" />
-          </Button>
-          <MenuPopover placement="bottom end">
-            <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
-              <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
-            </Menu>
-          </MenuPopover>
-        </MenuTrigger>
+      <div className="flex items-baseline gap-2">
+        <FieldLabel id={labelId}>State</FieldLabel>
+        <span className={`text-sm font-medium ${item.state === "in_progress" ? "text-accent-ink" : "text-ink"}`}>
+          {STATE_LABELS[item.state]}
+          {item.closed_label && <span className="font-normal text-muted"> · {item.closed_label}</span>}
+        </span>
       </div>
+      <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
     </div>
+  );
+}
+
+/**
+ * Won't do from the phone's bar, in a sheet that opens as the finger lifts. A menu opens as it's pressed and picks
+ * the entry the finger lifts over, and on a phone its sheet comes up right under the ⋯ at the bottom of the screen.
+ */
+function MoreStatesSheet({
+  item,
+  disabled,
+  onChange,
+}: {
+  item: Item;
+  disabled: boolean;
+  onChange: (state: ItemState) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="More states"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        className="flex size-13 items-center justify-center rounded-[14px] bg-sunken text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+      >
+        <Ellipsis aria-hidden="true" className="size-5" />
+      </button>
+      <Sheet title="More states" isOpen={open} onClose={() => setOpen(false)} aside={item.title}>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            onChange("wont_do");
+          }}
+          className={`${sheetRowClass} mb-1`}
+        >
+          {changeLabel(item.state, "wont_do")}
+        </button>
+      </Sheet>
+    </>
   );
 }
 
@@ -526,4 +832,10 @@ function StateActions({
 const stateButtonClass = (main: boolean) =>
   `h-9 rounded-lg px-3 text-sm font-medium disabled:opacity-50 pointer-coarse:h-11 ${
     main ? "bg-accent text-stone-950 hover:brightness-95" : "border border-line bg-surface text-ink hover:border-muted"
+  }`;
+
+/** The same, as the phone's bar shows it: 52 px tall, the others on a sunken ground. */
+const barButtonClass = (main: boolean) =>
+  `h-13 rounded-[14px] text-[15px] disabled:opacity-50 ${
+    main ? "bg-accent font-semibold text-stone-950" : "bg-sunken font-medium text-ink"
   }`;

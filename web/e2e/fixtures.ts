@@ -64,12 +64,43 @@ export async function closeItem(page: Page) {
   await expect(itemPane(page)).toHaveCount(0);
 }
 
-/** Picks `option` in the item pane's radio group `group`: a state, a size, a parameter's option. */
-export async function pick(page: Page, group: string, option: string) {
-  await itemPane(page)
+/**
+ * Where the open item's field `name` is changed: on a phone its row opens a sheet, which this opens and returns; on a
+ * tablet or wide screen the field is in the pane itself.
+ */
+export async function field(page: Page, name: string): Promise<Locator> {
+  // The fields show once the item has loaded.
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toBeVisible();
+  const opener = itemPane(page).getByRole("button", { name: new RegExp(`^${name}( |$)`) });
+  if ((await opener.count()) > 0 && (await opener.isVisible())) {
+    await opener.click();
+    const sheet = page.getByRole("dialog", { name, exact: true });
+    await expect(sheet).toBeVisible();
+    return sheet;
+  }
+  return itemPane(page);
+}
+
+/** Closes the sheet a field opened on a phone, if one is still open. */
+export async function closeField(page: Page) {
+  const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading") });
+  if ((await sheet.count()) > 0) {
+    await sheet.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(sheet).toHaveCount(0);
+  }
+}
+
+/**
+ * Picks `option` in the item's radio group `group`: a state, a size, a parameter's option, a due choice. Returns
+ * where it was picked, the pane or a phone's sheet, which closes itself once a choice is the whole job.
+ */
+export async function pick(page: Page, group: string, option: string): Promise<Locator> {
+  const scope = await field(page, group);
+  await scope
     .getByRole("radiogroup", { name: group, exact: true })
     .getByRole("radio", { name: option, exact: true })
     .click();
+  return scope;
 }
 
 /** Presses the item pane's state button `label`: Start, Block, Done, Unblock, Back to open or Reopen. */
@@ -90,8 +121,16 @@ export async function expectOrder(page: Page, titles: string[]) {
 /** A need as the Add dialog and the item pane name it. */
 export type Need = "Idea" | "Nice to have" | "Expected" | "Critical";
 
-/** Adds an item through the Add dialog of the open list, as expected unless `need` says otherwise. */
-export async function addItem(page: Page, title: string, fields: { need?: Need; effort?: Size; impact?: Size } = {}) {
+/**
+ * Adds an item through the Add dialog, as expected unless `need` says otherwise. With `listed`, the default, the page
+ * is the open list, and the new row shows there.
+ */
+export async function addItem(
+  page: Page,
+  title: string,
+  fields: { need?: Need; effort?: Size; impact?: Size } = {},
+  { listed = true }: { listed?: boolean } = {},
+) {
   await page.getByRole("button", { name: "Add an item" }).click();
   const dialog = page.getByRole("dialog", { name: "Add an item" });
   await dialog.getByLabel("Title").fill(title);
@@ -108,7 +147,7 @@ export async function addItem(page: Page, title: string, fields: { need?: Need; 
   }
   await dialog.getByLabel("Title").press("Enter");
   await expect(dialog).toHaveCount(0);
-  await expect(row(page, title)).toBeVisible();
+  if (listed) await expect(row(page, title)).toBeVisible();
 }
 
 /** A page the app's navigation leads to. */
@@ -123,9 +162,18 @@ export async function goTo(page: Page, name: AppPage) {
   if (await link.isVisible()) {
     await link.click();
   } else {
-    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name, exact: true }).click();
+    await openMore(page);
+    // A row may carry a note after its name, such as the account's username.
+    await page
+      .getByRole("navigation", { name: "More" })
+      .getByRole("link", { name: new RegExp(`^${name}( |$)`) })
+      .click();
   }
+}
+
+/** Opens More from the phone's tabs. */
+async function openMore(page: Page) {
+  await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
 }
 
 /** Signs out, from the sidebar or rail, or on a phone from More. */
@@ -134,8 +182,8 @@ export async function signOut(page: Page) {
   if (await button.isVisible()) {
     await button.click();
   } else {
-    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+    await openMore(page);
+    await page.getByRole("navigation", { name: "More" }).getByRole("button", { name: "Sign out" }).click();
   }
 }
 

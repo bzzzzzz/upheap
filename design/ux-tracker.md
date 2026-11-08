@@ -18,13 +18,13 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Area | Entries | Must L / S | Boards | Design | Build | What the build has to change |
 | --- | --- | :---: | --- | :---: | :---: | --- |
 | Shell, browser | G-shell-wide, G-storage-note | 4 / 4 | Main | 🟡 | 🟡 | Heaps grouped by team with open counts; Team, Account, Sign out at the bottom; storage note mentions the last download only when it's over two weeks old or never happened |
-| Shell, phone | G-shell-phone, M-more | 4 / 4 | PhoneList, PhoneMore | 🟡 | 🟡 | Tabs become Open, Closed, +, Activity, More, with Add in the middle; More as a list of 52 px rows |
-| Heap switcher | M-heap-switcher | 2 / 4 | PhoneSwitcher | 🟡 | 🟡 | Open counts, a check on the current heap, "New heap in \<team\>" at the end |
+| Shell, phone | G-shell-phone, M-more | 4 / 4 | PhoneList, PhoneMore | 🟡 | ✅ | Built: tabs Open, Closed, +, Activity, More, with + opening Add from any of the heap's pages; More as a card of 52 px rows above the tabs, with the team's name, the team count and the username as notes. Left: the member count beside Team, which needs it from the server |
+| Heap switcher | M-heap-switcher | 2 / 4 | PhoneSwitcher | 🟡 | 🟡 | Built: a sheet of 52 px rows by team (a popover beside the rail on a tablet), a check on the current heap, "New heap in \<team\>" when the team allows it, which asks for a name and opens the new heap. Left: open counts, which need the server |
 | The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is the list response's `unfiltered_count`); the changed view's dot, with Save and Undo behind the chip; "Show them" |
 | Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else in the heap is in progress, counting items the view or a filter hides (the list response's `in_progress_count`) |
 | Item, browser | M-item | 5 / 5 | Main | 🟡 | ✅ | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars; "Added by Sam 4 days ago" beside History, from the item's `created_by` and `created_label` ("by you" for the viewer's own, as History says "You") |
-| Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Start / Blocked / Done in a bar at the bottom of the sheet (today it's the pane's Start / Block / Done buttons); fields as rows; an "Added" row |
-| Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone: a sheet of 52 px rows plus an Exact date block and Clear due. Browser: the pane's dropdown when open isn't mocked yet |
+| Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Built: the state buttons in a bar at the bottom of the sheet, the likeliest next state wider, with Won't do under ⋯ at the end of the bar rather than in the header; the state as a line under the title; due, tags, parameters and description as rows that open sheets. The buttons keep the wide screen's names (Block, not Blocked). Left: the "Added" row among the fields; until then "Added by" shows beside History |
+| Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone, in the item: built, a sheet of 52 px rows, Exact date with its date field, and Clear due; a rough choice or Clear closes it. Left: the phone Add dialog still has the pills (step 4.3), and the browser pane's dropdown isn't mocked yet |
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
 | Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | 🟡 | Heap chooser in the title; prefill from the active filter, without a label; "Added at #4 · Open it" (needs the position from the server); Add another remembered per device; due starts at None. Phone: one-tap chips and More fields |
 | Conflicts | E-conflict | n/a / 4 | Main | 🟡 | 🟡 | Says what was lost ("your change (due: next week) wasn't saved") with Apply mine again |
@@ -44,8 +44,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    them, or strip them from the first-set boards?
 2. **Frequency ratings** the subagent questioned in screens.md: storage note and tablet rail (5 because always on
    screen), hidden-items note (4, not 3), switching saved views (3, not 4), conflicts in a shared heap (2, not 1).
-3. **app-ux.md disagrees with the mockups** in places: the phone tabs (Add in the middle), the item's state
-   buttons per width, and the tablet. Update app-ux.md once the boards are agreed.
+3. **app-ux.md disagrees with the mockups** on the tablet. The phone tabs and the item's state buttons now follow
+   the mockups there.
 4. **"Added at #4"** needs the new item's position from the Add response, or a list refetch.
 5. **Username suggestions** when the chosen one is taken: worth the server work?
 6. **Links:** screens.md, ux-overview.md and this file aren't linked from CLAUDE.md, app-ux.md or progress.md yet.
@@ -61,7 +61,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
       `created_label` on Item for "Added by", and `unfiltered_count` (the "14" in "6 of 14", so the client makes no
       second list request) and `in_progress_count` (for "Start next") on the ranked list. A count rather than a
       yes or no, because the item just marked done may be the one in progress.
-   2. The phone tabs, item bar and sheets.
+   2. ~~The phone tabs, item bar and sheets.~~ Done, apart from open counts in the heap switcher and the member
+      count in More, which wait on the server, and the "Added" row among the phone's fields.
    3. Add.
    4. Closed.
    5. Your data.

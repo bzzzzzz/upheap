@@ -14,11 +14,14 @@ export function TagPicker({
   value,
   onChange,
   disabled,
+  inline = false,
 }: {
   heapRef: HeapRef;
   value: ItemTag[];
   onChange: (tags: ItemTag[]) => void;
   disabled?: boolean;
+  /** The matches in the flow, under the field, rather than over what follows; for a phone's sheet, which grows. */
+  inline?: boolean;
 }) {
   const tags = useTags(heapRef);
   const create = useCreateTag(heapRef);
@@ -52,7 +55,9 @@ export function TagPicker({
 
   const createTag = () => {
     if (busy) return;
-    create.mutate({ name: query }, { onSuccess: add });
+    // Through the promise rather than `onSuccess`, which is dropped if the picker goes away meanwhile (a phone's
+    // sheet closed at once), so the new tag still lands on the item. A failure shows as `create.error`.
+    create.mutateAsync({ name: query }).then(add, () => {});
   };
 
   const choose = (index: number) => {
@@ -135,7 +140,9 @@ export function TagPicker({
           id={listId}
           role="listbox"
           aria-label="Tags"
-          className="absolute top-full right-0 left-0 z-10 mt-1 rounded-lg border border-line bg-surface py-1 text-sm text-ink shadow-md"
+          className={`mt-1 rounded-lg border border-line bg-surface py-1 text-sm text-ink ${
+            inline ? "" : "absolute top-full right-0 left-0 z-10 shadow-md"
+          }`}
         >
           {suggestions.map((tag, index) => (
             <li

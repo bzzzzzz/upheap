@@ -1,10 +1,12 @@
 import {
   addItem,
   changeState,
+  closeField,
   closeItem,
   dayFromToday,
   expect,
   expectOrder,
+  field,
   goTo,
   itemPane,
   openItem,
@@ -22,8 +24,9 @@ test("added items are ranked, and an edit moves an item", async ({ page }) => {
 
   // An exact deadline that has passed puts the slog first.
   await openItem(page, "Slog");
-  await pick(page, "Due", "Exact date");
-  await itemPane(page).getByLabel("Exact due date").fill(dayFromToday(-1));
+  const due = await pick(page, "Due", "Exact date");
+  await due.getByLabel("Exact due date").fill(dayFromToday(-1));
+  await closeField(page);
   await expect(itemPane(page).getByText("Overdue · yesterday", { exact: true })).toBeVisible();
   await closeItem(page);
   await expect(row(page, "Slog").getByText("Overdue · yesterday", { exact: true })).toBeVisible();
@@ -40,7 +43,8 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await pick(page, "Impact", "XL");
   await pane.getByLabel("Title", { exact: true }).fill("Write the team rota");
   await pane.getByLabel("Title", { exact: true }).press("Enter");
-  await pane.getByLabel("Description").fill("For the next quarter");
+  await (await field(page, "Description")).getByLabel("Description").fill("For the next quarter");
+  await closeField(page);
   // The likeliest next state is the first button: Start, for an open item, then Done once it's started.
   await changeState(page, "Start");
   await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
@@ -66,7 +70,8 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   // Opened from a link, it closes to its list.
   await openItem(page, "Write the team rota");
   await page.reload();
-  await expect(pane.getByLabel("Description")).toHaveValue("For the next quarter");
+  await expect((await field(page, "Description")).getByLabel("Description")).toHaveValue("For the next quarter");
+  await closeField(page);
   await closeItem(page);
   await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
   await expect(row(page, "Write the team rota")).toBeVisible();
@@ -153,8 +158,8 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 });
 
 test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {
-  // `N` works once the list is there.
-  await expect(page.getByRole("button", { name: "Add an item" })).toBeEnabled();
+  // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
+  await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
   await page.keyboard.press("n");
   const dialog = page.getByRole("dialog", { name: "Add an item" });
   const due = dialog.getByRole("radiogroup", { name: "Due" });
@@ -205,4 +210,33 @@ test("a short link opens the item it names", async ({ page, heapPath }) => {
   await page.goto(short);
   await expect(page).toHaveURL(new RegExp(`${heapPath}/items/${key}$`));
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
+});
+
+test("on a phone, the item's fields open sheets, and the state buttons sit at the bottom", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone shows the fields as rows.");
+  await addItem(page, "Plan the offsite");
+  await openItem(page, "Plan the offsite");
+  const pane = itemPane(page);
+
+  // The description saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
+  await (await field(page, "Description")).getByLabel("Description").fill("Venue first");
+  await page.keyboard.press("Escape");
+  await expect(pane.getByRole("button", { name: "Description Venue first" })).toBeVisible();
+  await (await field(page, "Description")).getByLabel("Description").fill("Venue, then dates");
+  await page.mouse.click(200, 20);
+  await expect(pane.getByRole("button", { name: "Description Venue, then dates" })).toBeVisible();
+
+  // A new tag from the Tags sheet, its offer in view under the field.
+  const tags = await field(page, "Tags");
+  await tags.getByLabel("Add a tag").fill("travel");
+  await tags.getByRole("option", { name: "Create tag “travel”" }).click();
+  await closeField(page);
+  await expect(pane.getByRole("button", { name: "Tags travel" })).toBeVisible();
+
+  // Won't do is under ⋯ at the end of the bar; a closed item shows all its fields, unchangeable.
+  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More states" }).click();
+  await page.getByRole("dialog", { name: "More states" }).getByRole("button", { name: "Won't do" }).click();
+  await expect(pane.getByText("Venue, then dates", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: /^Description/ })).toHaveCount(0);
+  await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
 });
