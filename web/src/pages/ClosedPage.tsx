@@ -177,7 +177,7 @@ function ClosedMark({ wontDo }: { wontDo: boolean }) {
         </>
       ) : (
         <>
-          <circle cx="11" cy="11" r="11" fill="var(--accent)" />
+          <circle cx="11" cy="11" r="11" fill="var(--done)" />
           <path
             d="m6.75 11.25 2.75 2.75 5.75-5.75"
             fill="none"
