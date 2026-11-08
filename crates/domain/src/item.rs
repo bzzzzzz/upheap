@@ -164,8 +164,8 @@ impl StateKind {
     }
 }
 
-/// An item's state. Only the closed states carry a close time, and only the blocked state carries a blocker, so
-/// an open item with either can't exist.
+/// An item's state. Only the closed states carry a close time and who closed it, and only the blocked state carries
+/// a blocker, so an open item with any of them can't exist.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemState {
     Open,
@@ -174,40 +174,47 @@ pub enum ItemState {
     Blocked {
         by: Option<ItemId>,
     },
+    /// `closed_by` is `None` only for an item closed before who closed it was recorded.
     Done {
         closed_at: Timestamp,
+        closed_by: Option<UserId>,
     },
+    /// As [`ItemState::Done`].
     WontDo {
         closed_at: Timestamp,
+        closed_by: Option<UserId>,
     },
 }
 
-/// A stored state, close time and blocker that don't fit together.
+/// A stored state, close time, closer and blocker that don't fit together.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("state {kind:?} doesn't match closed_at {closed_at:?} and blocked_by {blocked_by:?}")]
+#[error("state {kind:?} doesn't match closed_at {closed_at:?}, closed_by {closed_by:?} and blocked_by {blocked_by:?}")]
 pub struct InconsistentState {
     pub kind: StateKind,
     pub closed_at: Option<Timestamp>,
+    pub closed_by: Option<UserId>,
     pub blocked_by: Option<ItemId>,
 }
 
 impl ItemState {
-    /// Builds a state from its stored parts. `closed_at` must be set exactly when `kind` is closed, and
-    /// `blocked_by` only when it's blocked.
+    /// Builds a state from its stored parts. `closed_at` must be set exactly when `kind` is closed, `closed_by`
+    /// only when it's closed, and `blocked_by` only when it's blocked.
     pub fn from_parts(
         kind: StateKind,
         closed_at: Option<Timestamp>,
+        closed_by: Option<UserId>,
         blocked_by: Option<ItemId>,
     ) -> Result<Self, InconsistentState> {
-        match (kind, closed_at, blocked_by) {
-            (StateKind::Open, None, None) => Ok(Self::Open),
-            (StateKind::InProgress, None, None) => Ok(Self::InProgress),
-            (StateKind::Blocked, None, by) => Ok(Self::Blocked { by }),
-            (StateKind::Done, Some(closed_at), None) => Ok(Self::Done { closed_at }),
-            (StateKind::WontDo, Some(closed_at), None) => Ok(Self::WontDo { closed_at }),
+        match (kind, closed_at, closed_by, blocked_by) {
+            (StateKind::Open, None, None, None) => Ok(Self::Open),
+            (StateKind::InProgress, None, None, None) => Ok(Self::InProgress),
+            (StateKind::Blocked, None, None, by) => Ok(Self::Blocked { by }),
+            (StateKind::Done, Some(closed_at), closed_by, None) => Ok(Self::Done { closed_at, closed_by }),
+            (StateKind::WontDo, Some(closed_at), closed_by, None) => Ok(Self::WontDo { closed_at, closed_by }),
             _ => Err(InconsistentState {
                 kind,
                 closed_at,
+                closed_by,
                 blocked_by,
             }),
         }
@@ -226,7 +233,15 @@ impl ItemState {
     /// `None` unless the state is closed.
     pub const fn closed_at(self) -> Option<Timestamp> {
         match self {
-            Self::Done { closed_at } | Self::WontDo { closed_at } => Some(closed_at),
+            Self::Done { closed_at, .. } | Self::WontDo { closed_at, .. } => Some(closed_at),
+            Self::Open | Self::InProgress | Self::Blocked { .. } => None,
+        }
+    }
+
+    /// Who closed the item. `None` unless the state is closed, and for an item closed before this was recorded.
+    pub const fn closed_by(self) -> Option<UserId> {
+        match self {
+            Self::Done { closed_by, .. } | Self::WontDo { closed_by, .. } => closed_by,
             Self::Open | Self::InProgress | Self::Blocked { .. } => None,
         }
     }
@@ -386,14 +401,15 @@ impl Item {
         self.state.blocked_by()
     }
 
-    /// Applies `patch` at `now` and returns the edited item, or `None` when the patch changes nothing.
+    /// Applies `patch`, made by `actor` at `now`, and returns the edited item, or `None` when the patch changes
+    /// nothing. Closing the item records `actor` as who closed it.
     ///
     /// The state changes first, so a single patch can reopen an item and edit it, or block it and pick the
     /// blocker. Fields of an item that stays closed can't be edited. The returned item keeps the old version; the
     /// store bumps it on write.
-    pub fn apply_patch(&self, patch: &ItemPatch, now: Timestamp) -> Result<Option<Self>, ItemError> {
+    pub fn apply_patch(&self, patch: &ItemPatch, actor: UserId, now: Timestamp) -> Result<Option<Self>, ItemError> {
         let mut state = match patch.state {
-            Some(target) => self.transition(target, now)?,
+            Some(target) => self.transition(target, actor, now)?,
             None => self.state,
         };
         if state.kind().is_closed() && patch.edits_fields() {
@@ -434,8 +450,8 @@ impl Item {
         values
     }
 
-    /// The state after moving to `target` at `now`. Moving to the current state changes nothing.
-    fn transition(&self, target: StateKind, now: Timestamp) -> Result<ItemState, ItemError> {
+    /// The state after `actor` moves it to `target` at `now`. Moving to the current state changes nothing.
+    fn transition(&self, target: StateKind, actor: UserId, now: Timestamp) -> Result<ItemState, ItemError> {
         let current = self.state.kind();
         if current == target {
             return Ok(self.state);
@@ -455,8 +471,14 @@ impl Item {
             StateKind::Open => ItemState::Open,
             StateKind::InProgress => ItemState::InProgress,
             StateKind::Blocked => ItemState::Blocked { by: None },
-            StateKind::Done => ItemState::Done { closed_at: now },
-            StateKind::WontDo => ItemState::WontDo { closed_at: now },
+            StateKind::Done => ItemState::Done {
+                closed_at: now,
+                closed_by: Some(actor),
+            },
+            StateKind::WontDo => ItemState::WontDo {
+                closed_at: now,
+                closed_by: Some(actor),
+            },
         })
     }
 }
@@ -493,6 +515,11 @@ mod tests {
         )
     }
 
+    /// Who makes the edits in these tests.
+    fn actor() -> UserId {
+        UserId::from_uuid(Uuid::from_u128(42))
+    }
+
     fn closing_patch() -> ItemPatch {
         ItemPatch {
             state: Some(StateKind::Done),
@@ -501,21 +528,48 @@ mod tests {
     }
 
     #[gtest]
-    fn closing_sets_closed_at() {
+    fn closing_records_when_and_by_whom() {
         let item = sample_item();
 
         let closed = item
-            .apply_patch(&closing_patch(), at(2))
+            .apply_patch(&closing_patch(), actor(), at(2))
             .expect("allowed")
             .expect("changed");
 
-        expect_that!(closed.state, eq(ItemState::Done { closed_at: at(2) }));
+        expect_that!(
+            closed.state,
+            eq(ItemState::Done {
+                closed_at: at(2),
+                closed_by: Some(actor())
+            })
+        );
+        expect_that!(closed.state.closed_by(), some(eq(actor())));
+    }
+
+    #[gtest]
+    fn reopening_forgets_who_closed_it() {
+        let closed = sample_item()
+            .apply_patch(&closing_patch(), actor(), at(1))
+            .expect("ok")
+            .expect("changed");
+        let reopen = ItemPatch {
+            state: Some(StateKind::InProgress),
+            ..ItemPatch::default()
+        };
+
+        let reopened = closed
+            .apply_patch(&reopen, UserId::from_uuid(Uuid::from_u128(43)), at(2))
+            .expect("inside window")
+            .expect("changed");
+
+        expect_that!(reopened.state.closed_by(), none());
+        expect_that!(reopened.state.closed_at(), none());
     }
 
     #[gtest]
     fn reopening_within_a_week_is_allowed() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let reopen = ItemPatch {
@@ -524,7 +578,7 @@ mod tests {
         };
 
         let reopened = closed
-            .apply_patch(&reopen, at(8))
+            .apply_patch(&reopen, actor(), at(8))
             .expect("inside window")
             .expect("changed");
 
@@ -534,7 +588,7 @@ mod tests {
     #[gtest]
     fn reopening_after_a_week_fails() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let reopen = ItemPatch {
@@ -543,7 +597,7 @@ mod tests {
         };
         let just_after = at(8).checked_add(Duration::from_millis(1)).expect("in range");
 
-        let result = closed.apply_patch(&reopen, just_after);
+        let result = closed.apply_patch(&reopen, actor(), just_after);
 
         expect_that!(
             result,
@@ -557,7 +611,7 @@ mod tests {
     #[gtest]
     fn editing_a_closed_item_fails() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let rename = ItemPatch {
@@ -566,7 +620,7 @@ mod tests {
         };
 
         expect_that!(
-            closed.apply_patch(&rename, at(2)),
+            closed.apply_patch(&rename, actor(), at(2)),
             err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }
@@ -574,7 +628,7 @@ mod tests {
     #[gtest]
     fn retagging_a_closed_item_fails() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let retag = ItemPatch {
@@ -583,7 +637,7 @@ mod tests {
         };
 
         expect_that!(
-            closed.apply_patch(&retag, at(2)),
+            closed.apply_patch(&retag, actor(), at(2)),
             err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }
@@ -591,7 +645,7 @@ mod tests {
     #[gtest]
     fn reopen_and_edit_in_one_patch() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let patch = ItemPatch {
@@ -600,7 +654,10 @@ mod tests {
             ..ItemPatch::default()
         };
 
-        let edited = closed.apply_patch(&patch, at(2)).expect("allowed").expect("changed");
+        let edited = closed
+            .apply_patch(&patch, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
 
         expect_that!(edited.state, eq(ItemState::InProgress));
         expect_that!(edited.effort, some(eq(Size::S)));
@@ -615,7 +672,7 @@ mod tests {
             ..ItemPatch::default()
         };
 
-        expect_that!(item.apply_patch(&patch, at(1)), ok(none()));
+        expect_that!(item.apply_patch(&patch, actor(), at(1)), ok(none()));
     }
 
     #[gtest]
@@ -625,18 +682,18 @@ mod tests {
             ..ItemPatch::default()
         };
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
 
         let edited = sample_item()
-            .apply_patch(&patch, at(1))
+            .apply_patch(&patch, actor(), at(1))
             .expect("allowed")
             .expect("changed");
 
         expect_that!(edited.need, eq(Need::Critical));
         expect_that!(
-            closed.apply_patch(&patch, at(2)),
+            closed.apply_patch(&patch, actor(), at(2)),
             err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }
@@ -652,17 +709,50 @@ mod tests {
     fn inconsistent_stored_state_is_rejected() {
         let other = ItemId::from_uuid(Uuid::from_u128(1));
         expect_that!(
-            ItemState::from_parts(StateKind::Open, Some(at(1)), None),
-            err(anything())
-        );
-        expect_that!(ItemState::from_parts(StateKind::Done, None, None), err(anything()));
-        expect_that!(
-            ItemState::from_parts(StateKind::Open, None, Some(other)),
+            ItemState::from_parts(StateKind::Open, Some(at(1)), None, None),
             err(anything())
         );
         expect_that!(
-            ItemState::from_parts(StateKind::Blocked, None, Some(other)),
+            ItemState::from_parts(StateKind::Done, None, None, None),
+            err(anything())
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::Open, None, None, Some(other)),
+            err(anything())
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::Blocked, None, None, Some(other)),
             ok(eq(ItemState::Blocked { by: Some(other) }))
+        );
+    }
+
+    #[gtest]
+    fn only_a_closed_stored_state_has_a_closer() {
+        for kind in [StateKind::Open, StateKind::InProgress, StateKind::Blocked] {
+            expect_that!(
+                ItemState::from_parts(kind, None, Some(actor()), None),
+                err(anything()),
+                "{kind:?}"
+            );
+        }
+        expect_that!(
+            ItemState::from_parts(StateKind::Done, None, Some(actor()), None),
+            err(anything())
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::WontDo, Some(at(1)), Some(actor()), None),
+            ok(eq(ItemState::WontDo {
+                closed_at: at(1),
+                closed_by: Some(actor())
+            }))
+        );
+        // Items closed before closers were recorded.
+        expect_that!(
+            ItemState::from_parts(StateKind::Done, Some(at(1)), None, None),
+            ok(eq(ItemState::Done {
+                closed_at: at(1),
+                closed_by: None
+            }))
         );
     }
 
@@ -683,7 +773,10 @@ mod tests {
             ..ItemPatch::default()
         };
 
-        let edited = item.apply_patch(&patch, at(1)).expect("allowed").expect("changed");
+        let edited = item
+            .apply_patch(&patch, actor(), at(1))
+            .expect("allowed")
+            .expect("changed");
 
         expect_that!(edited.parameters, eq(&BTreeMap::from([(area, infra)])));
     }
@@ -691,7 +784,7 @@ mod tests {
     #[gtest]
     fn setting_a_value_of_a_closed_item_fails() {
         let closed = sample_item()
-            .apply_patch(&closing_patch(), at(1))
+            .apply_patch(&closing_patch(), actor(), at(1))
             .expect("ok")
             .expect("changed");
         let patch = ItemPatch {
@@ -700,7 +793,7 @@ mod tests {
         };
 
         expect_that!(
-            closed.apply_patch(&patch, at(2)),
+            closed.apply_patch(&patch, actor(), at(2)),
             err(eq(&ItemError::Closed { item_id: closed.id }))
         );
     }
@@ -718,7 +811,7 @@ mod tests {
         };
 
         let blocked = sample_item()
-            .apply_patch(&patch, at(1))
+            .apply_patch(&patch, actor(), at(1))
             .expect("allowed")
             .expect("changed");
 
@@ -734,7 +827,7 @@ mod tests {
         };
 
         expect_that!(
-            item.apply_patch(&patch, at(1)),
+            item.apply_patch(&patch, actor(), at(1)),
             err(eq(&ItemError::NotBlocked { item_id: item.id }))
         );
     }
@@ -746,13 +839,19 @@ mod tests {
             blocked_by: Some(Some(blocker())),
             ..ItemPatch::default()
         };
-        let blocked = sample_item().apply_patch(&block, at(1)).expect("ok").expect("changed");
+        let blocked = sample_item()
+            .apply_patch(&block, actor(), at(1))
+            .expect("ok")
+            .expect("changed");
         let unblock = ItemPatch {
             state: Some(StateKind::Open),
             ..ItemPatch::default()
         };
 
-        let open = blocked.apply_patch(&unblock, at(2)).expect("allowed").expect("changed");
+        let open = blocked
+            .apply_patch(&unblock, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
 
         expect_that!(open.state, eq(ItemState::Open));
         expect_that!(open.blocked_by(), none());
@@ -765,14 +864,20 @@ mod tests {
             blocked_by: Some(Some(blocker())),
             ..ItemPatch::default()
         };
-        let blocked = sample_item().apply_patch(&block, at(1)).expect("ok").expect("changed");
+        let blocked = sample_item()
+            .apply_patch(&block, actor(), at(1))
+            .expect("ok")
+            .expect("changed");
         let retitle = ItemPatch {
             state: Some(StateKind::Blocked),
             title: Some(Title::parse("Renamed").expect("valid")),
             ..ItemPatch::default()
         };
 
-        let edited = blocked.apply_patch(&retitle, at(2)).expect("allowed").expect("changed");
+        let edited = blocked
+            .apply_patch(&retitle, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
 
         expect_that!(edited.blocked_by(), some(eq(blocker())));
     }

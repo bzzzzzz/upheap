@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { ItemState, Need, Size } from "../api/client";
+import type { ClosedGroup, ItemState, Need, Size } from "../api/client";
 
 export const SIZES: readonly Size[] = ["s", "m", "l", "xl"];
 
@@ -29,6 +29,13 @@ export const STATE_LABELS: Record<ItemState, string> = {
   blocked: "Blocked",
   done: "Done",
   wont_do: "Won't do",
+};
+
+/** The headings of the closed list's sections, by the server's `closed_group`. */
+export const CLOSED_GROUP_LABELS: Record<ClosedGroup, string> = {
+  today: "Today",
+  this_week: "This week",
+  earlier: "Earlier",
 };
 
 export const STATES: readonly ItemState[] = ["open", "in_progress", "blocked", "done", "wont_do"];

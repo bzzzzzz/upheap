@@ -28,7 +28,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
 | Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | ✅ | Built: "Add to \<heap\> ▾" chooses the heap (tags and parameter values clear, the rest stays); the list's filters prefill tags, and effort, impact or a parameter where they pick one value, silently, also after each Add another; "Added “X” at #4 in Up next" with Open it, in the dialog with Add another and in the toast without, the position read from the list refetched after the add; Add another remembered per device; due starts at None. Phone: a sheet with chips for need, effort, impact, tags and due, and More fields for the description and parameters. Need stays, as its own row of chips, though the mockups predate it. Left: on a phone, a parameter that a newly added tag asks for sits under More fields, closed, unless the prefill opened it; a badge on More fields, or opening it, would show it |
 | Conflicts | E-conflict | n/a / 4 | Main | 🟡 | 🟡 | Says what was lost ("your change (due: next week) wasn't saved") with Apply mine again |
-| Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | 🟡 | Grouped by day; one intro line explains the week limit; who closed it; Reopen while allowed, nothing after |
+| Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | ✅ | Built: sections Today, This week and Earlier from each item's `closed_group`, one section per run across loaded pages; one intro line on the week limit, shorter on a phone; "Done · today by you" from `closed_by` ("you" as in Added by), with no "by" when the closer isn't known; a state mark on wide screens; Reopen only while allowed, 44 px on a phone; no tag chips. Left: the "team · heap" line over the title, which no other page has yet and the closed response can't fill (it has no team name); "by" in the item's state line |
 | Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | 🟡 | The confirm names the file, compares item counts and offers Download current first. No phone board yet |
 | Tab lock (local) | S-tab-lock | 4 / n/a | WideTeams | 🟡 | ✅ | Matches today's page |
 | Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | 🟡 | Errors inline under their field (username taken, password too short); a signed-out link says where it leads and opens the item after sign-in |
@@ -69,7 +69,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    2. ~~The phone tabs, item bar and sheets.~~ Done, apart from open counts in the heap switcher and the member
       count in More, which wait on the server, and the "Added" row among the phone's fields.
    3. ~~Add.~~ Done, with no server change: the position comes from the list refetched after the add.
-   4. Closed.
+   4. ~~Closed.~~ Done. One API change: `closed_by` and `closed_group` on Item, and a nullable `items.closed_by`
+      column, filled in for closed items from the audit log. Items with no matching entry show no "by".
    5. Your data.
    6. Sign in and create account.
    7. Team and Teams.

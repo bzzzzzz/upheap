@@ -42,6 +42,8 @@ pub struct ItemView {
     pub blocked_by: Option<ItemSummary>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
+    /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
+    pub closed_by: Option<User>,
     pub allowed_actions: Vec<ItemAction>,
 }
 
@@ -137,7 +139,7 @@ impl Services {
         let unfiltered_count = count_items(&items, |item| view.group_of(item.state.kind()).is_some());
         let in_progress_count = count_items(&items, |item| item.state.kind() == StateKind::InProgress);
         let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
-        let creators = load_creators(&self.db, &items).await?;
+        let users = load_item_users(&self.db, &items).await?;
 
         let role = access.membership.role;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
@@ -163,7 +165,7 @@ impl Services {
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
-            let created_by = item.created_by.and_then(|id| creators.get(&id).cloned());
+            let created_by = pick_user(&users, item.created_by);
             group.push(RankedEntry {
                 view: ItemView {
                     item,
@@ -171,6 +173,8 @@ impl Services {
                     parameters: values,
                     blocked_by,
                     created_by,
+                    // Ranked items aren't closed, so they have no closer.
+                    closed_by: None,
                     allowed_actions,
                 },
                 position: 0,
@@ -228,7 +232,7 @@ impl Services {
 
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
-        let creators = load_creators(&self.db, &items).await?;
+        let users = load_item_users(&self.db, &items).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
@@ -237,7 +241,8 @@ impl Services {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
-                let created_by = item.created_by.and_then(|id| creators.get(&id).cloned());
+                let created_by = pick_user(&users, item.created_by);
+                let closed_by = pick_user(&users, item.state.closed_by());
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
@@ -245,6 +250,7 @@ impl Services {
                     parameters: values,
                     blocked_by: None,
                     created_by,
+                    closed_by,
                     allowed_actions,
                 }
             })
@@ -291,19 +297,20 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let created_by = find_creator(&txn, &item).await?;
+        let created_by = store::users::find_user(&txn, principal.user_id).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
         let values = describe_values(&item, &parameters);
-        // New items are open, so they have no blocker.
+        // New items are open, so they have no blocker and no closer.
         Ok(ItemView {
             item,
             tags,
             parameters: values,
             blocked_by: None,
             created_by,
+            closed_by: None,
             allowed_actions,
         })
     }
@@ -317,13 +324,14 @@ impl Services {
         let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
         let parameters = store::parameters::list_parameters(&self.db, item.heap_id).await?;
         let blocked_by = find_blocker(&self.db, &item).await?;
-        let created_by = find_creator(&self.db, &item).await?;
+        let (created_by, closed_by) = find_item_users(&self.db, &item).await?;
         Ok(ItemView {
             parameters: describe_values(&item, &parameters),
             item,
             tags,
             blocked_by,
             created_by,
+            closed_by,
             allowed_actions,
         })
     }
@@ -362,7 +370,7 @@ impl Services {
         let now = self.now();
         let role = access.membership.role;
         // The patch is applied first, so editing an item that stays closed fails with `item_closed`.
-        let mut edited = current.apply_patch(&patch, now)?;
+        let mut edited = current.apply_patch(&patch, principal.user_id, now)?;
         check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
         // A reopened item gets the values archiving would have given it had it been open.
         if let Some(reopened) = edited.as_mut().filter(|e| current.is_closed() && !e.is_closed()) {
@@ -378,13 +386,14 @@ impl Services {
             let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
             let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
             let blocked_by = find_blocker(&txn, &current).await?;
-            let created_by = find_creator(&txn, &current).await?;
+            let (created_by, closed_by) = find_item_users(&txn, &current).await?;
             return Ok(ItemView {
                 parameters: describe_values(&current, &parameters),
                 item: current,
                 tags,
                 blocked_by,
                 created_by,
+                closed_by,
                 allowed_actions,
             });
         };
@@ -406,7 +415,7 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let tags = load_heap_tags(&txn, saved.heap_id, &saved.tags).await?;
         let blocked_by = find_blocker(&txn, &saved).await?;
-        let created_by = find_creator(&txn, &saved).await?;
+        let (created_by, closed_by) = find_item_users(&txn, &saved).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
@@ -417,6 +426,7 @@ impl Services {
             tags,
             blocked_by,
             created_by,
+            closed_by,
             allowed_actions,
         })
     }
@@ -488,24 +498,32 @@ fn count_items(items: &[Item], keep: impl Fn(&Item) -> bool) -> u32 {
     u32::try_from(items.iter().filter(|item| keep(item)).count()).unwrap_or(u32::MAX)
 }
 
-/// The user who added `item`, if it's known.
-async fn find_creator(db: &impl ConnectionTrait, item: &Item) -> Result<Option<User>, ServiceError> {
-    let Some(id) = item.created_by else {
-        return Ok(None);
-    };
-    Ok(store::users::find_user(db, id).await?)
+/// Who added `item` and who closed it, each when it's known.
+async fn find_item_users(db: &impl ConnectionTrait, item: &Item) -> Result<(Option<User>, Option<User>), ServiceError> {
+    let users = load_item_users(db, std::slice::from_ref(item)).await?;
+    Ok((
+        pick_user(&users, item.created_by),
+        pick_user(&users, item.state.closed_by()),
+    ))
 }
 
-/// The users who added `items`, by ID. A heap's items are added by its team's members, so these are few.
-async fn load_creators(db: &impl ConnectionTrait, items: &[Item]) -> Result<HashMap<UserId, User>, ServiceError> {
+/// The users who added or closed `items`, by ID. A heap's items are added and closed by its team's members, so
+/// these are few.
+async fn load_item_users(db: &impl ConnectionTrait, items: &[Item]) -> Result<HashMap<UserId, User>, ServiceError> {
     let ids: Vec<UserId> = items
         .iter()
-        .filter_map(|item| item.created_by)
+        .flat_map(|item| [item.created_by, item.state.closed_by()])
+        .flatten()
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
     let users = store::users::list_users(db, &ids).await?;
     Ok(users.into_iter().map(|user| (user.id, user)).collect())
+}
+
+/// The user `id` names among `users`, from [`load_item_users`].
+fn pick_user(users: &HashMap<UserId, User>, id: Option<UserId>) -> Option<User> {
+    id.and_then(|id| users.get(&id).cloned())
 }
 
 /// Every blocker of `items`, by ID. Blockers among `items` are taken from there; closed ones are loaded.

@@ -5,7 +5,7 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "re
 import { Button, Menu, MenuTrigger, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
-import { useBlockerCandidates, useItem, useMe, useParameters, useUpdateItem } from "../api/queries";
+import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
 import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
 import { CopyLink } from "./CopyLink";
@@ -20,6 +20,7 @@ import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
 import { TagPicker } from "./TagPicker";
+import { useUserName } from "./userName";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
@@ -651,8 +652,7 @@ function StateLine({ item, canReopen }: { item: Item; canReopen: boolean }) {
  * viewer's own, as History says "You".
  */
 function AddedBy({ item }: { item: Item }) {
-  const { data: me } = useMe();
-  const by = item.created_by && (item.created_by.id === me?.user.id ? "you" : item.created_by.display_name);
+  const by = useUserName(item.created_by);
   return (
     <p className="text-xs text-muted">
       Added{by && ` by ${by}`} <time dateTime={new Date(item.created_at).toISOString()}>{item.created_label}</time>

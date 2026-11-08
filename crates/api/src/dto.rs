@@ -2,7 +2,7 @@
 //!
 //! These are separate from domain types even where fields match, because the API changes for different reasons.
 
-use domain::due::{describe_ago, describe_date, describe_due};
+use domain::due::{ClosedGroup, describe_ago, describe_date, describe_due, group_closed};
 use domain::heap::Heap;
 use domain::item::{Due, ItemSummary, Need, Size, StateKind};
 use domain::permission::ItemAction;
@@ -120,6 +120,27 @@ impl From<StateDto> for StateKind {
             StateDto::Blocked => Self::Blocked,
             StateDto::Done => Self::Done,
             StateDto::WontDo => Self::WontDo,
+        }
+    }
+}
+
+/// Which part of the closed list a closed item belongs in, in the request's timezone: `today` for the same calendar
+/// day, `this_week` for 1 to 6 days before, and `earlier` for anything older.
+#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ClosedGroup)]
+pub(crate) enum ClosedGroupDto {
+    Today,
+    ThisWeek,
+    Earlier,
+}
+
+impl From<ClosedGroup> for ClosedGroupDto {
+    fn from(group: ClosedGroup) -> Self {
+        match group {
+            ClosedGroup::Today => Self::Today,
+            ClosedGroup::ThisWeek => Self::ThisWeek,
+            ClosedGroup::Earlier => Self::Earlier,
         }
     }
 }
@@ -334,6 +355,11 @@ pub(crate) struct ItemDto {
     pub closed_at: Option<i64>,
     /// When it was closed, ready to show ("yesterday", "3 Nov").
     pub closed_label: Option<String>,
+    /// Who closed it. `null` when the item is open, or was closed before who closed it was recorded.
+    pub closed_by: Option<UserRefDto>,
+    /// Which part of the closed list it belongs in. `null` when the item is open. Clients group consecutive items
+    /// with the same group.
+    pub closed_group: Option<ClosedGroupDto>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     pub allowed_actions: Vec<ItemActionDto>,
@@ -448,6 +474,8 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         created_by: view.created_by.as_ref().map(UserRefDto::from),
         closed_at: closed_at.map(Timestamp::as_millis),
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),
+        closed_by: view.closed_by.as_ref().map(UserRefDto::from),
+        closed_group: closed_at.map(|at| group_closed(at, as_of, tz).into()),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }

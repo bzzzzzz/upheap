@@ -14,6 +14,7 @@ mod m20261111_000008_exact_email;
 mod m20261112_000009_handles;
 mod m20261113_000010_need;
 mod m20261114_000011_item_creator;
+mod m20261115_000012_item_closer;
 
 pub struct Migrator;
 
@@ -32,6 +33,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261112_000009_handles::Migration),
             Box::new(m20261113_000010_need::Migration),
             Box::new(m20261114_000011_item_creator::Migration),
+            Box::new(m20261115_000012_item_closer::Migration),
         ]
     }
 }

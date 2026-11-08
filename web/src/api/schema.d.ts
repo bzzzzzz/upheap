@@ -694,6 +694,12 @@ export interface components {
          * @enum {string}
          */
         BlockedLayout: "grouped" | "mixed";
+        /**
+         * @description Which part of the closed list a closed item belongs in, in the request's timezone: `today` for the same calendar
+         *     day, `this_week` for 1 to 6 days before, and `earlier` for anything older.
+         * @enum {string}
+         */
+        ClosedGroup: "today" | "this_week" | "earlier";
         ClosedItems: {
             heap: components["schemas"]["HeapSummary"];
             /** @description Most recently closed first. */
@@ -853,6 +859,8 @@ export interface components {
              * @description UTC milliseconds; set exactly when the item is closed.
              */
             closed_at?: number | null;
+            closed_by?: null | components["schemas"]["UserRef"];
+            closed_group?: null | components["schemas"]["ClosedGroup"];
             /** @description When it was closed, ready to show ("yesterday", "3 Nov"). */
             closed_label?: string | null;
             /**
