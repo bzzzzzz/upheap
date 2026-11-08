@@ -456,9 +456,11 @@ overlays are the same components.
 
 ### G-session-expired: Session expired
 
-- **Behaviour:** any `401` sends the user to S-sign-in (`main.tsx` query cache). The page they were on is not kept,
-  so after signing in they land on their first heap.
-- **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built (redirect only).
+- **Behaviour:** any `401` sends the user to S-sign-in (`main.tsx` query cache) with the page they were on as
+  `redirect`, as the route guard does for a signed-out visit, so after signing in they're back there. During a
+  pending navigation the page is the one being opened, so the guard and the handler agree. Nothing happens on
+  S-sign-in itself. The notice reads "Sign in to open that page."; there's no "your session ended" line.
+- **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built.
 - **Must:** local n/a, server 4. Without it a `401` leaves every page failing, with no way back to sign-in.
 
 ### G-offline: Can't reach the server
@@ -498,8 +500,11 @@ order §4–5). See Gaps.
 - **From a link:** a signed-out visit to any page of the app goes to `/login?redirect=<path>` (a plain visit to `/`
   to `/login`). A notice above the switch says where it leads: "Sign in to open the link to PER-12." for an item,
   "Sign in to open that page." otherwise.
-- **Exits:** to `redirect` when it's a path in the app other than `/login`; otherwise, and for anything else (such
-  as `//evil.example`), to `/`, which redirects to the first unarchived heap.
+- **Exits:** to `redirect` when, as the URL parser normalises it, it's a same-origin path that the router matches
+  to one of the signed-in pages; otherwise (`//evil.example`, `/.//evil.example`, `javascript:…`, `/LOGIN`, a path
+  no page answers) to `/`, which redirects to the first unarchived heap.
+- **Empty inputs:** an empty email or password gets `field_empty` with that field before the server counts the
+  attempt, so a form sent before a password manager fills it doesn't use one up.
 - **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, TD Auth §3.
   The phone board's "Email or username" waits on signing in by username, which the server doesn't do.
 - **Phone:** the bare form at full width (PhoneSignIn): 48 px inputs with 16 px text, a 52 px button, and the
@@ -1093,8 +1098,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
     unarchive, by design.
 15. **Blocked on a closed blocker.** "Closing a blocker later doesn't unblock what waits for it" (TD Cycle
     detection §3). Nothing nudges the user to move the blocked item on.
-16. **Return to page after sign-in.** A signed-out visit returns to its page after sign-in (S-sign-in, From a
-    link); G-session-expired still drops the page the user was on.
+16. ~~**Return to page after sign-in.**~~ Settled: a signed-out visit and an expired session both return to their
+    page after sign-in (S-sign-in, From a link; G-session-expired).
 
 ### Conflicts between docs, or between docs and code
 

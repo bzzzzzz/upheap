@@ -31,8 +31,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | ✅ | Built: sections Today, This week and Earlier from each item's `closed_group`, one section per run across loaded pages; one intro line on the week limit, shorter on a phone; "Done · today by you" from `closed_by` ("you" as in Added by), with no "by" when the closer isn't known; a state mark on wide screens; Reopen only while allowed, 44 px on a phone; no tag chips. Left: the "team · heap" line over the title, which no other page has yet and the closed response can't fill (it has no team name); "by" in the item's state line |
 | Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | ✅ | Built: the Your data card with Download a copy, Open a copy… and "2 heaps · 41 items · last downloaded 26 Oct"; the confirm names the file, says what the copy holds and from when, compares item counts and offers Download current first; a file that isn't an Upheap database is refused in the confirm. The worker counts the file in memory (`count`); the last download is kept in localStorage. No phone board yet: on a phone the confirm is a sheet like the others, with full-width 44 px buttons |
 | Tab lock (local) | S-tab-lock | 4 / n/a | WideTeams | 🟡 | ✅ | Matches today's page |
-| Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | ✅ | Built: a 380 px card on a wide screen, the bare form on a phone, with a Sign in / Create account switch; a problem whose `field` names an input shows under it (username taken, email taken, password too short), with focus on it, and any other (wrong password, too many attempts, registration closed) above the button; a signed-out link goes to `/login?redirect=…`, says where it leads ("Sign in to open the link to PER-12.", or "…that page.") and opens it after sign-in. The tagline is left out, as on the boards. Left: "Email or username", as the server signs in by email only |
-| Session expired | G-session-expired | n/a / 4 | — | ⬜ | 🟡 | Signing in again should return to the page the user was on |
+| Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | ✅ | Built: a 380 px card on a wide screen, the bare form on a phone, with a Sign in / Create account switch; a problem whose `field` names an input shows under it (username taken, email taken, password too short, an empty email or password), with focus on it and announced, and any other (wrong password, too many attempts, registration closed) above the button; a signed-out link goes to `/login?redirect=…`, says where it leads ("Sign in to open the link to PER-12.", or "…that page.") and opens it after sign-in. The tagline is left out, as on the boards. Left: "Email or username", as the server signs in by email only |
+| Session expired | G-session-expired | n/a / 4 | — | ⬜ | ✅ | Signing in again should return to the page the user was on. Built with sign-in: a `401` mid-session goes to `/login?redirect=…`, as a signed-out visit does, with the same notice ("Sign in to open that page."), and signing in returns there. The row asks for nothing more; a "your session ended" line would be new |
 | Empty heap, first open | E-heap-empty | 1 / 1 | WideSignIn | 🟡 | 🟡 | Add your first item, and (server) Create a team. Not in the must-have set; drawn because it's the first screen after sign-up |
 | Teams | S-teams | n/a / 5 | WideTeams | 🟡 | 🟡 | Create team inline, with name and link name |
 | Team | S-team, P-heap-new, P-member-add, P-member-row | n/a / 5 | WideTeam, PhoneTeam | 🟡 | 🟡 | The settings layout; member search with results under it; the remove confirm says what happens; on a phone, member actions in a sheet |
@@ -76,7 +76,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    6. ~~Sign in and create account.~~ Done. One API change: `email_taken` names `field` `email`, as `handle_taken`
       names `username`.
    7. Team and Teams.
-   8. Session expiry return.
+   8. ~~Session expiry return.~~ Done with step 6: the `401` handler sends the user to sign-in with the way back,
+      as the route guard does. Nothing is left unless a "your session ended" line is wanted, which the row doesn't
+      ask for.
 
 ## Later
 
