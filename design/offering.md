@@ -13,7 +13,7 @@ Companion to [requirements.md](requirements.md).
 1. One backend is the source of truth for all data. In the local build, that backend runs inside the browser and owns that browser's data.
 2. The backend exposes an API that any client can use, for example a CLI, a native app or a web app.
 3. For now the web app is the only planned client. The API should not assume it is the only one.
-4. The backend supports more than one database. MySQL is the minimum for production deployments, and SQLite is supported for local and test deployments. Other databases may be added later, so the data layer should not depend on features specific to one database.
+4. The backend supports more than one database. Postgres and MySQL are supported for production deployments, and SQLite for local and test deployments. Other databases may be added later, so the data layer should not depend on features specific to one database.
 
 ## Authentication
 

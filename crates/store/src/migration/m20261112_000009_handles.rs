@@ -11,7 +11,7 @@
 //!   heap names within each team, oldest first, with `-2`, `-3`… where one is taken.
 //! - Items get random keys.
 //!
-//! MySQL then makes the columns `NOT NULL`. SQLite can't change a column without rebuilding its table, which its
+//! MySQL and Postgres then make the columns `NOT NULL`. SQLite can't change a column without rebuilding its table, which its
 //! foreign keys make unsafe inside a migration, so there they stay nullable and the store always writes them.
 
 use std::collections::{BTreeSet, HashMap};
@@ -83,7 +83,7 @@ impl MigrationTrait for Migration {
         fill_teams(db).await?;
         fill_heaps(db).await?;
         fill_items(db).await?;
-        if manager.get_database_backend() == DbBackend::MySql {
+        if manager.get_database_backend() != DbBackend::Sqlite {
             require_columns(manager).await?;
         }
         add_indexes(manager).await

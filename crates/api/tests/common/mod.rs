@@ -1,6 +1,7 @@
 //! Test harness: the real router over a fresh database and a manual clock.
 //!
-//! The database is in-memory SQLite, or a new MySQL database when `TEST_DATABASE_URL` is set (`store::testing`).
+//! The database is in-memory SQLite, or a new MySQL or Postgres database when `TEST_DATABASE_URL` is set
+//! (`store::testing`).
 //!
 //! Each test binary uses a different part of the harness, so unused items are expected.
 #![allow(dead_code)]

@@ -36,7 +36,7 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - Audit log: the history of each item, tag, parameter, saved view, heap and member, and Activity pages per heap and
   team.
 - Sign-in rate limiting: each email address gets 5 attempts per 15 minutes.
-- One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite or MySQL.
+- One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 
 Not yet: editing the heap's own weights, OIDC sign-in, the CLI OAuth flow and invitations.
 
@@ -58,13 +58,15 @@ DATABASE_URL="sqlite://data/heap.db?mode=rwc" BASE_URL=http://localhost:8080 LOG
 ```
 
 In production, put a TLS-terminating reverse proxy in front, set `BASE_URL` to its `https://` address, and point
-`DATABASE_URL` at MySQL (`mysql://user:pass@host/db`) if you want more than SQLite.
+`DATABASE_URL` at Postgres (`postgres://user:pass@host/db`) or MySQL (`mysql://user:pass@host/db`) if you want more
+than SQLite. For Cloud Run with Neon, see [design/cloud-run-postgres.md](design/cloud-run-postgres.md).
 
 ### Configuration
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DATABASE_URL` | required | `sqlite://path?mode=rwc` or `mysql://…` |
+| `DATABASE_URL` | required | `sqlite://path?mode=rwc`, `mysql://…` or `postgres://…` |
+| `DATABASE_MAX_CONNECTIONS` | `5` | Most database connections the server keeps open |
 | `BASE_URL` | required | Public URL. Cookies are `Secure` unless it starts with `http://` |
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address |
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups |
@@ -95,13 +97,17 @@ with an in-memory database:
 (cd web && npx playwright install chromium && npm run e2e)
 ```
 
-The tests use in-memory SQLite. To run the store and API suites on MySQL as CI does, point `TEST_DATABASE_URL` at a
-MySQL server (no database name; each test creates its own):
+The tests use in-memory SQLite. To run the store and API suites on MySQL or Postgres as CI does, point
+`TEST_DATABASE_URL` at a server (no database name; each test creates its own):
 
 ```sh
 docker run -d --rm --name upheap-test-mysql -e MYSQL_ROOT_PASSWORD=root -p 127.0.0.1:3307:3306 mysql:8.4
 TEST_DATABASE_URL=mysql://root:root@127.0.0.1:3307 cargo test -p store -p api
 docker stop upheap-test-mysql
+
+docker run -d --rm --name upheap-test-postgres -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5433:5432 postgres:17
+TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433 cargo test -p store -p api
+docker stop upheap-test-postgres
 ```
 
 The local build ([design/local-build.md](design/local-build.md)) runs the backend in a worker in the page, on

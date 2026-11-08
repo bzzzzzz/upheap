@@ -6,7 +6,7 @@ Draft. Companion to [requirements.md](requirements.md) and [offering.md](offerin
 
 1. **Thin clients.** The API server does all computation: ranking, score contributors, filtering, sorting, fuzzy due labels, permission checks, and state rules such as whether an item can still be reopened. Clients render what the API returns and send user intent back. Clients do two things themselves: text search over the list they already have (see [Search](#search)), and animations. Ranking, permission and state-machine logic exist only on the server, so a new client (CLI, native app) needs nothing beyond an HTTP client and the generated API types.
 2. **The server tells clients what is allowed.** Responses include the actions the current user can take (for example `can_reopen` or `can_edit_parameters`), so clients don't re-implement role or state rules to decide which controls to show.
-3. **Database-agnostic.** Only portable SQL features. No JSON column types, database-specific full-text search, triggers or stored procedures. Everything is tested against both SQLite and MySQL.
+3. **Database-agnostic.** Only portable SQL features. No JSON column types, database-specific full-text search, triggers or stored procedures. Everything is tested against SQLite, MySQL and Postgres.
 4. **Nothing is deleted, and everything is audited.** There are no `DELETE` statements for domain data. Every write and its audit entry are committed in the same transaction.
 5. **Single binary.** One statically linked executable serves the API and the embedded web app. The [local build](local-build.md) is the one other deliverable: the same backend crates compiled to WebAssembly and shipped with the web app as a static site.
 
@@ -17,12 +17,12 @@ Draft. Companion to [requirements.md](requirements.md) and [offering.md](offerin
 | Language (backend) | Rust (stable), Cargo workspace |
 | HTTP | axum on tokio, tower middleware |
 | API contract | Code-first OpenAPI 3.1 via utoipa; TypeScript types for the web app generated with openapi-typescript |
-| Data access | SeaORM (on sqlx), runtime-selected backend: SQLite or MySQL (Postgres later). The local build uses SeaORM's proxy connection over SQLite-wasm |
+| Data access | SeaORM (on sqlx), runtime-selected backend: SQLite, MySQL or Postgres. The local build uses SeaORM's proxy connection over SQLite-wasm |
 | Migrations | sea-orm-migration, embedded in the binary, run on startup |
 | Auth | `openidconnect` + `oauth2` crates (external IdPs), `argon2` (local passwords), own session table with hashed random tokens (web sessions), own minimal OAuth authorization-code + PKCE endpoints (non-web clients) |
 | Web app | React + Vite + TanStack Query + TanStack Router, Tailwind, Motion (layout animations); embedded with `rust-embed` |
 | Observability | `tracing` with JSON logs, `/healthz` and `/readyz` |
-| Testing | `cargo test`, `proptest` for ranking invariants, a MySQL 8.4 service container in CI, Playwright for end to end |
+| Testing | `cargo test`, `proptest` for ranking invariants, MySQL 8.4 and Postgres 17 service containers in CI, Playwright for end to end |
 | Packaging | Static musl binary; minimal Docker image; example docker-compose with MySQL. The local build is a static site on GitHub Pages |
 
 ## Workspace layout
@@ -285,7 +285,8 @@ These checks run in the same transaction as the write, after the permission chec
 ## Configuration and deployment
 
 1. Configuration comes from environment variables, optionally with a TOML file:
-   - `DATABASE_URL` (`sqlite://…` or `mysql://…`)
+   - `DATABASE_URL` (`sqlite://…`, `mysql://…` or `postgres://…`)
+   - `DATABASE_MAX_CONNECTIONS` (default `5`, small because several Cloud Run instances may share one database)
    - `BASE_URL` (session cookies are `Secure` unless it starts with `http://`)
    - `BIND_ADDR` (default `0.0.0.0:8080`)
    - `ALLOW_REGISTRATION` (default `true`)
@@ -294,9 +295,9 @@ These checks run in the same transaction as the write, after the permission chec
    - a list of OIDC providers (not yet implemented)
 
    No session secret is needed, because session tokens are random and stored hashed rather than signed.
-2. On startup the server runs pending migrations, then serves the API and the web app on one port.
+2. On startup the server runs pending migrations, then serves the API and the web app on one port. On Postgres the run holds an advisory lock, so instances starting together apply each migration once.
 3. **Default deployment:** the Docker image with SQLite on a mounted volume.
-4. **Production:** `DATABASE_URL` points at MySQL. TLS terminates at a reverse proxy.
+4. **Production:** `DATABASE_URL` points at Postgres or MySQL. TLS terminates at a reverse proxy, or at Cloud Run in front of a Neon database ([cloud-run-postgres.md](cloud-run-postgres.md)).
 5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations have finished and the database answers a ping, so orchestrators and proxies route traffic only to ready instances. Neither needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
 7. **Local build:** a static site with no configuration, published to GitHub Pages. It has one user and one team, which holds every heap, and its data lives in the browser. See [local-build.md](local-build.md).
@@ -310,7 +311,7 @@ These checks run in the same transaction as the write, after the permission chec
      - an item blocking another never ranks below it;
      - editing one item under a fixed `as_of` doesn't change the relative order of the others.
 2. **Access control:** a table-driven test runs every endpoint as a non-member, a member and an admin. It also runs every write endpoint against an archived heap. Expected status codes come from the permission table, so adding an endpoint without adding it to the table fails the test.
-3. **Store and service:** the store and API suites (the API suite drives the services) run against in-memory SQLite, and again against MySQL in CI. `TEST_DATABASE_URL` points them at a MySQL server, and each test creates its own database there (`store::testing`). A service container rather than `testcontainers` keeps `cargo test` free of Docker and the tests free of container start-up.
+3. **Store and service:** the store and API suites (the API suite drives the services) run against in-memory SQLite, and again against MySQL and Postgres in CI. `TEST_DATABASE_URL` points them at a MySQL or Postgres server, and each test creates its own database there (`store::testing`). A service container rather than `testcontainers` keeps `cargo test` free of Docker and the tests free of container start-up.
 4. **API:** the generated OpenAPI spec is checked into the repo, and CI fails if it changes without being regenerated.
 5. **End to end:** Playwright covers the golden paths (sign up and sign in, add item, ranking, block and unblock, close and reopen, admin parameter management) in `web/e2e`. They drive Chromium against the real server binary with the web app embedded, on in-memory SQLite. Each test registers its own account, so tests share no data and run in parallel; anything beyond these paths is tested lower down. The same tests, without sign-up, run against the local build, with its own tests for export and import and the tab lock ([local-build.md](local-build.md)).
 
