@@ -153,7 +153,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 2. Use property tests for ranking invariants: tie stability, monotonic age, blockers inheriting the priority of what they block, and no cycles.
 3. Every bug gets a regression test before the fix.
 4. Integration tests run against real SQLite and MySQL, with no database mocks.
-5. Tests are fast and hermetic. They take an injected clock, use no network, and don't depend on order.
+5. Tests are fast and hermetic. They take an injected clock, and an injected random source when they check random values, use no network, and don't depend on order.
 6. Keep end-to-end tests to the golden paths. Everything else is tested lower down.
 7. **Rust test layout:**
    - Unit tests go in `#[cfg(test)] mod tests` in the same file.
@@ -164,7 +164,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
    - Tests are written in Arrange / Act / Assert sections.
    - Assertions use `googletest` matchers.
    - Tracing for tests is initialised once per test binary, through a `std::sync::Once` in the shared harness, with the level set by `RUST_LOG`. (Not `ctor`: it expands to `unsafe` code, which `forbid(unsafe_code)` rejects.)
-9. **Testable by design.** Operations take plain values, repositories and a clock from their caller, so tests can use plain values and fakes instead of patching globals.
+9. **Testable by design.** Operations take plain values, repositories, a clock and a random source from their caller, so tests can use plain values and fakes instead of patching globals.
 
 ## Operations
 

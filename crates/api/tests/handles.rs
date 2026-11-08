@@ -3,11 +3,14 @@
 
 mod common;
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
 use common::TestApp;
 use googletest::prelude::*;
 use serde_json::{Value, json};
+use service::ScriptedRandom;
 
 const PASSWORD: &str = "a long test password";
 
@@ -418,6 +421,45 @@ async fn members_are_named_by_username() -> Result<()> {
             .map(|users| users.iter().map(|u| u["username"].clone()).collect::<Vec<_>>()),
         some(eq(&vec![json!("al")]))
     );
+    Ok(())
+}
+
+/// The random bytes that spell `key`, one per character of Crockford's base32.
+fn bytes_of(key: &str) -> Vec<u8> {
+    const ALPHABET: &[u8] = b"0123456789abcdefghjkmnpqrstvwxyz";
+    key.bytes()
+        .map(|c| {
+            let i = ALPHABET.iter().position(|a| *a == c);
+            #[allow(clippy::expect_used)]
+            u8::try_from(i.expect("a key character")).expect("under 32")
+        })
+        .collect()
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_new_item_skips_keys_without_a_digit_and_keys_its_heap_has_taken() -> Result<()> {
+    // Arrange: the first draw goes to Ada's first item. Her second item draws a key with no digit, then the key she
+    // already has, then a free one. Grace's heap doesn't have that first key yet, so she gets it too.
+    let random = Arc::new(ScriptedRandom::default());
+    let app = TestApp::start_with_random(random.clone()).await?;
+    let (ada, ada_heap) = app.register_as("ada@example.test", "Ada").await?;
+    let (grace, grace_heap) = app.register_as("grace@example.test", "Grace").await?;
+    for key in ["k3x9a", "abcde", "k3x9a", "m4n5p", "k3x9a"] {
+        random.push(bytes_of(key));
+    }
+
+    // Act
+    let first = app.new_item(&ada, &ada_heap, json!({ "title": "First" })).await?;
+    let second = app.new_item(&ada, &ada_heap, json!({ "title": "Second" })).await?;
+    let elsewhere = app
+        .new_item(&grace, &grace_heap, json!({ "title": "Elsewhere" }))
+        .await?;
+
+    // Assert
+    expect_that!(first["key"], eq(&json!("k3x9a")));
+    expect_that!(second["key"], eq(&json!("m4n5p")));
+    expect_that!(elsewhere["key"], eq(&json!("k3x9a")));
     Ok(())
 }
 

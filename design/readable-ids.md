@@ -68,8 +68,10 @@ least one digit. That's about 30 million keys per heap.
    in a heap a new key clashes about once in 5,000 inserts, so a retry is rare and one is almost always enough.
 4. **Fixed for life.** Items are never deleted, so a key is never reused either.
 
-This is the same idea as Nano ID with a custom alphabet. It's a few lines in `domain` with an injected random source,
-so we don't need the crate.
+This is the same idea as Nano ID with a custom alphabet. It's a few lines in `domain`, so we don't need the crate.
+`domain` turns random bytes into a key, and the service draws the bytes from a `RandomSource` it's given, like its
+clock: the system's random source in the server and the local build, and scripted bytes in tests that need to know
+the keys. Session tokens and password salts don't use it; they always come from a generator the system seeds.
 
 ## URLs and the API
 
