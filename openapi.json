@@ -3908,6 +3908,15 @@
           "mixed"
         ]
       },
+      "ClosedGroup": {
+        "type": "string",
+        "description": "Which part of the closed list a closed item belongs in, in the request's timezone: `today` for the same calendar\nday, `this_week` for 1 to 6 days before, and `earlier` for anything older.",
+        "enum": [
+          "today",
+          "this_week",
+          "earlier"
+        ]
+      },
       "ClosedItems": {
         "type": "object",
         "required": [
@@ -4385,12 +4394,15 @@
             ]
           },
           "closed_group": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Which part of the closed list it belongs in, in the request's timezone: \"Today\" for the same calendar day,\n\"This week\" for 1 to 6 days before, and \"Earlier\" for anything older. `null` when the item is open. Clients\ngroup consecutive items with the same label.",
-            "example": "This week"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClosedGroup",
+                "description": "Which part of the closed list it belongs in. `null` when the item is open. Clients group consecutive items\nwith the same group."
+              }
+            ]
           },
           "closed_label": {
             "type": [

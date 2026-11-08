@@ -165,7 +165,6 @@ impl Services {
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
-            // Ranked items aren't closed, so they have no closer.
             let created_by = pick_user(&users, item.created_by);
             group.push(RankedEntry {
                 view: ItemView {
@@ -174,6 +173,7 @@ impl Services {
                     parameters: values,
                     blocked_by,
                     created_by,
+                    // Ranked items aren't closed, so they have no closer.
                     closed_by: None,
                     allowed_actions,
                 },

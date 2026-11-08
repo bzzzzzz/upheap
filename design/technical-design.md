@@ -87,7 +87,7 @@ Notes:
 - Effort and impact are columns on `items` rather than custom parameters. They are fixed, apply to every heap, and share one weight (`heaps.value_weight`).
 - Need is a column on `items` too, for the same reasons, and is never null. Its weight is `heaps.need_weight`.
 - `items.created_by` is the user who added the item. The migration that added it filled it in from each item's `item_created` audit entry; it stays nullable, so an item whose entry is missing keeps no creator instead of failing the migration, and the API returns `created_by: null` for it.
-- `items.closed_by` is the user who closed the item, set on closing and cleared on reopening. Items closed before it was added keep `NULL`: filling it in from the audit log would mean reading JSON diffs, which has no portable SQL. The API returns `closed_by: null` for them, and for open items.
+- `items.closed_by` is the user who closed the item, set on closing and cleared on reopening. The migration that added it filled it in for closed items from the audit log, matching each item's `closed_at` to the `created_at` of its `item_updated` entry, since closing writes both from the same instant; no JSON diff is read. Items with no matching entry keep `NULL`, and the API returns `closed_by: null` for them, and for open items.
 - The need, age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
 - A user's username is the slug of their personal team, so usernames and team slugs share one namespace under one unique index. A personal team has its owner as its only member, can't take others, and its slug never changes.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
@@ -171,7 +171,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
    - `due`: `{ at, firm, label, overdue }`, where `label` is the fuzzy text ("in a few weeks") for loose dates or a formatted date for exact ones, in the timezone from the request's `Time-Zone` header.
    - `contributors`: a list of labelled factors.
    - `created_by` and `created_label` on items: who added it (`{ id, display_name }`, the `UserRef` audit entries use for their actor) and how long ago ("4 days ago"), in the request's timezone. `UserRef` was called `AuditActor` until items used it too. The JSON didn't change, and the schema was renamed in place because the API has no outside clients yet.
-   - `closed_by` and `closed_group` on items: who closed it (a `UserRef`) and which part of the closed list it belongs in, "Today", "This week" (1 to 6 calendar days before) or "Earlier", in the request's timezone. Both are `null` for open items. Clients group consecutive closed items by `closed_group` rather than comparing dates.
+   - `closed_by` and `closed_group` on items: who closed it (a `UserRef`) and which part of the closed list it belongs in, `today`, `this_week` (1 to 6 calendar days before) or `earlier`, in the request's timezone. `closed_group` is a code, like `state`; the client has the headings. Both are `null` for open items. Clients group consecutive closed items by `closed_group` rather than comparing dates.
    - `allowed_actions`: for example `["edit", "reopen", "set_blocked"]`.
    - `unset` markers for parameters with no value.
 

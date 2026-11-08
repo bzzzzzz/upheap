@@ -96,17 +96,6 @@ pub enum ClosedGroup {
     Earlier,
 }
 
-impl ClosedGroup {
-    /// The group's heading as people read it.
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Today => "Today",
-            Self::ThisWeek => "This week",
-            Self::Earlier => "Earlier",
-        }
-    }
-}
-
 /// The group of an item closed at `closed_at`, as seen at `as_of` by a user in `tz`, in calendar days. A
 /// `closed_at` after `as_of` counts as today.
 pub fn group_closed(closed_at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> ClosedGroup {
@@ -376,13 +365,6 @@ mod tests {
         expect_that!(group_closed(day(0), as_of, &berlin), eq(ClosedGroup::ThisWeek));
         expect_that!(group_closed(day(-6), as_of, &utc()), eq(ClosedGroup::ThisWeek));
         expect_that!(group_closed(day(-6), as_of, &berlin), eq(ClosedGroup::Earlier));
-    }
-
-    #[gtest]
-    fn closed_group_labels() {
-        expect_that!(ClosedGroup::Today.label(), eq("Today"));
-        expect_that!(ClosedGroup::ThisWeek.label(), eq("This week"));
-        expect_that!(ClosedGroup::Earlier.label(), eq("Earlier"));
     }
 
     #[gtest]

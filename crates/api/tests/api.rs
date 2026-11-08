@@ -321,7 +321,7 @@ async fn closed_items_say_who_closed_them_and_are_grouped_by_day() -> Result<()>
 
     // Assert
     expect_that!(new["closed_by"]["display_name"], eq(&json!("Ada")));
-    expect_that!(new["closed_group"], eq(&json!("Today")));
+    expect_that!(new["closed_group"], eq(&json!("today")));
     let items = &closed.body["items"];
     let summary = |i: usize| {
         (
@@ -330,12 +330,12 @@ async fn closed_items_say_who_closed_them_and_are_grouped_by_day() -> Result<()>
             items[i]["closed_by"]["display_name"].clone(),
         )
     };
-    expect_that!(summary(0), eq(&(json!("New"), json!("Today"), json!("Ada"))));
-    expect_that!(summary(1), eq(&(json!("Mid"), json!("This week"), json!("Sam"))));
-    expect_that!(summary(2), eq(&(json!("Old"), json!("Earlier"), json!("Ada"))));
+    expect_that!(summary(0), eq(&(json!("New"), json!("today"), json!("Ada"))));
+    expect_that!(summary(1), eq(&(json!("Mid"), json!("this_week"), json!("Sam"))));
+    expect_that!(summary(2), eq(&(json!("Old"), json!("earlier"), json!("Ada"))));
     expect_that!(items[1]["closed_by"]["id"], eq(&sam_me.body["user"]["id"]));
     expect_that!(mid.body["closed_by"]["display_name"], eq(&json!("Sam")));
-    expect_that!(mid.body["closed_group"], eq(&json!("This week")));
+    expect_that!(mid.body["closed_group"], eq(&json!("this_week")));
     Ok(())
 }
 

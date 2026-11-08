@@ -1,14 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 
-import type { HeapRef, Item } from "../api/client";
+import type { ClosedGroup, HeapRef, Item } from "../api/client";
 import { useClosedItems, useReopenItem } from "../api/queries";
-import { STATE_LABELS } from "../components/labels";
+import { CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
 
-/** A run of items next to each other with the same `closed_group`, as the server labels them. */
+/** A run of items next to each other with the same `closed_group`, as the server groups them. */
 interface ClosedSection {
-  label: string;
+  group: ClosedGroup;
   items: Item[];
 }
 
@@ -19,12 +19,13 @@ interface ClosedSection {
 function toSections(items: Item[]): ClosedSection[] {
   const sections: ClosedSection[] = [];
   for (const item of items) {
-    const label = item.closed_group ?? "";
+    // Closed items always have a group; the fallback only satisfies the type.
+    const group = item.closed_group ?? "earlier";
     const last = sections.at(-1);
-    if (last && last.label === label) {
+    if (last && last.group === group) {
       last.items.push(item);
     } else {
-      sections.push({ label, items: [item] });
+      sections.push({ group, items: [item] });
     }
   }
   return sections;
@@ -60,8 +61,8 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
       {items.length === 0 && <p className="py-12 text-center text-muted">Nothing closed yet.</p>}
       {toSections(items).map((section, index) => (
         <ClosedGroup
-          // Labels can repeat, in the unlikely case the clock moves between pages, so the index keeps keys unique.
-          key={`${index}-${section.label}`}
+          // Groups can repeat, in the unlikely case the clock moves between pages, so the index keeps keys unique.
+          key={`${index}-${section.group}`}
           section={section}
           heapRef={heapRef}
           reopening={reopen.isPending}
@@ -107,7 +108,7 @@ function ClosedGroup({
         id={headingId}
         className="mb-1.5 px-1 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase max-sm:text-xs"
       >
-        {section.label}
+        {CLOSED_GROUP_LABELS[section.group]}
       </h2>
       <ol className="divide-line rounded-xl border border-line bg-surface p-1 max-sm:divide-y max-sm:rounded-[14px]">
         {section.items.map((item) => (

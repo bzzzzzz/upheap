@@ -295,7 +295,7 @@ M-add-item, with P-due and P-tag-picker as in M-item.
 S-closed, P-reopen.
 
 - **Browser:** closed items, newest first, under Today, This week and Earlier, each with "Done · today by you" or
-  "Won't do · Tuesday by Sam" and Reopen inside its week; Load more; a row opens M-item.
+  "Won't do · 3 Nov by Sam" and Reopen inside its week; Load more; a row opens M-item.
 - **Phone:** the same list at full width from the Closed tab, with Reopen as a 44 px target.
 
 ### S-account: Your data (local build)
@@ -791,7 +791,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 - **Purpose:** done and won't-do items, most recently closed first (Req Views: Closed items).
 - **Shows:** an intro line on the week limit, then sections Today, This week and Earlier (the item's
   `closed_group`). Rows have a state mark on wide screens, the title (opens M-item), "Done · today by you" or
-  "Won't do · Tuesday by Sam" (no "by" for items closed before closers were recorded), and Reopen while the item is
+  "Won't do · 3 Nov by Sam" (no "by" for an item whose closer isn't known), and Reopen while the item is
   inside its week (`reopen` in `allowed_actions`), 44 px on a phone. No tag chips. Load more (cursor paging). Empty:
   "Nothing closed yet."
 - **Freq 3.** **Source:** `ClosedPage.tsx`. Built.

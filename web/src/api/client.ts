@@ -13,6 +13,7 @@ export type Me = Schemas["Me"];
 export type Size = Schemas["Size"];
 export type Need = Schemas["Need"];
 export type ItemState = Schemas["ItemState"];
+export type ClosedGroup = Schemas["ClosedGroup"];
 export type ItemPatch = Schemas["ItemPatchRequest"];
 export type NewItem = Schemas["CreateItemRequest"];
 export type Tag = Schemas["Tag"];
