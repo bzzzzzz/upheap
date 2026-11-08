@@ -46,26 +46,27 @@ export function countDatabase(db: Database): DatabaseCounts {
 
 /**
  * Counts the database in `file` without storing it anywhere: it opens read-only in memory, not in an OPFS slot.
- * Refuses, with a message fit to show, a file that import would refuse for not being an Upheap database.
+ * Refuses, with a message fit to show, a file that import would refuse for not being an Upheap database, or one it
+ * couldn't read at all.
  */
 export function countFile(sqlite3: Sqlite3Static, file: Uint8Array): DatabaseCounts {
   checkHeader(file);
-  // As `importDb` does, mark the copy as not in WAL mode, which an in-memory database can't open.
-  const copy = file.slice();
-  if (copy.length > 19) {
-    copy[18] = 1;
-    copy[19] = 1;
-  }
+  const { capi, wasm } = sqlite3;
   const db = new sqlite3.oo1.DB(":memory:");
   try {
-    const { capi, wasm } = sqlite3;
+    const pointer = wasm.allocFromTypedArray(file);
+    // As `importDb` does, mark the copy as not in WAL mode, which an in-memory database can't open. In the wasm heap,
+    // so the file isn't copied once more.
+    const heap = wasm.heap8u();
+    heap[Number(pointer) + 18] = 1;
+    heap[Number(pointer) + 19] = 1;
     // FREEONCLOSE hands the memory to SQLite, which frees it when the database closes, or at once if this fails.
     const rc = capi.sqlite3_deserialize(
       db.pointer ?? 0,
       "main",
-      wasm.allocFromTypedArray(copy),
-      copy.byteLength,
-      copy.byteLength,
+      pointer,
+      file.byteLength,
+      file.byteLength,
       capi.SQLITE_DESERIALIZE_FREEONCLOSE | capi.SQLITE_DESERIALIZE_READONLY,
     );
     if (rc !== capi.SQLITE_OK) {
@@ -74,7 +75,8 @@ export function countFile(sqlite3: Sqlite3Static, file: Uint8Array): DatabaseCou
     checkUpheapDatabase(db);
     return countDatabase(db);
   } catch (error) {
-    throw error instanceof FileRefused ? error : new FileRefused(NOT_UPHEAP);
+    // Running out of memory for a large file, say, isn't the file's fault.
+    throw error instanceof FileRefused ? error : new FileRefused(`Upheap couldn't read this file: ${String(error)}`);
   } finally {
     db.close();
   }

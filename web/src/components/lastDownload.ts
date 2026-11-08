@@ -4,7 +4,7 @@
 // An exception to thin clients (engineering-principles.md): the date and its wording are worked out here, not by the
 // server, because the fact lives only in this browser's localStorage and no server ever sees it. Storage can be
 // unavailable or full, so every read and write is guarded, and then the date is unknown, the same as never.
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const KEY = "upheap.lastDownloadAt";
 const DAY = 24 * 60 * 60 * 1000;
@@ -41,11 +41,23 @@ export function useLastDownloadAt(): number | null {
 }
 
 /**
- * The time the component first rendered, in epoch milliseconds, for wording dates. It stays put while the component
- * stays on screen, which is fine for labels that change by the day.
+ * The time now, in epoch milliseconds, for wording dates by the day. It moves when the page becomes visible again and
+ * once a day, so a tab left open for weeks still nudges.
  */
 export function useNow(): number {
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const onVisible = () => {
+      if (document.visibilityState === "visible") update();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const daily = setInterval(update, DAY);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(daily);
+    };
+  }, []);
   return now;
 }
 

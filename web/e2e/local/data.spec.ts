@@ -53,9 +53,34 @@ test("a downloaded copy replaces the data after a confirm, and a file that isn't
   await refused.getByRole("button", { name: "Cancel" }).click();
   await expect(refused).toHaveCount(0);
   await expect(input).toBeFocused();
+  await input.setInputFiles({ name: "notes.sqlite3", mimeType: "text/plain", buffer: Buffer.from("not a database") });
+  await expect(refused.getByRole("alert")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(refused).toHaveCount(0);
+  await expect(input).toBeFocused();
   await page.goto(heapUrl);
   await expect(row(page, "Keep me")).toBeVisible();
 });
+
+for (const [daysAgo, note] of [
+  [15, "Last copy downloaded 2 weeks ago."],
+  [13, null],
+] as const) {
+  test(`the storage note after a copy downloaded ${daysAgo} days ago`, async ({ page }) => {
+    await page.addInitScript(
+      (at) => localStorage.setItem("upheap.lastDownloadAt", String(at)),
+      Date.now() - daysAgo * 864e5,
+    );
+    await page.reload();
+    const footer = page.locator("footer").filter({ visible: true });
+    await expect(footer).toContainText("Stored only in this browser");
+    if (note) {
+      await expect(footer).toContainText(note);
+    } else {
+      await expect(footer).not.toContainText("downloaded");
+    }
+  });
+}
 
 test("a second tab waits until the first one closes", async ({ page, context }) => {
   await addItem(page, "Only here");

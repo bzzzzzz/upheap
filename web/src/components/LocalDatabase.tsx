@@ -4,7 +4,7 @@ import { localDatabase, type DatabaseCounts, type LocalDatabase } from "#local-d
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Check, Download } from "lucide-react";
-import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import { formatAgo, formatDay, isDownloadStale, recordDownload, useLastDownloadAt, useNow } from "./lastDownload";
@@ -77,6 +77,12 @@ const secondaryClass = `${buttonClass} border border-line bg-surface text-ink ho
 const quietClass = `${buttonClass} text-ink-soft hover:bg-sunken`;
 const dangerClass = `${buttonClass} bg-overdue-ink font-semibold text-surface`;
 
+/**
+ * Numbers each picked file, so picking the same file again counts it again. Module-wide, so a count still running for
+ * a pick made before the card remounted can't land under a later pick's key.
+ */
+let picks = 0;
+
 /** "1 heap", "2 heaps". */
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -91,7 +97,9 @@ function useDownloadCopy(database: LocalDatabase) {
       link.href = URL.createObjectURL(file);
       link.download = `upheap-${new Date().toISOString().slice(0, 10)}.sqlite3`;
       link.click();
-      URL.revokeObjectURL(link.href);
+      // Revoked a moment later: revoking at once can cancel the download before it starts.
+      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+      // A Save As the user cancels can't be told apart, so the click counts as the download.
       recordDownload(Date.now());
     },
   });
@@ -114,8 +122,6 @@ function DataSection({ database }: { database: LocalDatabase }) {
   const lastAt = useLastDownloadAt();
   const now = useNow();
   const input = useRef<HTMLInputElement>(null);
-  // Each pick gets its own number, so picking the same file again counts it again.
-  const picks = useRef(0);
   const [chosen, setChosen] = useState<{ file: File; pick: number } | null>(null);
 
   const close = () => {
@@ -152,7 +158,7 @@ function DataSection({ database }: { database: LocalDatabase }) {
               if (!file) return;
               // The confirm gives focus back to what had it when it opened, so make that the input.
               event.target.focus();
-              setChosen({ file, pick: ++picks.current });
+              setChosen({ file, pick: ++picks });
             }}
           />
         </label>
@@ -216,14 +222,13 @@ function ReplaceConfirm({
     onSuccess: () => window.location.assign(import.meta.env.BASE_URL),
   });
   const title = `Replace everything here with ${file.name}?`;
+  const bodyId = useId();
   const requestClose = () => {
     if (!replace.isPending) onClose();
   };
 
-  const body = copy.isPending ? (
-    <p role="status" className="text-sm text-ink-soft">
-      Reading the copy…
-    </p>
+  const message = copy.isPending ? (
+    <p className="text-sm text-ink-soft">Reading the copy…</p>
   ) : copy.isError ? (
     <p role="alert" className="text-sm text-overdue-ink">
       {problemMessage(copy.error)}
@@ -234,6 +239,12 @@ function ReplaceConfirm({
       {copy.data.lastChangedAt !== null && `, from ${formatDay(copy.data.lastChangedAt, now)}`}. What&apos;s in this
       browser now{current && ` (${plural(current.items, "item", "items")})`} is replaced and can&apos;t be brought back.
     </p>
+  );
+  // The dialog's description, and a live region, so the counts are read out when they replace "Reading the copy…".
+  const body = (
+    <div id={bodyId} aria-live="polite">
+      {message}
+    </div>
   );
   const buttons = (
     <div className={phone ? "flex flex-col-reverse gap-2 pt-3" : "flex flex-wrap items-center justify-end gap-2 pt-5"}>
@@ -251,7 +262,10 @@ function ReplaceConfirm({
           <button
             type="button"
             disabled={download.isPending || replace.isPending}
-            onClick={() => download.mutate()}
+            onClick={() => {
+              replace.reset();
+              download.mutate();
+            }}
             className={`${secondaryClass} ${phone ? "h-11 w-full" : ""}`}
           >
             {download.isSuccess ? (
@@ -266,7 +280,10 @@ function ReplaceConfirm({
           <button
             type="button"
             disabled={replace.isPending}
-            onClick={() => replace.mutate()}
+            onClick={() => {
+              download.reset();
+              replace.mutate();
+            }}
             className={`${dangerClass} ${phone ? "h-11 w-full" : ""}`}
           >
             Replace
@@ -284,7 +301,7 @@ function ReplaceConfirm({
 
   if (phone) {
     return (
-      <Sheet title={title} role="alertdialog" isOpen onClose={requestClose}>
+      <Sheet title={title} role="alertdialog" describedBy={bodyId} isOpen onClose={requestClose}>
         <div className="flex flex-col pb-1">
           {body}
           {problem}
@@ -300,7 +317,7 @@ function ReplaceConfirm({
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[18vh]"
     >
       <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-6 text-ink shadow-xl outline-none">
-        <Dialog role="alertdialog" className="outline-none">
+        <Dialog role="alertdialog" aria-describedby={bodyId} className="outline-none">
           <Heading slot="title" className="mb-2 text-base font-semibold break-words">
             {title}
           </Heading>
