@@ -160,7 +160,10 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::TooManySignInAttempts { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
-        ServiceError::EmailTaken => simple(StatusCode::CONFLICT, "email_taken", Category::Conflict),
+        ServiceError::EmailTaken => Classified {
+            field: Some("email"),
+            ..simple(StatusCode::CONFLICT, "email_taken", Category::Conflict)
+        },
         ServiceError::HandleTaken { field } => Classified {
             field: Some(field.as_str()),
             ..simple(StatusCode::CONFLICT, "handle_taken", Category::Conflict)

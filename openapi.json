@@ -114,7 +114,7 @@
             }
           },
           "409": {
-            "description": "`email_taken`, or `handle_taken` (`field` `username`)",
+            "description": "`email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
             "content": {
               "application/json": {
                 "schema": {

@@ -60,6 +60,7 @@ async fn duplicate_email_is_rejected() -> Result<()> {
     // Assert
     expect_that!(response.status, eq(StatusCode::CONFLICT));
     expect_that!(response.body["code"], eq(&json!("email_taken")));
+    expect_that!(response.body["field"], eq(&json!("email")));
     Ok(())
 }
 

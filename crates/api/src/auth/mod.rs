@@ -42,7 +42,7 @@ pub(crate) struct SignInRequest {
 #[utoipa::path(post, path = "/auth/register", tag = "auth", request_body = RegisterRequest,
     responses(
         (status = 201, description = "Registered and signed in; sets the session cookie", body = UserDto),
-        (status = 409, description = "`email_taken`, or `handle_taken` (`field` `username`)", body = Problem),
+        (status = 409, description = "`email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
         (status = 422, description = "Invalid email, name or password, or `invalid_handle` with a `hint`", body = Problem),
     ))]
 async fn register(

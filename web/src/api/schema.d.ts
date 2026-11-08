@@ -1486,7 +1486,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description `email_taken`, or `handle_taken` (`field` `username`) */
+            /** @description `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
             409: {
                 headers: {
                     [name: string]: unknown;
