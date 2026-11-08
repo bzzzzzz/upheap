@@ -21,8 +21,7 @@ export function AccountPage() {
   return (
     <main>
       <h1 className="mt-6 mb-4 text-[22px] font-semibold tracking-[-0.015em]">Account</h1>
-      {/* The mockup's main column, 760 px at most. */}
-      <div className="flex max-w-[760px] flex-col gap-6">
+      <div className="flex flex-col gap-6">
         <section aria-labelledby="profile" className="rounded-[14px] border border-line bg-surface p-5">
           <h2 id="profile" className="text-base font-semibold">
             Profile

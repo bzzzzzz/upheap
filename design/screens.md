@@ -953,9 +953,9 @@ Why the 4s and 5s:
 
 - **Route:** `/account`. **Who:** everyone signed in, and the local user.
 - **Shows:** a Profile card with P-display-name and Email (read-only). In the local build, the "Your data" card
-  (P-local-export, P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that removes it,
-  loses it. Download a copy now and then, and open it here or in another browser to carry on." Download a copy
-  (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
+  (P-local-export, P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that
+  removes it, loses it. Download a copy now and then, and open it here or in another browser to carry on." Download
+  a copy (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
   downloaded").
 - **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
 - **Freq 1.** **Source:** TD API Me; `AccountPage.tsx`. Built.
