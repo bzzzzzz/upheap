@@ -18,6 +18,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Area | Spec | Status | Notes |
 | --- | --- | :---: | --- |
 | Local accounts: register, sign in, sign out | Off Auth §2–3 | ✅ | argon2id, hashed session tokens, CSRF header |
+| Sign in by username | Later | ⬜ | The PhoneSignIn board labels the field "Email or username"; the server signs in by email only, so the web app says "Email". Needs `POST /auth/login` to take either (an `@` tells them apart, as usernames can't hold one), and the rate limit keyed on the account rather than the typed address, so one person can't get ten attempts by switching between the two |
 | Personal team and heap on registration | Off Teams §3 | ✅ | Named by the username; private to its owner, so it takes no members |
 | Readable IDs: usernames, slugs, item keys, short links | [readable-ids.md](readable-ids.md) | ✅ | `/teams/{team}/heaps/{heap}/items/{item}` in the app and the API, `/h/…` short links with Copy link, slugs editable on team and heap pages; a migration fills them in on existing data |
 | Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue; need (idea, nice to have, expected, critical) required on every new item, changeable but never cleared |
