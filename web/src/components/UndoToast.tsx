@@ -1,6 +1,6 @@
 import { useParams, useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 /**
  * A message about a change just made, with a way to take it back, and sometimes the likely next step as `action`.
@@ -17,8 +17,11 @@ export type Toast = {
 /** Shows a toast in place of the one on screen, if any. */
 type ShowToast = (toast: Omit<Toast, "id">) => void;
 
-const ToastContext = createContext<ShowToast>(() => {
-  throw new Error("useToast needs a ToastProvider around it");
+const ToastContext = createContext<{ show: ShowToast; count: () => number }>({
+  show: () => {
+    throw new Error("useToast needs a ToastProvider around it");
+  },
+  count: () => 0,
 });
 
 /**
@@ -31,12 +34,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const owner = team !== undefined && heap !== undefined ? `heap:${team}/${heap}` : pathname;
   const [shown, setShown] = useState<{ toast: Toast; owner: string } | null>(null);
-  const show = useCallback<ShowToast>((toast) => setShown({ toast: { ...toast, id: Date.now() }, owner }), [owner]);
+  // How many toasts have been shown, for a toast that's only worth showing if none came since.
+  const shownCount = useRef(0);
+  const show = useCallback<ShowToast>(
+    (toast) => {
+      shownCount.current += 1;
+      setShown({ toast: { ...toast, id: Date.now() }, owner });
+    },
+    [owner],
+  );
+  const value = useMemo(() => ({ show, count: () => shownCount.current }), [show]);
   const dismiss = useCallback(() => setShown(null), []);
   // Put away for good once the heap changes, so coming back doesn't bring it back.
   if (shown && shown.owner !== owner) setShown(null);
   return (
-    <ToastContext.Provider value={show}>
+    <ToastContext.Provider value={value}>
       {children}
       <UndoToast toast={shown?.owner === owner ? shown.toast : null} onDismiss={dismiss} />
     </ToastContext.Provider>
@@ -44,7 +56,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 /** Shows a toast: from a component under the `ToastProvider`. */
-export const useToast = (): ShowToast => useContext(ToastContext);
+export const useToast = (): ShowToast => useContext(ToastContext).show;
+
+/** How many toasts have been shown so far, read when called. */
+export const useToastCount = (): (() => number) => useContext(ToastContext).count;
 
 /** How long a toast stays. */
 const SHOW_FOR_MS = 6000;

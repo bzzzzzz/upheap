@@ -164,6 +164,29 @@ test("an add on its way is no draft to discard, and what's changed meanwhile sta
   await expect(row(page, "Pay rent")).toBeVisible();
 });
 
+test("an add that fails after the dialog closed says so in a toast", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+  const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
+  await page.route(items, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await new Promise((done) => setTimeout(done, 1000));
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ code: "internal", message: "Something went wrong.", status: 500 }),
+    });
+  });
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await fillIn(page, "Pay rent");
+  await dialog.getByLabel("Title").press("Enter");
+  // Sent, so Escape closes without asking; the failure comes after.
+  await dialog.getByLabel("Title").press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("alert").filter({ hasText: "“Pay rent” wasn't added:" })).toBeVisible();
+  await expect(row(page, "Pay rent")).toHaveCount(0);
+});
+
 test("an item the list's search hides is added without a position", async ({ page }) => {
   await addItem(page, "Water the plants");
   await page.getByLabel("Search items").fill("plants");

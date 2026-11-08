@@ -138,8 +138,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    tags and parameter values belong to a heap, so they clear, and the rest stays.
 4. Add saves and closes (`⌘↵` / `Ctrl↵` on a keyboard), and a toast says where the item landed ("Added “X” at #4 in
    Up next", read from the list as the server ranks it) with Open it. With "Add another" ticked, the dialog stays
-   open, says the same in a line of its own, and goes back to how it started. Add another is remembered on the
-   device. Escape, Cancel or a tap outside closes it; if a title was typed, it asks first.
+   open, says the same in a line of its own, and goes back to how it started, keeping anything changed while it was
+   being added. Add another is remembered on the device. Escape, Cancel or a tap outside closes it; if a title was
+   typed, it asks first. An add that fails says so in the dialog, or in a toast once the dialog is closed.
 
 ### Due
 

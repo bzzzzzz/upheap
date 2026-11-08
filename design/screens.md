@@ -767,9 +767,10 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
   and effort, impact or a parameter's option where they pick one value. Footer: Add another (checkbox, remembered
   on the device), Cancel, Add.
 - **Actions:** Add (or Enter in the title, or `⌘↵`): without Add another the dialog closes and the toast says where
-  the item landed, with Open it; with it, the dialog says so and goes back to its starting point. The position is
-  the one in the list on screen, fetched again after the add; an item the list doesn't show (another heap, or hidden
-  by the view) gets "Added “X” to \<heap\>".
+  the item landed, with Open it; with it, the dialog says so and goes back to its starting point, keeping anything
+  changed while it was being added. The position is the one in the list on screen, fetched again after the add; an
+  item the list doesn't show (another heap, or hidden by the view or the search) gets "Added “X” to \<heap\>". A
+  failed add says "“X” wasn't added: …" in the dialog, or in a toast once the dialog is closed.
 - **Presentation:** a centred modal near the top, 600 px wide, labels beside the fields, on tablet and wide. On a
   phone a bottom sheet above the keyboard: the heap and the "added at #4" note on one line, the title, then chips
   that scroll sideways for need, effort and impact (each a sheet of S M L XL), tags (+ Tag opens the picker in a

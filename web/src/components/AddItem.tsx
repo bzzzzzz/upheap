@@ -8,6 +8,7 @@ import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } fr
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
+import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
 import { matchesSearch, placeOf, splitList, toListQuery, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
@@ -16,7 +17,7 @@ import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
 import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
-import { useToast } from "./UndoToast";
+import { useToast, useToastCount } from "./UndoToast";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
@@ -124,14 +125,17 @@ const addedNote = ({ title, heapName, place }: Added) =>
 
 const sameHeap = (a: HeapRef, b: HeapRef) => a.team === b.team && a.heap === b.heap;
 
-/** An add on its way: where it goes, whether Add another was on, the edits it was made from, and its number. */
+/** An add on its way: where it goes, whether Add another was on, the edits and title it was made from, its number. */
 type SentAdd = {
   heap: HeapRef;
   heapName: string;
   onScreen: boolean;
   addAnother: boolean;
   edits: Partial<Draft>;
+  title: string;
   number: number;
+  /** How many toasts had been shown when it was sent. */
+  toasts: number;
 };
 
 /** The edits changed since `sent`, each change making a new value, so the rest can go. */
@@ -168,11 +172,14 @@ export function AddItemDialog({
   const { data: me } = useMe();
   const navigate = useNavigate();
   const showToast = useToast();
+  const toastCount = useToastCount();
   const refetchList = useRefetchRankedList();
-  // Whether the dialog is still open, and which add or heap change came last, for an add the server answers later:
-  // only the newest add's message shows in the dialog, and one the dialog is gone for shows as a toast.
+  // For an add the server answers later: whether the dialog is still open (if not, it answers in a toast), which add
+  // came last (only its message shows in the dialog), the heap now chosen, and the edits now made.
   const open = useRef(true);
   const latest = useRef(0);
+  const chosenHeap = useRef(heapRef);
+  const currentEdits = useRef<Partial<Draft>>({});
   useEffect(() => {
     open.current = true;
     return () => {
@@ -194,6 +201,8 @@ export function AddItemDialog({
   // A new key remounts the due picker, so a cleared draft doesn't keep Exact date picked.
   const [round, setRound] = useState(0);
   const [added, setAdded] = useState<Added | null>(null);
+  // The add that failed last, with what went wrong.
+  const [failed, setFailed] = useState<{ title: string; problem: string } | null>(null);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   // The item to open once the draft is discarded, when Open it asked first.
   const [openAfterDiscard, setOpenAfterDiscard] = useState<Added | null>(null);
@@ -202,6 +211,9 @@ export function AddItemDialog({
   const [moreFields, setMoreFields] = useState<boolean | null>(null);
   const moreId = useId();
   const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    currentEdits.current = edits;
+  });
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setEdits((d) => ({ ...d, [key]: value }));
   const heapName = heapNameOf(me, target);
   const showMore = moreFields ?? Object.keys(draft.values).length > 0;
@@ -232,8 +244,8 @@ export function AddItemDialog({
     void navigate({
       to: "/teams/$team/heaps/$heap/items/$item",
       params: { ...item.heap, item: item.key },
-      // In the list on screen, the item opens over it as it is.
-      search: sameHeap(item.heap, heapRef) && view ? view : {},
+      // In the list's heap, the item opens over the list as it is by then.
+      search: sameHeap(item.heap, heapRef) ? (prev) => prev : {},
       state: (prev) => ({ ...prev, closesBack: true }),
     });
 
@@ -253,7 +265,8 @@ export function AddItemDialog({
 
   const chooseHeap = (next: HeapRef) => {
     if (sameHeap(next, target)) return;
-    latest.current += 1;
+    chosenHeap.current = next;
+    setAdded(null);
     // Tags and parameter values belong to a heap; the rest carries over.
     setEdits({
       title: draft.title,
@@ -270,8 +283,18 @@ export function AddItemDialog({
     event.preventDefault();
     const need = draft.need;
     if (!canAdd || need === null) return;
-    const add = { heap: target, heapName, onScreen, addAnother, edits, number: ++latest.current };
+    const add: SentAdd = {
+      heap: target,
+      heapName,
+      onScreen,
+      addAnother,
+      edits,
+      title: draft.title,
+      number: ++latest.current,
+      toasts: toastCount(),
+    };
     setSent(edits);
+    setFailed(null);
     // Through the promise rather than `onSuccess`, which is dropped once the dialog has closed. It settles as soon as
     // the server has the item, so the next one can be typed and added while the list catches up.
     create
@@ -295,8 +318,7 @@ export function AddItemDialog({
       })
       .then(
         (item) => void onAdded(item, add),
-        // Shown as `create.error`; the draft is still there to try again.
-        () => setSent(null),
+        (error: Error) => onFailed(error, add),
       );
   };
 
@@ -311,9 +333,13 @@ export function AddItemDialog({
       onClose();
     } else if (open.current) {
       // What was changed since Enter belongs to the next item, and stays.
-      setEdits((current) => changedSince(current, add.edits));
-      setConfirmingDiscard(false);
-      setOpenAfterDiscard(null);
+      const next = changedSince(currentEdits.current, add.edits);
+      setEdits(next);
+      // A discard asked about the title just added; one typed since is still to be asked about.
+      if (!next.title?.trim()) {
+        setConfirmingDiscard(false);
+        setOpenAfterDiscard(null);
+      }
       setRound((n) => n + 1);
       titleRef.current?.focus();
     }
@@ -330,10 +356,28 @@ export function AddItemDialog({
       place: shown && { position: shown.entry.position, section: shown.section },
     };
     if (!add.addAnother || !open.current) {
-      showToast({ message: addedMessage(result), action: { label: "Open it", run: () => openItem(result) } });
+      // Not over a toast about something done since, such as a row marked done.
+      if (toastCount() === add.toasts) {
+        showToast({ message: addedMessage(result), action: { label: "Open it", run: () => openItem(result) } });
+      }
     } else if (latest.current === add.number) {
-      setAdded(result);
+      // Under another heap's title, it says which heap it went into.
+      setAdded(sameHeap(add.heap, chosenHeap.current) ? result : { ...result, place: undefined });
     }
+  };
+
+  /**
+   * When the server refuses the item: the dialog says so, with the draft still there to try again, as nothing clears
+   * it before the server has the item; once the dialog is gone, a toast says so.
+   */
+  const onFailed = (error: Error, add: SentAdd) => {
+    const problem = itemProblem(error);
+    if (!open.current) {
+      showToast({ message: `“${add.title}” wasn't added: ${problem}`, error: true });
+      return;
+    }
+    setSent(null);
+    setFailed({ title: add.title, problem });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -406,9 +450,9 @@ export function AddItemDialog({
       </div>
     );
 
-  const error = create.error && (
+  const error = failed && (
     <p role="alert" className="text-sm text-overdue-ink">
-      {create.error.message}
+      “{failed.title}” wasn't added: {failed.problem}
     </p>
   );
 
