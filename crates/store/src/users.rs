@@ -9,7 +9,7 @@ use domain::handle::Handle;
 use domain::user::{DisplayName, Email, User, UserQuery};
 use domain::{Timestamp, UserId, Version};
 use sea_orm::ExprTrait;
-use sea_orm::sea_query::{Expr, Func, LikeExpr};
+use sea_orm::sea_query::{BinOper, Expr, Func, LikeExpr};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -84,9 +84,10 @@ pub async fn list_users(db: &impl ConnectionTrait, ids: &[UserId]) -> Result<Vec
     to_users(db, rows).await
 }
 
-/// Up to `limit` users with a word of their display name starting with `query`, ignoring ASCII case, by display name.
+/// Up to `limit` users with a word of their display name starting with `query`, ignoring case, by display name.
 ///
-/// `LOWER` lowercases ASCII only on SQLite, which is why [`UserQuery`] lowercases ASCII only too.
+/// Both the name and the pattern go through the database's `LOWER`, so they are lowercased alike: ASCII only on
+/// SQLite, all of Unicode on Postgres and MySQL.
 pub async fn find_users_by_name(
     db: &impl ConnectionTrait,
     query: &UserQuery,
@@ -94,12 +95,19 @@ pub async fn find_users_by_name(
 ) -> Result<Vec<User>, StoreError> {
     let text = escape_like(query.as_str());
     let name = || Expr::expr(Func::lower(Expr::col(users::Column::DisplayName)));
-    let like = |pattern: String| LikeExpr::new(pattern).escape('\\');
+    // `LOWER(pattern) ESCAPE '\'`, built by hand because `LikeExpr` takes only a literal pattern.
+    let like = |pattern: String| {
+        Expr::Binary(
+            Box::new(Func::lower(Expr::val(pattern)).into()),
+            BinOper::Escape,
+            Box::new(Expr::Constant('\\'.into())),
+        )
+    };
     let rows = users::Entity::find()
         .filter(
             Condition::any()
-                .add(name().like(like(format!("{text}%"))))
-                .add(name().like(like(format!("% {text}%")))),
+                .add(name().binary(BinOper::Like, like(format!("{text}%"))))
+                .add(name().binary(BinOper::Like, like(format!("% {text}%")))),
         )
         .order_by_asc(users::Column::DisplayName)
         .order_by_asc(users::Column::Id)

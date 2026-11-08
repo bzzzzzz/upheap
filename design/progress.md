@@ -6,7 +6,7 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
-rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 242 Rust tests pass
+rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 245 Rust tests pass
 (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4 and Postgres 17, the 15 Playwright tests pass at each of
 three widths, and 16 against the local build, and the web typecheck and lint are clean. CI
 runs all of them on every pull request.
