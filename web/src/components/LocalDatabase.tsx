@@ -51,7 +51,7 @@ function Note({ database, className }: { database: LocalDatabase; className: str
   const now = useNow();
   const stale = isDownloadStale(lastAt, now);
   const link = (
-    <Link to="/account" className="font-medium text-ink underline underline-offset-2 hover:text-accent-ink">
+    <Link to="/account" className="font-medium underline underline-offset-2 hover:text-ink">
       Download a copy
     </Link>
   );
@@ -70,12 +70,33 @@ function Note({ database, className }: { database: LocalDatabase; className: str
   );
 }
 
+// Sizes from the WideAccount mockup. Touch and phones keep 44 px targets.
 const buttonClass =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium disabled:opacity-40 pointer-coarse:h-11";
-const primaryClass = `${buttonClass} bg-ink font-semibold text-canvas`;
-const secondaryClass = `${buttonClass} border border-line bg-surface text-ink hover:bg-sunken`;
-const quietClass = `${buttonClass} text-ink-soft hover:bg-sunken`;
-const dangerClass = `${buttonClass} bg-overdue-ink font-semibold text-surface`;
+  "inline-flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-40 pointer-coarse:min-h-11";
+const borderedClass = "border border-line-strong bg-surface text-ink hover:bg-sunken";
+
+/** The Your data card's buttons. */
+const cardButtonClass = `${buttonClass} rounded-[10px] px-3.5 py-[9px] max-sm:min-h-11`;
+const downloadClass = `${cardButtonClass} bg-ink font-semibold text-surface`;
+const openClass = `${cardButtonClass} ${borderedClass}`;
+
+/** The wide confirm's buttons, which the Account page's Save and Cancel share. */
+const compactClass = `${buttonClass} rounded-[9px] py-2`;
+export const compactButtonClass = {
+  primary: `${compactClass} bg-ink px-3.5 font-semibold text-surface`,
+  quiet: `${compactClass} px-3 text-ink-soft hover:text-ink`,
+  bordered: `${compactClass} px-3 ${borderedClass}`,
+  danger: `${compactClass} bg-overdue-ink px-3.5 font-semibold text-surface`,
+};
+
+/** The phone sheet's buttons: full width and 44 px tall. */
+const sheetButtonClass =
+  "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium disabled:opacity-40";
+const sheetClass = {
+  quiet: `${sheetButtonClass} text-ink-soft hover:bg-sunken`,
+  bordered: `${sheetButtonClass} border border-line bg-surface text-ink hover:bg-sunken`,
+  danger: `${sheetButtonClass} bg-overdue-ink font-semibold text-surface`,
+};
 
 /**
  * Numbers each picked file, so picking the same file again counts it again. Module-wide, so a count still running for
@@ -130,7 +151,7 @@ function DataSection({ database }: { database: LocalDatabase }) {
   };
 
   return (
-    <section aria-labelledby="local-data" className="mt-8 max-w-xl rounded-[14px] border border-line bg-surface p-5">
+    <section aria-labelledby="local-data" className="rounded-[14px] border border-line bg-surface p-5">
       <h2 id="local-data" className="text-base font-semibold">
         Your data
       </h2>
@@ -138,14 +159,14 @@ function DataSection({ database }: { database: LocalDatabase }) {
         Everything is kept in this browser only. Clearing site data, or a browser that removes it, loses it. Download a
         copy now and then, and open it here or in another browser to carry on.
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={download.isPending} onClick={() => download.mutate()} className={primaryClass}>
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        <button type="button" disabled={download.isPending} onClick={() => download.mutate()} className={downloadClass}>
           <Download aria-hidden="true" className="size-4" />
           Download a copy
         </button>
         {/* The input itself takes focus, so its label shows the focus ring. */}
         <label
-          className={`${secondaryClass} cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent`}
+          className={`${openClass} cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent`}
         >
           Open a copy…
           <input
@@ -246,14 +267,15 @@ function ReplaceConfirm({
       {message}
     </div>
   );
+  const buttonClasses = phone ? sheetClass : compactButtonClass;
   const buttons = (
-    <div className={phone ? "flex flex-col-reverse gap-2 pt-3" : "flex flex-wrap items-center justify-end gap-2 pt-5"}>
+    <div className={phone ? "flex flex-col-reverse gap-2 pt-3" : "flex flex-wrap items-center justify-end gap-2"}>
       <button
         type="button"
         autoFocus
         disabled={replace.isPending}
         onClick={requestClose}
-        className={`${quietClass} ${phone ? "h-11 w-full" : ""}`}
+        className={buttonClasses.quiet}
       >
         Cancel
       </button>
@@ -266,7 +288,7 @@ function ReplaceConfirm({
               replace.reset();
               download.mutate();
             }}
-            className={`${secondaryClass} ${phone ? "h-11 w-full" : ""}`}
+            className={buttonClasses.bordered}
           >
             {download.isSuccess ? (
               <>
@@ -284,7 +306,7 @@ function ReplaceConfirm({
               download.reset();
               replace.mutate();
             }}
-            className={`${dangerClass} ${phone ? "h-11 w-full" : ""}`}
+            className={buttonClasses.danger}
           >
             Replace
           </button>
@@ -294,7 +316,7 @@ function ReplaceConfirm({
   );
   const failure = download.error ?? replace.error;
   const problem = failure && (
-    <p role="alert" className="mt-3 text-sm text-overdue-ink">
+    <p role="alert" className={`text-sm text-overdue-ink ${phone ? "mt-3" : ""}`}>
       {problemMessage(failure)}
     </p>
   );
@@ -316,9 +338,9 @@ function ReplaceConfirm({
       onOpenChange={(open) => !open && requestClose()}
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[18vh]"
     >
-      <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-6 text-ink shadow-xl outline-none">
-        <Dialog role="alertdialog" aria-describedby={bodyId} className="outline-none">
-          <Heading slot="title" className="mb-2 text-base font-semibold break-words">
+      <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-[22px] text-ink shadow-xl outline-none">
+        <Dialog role="alertdialog" aria-describedby={bodyId} className="flex flex-col gap-3.5 outline-none">
+          <Heading slot="title" className="text-base font-semibold break-words">
             {title}
           </Heading>
           {body}

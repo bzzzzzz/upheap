@@ -9,6 +9,10 @@ export const primaryButtonClass =
 export const quietButtonClass =
   "rounded px-1.5 py-1 text-sm text-stone-500 hover:text-stone-900 disabled:opacity-40 dark:hover:text-stone-100";
 
+export type NameFormClasses = { input: string; save: string; cancel: string; problem?: string };
+
+const defaultClasses: NameFormClasses = { input: inputClass, save: primaryButtonClass, cancel: quietButtonClass };
+
 /**
  * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
  * `version` (a save, or someone else's edit), the input shows it.
@@ -22,6 +26,7 @@ export function NameForm({
   error,
   onSave,
   className = "",
+  classes = defaultClasses,
 }: {
   label: string;
   value: string;
@@ -31,6 +36,8 @@ export function NameForm({
   error: Error | null;
   onSave: (name: string) => void;
   className?: string;
+  /** The input's, buttons' and error's look, for a page in the design tokens; other pages keep the defaults. */
+  classes?: NameFormClasses;
 }) {
   const [name, setName] = useState(value);
   const [shownVersion, setShownVersion] = useState(version);
@@ -59,19 +66,19 @@ export function NameForm({
           }
         }}
         maxLength={maxLength}
-        className={`${inputClass} min-w-0 flex-1 ${className}`}
+        className={`${classes.input} min-w-0 flex-1 ${className}`}
       />
       {changed && (
         <>
-          <button type="submit" disabled={pending || name.trim() === ""} className={primaryButtonClass}>
+          <button type="submit" disabled={pending || name.trim() === ""} className={classes.save}>
             Save
           </button>
-          <button type="button" onClick={() => setName(value)} className={quietButtonClass}>
+          <button type="button" onClick={() => setName(value)} className={classes.cancel}>
             Cancel
           </button>
         </>
       )}
-      <ProblemText error={error} />
+      <ProblemText error={error} className={classes.problem} />
     </form>
   );
 }
