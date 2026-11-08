@@ -1,4 +1,5 @@
-# Checks every pull request. The rules come from design/engineering-principles.md:
+# Checks every pull request, and main after each merge (Deploy waits for that run). The rules come from
+# design/engineering-principles.md:
 # rustfmt and clippy are law, the OpenAPI file and the web types are generated and must not drift, and the web
 # app lints with no warnings.
 
@@ -6,6 +7,8 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
