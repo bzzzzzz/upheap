@@ -27,10 +27,17 @@ export function problemMessage(error: Error): string {
   return error instanceof ApiProblem && error.hint ? `${message} Try “${error.hint}”.` : message;
 }
 
-export function ProblemText({ error }: { error: Error | null }) {
+/** `className` is the text colour, which a page in the design tokens sets. */
+export function ProblemText({
+  error,
+  className = "text-red-700 dark:text-red-400",
+}: {
+  error: Error | null;
+  className?: string;
+}) {
   if (!error) return null;
   return (
-    <p role="alert" className="basis-full text-sm text-red-700 dark:text-red-400">
+    <p role="alert" className={`basis-full text-sm ${className}`}>
       {problemMessage(error)}
     </p>
   );

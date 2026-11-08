@@ -200,7 +200,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
           <span>Sign out</span>
         </SignOutButton>
         <div className="hidden lg:block">
-          <StorageNote className="px-2 pt-3" />
+          <StorageNote className="px-2 pt-1.5" />
         </div>
       </div>
     </aside>
