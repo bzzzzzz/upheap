@@ -1,7 +1,7 @@
 # Cloud Run and Neon on Postgres
 
 Plan for running Upheap in production on Google Cloud Run with a Neon Postgres database. Both scale to zero, so a
-deployment with little use costs close to nothing. Last reviewed 2026-11-07.
+deployment with little use costs close to nothing. Last reviewed 2026-11-08.
 
 ## Why
 
@@ -27,6 +27,65 @@ deployment with little use costs close to nothing. Last reviewed 2026-11-07.
 5. **Cold starts:** expected to be about a second, mostly from waking Neon. `--min-instances=1` removes them for
    about $5–10 a month if they turn out to bother people.
 
+## Production setup
+
+What runs today, set up by hand on 2026-11-08:
+
+| Piece | Value |
+| --- | --- |
+| Google Cloud project | `upheap`, region `us-west1` (Oregon) |
+| Neon | Postgres 17 in AWS `us-west-2` (Oregon), so queries stay in one region |
+| Image repository | Artifact Registry `us-west1-docker.pkg.dev/upheap/upheap`, image `upheap-server`, tagged with the commit |
+| Cloud Run service | `upheap`, public, at most 3 instances, startup probe on `/readyz`, startup CPU boost |
+| Configuration | `DATABASE_URL` from the Secret Manager secret `upheap-database-url` (Neon's pooled URL, `sslmode=require`), `BASE_URL=https://upheap-251561194444.us-west1.run.app`, `DATABASE_MAX_CONNECTIONS=3`, `ALLOW_REGISTRATION=false` |
+| Runtime identity | The default compute service account, with `secretmanager.secretAccessor` on the secret |
+
+The service uses Google's `run.app` URL for now; a mapped domain would change `BASE_URL`.
+
+### Deploying
+
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) deploys every push to `main`, and can be run by
+hand from the Actions tab. It builds the Docker image on the GitHub runner, pushes it to Artifact Registry, and runs
+`gcloud run deploy` with the whole configuration above, so the service matches the workflow file. To change a
+setting, change the workflow, not the service.
+
+The workflow signs in through Workload Identity Federation: GitHub's OIDC token for this repository's `main` is
+exchanged for the `github-deploy` service account, so no key is stored anywhere. The one-time setup:
+
+```sh
+PROJECT_ID=upheap
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+DEPLOY_SA=github-deploy@$PROJECT_ID.iam.gserviceaccount.com
+
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com
+gcloud iam service-accounts create github-deploy --display-name="GitHub deploy"
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=serviceAccount:$DEPLOY_SA --role=roles/run.developer --condition=None
+gcloud artifacts repositories add-iam-policy-binding upheap --location=us-west1 \
+  --member=serviceAccount:$DEPLOY_SA --role=roles/artifactregistry.writer
+# Lets the deploy start revisions that run as the runtime service account.
+gcloud iam service-accounts add-iam-policy-binding $PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+  --member=serviceAccount:$DEPLOY_SA --role=roles/iam.serviceAccountUser
+
+gcloud iam workload-identity-pools create github --location=global --display-name=GitHub
+gcloud iam workload-identity-pools providers create-oidc upheap --location=global \
+  --workload-identity-pool=github --issuer-uri=https://token.actions.githubusercontent.com \
+  --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref \
+  --attribute-condition="assertion.repository=='bzzzzzz/upheap' && assertion.ref=='refs/heads/main'"
+gcloud iam service-accounts add-iam-policy-binding $DEPLOY_SA --role=roles/iam.workloadIdentityUser \
+  --member=principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/bzzzzzz/upheap
+
+gh variable set GCP_PROJECT_ID --body $PROJECT_ID
+gh variable set GCP_REGION --body us-west1
+gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --body $DEPLOY_SA
+gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
+  --body projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/upheap
+gh variable set BASE_URL --body https://upheap-$PROJECT_NUMBER.us-west1.run.app
+```
+
+To roll back, send traffic to an earlier revision:
+`gcloud run services update-traffic upheap --region us-west1 --to-revisions=<revision>=100`.
+
 ## Progress
 
 Status: ✅ done · 🟡 partial · ⬜ not started.
@@ -42,9 +101,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Connection pool size set from config | ✅ | `DATABASE_MAX_CONNECTIONS`, default 5 |
 | Migrations safe when several instances start at once | ✅ | Advisory lock around the run; `crates/store/tests/postgres_migrations.rs` |
 | Docs updated: Postgres supported for production | ✅ | [offering.md](offering.md) §4, [technical-design.md](technical-design.md), README |
-| Neon project and Cloud Run service set up | ⬜ | |
-| Deploy from CI on merge to `main` | ⬜ | |
-| First production deploy, backups checked | ⬜ | Neon's point-in-time restore window on the chosen plan |
+| Neon project and Cloud Run service set up | ✅ | See [Production setup](#production-setup) |
+| Deploy from CI on merge to `main` | ✅ | `.github/workflows/deploy.yml`, Workload Identity Federation |
+| First production deploy | ✅ | By hand on 2026-11-08, through Neon's pooled endpoint |
+| Backups checked | ⬜ | Neon's point-in-time restore window on the chosen plan |
 
 ## What running the suites on Postgres found
 
@@ -71,14 +131,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   nothing pending. The lock is transaction-scoped because Neon's pooler runs in transaction mode, where a
   session-scoped lock could be taken and released on different server connections. MySQL and SQLite have no such
   lock; they aren't run with several instances.
-- **Prepared statements through the pooler.** sqlx prepares statements. Neon's PgBouncer supports protocol-level
-  prepared statements in transaction mode, but this hasn't been tried against Neon yet; check it on the first
-  deploy, and fall back to the direct endpoint if it fails.
-- **Startup parameters through the pooler.** sqlx sets `extra_float_digits` when it connects, and PgBouncer refuses
-  startup parameters it doesn't know unless they are listed in `ignore_startup_parameters`. Neon's pooler is
-  expected to accept it, but this is untried too. If connecting through the pooler fails on it, use the direct
-  endpoint, or have `store::connect` stop sqlx sending it (`PgConnectOptions::extra_float_digits(None)`); no column
-  is a float, so nothing depends on it.
+- **sqlx through the pooler: works.** sqlx prepares statements and sets `extra_float_digits` when it connects,
+  either of which PgBouncer can refuse. Neon's pooler accepted both on the first deploy (2026-11-08). If a later
+  Neon change breaks it, put the direct endpoint in the secret, or have `store::connect` stop sending the parameter
+  (`PgConnectOptions::extra_float_digits(None)`; no column is a float).
 - **No work between requests.** Cloud Run pauses the CPU between requests. The server has no background timers
   today; any added later must be triggered by Cloud Scheduler calling an endpoint instead.
 - **Neon free tier limits.** About 0.5 GB of storage and a short restore window. Decide whether a paid plan is

@@ -1,0 +1,66 @@
+# Deploys the server to Cloud Run on every push to main (design/cloud-run-postgres.md): builds the Docker image,
+# pushes it to Artifact Registry tagged with the commit, and rolls out a new revision. CI has already tested the
+# change on its pull request. Google Cloud is reached through Workload Identity Federation, so no key is stored here;
+# the repository variables below come from the one-time setup in the design doc.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deployment at a time, in merge order; a newer push doesn't cancel one that is going out.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/upheap/upheap-server:${{ github.sha }}
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Sign Docker in to Artifact Registry
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The layer cache lets an unchanged web app or dependency set skip its stage.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The whole configuration is set on every deploy, so the service matches this file rather than earlier
+      # manual changes. --allow-unauthenticated isn't repeated: the public binding stays on the service.
+      - name: Deploy to Cloud Run
+        run: >-
+          gcloud run deploy upheap
+          --image "$IMAGE"
+          --region "$REGION"
+          --port 8080
+          --set-secrets DATABASE_URL=upheap-database-url:latest
+          --set-env-vars "BASE_URL=${{ vars.BASE_URL }},DATABASE_MAX_CONNECTIONS=3,ALLOW_REGISTRATION=false"
+          --max-instances 3
+          --startup-probe httpGet.path=/readyz,periodSeconds=2,failureThreshold=30
+          --quiet
