@@ -132,8 +132,39 @@ test("the next item can be typed and added while the list catches up", async ({ 
   await expect(row(page, "Call Sam")).toBeVisible();
 });
 
+test("an add on its way is no draft to discard, and what's changed meanwhile stays", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+  const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
+  // The server takes its time to take each item.
+  await page.route(items, async (route) => {
+    if (route.request().method() === "POST") await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await dialog.getByLabel("Add another").check();
+  const need = dialog.getByRole("radiogroup", { name: "Need" });
+
+  // Changed while the first add is on its way, the title and the need are the next item's.
+  await fillIn(page, "Pay rent");
+  await dialog.getByLabel("Title").press("Enter");
+  await dialog.getByLabel("Title").fill("Call Sam");
+  await need.getByRole("radio", { name: "Critical", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("“Pay rent”");
+  await expect(dialog.getByLabel("Title")).toHaveValue("Call Sam");
+  await expect(need.getByRole("radio", { name: "Critical", exact: true })).toBeChecked();
+
+  // Sent and untouched, there's nothing to discard: Escape closes, and the toast says where it went.
+  await dialog.getByLabel("Title").press("Enter");
+  await dialog.getByLabel("Title").press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Added “Call Sam”" })).toBeVisible();
+  await page.unroute(items);
+  await expect(row(page, "Call Sam")).toBeVisible();
+  await expect(row(page, "Pay rent")).toBeVisible();
+});
+
 test("an item the list's search hides is added without a position", async ({ page }) => {
-  test.skip(isPhone(page), "The phone's + opens Add from the tabs, which don't know the list's search.");
   await addItem(page, "Water the plants");
   await page.getByLabel("Search items").fill("plants");
   await addItem(page, "Pay the rent", {}, { listed: false });

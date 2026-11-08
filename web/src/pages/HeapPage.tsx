@@ -9,6 +9,7 @@ import { CopyLink } from "../components/CopyLink";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
+import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
 import { SavedViewsBar } from "../components/SavedViewsBar";
@@ -41,7 +42,7 @@ export function HeapPage({
   onViewChange: (view: ListSearch) => void;
 }) {
   const list = useRankedList(heapRef, toListQuery(view));
-  const [search, setSearch] = useState("");
+  const { search, setSearch } = useListSearch();
   const [panel, setPanel] = useState<Panel>(null);
   const changeState = useChangeState(heapRef, list.data);
   const closeItem = useCloseItem(heapRef, itemKey);

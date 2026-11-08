@@ -3,7 +3,7 @@ import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { Dialog, Modal, ModalOverlay, ToggleButtonGroup } from "react-aria-components";
 
-import type { DueInput, HeapRef, ItemTag, Me, Need, Parameter, Size } from "../api/client";
+import type { DueInput, HeapRef, Item, ItemTag, Me, Need, Parameter, Size } from "../api/client";
 import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons } from "./ChoiceButtons";
@@ -124,6 +124,23 @@ const addedNote = ({ title, heapName, place }: Added) =>
 
 const sameHeap = (a: HeapRef, b: HeapRef) => a.team === b.team && a.heap === b.heap;
 
+/** An add on its way: where it goes, whether Add another was on, the edits it was made from, and its number. */
+type SentAdd = {
+  heap: HeapRef;
+  heapName: string;
+  onScreen: boolean;
+  addAnother: boolean;
+  edits: Partial<Draft>;
+  number: number;
+};
+
+/** The edits changed since `sent`, each change making a new value, so the rest can go. */
+function changedSince(edits: Partial<Draft>, sent: Partial<Draft>): Partial<Draft> {
+  return Object.fromEntries(
+    Object.entries(edits).filter(([key, value]) => sent[key as keyof Draft] !== value),
+  ) as Partial<Draft>;
+}
+
 /**
  * Every field Add item takes, the title focused (Req Views: Add item). The title and the need are required. Picking
  * a tag brings up the parameters linked to it. Enter in the title or ⌘↵ adds; with Add another ticked the dialog
@@ -152,13 +169,14 @@ export function AddItemDialog({
   const navigate = useNavigate();
   const showToast = useToast();
   const refetchList = useRefetchRankedList();
-  // Counts adds and heap changes, so only the newest add's message is shown, and none for a heap left since.
+  // Whether the dialog is still open, and which add or heap change came last, for an add the server answers later:
+  // only the newest add's message shows in the dialog, and one the dialog is gone for shows as a toast.
+  const open = useRef(true);
   const latest = useRef(0);
-  const mounted = useRef(true);
   useEffect(() => {
-    mounted.current = true;
+    open.current = true;
     return () => {
-      mounted.current = false;
+      open.current = false;
     };
   }, []);
   // The heap the item goes into, the one on screen unless another is chosen.
@@ -170,6 +188,8 @@ export function AddItemDialog({
   const [addAnother, setAddAnother] = useAddAnother();
   // What the user has set, over the view's prefill, which belongs to the heap on screen.
   const [edits, setEdits] = useState<Partial<Draft>>({});
+  // The edits of the add on its way, until the server answers. While they're untouched there's nothing unsaved.
+  const [sent, setSent] = useState<Partial<Draft> | null>(null);
   const draft: Draft = { ...EMPTY, ...(onScreen ? prefill : {}), ...edits };
   // A new key remounts the due picker, so a cleared draft doesn't keep Exact date picked.
   const [round, setRound] = useState(0);
@@ -198,9 +218,10 @@ export function AddItemDialog({
   };
 
   const canAdd = draft.title.trim() !== "" && draft.need !== null && !create.isPending;
+  const unsaved = draft.title.trim() !== "" && edits !== sent;
 
   const requestClose = () => {
-    if (draft.title.trim() !== "" && !confirmingDiscard) {
+    if (unsaved && !confirmingDiscard) {
       setConfirmingDiscard(true);
     } else {
       onClose();
@@ -221,7 +242,7 @@ export function AddItemDialog({
     // A new tab or window leaves the dialog as it is.
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
-    if (draft.title.trim() !== "") {
+    if (unsaved) {
       setOpenAfterDiscard(item);
       setConfirmingDiscard(true);
       return;
@@ -249,8 +270,8 @@ export function AddItemDialog({
     event.preventDefault();
     const need = draft.need;
     if (!canAdd || need === null) return;
-    const into = { heap: target, heapName, onScreen, addAnother, title: draft.title };
-    const add = ++latest.current;
+    const add = { heap: target, heapName, onScreen, addAnother, edits, number: ++latest.current };
+    setSent(edits);
     // Through the promise rather than `onSuccess`, which is dropped once the dialog has closed. It settles as soon as
     // the server has the item, so the next one can be typed and added while the list catches up.
     create
@@ -273,39 +294,46 @@ export function AddItemDialog({
         },
       })
       .then(
-        async (item) => {
-          if (into.addAnother) {
-            setConfirmingDiscard(false);
-            setOpenAfterDiscard(null);
-            // A title typed since Enter is the next item's, and stays.
-            setEdits((current) =>
-              current.title !== undefined && current.title !== into.title ? { title: current.title } : {},
-            );
-            setRound((n) => n + 1);
-            titleRef.current?.focus();
-          } else {
-            onClose();
-          }
-          // Where it landed, from the list on screen fetched again; not if the search there hides it.
-          const list = into.onScreen && view ? await refetchList(heapRef, toListQuery(view)) : undefined;
-          const place = list && placeOf(list, item.key);
-          const shown = place && matchesSearch(place.entry, search) ? place : undefined;
-          const result: Added = {
-            title: item.title,
-            key: item.key,
-            heap: into.heap,
-            heapName: into.heapName,
-            place: shown && { position: shown.entry.position, section: shown.section },
-          };
-          if (!into.addAnother) {
-            showToast({ message: addedMessage(result), action: { label: "Open it", run: () => openItem(result) } });
-          } else if (mounted.current && latest.current === add) {
-            setAdded(result);
-          }
-        },
-        // Shown as `create.error`.
-        () => {},
+        (item) => void onAdded(item, add),
+        // Shown as `create.error`; the draft is still there to try again.
+        () => setSent(null),
       );
+  };
+
+  /**
+   * Once the server has the item: the dialog clears for the next one, or closes, at once; then, with the list on
+   * screen fetched again, it says where the item landed, in the dialog or, without Add another or once the dialog is
+   * gone, in a toast.
+   */
+  const onAdded = async (item: Item, add: SentAdd) => {
+    setSent(null);
+    if (!add.addAnother) {
+      onClose();
+    } else if (open.current) {
+      // What was changed since Enter belongs to the next item, and stays.
+      setEdits((current) => changedSince(current, add.edits));
+      setConfirmingDiscard(false);
+      setOpenAfterDiscard(null);
+      setRound((n) => n + 1);
+      titleRef.current?.focus();
+    }
+
+    const list = add.onScreen && view ? await refetchList(heapRef, toListQuery(view)) : undefined;
+    const place = list && placeOf(list, item.key);
+    // Not a position the search on screen hides.
+    const shown = place && matchesSearch(place.entry, search) ? place : undefined;
+    const result: Added = {
+      title: item.title,
+      key: item.key,
+      heap: add.heap,
+      heapName: add.heapName,
+      place: shown && { position: shown.entry.position, section: shown.section },
+    };
+    if (!add.addAnother || !open.current) {
+      showToast({ message: addedMessage(result), action: { label: "Open it", run: () => openItem(result) } });
+    } else if (latest.current === add.number) {
+      setAdded(result);
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {

@@ -1,7 +1,7 @@
 // The app shell at each width (design/app-ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import { Link, Outlet, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
+import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
 import {
   Activity,
   Check,
@@ -23,6 +23,7 @@ import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from
 import type { HeapRef, Me } from "../api/client";
 import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useSignOut, useTeam } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
+import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { PopoverSheet } from "../components/PopoverSheet";
@@ -35,6 +36,8 @@ export function AppLayout() {
   useKeyboardInset();
   const { team, heap } = useParams({ strict: false });
   const heapRef = team !== undefined && heap !== undefined ? { team, heap } : undefined;
+  // The heap's list, also with an item open over it.
+  const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
 
   return (
     // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
@@ -42,23 +45,25 @@ export function AppLayout() {
     // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
     // right-hand padding.
     <ToastProvider>
-      <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
-        <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
-          {me && <Sidebar me={me} heapRef={heapRef} />}
-          <div className="min-w-0 flex-1 bg-canvas">
-            {me && <PhoneTopBar me={me} heapRef={heapRef} />}
-            {/* On a phone, room at the bottom for the tabs. */}
-            <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
-              {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
-              <Outlet />
-              <div className="lg:hidden">
-                <StorageNote />
+      <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : undefined}>
+        <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
+          <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
+            {me && <Sidebar me={me} heapRef={heapRef} />}
+            <div className="min-w-0 flex-1 bg-canvas">
+              {me && <PhoneTopBar me={me} heapRef={heapRef} />}
+              {/* On a phone, room at the bottom for the tabs. */}
+              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
+                {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
+                <Outlet />
+                <div className="lg:hidden">
+                  <StorageNote />
+                </div>
               </div>
             </div>
+            {me && heapRef && <PhoneTabs me={me} heapRef={heapRef} />}
           </div>
-          {me && heapRef && <PhoneTabs me={me} heapRef={heapRef} />}
         </div>
-      </div>
+      </ListSearchProvider>
     </ToastProvider>
   );
 }
@@ -237,6 +242,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const [adding, setAdding] = useState(false);
   // On the list, Add starts from its view; the heap's other pages have none.
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
+  const { search } = useListSearch();
   const [more, setMore] = useState(false);
 
   return (
@@ -266,7 +272,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
         <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
         <span>More</span>
       </button>
-      {adding && <AddItemDialog heapRef={heapRef} view={view} onClose={() => setAdding(false)} />}
+      {adding && <AddItemDialog heapRef={heapRef} view={view} search={search} onClose={() => setAdding(false)} />}
       <MoreSheet me={me} heapRef={heapRef} isOpen={more} onClose={() => setMore(false)} />
     </nav>
   );

@@ -188,15 +188,21 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
 }
 
 /**
- * Fetches a view of a heap's ranked list again, the one on screen, and gives it back. A fetch already on its way, as
- * after an add invalidates the heap, is waited for rather than started again, so Add says where an item landed from
- * the list itself rather than from a second request (ux-tracker.md, open question 4). `undefined` if it fails.
+ * Gives back a view of a heap's ranked list, the one on screen, as fetched from now on, so Add can say where an item
+ * the server has just taken landed, from the list itself (ux-tracker.md, open question 4). A fetch already on
+ * its way, as after the add invalidated the heap, is waited for rather than started again; if it was cancelled
+ * meanwhile (another change invalidated the heap), the list is fetched once more. If fetching fails, it's the list as
+ * cached, which may not have the item yet.
  */
 export function useRefetchRankedList() {
   const queryClient = useQueryClient();
   return async (heap: HeapRef, view: ListViewQuery): Promise<RankedList | undefined> => {
+    const since = Date.now();
     const queryKey = rankedViewKey(heap, view);
     await queryClient.refetchQueries({ queryKey, exact: true }, { cancelRefetch: false });
+    if ((queryClient.getQueryState(queryKey)?.dataUpdatedAt ?? 0) < since) {
+      await queryClient.refetchQueries({ queryKey, exact: true });
+    }
     return queryClient.getQueryData<RankedList>(queryKey);
   };
 }
