@@ -30,6 +30,7 @@ export type Role = Schemas["Role"];
 export type Heap = Schemas["Heap"];
 export type UserMatch = Schemas["UserMatch"];
 export type User = Schemas["User"];
+export type UserRef = Schemas["UserRef"];
 export type SavedView = Schemas["SavedView"];
 export type ListViewInput = Schemas["ListViewInput"];
 export type Parameter = Schemas["Parameter"];

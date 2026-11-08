@@ -90,8 +90,9 @@ test("an item is closed from the list, undone, and reopened from Closed", async 
   await row(page, "Write release notes").getByRole("button", { name: "Mark Write release notes done" }).click();
   await expect(row(page, "Write release notes")).toHaveCount(0);
   await goTo(page, "Closed");
-  const closed = page.getByRole("listitem").filter({ hasText: "Write release notes" });
-  await expect(closed).toContainText("Done ·");
+  const today = page.getByRole("region", { name: "Today" });
+  const closed = today.getByRole("listitem").filter({ hasText: "Write release notes" });
+  await expect(closed).toContainText("Done · today by you");
   await closed.getByRole("button", { name: "Reopen" }).click();
   await expect(page.getByText("Nothing closed yet.")).toBeVisible();
 
