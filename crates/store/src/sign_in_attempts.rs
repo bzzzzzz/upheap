@@ -16,7 +16,7 @@ const ROW: &str = "(sign-in attempts)";
 /// Counts one attempt for the address and returns its attempts so far, this one included.
 ///
 /// An attempt at or after the end of the window opens a new one, ending at `new_window_end`. Counting is a single upsert, so concurrent
-/// attempts are each counted, on SQLite and on MySQL alike, and none can slip past the limit by racing another.
+/// attempts are each counted on every backend, and none can slip past the limit by racing another.
 /// Run it in a transaction to read back this attempt's own count: the upsert locks the row until the transaction
 /// ends. Outside one, the count can include attempts made since, which only errs towards refusing.
 pub async fn count_sign_in_attempt(
@@ -26,22 +26,24 @@ pub async fn count_sign_in_attempt(
     new_window_end: Timestamp,
 ) -> Result<SignInAttempts, StoreError> {
     let new_end = new_window_end.as_millis();
-    let ended = Expr::col(Column::WindowEndsAt).lte(now.as_millis());
+    // Columns are named with their table: in Postgres's `ON CONFLICT` a bare name could also mean `excluded`'s.
+    let current = |column: Column| Expr::col((sign_in_attempts::Entity, column));
+    let ended = current(Column::WindowEndsAt).lte(now.as_millis());
     let row = sign_in_attempts::ActiveModel {
         email_hash: Set(email_hash.to_owned()),
         attempts: Set(1),
         window_ends_at: Set(new_end),
     };
-    // Both expressions read the row as it was: SQLite always does, and MySQL does here because `attempts` is
-    // assigned before `window_ends_at`.
+    // Both expressions read the row as it was: SQLite and Postgres always do, and MySQL does here because
+    // `attempts` is assigned before `window_ends_at`.
     let on_conflict = OnConflict::column(Column::EmailHash)
         .value(
             Column::Attempts,
-            Expr::case(ended.clone(), 1).finally(Expr::col(Column::Attempts).add(1)),
+            Expr::case(ended.clone(), 1).finally(current(Column::Attempts).add(1)),
         )
         .value(
             Column::WindowEndsAt,
-            Expr::case(ended, new_end).finally(Expr::col(Column::WindowEndsAt)),
+            Expr::case(ended, new_end).finally(current(Column::WindowEndsAt)),
         )
         .to_owned();
     sign_in_attempts::Entity::insert(row)

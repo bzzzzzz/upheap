@@ -32,7 +32,7 @@ Companion to [technical-design.md](technical-design.md). These are the rules we 
 
 1. Nothing is deleted. Use archive columns and state transitions, never `DELETE`, and no `ON DELETE CASCADE`. The exceptions are a team membership, whose removal deletes the `team_members` row while the audit log keeps the history (`member_removed`, `member_left`), and authentication plumbing that isn't domain data: ended sessions and sign-in attempt counts.
 2. Every change and its audit entry are written in one transaction. If the audit write fails, the change fails. Audit entries belong to a team, so a change to a user, such as their display name, is recorded in each of their teams; a user in no team has nowhere to record it, and the change goes unrecorded.
-3. Use portable SQL only. Anything that works on SQLite but not MySQL, or the reverse, doesn't go in. CI runs on both.
+3. Use portable SQL only. Anything that works on one of SQLite, MySQL and Postgres but not the others doesn't go in. CI runs on all three.
 4. Migrations only go forward and are never edited after release. Each one must be safe on a populated database.
 5. Store UTC everywhere. Timezones only apply at the edges, through the `Time-Zone` header.
 6. Use optimistic concurrency on every mutable row. A stale `version` gets `409`, never a silent overwrite.
@@ -152,7 +152,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 1. Test behaviour, not implementation. Tests go through public functions and endpoints.
 2. Use property tests for ranking invariants: tie stability, monotonic age, blockers inheriting the priority of what they block, and no cycles.
 3. Every bug gets a regression test before the fix.
-4. Integration tests run against real SQLite and MySQL, with no database mocks.
+4. Integration tests run against real SQLite, MySQL and Postgres, with no database mocks.
 5. Tests are fast and hermetic. They take an injected clock, and an injected random source when they check random values, use no network, and don't depend on order.
 6. Keep end-to-end tests to the golden paths. Everything else is tested lower down.
 7. **Rust test layout:**

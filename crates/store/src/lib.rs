@@ -26,17 +26,20 @@ pub mod users;
 use std::time::Duration;
 
 use sea_orm::{ConnectOptions, Database};
-pub use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, Statement, TransactionTrait};
-use sea_orm_migration::MigratorTrait;
+pub use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, Statement, TransactionTrait};
+use sea_orm_migration::{IntoSchemaManagerConnection, MigratorTrait};
 
 pub use error::StoreError;
 
-/// Opens a connection pool for `url` (`sqlite://…` or `mysql://…`). Doesn't run migrations.
-pub async fn connect(url: &str) -> Result<DatabaseConnection, StoreError> {
+/// Opens a connection pool for `url` (`sqlite://…`, `mysql://…` or `postgres://…`) that keeps at most
+/// `max_connections` open. Doesn't run migrations. An in-memory SQLite database always keeps one connection.
+pub async fn connect(url: &str, max_connections: u32) -> Result<DatabaseConnection, StoreError> {
     if url.contains(":memory:") {
         return connect_in_memory().await;
     }
-    Database::connect(pool_options(url)).await.map_err(StoreError::from)
+    let mut options = pool_options(url);
+    options.max_connections(max_connections);
+    Database::connect(options).await.map_err(StoreError::from)
 }
 
 fn pool_options(url: &str) -> ConnectOptions {
@@ -74,7 +77,33 @@ async fn connect_in_memory() -> Result<DatabaseConnection, StoreError> {
 }
 
 /// Applies every pending migration and returns how many ran.
+///
+/// On Postgres the whole run is one transaction holding an advisory lock, so servers starting together apply
+/// the migrations once: the others wait for the lock, then find nothing pending. The lock is transaction-scoped
+/// rather than session-scoped because a pooler in transaction mode (Neon's PgBouncer) may hand each statement
+/// outside a transaction to a different server connection. Postgres runs DDL inside transactions, so a failed
+/// run leaves the schema as it was. MySQL and SQLite run each migration on its own, as before.
 pub async fn run_migrations(db: &DatabaseConnection) -> Result<usize, StoreError> {
+    if db.get_database_backend() != DbBackend::Postgres {
+        return apply_pending_migrations(db).await;
+    }
+    let txn = db.begin().await?;
+    txn.execute_unprepared(&format!("SELECT pg_advisory_xact_lock({MIGRATION_LOCK_KEY})"))
+        .await?;
+    let applied = apply_pending_migrations(&txn).await?;
+    txn.commit().await?;
+    Ok(applied)
+}
+
+/// The Postgres advisory lock key that serialises migration runs. Any fixed number works, as long as nothing else
+/// in the database uses it; this one is "upheap" in ASCII.
+const MIGRATION_LOCK_KEY: i64 = 0x7570_6865_6170;
+
+async fn apply_pending_migrations<'c, C>(db: &'c C) -> Result<usize, StoreError>
+where
+    C: ConnectionTrait,
+    &'c C: IntoSchemaManagerConnection<'c>,
+{
     let pending = migration::Migrator::get_pending_migrations(db).await?.len();
     tracing::info!(pending, "applying migrations");
     migration::Migrator::up(db, None).await?;

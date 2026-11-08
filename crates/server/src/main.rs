@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: Config) -> anyhow::Result<()> {
-    let db = store::connect(&config.database_url)
+    let db = store::connect(&config.database_url, config.database_max_connections)
         .await
         .context("can't connect to the database")?;
     store::run_migrations(&db).await.context("migrations failed")?;

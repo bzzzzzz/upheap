@@ -1,5 +1,5 @@
-//! Counting sign-in attempts. Runs on in-memory SQLite, or on MySQL with `TEST_DATABASE_URL` set; the MySQL run
-//! is what proves that concurrent attempts are each counted.
+//! Counting sign-in attempts. Runs on in-memory SQLite, or on MySQL or Postgres with `TEST_DATABASE_URL` set; those
+//! runs are what prove that concurrent attempts are each counted.
 
 use anyhow::{Context, Result};
 use domain::sign_in::SignInAttempts;
@@ -11,10 +11,16 @@ fn at(minutes: i64) -> Result<Timestamp> {
     Timestamp::from_millis(Duration::from_minutes(minutes).as_millis()).context("in range")
 }
 
-/// Counts an attempt at `now`, opening 15-minute windows.
-async fn count(db: &impl ConnectionTrait, key: &str, now: Timestamp) -> Result<SignInAttempts> {
+/// A stand-in for the email hash named `name`, as long as a real one. The column is `char(64)`, which Postgres
+/// pads with spaces, so a shorter key would come back from a read different from how it went in.
+fn hash(name: &str) -> String {
+    format!("{name:-<64}")
+}
+
+/// Counts an attempt at `now` for the address named `name`, opening 15-minute windows.
+async fn count(db: &impl ConnectionTrait, name: &str, now: Timestamp) -> Result<SignInAttempts> {
     let window_end = now.checked_add(Duration::from_minutes(15)).context("in range")?;
-    Ok(store::sign_in_attempts::count_sign_in_attempt(db, key, now, window_end).await?)
+    Ok(store::sign_in_attempts::count_sign_in_attempt(db, &hash(name), now, window_end).await?)
 }
 
 #[gtest]
@@ -76,7 +82,7 @@ async fn clearing_and_pruning_forget_attempts() -> Result<()> {
     count(&db, "recent", at(10)?).await?;
 
     // Act
-    store::sign_in_attempts::clear_sign_in_attempts(&db, "signed-in").await?;
+    store::sign_in_attempts::clear_sign_in_attempts(&db, &hash("signed-in")).await?;
     let first_batch = store::sign_in_attempts::delete_ended_sign_in_windows(&db, at(20)?, 1).await?;
     let second_batch = store::sign_in_attempts::delete_ended_sign_in_windows(&db, at(20)?, 10).await?;
     let nothing_left = store::sign_in_attempts::delete_ended_sign_in_windows(&db, at(20)?, 10).await?;

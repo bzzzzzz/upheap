@@ -8,13 +8,14 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["sqlite", "mysql"]
+default = ["sqlite", "mysql", "postgres"]
 sqlite = ["sea-orm/sqlx-sqlite", "sea-orm-migration/sqlx-sqlite"]
 mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+postgres = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres"]
 # A connection whose SQL runs somewhere SeaORM doesn't drive itself, such as SQLite-wasm in the local build.
 proxy = ["sea-orm/proxy"]
-# Test databases for the store and API suites (`store::testing`). Needs both drivers to honour TEST_DATABASE_URL.
-testing = ["sqlite", "mysql"]
+# Test databases for the store and API suites (`store::testing`). Needs every driver to honour TEST_DATABASE_URL.
+testing = ["sqlite", "mysql", "postgres"]
 
 [dependencies]
 domain.workspace = true

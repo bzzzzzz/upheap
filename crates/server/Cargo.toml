@@ -12,9 +12,10 @@ name = "upheap-server"
 path = "src/main.rs"
 
 [features]
-default = ["sqlite", "mysql"]
+default = ["sqlite", "mysql", "postgres"]
 sqlite = ["store/sqlite"]
 mysql = ["store/mysql"]
+postgres = ["store/postgres"]
 
 [dependencies]
 anyhow.workspace = true

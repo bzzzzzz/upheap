@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use domain::item::Need;
 use domain::{HeapId, ItemId};
 use googletest::prelude::*;
-use store::{ConnectionTrait, DatabaseConnection};
+use store::{ConnectionTrait, DatabaseConnection, DbBackend};
 use uuid::Uuid;
 
 /// Migrations before the need one.
@@ -42,10 +42,15 @@ async fn existing_items_become_expected_and_heaps_get_the_default_weight() -> Re
         ),
     )
     .await?;
+    // `key` is reserved on MySQL, which quotes it with backticks; SQLite and Postgres take double quotes.
+    let key = match db.get_database_backend() {
+        DbBackend::MySql => "`key`",
+        _ => "\"key\"",
+    };
     run(
         &db,
         &format!(
-            "INSERT INTO items (id, heap_id, `key`, title, state, created_at, version) \
+            "INSERT INTO items (id, heap_id, {key}, title, state, created_at, version) \
              VALUES ('{}', '{}', 'k3x9a', 'Item', 'open', 0, 1)",
             id(3),
             id(2)
