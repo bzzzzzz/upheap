@@ -164,6 +164,28 @@ test("an add on its way is no draft to discard, and what's changed meanwhile sta
   await expect(row(page, "Pay rent")).toBeVisible();
 });
 
+test("an add that lands after its dialog closed leaves the next dialog open", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+  const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
+  await page.route(items, async (route) => {
+    if (route.request().method() === "POST") await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await fillIn(page, "First thing");
+  await dialog.getByLabel("Title").press("Enter");
+  await dialog.getByLabel("Title").press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  // The first add's answer closes nothing: the next draft stays where it is.
+  await openAdd(page);
+  await dialog.getByLabel("Title").fill("Second thing");
+  await expect(page.getByRole("status").filter({ hasText: "Added “First thing”" })).toBeVisible();
+  await expect(dialog.getByLabel("Title")).toHaveValue("Second thing");
+  await page.unroute(items);
+});
+
 test("an add that fails after the dialog closed says so in a toast", async ({ page, localBuild }) => {
   test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
   const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;

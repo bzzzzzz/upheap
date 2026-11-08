@@ -114,22 +114,21 @@ function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
 
   const run: ChangeState = (item, state, onError) => {
     const next = state === "done" && list ? nextToStart(list, item) : undefined;
-    update.mutate(
-      { item, patch: { state } },
-      {
-        onSuccess: (saved) => {
-          const restore: ItemPatch = { state: item.state };
-          if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
-          setToast({
-            message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
-            undo: () => update.mutate({ item: saved, patch: restore }, { onError: failed }),
-            action: next && { label: `Start next: ${next.title}`, run: () => run(next, "in_progress") },
-          });
-        },
-        onError: (error) => {
-          failed(error);
-          onError?.();
-        },
+    // `mutateAsync`, not `mutate` with callbacks: the toast can outlive the list (it stays while in the heap), and
+    // TanStack drops a call's callbacks once the component that made it has unmounted.
+    update.mutateAsync({ item, patch: { state } }).then(
+      (saved) => {
+        const restore: ItemPatch = { state: item.state };
+        if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
+        setToast({
+          message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
+          undo: () => update.mutateAsync({ item: saved, patch: restore }).then(undefined, failed),
+          action: next && { label: `Start next: ${next.title}`, run: () => run(next, "in_progress") },
+        });
+      },
+      (error: Error) => {
+        failed(error);
+        onError?.();
       },
     );
   };

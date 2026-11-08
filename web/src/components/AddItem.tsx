@@ -330,7 +330,8 @@ export function AddItemDialog({
   const onAdded = async (item: Item, add: SentAdd) => {
     setSent(null);
     if (!add.addAnother) {
-      onClose();
+      // Only this dialog: once it's gone, the parent's state may already belong to the next one the user opened.
+      if (open.current) onClose();
     } else if (open.current) {
       // What was changed since Enter belongs to the next item, and stays.
       const next = changedSince(currentEdits.current, add.edits);
