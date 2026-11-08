@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Route } from "@playwright/test";
 
 import {
   addItem,
@@ -8,6 +8,7 @@ import {
   openItem,
   PASSWORD as password,
   registerThroughApi,
+  row,
   signOut,
   uniqueUser,
 } from "./fixtures";
@@ -103,6 +104,63 @@ test("an item link opened while signed out signs in and opens the item", async (
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Fix the gate");
 });
 
+test("a session that ends mid-use returns to the page, with nothing left of the last user", async ({ page }) => {
+  // B first, so the page ends up signed in as A.
+  const userB = await registerThroughApi(page);
+  await page.context().clearCookies();
+  await registerThroughApi(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(HEAP_URL);
+  const titles = ["A's private plan", "A's other secret"];
+  for (const title of titles) await addItem(page, title);
+
+  // The session ends; the next request finds out.
+  await page.context().clearCookies();
+  await row(page, titles[0] ?? "")
+    .getByRole("link")
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/login\?redirect=/);
+  const back = new URL(page.url()).searchParams.get("redirect") ?? "";
+  expect(back).toMatch(/\/items\/[^/]+$/);
+
+  // B's requests for heap data wait, so anything shown meanwhile could only come from the old cache.
+  const held: Route[] = [];
+  await page.route("**/api/v1/teams/**", (route) => void held.push(route));
+  await page.getByLabel("Email").fill(userB.email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL((url) => url.pathname + url.search + url.hash === back);
+  const showsA = () =>
+    page.evaluate(
+      (titles) =>
+        titles.some(
+          (title) =>
+            document.body.innerText.includes(title) ||
+            [...document.querySelectorAll("input, textarea")].some(
+              (field) => (field as HTMLInputElement).value === title,
+            ),
+        ),
+      titles,
+    );
+  expect(await showsA()).toBe(false);
+  await expect.poll(() => held.length).toBeGreaterThan(0);
+  expect(await showsA()).toBe(false);
+
+  // Requests from now on go straight through.
+  await page.route("**/api/v1/teams/**", (route) => route.continue());
+  for (const route of held) await route.continue();
+  await page.waitForLoadState("networkidle");
+  // B isn't in A's team, so once the answers land the page still has nothing of A's to show.
+  expect(await showsA()).toBe(false);
+});
+
+test("a link's notice names an item only by a key's shape", async ({ page }) => {
+  await page.goto("/login?redirect=/teams/a/heaps/b/items/Your%20account%20is%20locked");
+  await expect(page.getByText("Sign in to open that page.")).toBeVisible();
+  await expect(page.getByText(/account is locked/)).toHaveCount(0);
+});
+
 test("a redirect that isn't a page of the app is ignored", async ({ page, baseURL }) => {
   const { email } = await registerThroughApi(page);
   const origin = new URL(baseURL ?? "").origin;
@@ -110,7 +168,8 @@ test("a redirect that isn't a page of the app is ignored", async ({ page, baseUR
     "//evil.example/steal",
     "https://evil.example",
     "/\\evil.example",
-    "/%09/evil.example",
+    // A raw tab, which the URL parser drops, leaving `//evil.example`.
+    "/\t/evil.example",
     "/.//evil.example",
     "javascript:alert(1)",
   ];

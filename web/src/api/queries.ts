@@ -448,7 +448,9 @@ export function useSignIn() {
   return useMutation({
     mutationFn: async (body: { email: string; password: string }) =>
       unwrap(await api.POST("/api/v1/auth/login", { body })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
+    // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
+    onSuccess: () => queryClient.removeQueries(),
   });
 }
 
@@ -457,7 +459,9 @@ export function useRegister() {
   return useMutation({
     mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) =>
       unwrap(await api.POST("/api/v1/auth/register", { body })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
+    // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
+    onSuccess: () => queryClient.removeQueries(),
   });
 }
 

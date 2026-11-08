@@ -38,6 +38,18 @@ export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
 }
 
+/** Whether `pathname` is sign-in's, by the router's matching, so `/LOGIN` counts too. */
+export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: string): boolean {
+  return router.matchRoutes(pathname, {}).some((match) => match.routeId === loginRoute.id);
+}
+
+/**
+ * An item key as `domain::handle::ItemKey` makes them: five characters of lowercase Crockford base32, at least one a
+ * digit. The notice names an item only when its segment has this shape, so a crafted link can't put its own words
+ * there.
+ */
+const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
+
 /**
  * `redirect` as a page of the app to return to after sign-in, with the router's matches for it, or nothing when it
  * isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to another site, and
@@ -65,7 +77,8 @@ const loginRoute = createRoute({
     const page = toAppPage(router, loginRoute.useSearch().redirect);
     // The router's own matching says whether the link is to an item, and which.
     const item = page?.matches.find((match) => match.routeId === itemRoute.id);
-    const itemKey = item && "item" in item.params ? String(item.params.item) : undefined;
+    const segment = item && "item" in item.params ? String(item.params.item) : undefined;
+    const itemKey = segment && ITEM_KEY.test(segment) ? segment : undefined;
     let notice: string | undefined;
     if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
     // With `href`, the router takes the whole location from it; without, it goes to `to`.

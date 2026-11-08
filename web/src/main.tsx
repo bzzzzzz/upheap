@@ -6,27 +6,32 @@ import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
 import { LocalDatabaseGate } from "./components/LocalDatabase";
-import { createAppRouter, signInSearch } from "./routes";
+import { createAppRouter, isSignInPath, signInSearch } from "./routes";
 import "./index.css";
+
+/**
+ * Sends a user whose session has ended to sign-in, which returns to the page, as the guard (`appRoute`) does. While a
+ * navigation is pending, `location` is already where it's going, so the two send the user to the same place. It
+ * replaces the page, so Back doesn't return to it signed out. Nothing happens on sign-in itself, where a wrong
+ * password is a `401` too.
+ */
+function onUnauthenticated(error: Error) {
+  if (!isUnauthenticated(error)) return;
+  const { location } = router.state;
+  if (isSignInPath(router, location.pathname)) return;
+  void router.navigate({ to: "/login", search: signInSearch(location.href), replace: true });
+}
 
 const queryClient = new QueryClient({
   // Every write records an audit entry, so any open history is out of date after one, even a failed one that the
   // server may have applied. Not awaited: a returned promise would hold every mutation until the histories reload.
   mutationCache: new MutationCache({
+    onError: onUnauthenticated,
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["audit"] });
     },
   }),
-  queryCache: new QueryCache({
-    onError: (error) => {
-      if (!isUnauthenticated(error)) return;
-      // Sign-in returns to the page, as from the guard (`appRoute`). While a navigation is pending, `location` is
-      // already where it's going, so the two send the user to the same place.
-      const { location } = router.state;
-      if (router.matchRoutes(location.pathname, {}).some((match) => match.routeId === "/login")) return;
-      void router.navigate({ to: "/login", search: signInSearch(location.href) });
-    },
-  }),
+  queryCache: new QueryCache({ onError: onUnauthenticated }),
   defaultOptions: {
     queries: {
       // Client errors won't fix themselves; retry only server and network failures.
