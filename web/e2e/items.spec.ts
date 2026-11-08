@@ -1,4 +1,5 @@
 import {
+  addDialog,
   addItem,
   changeState,
   closeField,
@@ -161,7 +162,7 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
   await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
   await page.keyboard.press("n");
-  const dialog = page.getByRole("dialog", { name: "Add an item" });
+  const dialog = addDialog(page);
   const due = dialog.getByRole("radiogroup", { name: "Due" });
   const need = dialog.getByRole("radiogroup", { name: "Need" });
   const add = dialog.getByRole("button", { name: "Add", exact: true });
@@ -178,6 +179,8 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByLabel("Add another").check();
   await dialog.getByLabel("Title").press("Enter");
   await expect(row(page, "Book the dentist").getByText("next week", { exact: true })).toBeVisible();
+  // It says where the item landed, in the dialog.
+  await expect(dialog.getByRole("status")).toContainText(/“Book the dentist”.* at #1/);
 
   // With Add another, the dialog stays open and clears, the need too.
   await expect(dialog.getByLabel("Title")).toHaveValue("");
@@ -189,6 +192,8 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByLabel("Exact due date").fill(dayFromToday(-1));
   await dialog.getByLabel("Title").press("ControlOrMeta+Enter");
   await expect(row(page, "Renew the passport").getByText("Overdue · yesterday", { exact: true })).toBeVisible();
+  // Overdue and critical, it went in at the top.
+  await expect(dialog.getByRole("status")).toContainText(/“Renew the passport”.* at #1/);
 
   // Closing with a title typed asks first.
   await dialog.getByLabel("Title").fill("A stray thought");

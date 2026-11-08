@@ -8,6 +8,7 @@ import type {
   ListViewInput,
   ListViewQuery,
   RankedItem,
+  RankedList,
   SavedView,
   Size,
   StateMode,
@@ -172,3 +173,27 @@ export const toViewInput = (search: ListSearch): ListViewInput => toListQuery(se
 /** Whether two URLs show the same list, whichever saved view they were opened from. */
 export const showSameList = (a: ListSearch, b: ListSearch) =>
   JSON.stringify(toListQuery(a)) === JSON.stringify(toListQuery(b));
+
+/**
+ * Where an item sits in the list, as the server ranked it: its entry, with its position within its group, and the
+ * group's title, if it shows one. For the item pane's "#3 · Up next" and Add's "Added at #4 in Up next".
+ */
+export function placeOf(
+  list: RankedList,
+  itemKey: string,
+): { entry: RankedItem; section: string | undefined } | undefined {
+  const sections: [RankedItem[], string | undefined][] = [
+    [list.pinned, pinnedTitle(list.pinned)],
+    [list.ranked, list.pinned.length > 0 ? "Up next" : undefined],
+    [list.blocked, "Blocked"],
+  ];
+  for (const [entries, section] of sections) {
+    const entry = entries.find((e) => e.item.key === itemKey);
+    if (entry) return { entry, section };
+  }
+  return undefined;
+}
+
+/** The title of the pinned group: In progress while that's all it holds. */
+export const pinnedTitle = (pinned: RankedItem[]) =>
+  pinned.every((entry) => entry.item.state === "in_progress") ? "In progress" : "Pinned";

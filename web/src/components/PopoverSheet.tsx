@@ -21,7 +21,7 @@ export function PopoverSheet({
   triggerRef: RefObject<HTMLElement | null>;
   isOpen: boolean;
   onClose: () => void;
-  placement?: "bottom end" | "end top";
+  placement?: "bottom end" | "bottom start" | "end top";
   children: ReactNode;
 }) {
   const phone = useMedia(PHONE);

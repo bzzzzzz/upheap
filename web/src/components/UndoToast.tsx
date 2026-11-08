@@ -1,5 +1,6 @@
+import { useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 /**
  * A message about a change just made, with a way to take it back, and sometimes the likely next step as `action`.
@@ -13,14 +14,45 @@ export type Toast = {
   error?: boolean;
 };
 
+/** Shows a toast in place of the one on screen, if any. */
+type ShowToast = (toast: Omit<Toast, "id">) => void;
+
+const ToastContext = createContext<ShowToast>(() => {
+  throw new Error("useToast needs a ToastProvider around it");
+});
+
+/**
+ * The app's one toast, shared by everything that shows one (the list's state changes, Add), so a new toast replaces
+ * the last instead of stacking on it. A toast belongs to the page it was shown on: going to another page, such as
+ * opening an item, puts it away, so it never covers the item sheet's buttons on a phone.
+ */
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const [shown, setShown] = useState<{ toast: Toast; path: string } | null>(null);
+  const show = useCallback<ShowToast>((toast) => setShown({ toast: { ...toast, id: Date.now() }, path }), [path]);
+  const dismiss = useCallback(() => setShown(null), []);
+  // Put away for good once the page changes, so coming back doesn't bring it back.
+  if (shown && shown.path !== path) setShown(null);
+  return (
+    <ToastContext.Provider value={show}>
+      {children}
+      <UndoToast toast={shown?.path === path ? shown.toast : null} onDismiss={dismiss} />
+    </ToastContext.Provider>
+  );
+}
+
+/** Shows a toast: from a component under the `ToastProvider`. */
+export const useToast = (): ShowToast => useContext(ToastContext);
+
 /** How long a toast stays. */
 const SHOW_FOR_MS = 6000;
 
 /**
  * The toast after a change from the list (app-ux.md, The list §3): bottom centre, above the phone's tabs. It goes
- * after a few seconds, or when Undo or ✕ is pressed.
+ * after a few seconds, or when Undo or ✕ is pressed. Under the Add dialog and the phone's sheets, so a toast from the
+ * last item added never covers the dialog's buttons.
  */
-export function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
+function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(onDismiss, SHOW_FOR_MS);
@@ -30,7 +62,7 @@ export function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss
   return (
     <div
       role={toast?.error ? "alert" : "status"}
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 sm:bottom-6"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-center px-4 sm:bottom-6"
     >
       {toast && (
         <div

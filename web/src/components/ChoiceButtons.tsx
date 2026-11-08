@@ -18,8 +18,41 @@ export function FieldLabel({ id, children }: { id: string; children: ReactNode }
 }
 
 /**
+ * Where a field's label goes: above its control, as the item pane has it, or beside it, as the Add dialog has it on a
+ * tablet or wide screen. There the field's label and control are the two cells of a row of the dialog's grid.
+ */
+export type FieldLayout = "stack" | "grid";
+
+/** A field's label and its control, laid out as `layout` says. */
+export function FieldFrame({
+  layout = "stack",
+  label,
+  children,
+}: {
+  layout?: FieldLayout;
+  label: ReactNode;
+  children: ReactNode;
+}) {
+  if (layout === "grid") {
+    return (
+      <>
+        {/* Level with the first line of buttons beside it: 36 px tall with a mouse, 44 px on a touch screen. */}
+        <div className="flex pt-2.5 pointer-coarse:pt-3.5">{label}</div>
+        <div className="relative flex min-w-0 flex-col gap-1.5">{children}</div>
+      </>
+    );
+  }
+  return (
+    <div className="relative flex min-w-0 flex-col gap-1.5">
+      {label}
+      {children}
+    </div>
+  );
+}
+
+/**
  * One value out of a few, as a row of buttons: effort and impact sizes, a parameter's options. Pressing the picked
- * button again clears it, so "unset" needs no button of its own.
+ * button again clears it, so "unset" needs no button of its own. `hint` goes under the buttons.
  */
 export function ChoiceButtons<T extends string>({
   label,
@@ -28,6 +61,8 @@ export function ChoiceButtons<T extends string>({
   onChange,
   disabled,
   tone = "ink",
+  layout = "stack",
+  hint,
 }: {
   label: ReactNode;
   options: readonly { id: T; label: string }[];
@@ -36,6 +71,8 @@ export function ChoiceButtons<T extends string>({
   disabled?: boolean;
   /** Violet for custom parameters, which read apart from the built-in fields everywhere. */
   tone?: "ink" | "param";
+  layout?: FieldLayout;
+  hint?: ReactNode;
 }) {
   const labelId = useId();
   const onSelectionChange = (keys: Set<Key>) => {
@@ -46,23 +83,29 @@ export function ChoiceButtons<T extends string>({
     tone === "param"
       ? " data-[selected]:border-param-ink data-[selected]:bg-param-soft data-[selected]:text-param-ink data-[selected]:font-medium"
       : "";
+  // Stacked, the buttons share the width of the field; beside their label, each is as wide as its name.
+  const grid = layout === "grid";
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <FieldLabel id={labelId}>{label}</FieldLabel>
+    <FieldFrame layout={layout} label={<FieldLabel id={labelId}>{label}</FieldLabel>}>
       <ToggleButtonGroup
         aria-labelledby={labelId}
         selectionMode="single"
         selectedKeys={value === null ? [] : [value]}
         onSelectionChange={onSelectionChange}
         isDisabled={disabled}
-        className="grid auto-cols-fr grid-flow-col gap-1"
+        className={grid ? "flex flex-wrap gap-1" : "grid auto-cols-fr grid-flow-col gap-1"}
       >
         {options.map((option) => (
-          <ToggleButton key={option.id} id={option.id} className={`${choiceButtonClass} rounded-lg px-1${toneClass}`}>
+          <ToggleButton
+            key={option.id}
+            id={option.id}
+            className={`${choiceButtonClass} rounded-lg ${grid ? "min-w-11" : "px-1"}${toneClass}`}
+          >
             {option.label}
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
-    </div>
+      {hint && <span className="text-xs text-muted">{hint}</span>}
+    </FieldFrame>
   );
 }

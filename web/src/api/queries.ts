@@ -27,6 +27,7 @@ import {
   type NewTag,
   type Parameter,
   type ParameterOption,
+  type RankedList,
   type ParameterPatch,
   type Role,
   type SavedView,
@@ -186,11 +187,22 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
   ]);
 }
 
+/**
+ * Reads a view of a heap's ranked list as last fetched, if it's cached. The list views on screen are fetched again
+ * before a `useCreateItem` mutation's promise settles, so read after it they rank the new item: Add says where it
+ * landed from the list itself rather than from a second request (ux-tracker.md, open question 4).
+ */
+export function useCachedRankedList() {
+  const queryClient = useQueryClient();
+  return (heap: HeapRef, view: ListViewQuery) => queryClient.getQueryData<RankedList>(rankedViewKey(heap, view));
+}
+
 export function useCreateItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: NewItem) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
+    // Returned, so the mutation settles only once the views on screen have been fetched again.
     onSettled: () => invalidateHeap(queryClient, heap),
   });
 }

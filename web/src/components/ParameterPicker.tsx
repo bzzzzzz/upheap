@@ -1,7 +1,7 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 
 import type { ItemParameter, Parameter } from "../api/client";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { ChoiceButtons, FieldFrame, type FieldLayout } from "./ChoiceButtons";
 
 /** The parameters of an item that has a value, as "Name: Label" chips. */
 export function ParameterChips({ parameters, className }: { parameters: ItemParameter[]; className?: string }) {
@@ -24,18 +24,22 @@ const MAX_BUTTON_LABEL = 12;
 
 /**
  * Picks a value for one of the heap's parameters, as effort and impact are picked: a row of option buttons when there
- * are a few short options, or a menu otherwise.
+ * are a few short options, or a menu otherwise. `hint`, under the control, says why it's asked.
  */
 export function ParameterPicker({
   parameter,
   value,
   onChange,
   disabled,
+  layout = "stack",
+  hint,
 }: {
   parameter: Parameter;
   value: string | null;
   onChange: (optionId: string | null) => void;
   disabled?: boolean;
+  layout?: FieldLayout;
+  hint?: ReactNode;
 }) {
   const id = useId();
   const options = parameter.options;
@@ -48,14 +52,20 @@ export function ParameterPicker({
         onChange={onChange}
         disabled={disabled}
         tone="param"
+        layout={layout}
+        hint={hint}
       />
     );
   }
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-param-ink">
-        {parameter.name}
-      </label>
+    <FieldFrame
+      layout={layout}
+      label={
+        <label htmlFor={id} className="text-xs font-medium text-param-ink">
+          {parameter.name}
+        </label>
+      }
+    >
       <select
         id={id}
         value={value ?? ""}
@@ -70,6 +80,7 @@ export function ParameterPicker({
           </option>
         ))}
       </select>
-    </div>
+      {hint && <span className="text-xs text-muted">{hint}</span>}
+    </FieldFrame>
   );
 }
