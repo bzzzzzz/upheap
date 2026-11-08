@@ -28,6 +28,19 @@ test("a hovered row starts its item, and Done offers to start the next one", asy
   await expect(page.getByRole("status").filter({ hasText: "“Water the plants” is done." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
 
+  // Slog counts even while a filter leaves it out of the list.
+  await addItem(page, "Tidy up", { effort: "S" });
+  await addItem(page, "Quick fix", { effort: "S" });
+  await page.getByRole("button", { name: "Filters" }).click();
+  const filters = page.getByRole("dialog", { name: "Filters" });
+  await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
+  await filters.getByRole("button", { name: "Close" }).click();
+  await expect(row(page, "Slog")).toHaveCount(0);
+  await row(page, "Tidy up").getByRole("button", { name: "Mark Tidy up done" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "“Tidy up” is done." })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
+  await page.getByRole("group", { name: "Filters on" }).getByRole("button", { name: "Remove filter Effort S" }).click();
+
   // ⋯ has the other states.
   await row(page, "Slog").hover();
   await row(page, "Slog").getByRole("button", { name: "More for Slog" }).click();

@@ -3755,23 +3755,6 @@
           "option_archived"
         ]
       },
-      "AuditActor": {
-        "type": "object",
-        "required": [
-          "id",
-          "display_name"
-        ],
-        "properties": {
-          "display_name": {
-            "type": "string",
-            "description": "Their display name now."
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
       "AuditChange": {
         "type": "object",
         "description": "One changed field, ready to show.",
@@ -3856,7 +3839,7 @@
             "$ref": "#/components/schemas/AuditAction"
           },
           "actor": {
-            "$ref": "#/components/schemas/AuditActor"
+            "$ref": "#/components/schemas/UserRef"
           },
           "changes": {
             "type": "array",
@@ -4360,6 +4343,7 @@
           "tags",
           "parameters",
           "created_at",
+          "created_label",
           "version",
           "allowed_actions"
         ],
@@ -4400,6 +4384,21 @@
             "type": "integer",
             "format": "int64",
             "description": "UTC milliseconds."
+          },
+          "created_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef",
+                "description": "Who added it. `null` only for an item added before creators were recorded, whose creation couldn't be traced."
+              }
+            ]
+          },
+          "created_label": {
+            "type": "string",
+            "description": "How long ago it was added, ready to show: \"today\", \"yesterday\", \"4 days ago\", \"3 weeks ago\", in the request's\ntimezone."
           },
           "description": {
             "type": [
@@ -5223,7 +5222,9 @@
           "pinned",
           "ranked",
           "blocked",
-          "hidden_count"
+          "hidden_count",
+          "unfiltered_count",
+          "in_progress_count"
         ],
         "properties": {
           "as_of": {
@@ -5247,6 +5248,12 @@
             "description": "How many items the filters keep but are left out because their state is hidden.",
             "minimum": 0
           },
+          "in_progress_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of the heap's items are in progress, whatever the view and its filters leave out.",
+            "minimum": 0
+          },
           "pinned": {
             "type": "array",
             "items": {
@@ -5260,6 +5267,12 @@
               "$ref": "#/components/schemas/RankedItem"
             },
             "description": "Items in shown states, including blocked items when they're mixed in."
+          },
+          "unfiltered_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the \"14\" in\n\"6 of 14\". Hidden states still leave theirs out.",
+            "minimum": 0
           }
         }
       },
@@ -5790,6 +5803,24 @@
               "$ref": "#/components/schemas/UserMatch"
             },
             "description": "Up to 10, by display name."
+          }
+        }
+      },
+      "UserRef": {
+        "type": "object",
+        "description": "A user, named where something refers to them: who made an audit entry, who added an item.",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Their display name now."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       }

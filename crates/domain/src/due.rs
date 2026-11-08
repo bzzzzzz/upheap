@@ -1,4 +1,4 @@
-//! Presentation of due times: fuzzy labels for loose due times, dates for exact deadlines.
+//! Presentation of due times (fuzzy labels for loose due times, dates for exact deadlines) and of other instants.
 
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
@@ -67,6 +67,22 @@ pub fn describe_time(at: Timestamp, tz: &TimeZone) -> String {
         .to_zoned(tz.clone())
         .strftime("%-d %b %Y, %H:%M")
         .to_string()
+}
+
+/// How long ago `at` was, as seen at `as_of` by a user in `tz`, in calendar days: "today", "yesterday", "4 days ago",
+/// "3 weeks ago", "5 months ago", "2 years ago". An `at` after `as_of` counts as today.
+pub fn describe_ago(at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> String {
+    let days = local_date(at, tz)
+        .until(local_date(as_of, tz))
+        .map_or(0, |span| span.get_days());
+    match days {
+        ..1 => "today".to_owned(),
+        1 => "yesterday".to_owned(),
+        2..14 => format!("{days} days ago"),
+        14..61 => format!("{} weeks ago", days / 7),
+        61..730 => format!("{} months ago", days / 30),
+        _ => format!("{} years ago", days / 365),
+    }
 }
 
 /// The nearest fuzzy term for a loose due time. Past dates count as "in a few days".
@@ -266,6 +282,28 @@ mod tests {
         let berlin = TimeZone::get("Europe/Berlin").expect("bundled");
         expect_that!(describe_time(day(0), &utc()), eq("1 Jan 2027, 12:00"));
         expect_that!(describe_time(day(0), &berlin), eq("1 Jan 2027, 13:00"));
+    }
+
+    #[gtest]
+    fn how_long_ago_counts_calendar_days() {
+        expect_that!(describe_ago(day(0), day(0), &utc()), eq("today"));
+        expect_that!(describe_ago(day(1), day(0), &utc()), eq("today"));
+        expect_that!(describe_ago(day(-1), day(0), &utc()), eq("yesterday"));
+        expect_that!(describe_ago(day(-4), day(0), &utc()), eq("4 days ago"));
+        expect_that!(describe_ago(day(-13), day(0), &utc()), eq("13 days ago"));
+        expect_that!(describe_ago(day(-21), day(0), &utc()), eq("3 weeks ago"));
+        expect_that!(describe_ago(day(-150), day(0), &utc()), eq("5 months ago"));
+        expect_that!(describe_ago(day(-800), day(0), &utc()), eq("2 years ago"));
+    }
+
+    #[gtest]
+    fn how_long_ago_depends_on_the_timezone() {
+        // 2027-01-01T23:30Z is still 1 Jan in UTC but already 2 Jan in Berlin.
+        let as_of = Timestamp::from_millis(1_798_846_200_000).expect("in range");
+        let berlin = TimeZone::get("Europe/Berlin").expect("bundled");
+
+        expect_that!(describe_ago(day(0), as_of, &utc()), eq("today"));
+        expect_that!(describe_ago(day(0), as_of, &berlin), eq("yesterday"));
     }
 
     #[gtest]

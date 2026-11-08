@@ -2,7 +2,7 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { ApiProblem, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
+import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
 import { useRankedList, useUpdateItem } from "../api/queries";
 import { AddItem } from "../components/AddItem";
 import { CopyLink } from "../components/CopyLink";
@@ -19,7 +19,6 @@ import {
   matchesSearch,
   SHOWN_STATES,
   toListQuery,
-  withoutFilters,
   type ListSearch,
 } from "../components/listView";
 
@@ -130,7 +129,7 @@ function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const failed = (error: Error) => setToast({ id: Date.now(), message: itemProblem(error), error: true });
 
   const run: ChangeState = (item, state, onError) => {
-    const next = state === "done" && list ? nextToStart(list, item.id) : undefined;
+    const next = state === "done" && list ? nextToStart(list, item) : undefined;
     update.mutate(
       { item, patch: { state } },
       {
@@ -155,13 +154,14 @@ function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
 }
 
 /**
- * The item to offer starting once `doneId` is done: the top open item, but only when no other item is in progress.
- * If one is, the user is carrying on with it, and the offer would be noise.
+ * The item to offer starting once `done` is done: the top open item, but only when no other item in the heap is in
+ * progress, including any the view or its filters leave out. If one is, the user is carrying on with it, and the
+ * offer would be noise.
  */
-function nextToStart(list: RankedList, doneId: string) {
-  const others = everyEntry(list).filter((entry) => entry.item.id !== doneId);
-  if (others.some((entry) => entry.item.state === "in_progress")) return undefined;
-  return others.find((entry) => entry.item.state === "open")?.item;
+function nextToStart(list: RankedList, done: Item) {
+  const othersInProgress = list.in_progress_count - (done.state === "in_progress" ? 1 : 0);
+  if (othersInProgress > 0) return undefined;
+  return everyEntry(list).find((entry) => entry.item.id !== done.id && entry.item.state === "open")?.item;
 }
 
 /**
@@ -209,8 +209,6 @@ function ListPage({
   onChangeState: ChangeState;
 }) {
   const filters = filterCount(view);
-  // The same view without its filters, to say how much they leave out ("6 of 14"). Only fetched while filtering.
-  const unfiltered = useRankedList(heapRef, toListQuery(withoutFilters(view)), filters > 0);
   if (list.isPending) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
@@ -254,7 +252,7 @@ function ListPage({
     );
   }
 
-  const { heap, hidden_count } = list.data;
+  const { heap, hidden_count, unfiltered_count } = list.data;
   const { pinned, ranked, blocked } = shownSections(list.data, search);
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length;
@@ -299,12 +297,8 @@ function ListPage({
           view={view}
           onChange={onViewChange}
           shown={shown}
-          // Only once both lists are for this view, so a count from the last one never shows ("5 of 3").
-          total={
-            unfiltered.data && !unfiltered.isPlaceholderData && !list.isPlaceholderData
-              ? everyEntry(shownSections(unfiltered.data, search)).length
-              : undefined
-          }
+          // Not while the previous view stands in for this one, so a count from it never shows ("5 of 3").
+          total={list.isPlaceholderData ? undefined : unfiltered_count}
         />
       )}
 

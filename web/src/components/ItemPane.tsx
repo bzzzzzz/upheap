@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
-import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
+import { useBlockerCandidates, useItem, useMe, useParameters, useUpdateItem } from "../api/queries";
 import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
 import { CopyLink } from "./CopyLink";
@@ -387,10 +387,27 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       )}
 
       <section aria-label="History" className="flex flex-col gap-1.5 border-t border-line pt-4">
-        <h3 className="text-xs font-medium text-ink-soft">History</h3>
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-xs font-medium text-ink-soft">History</h3>
+          <AddedBy item={item} />
+        </div>
         <AuditHistory scope={{ heap: heapRef }} entityId={item.id} />
       </section>
     </div>
+  );
+}
+
+/**
+ * Who added the item and how long ago, as the server labels it: "Added by Sam 4 days ago", or "by you" for the
+ * viewer's own, as History says "You".
+ */
+function AddedBy({ item }: { item: Item }) {
+  const { data: me } = useMe();
+  const by = item.created_by && (item.created_by.id === me?.user.id ? "you" : item.created_by.display_name);
+  return (
+    <p className="text-xs text-muted">
+      Added{by && ` by ${by}`} <time dateTime={new Date(item.created_at).toISOString()}>{item.created_label}</time>
+    </p>
   );
 }
 

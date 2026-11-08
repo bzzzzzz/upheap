@@ -72,7 +72,7 @@ Tables:
 | `teams` | id, name, slug (unique; for a personal team, its owner's username), personal_user_id (unique, nullable: set on a user's personal team), created_at, version |
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
 | `heaps` | id, team_id, name, slug (unique per team), age_weight, deadline_weight, value_weight, archived_at, version |
-| `items` | id, heap_id, key (unique per heap), title, description, state, need, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
+| `items` | id, heap_id, key (unique per heap), title, description, state, need, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, created_by (nullable), closed_at, version |
 | `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
 | `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
 | `parameters` | id, heap_id, name, weight, created_at, archived_at, version |
@@ -86,6 +86,7 @@ Notes:
 
 - Effort and impact are columns on `items` rather than custom parameters. They are fixed, apply to every heap, and share one weight (`heaps.value_weight`).
 - Need is a column on `items` too, for the same reasons, and is never null. Its weight is `heaps.need_weight`.
+- `items.created_by` is the user who added the item. The migration that added it filled it in from each item's `item_created` audit entry; it stays nullable, so an item whose entry is missing keeps no creator instead of failing the migration, and the API returns `created_by: null` for it.
 - The need, age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
 - A user's username is the slug of their personal team, so usernames and team slugs share one namespace under one unique index. A personal team has its owner as its only member, can't take others, and its slug never changes.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
@@ -131,7 +132,7 @@ The score is a deterministic function of item data and time. A stable session th
 1. The ranked list endpoint returns every open item in the heap in one response, with no pagination. This is fine at the expected size of a few thousand items.
 2. The client does text search itself, over the titles and descriptions it already has. It keeps the matches in their ranked order and filters as the user types, without a request per keystroke.
 3. Filters by state, tag and parameter value stay on the server, because they change which items are pinned and how they are grouped. Ranking always runs over every non-closed item, since a blocker inherits from what it blocks even when that item is filtered out or hidden; the view then picks, groups and sorts the result.
-   - Each non-closed state is `pinned`, `shown` or `hidden` (`open=`, `in_progress=`, `blocked=`; by default in progress is pinned and blocked is hidden). Shown blocked items get their own group or are mixed in (`blocked_layout=`). The response counts what hidden states leave out (`hidden_count`).
+   - Each non-closed state is `pinned`, `shown` or `hidden` (`open=`, `in_progress=`, `blocked=`; by default in progress is pinned and blocked is hidden). Shown blocked items get their own group or are mixed in (`blocked_layout=`). The response counts what hidden states leave out (`hidden_count`), what the view would list without its filters (`unfiltered_count`, for "6 of 14"), and the heap's in-progress items, whatever the view and filters leave out (`in_progress_count`, so a client offers to start the next item only when nothing else is under way).
    - These defaults are the product's defaults, so every client starts from the same list. Before this, the response always carried blocked items and the web app hid them; the change was made before any release, when the web app was the only client.
    - `tag=`, `effort=` and `impact=` take comma-separated values and keep items with any of them. A malformed value is `400` `invalid_query`; a tag of another heap is `422` `tag_not_in_heap` with `field` `tag`.
    - `param=` takes option IDs of the heap's parameters, comma-separated. For each parameter they belong to, it keeps items with any of its listed options, and the parameters combine like the other filters. An archived option matches the items that switched to its replacement, so a saved view keeps working after an option is archived. An unknown option is `422` `option_not_in_heap` with `field` `param`.
@@ -167,6 +168,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 5. Responses carry presentation-ready derived data, so clients don't compute anything:
    - `due`: `{ at, firm, label, overdue }`, where `label` is the fuzzy text ("in a few weeks") for loose dates or a formatted date for exact ones, in the timezone from the request's `Time-Zone` header.
    - `contributors`: a list of labelled factors.
+   - `created_by` and `created_label` on items: who added it (`{ id, display_name }`, the `UserRef` audit entries use for their actor) and how long ago ("4 days ago"), in the request's timezone.
    - `allowed_actions`: for example `["edit", "reopen", "set_blocked"]`.
    - `unset` markers for parameters with no value.
 
@@ -179,7 +181,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 | Teams | `POST /teams`, `GET/PATCH /teams/{team}` (the team with its members and heaps; name and slug), `POST /teams/{team}/members`, `PATCH/DELETE /teams/{team}/members/{username}` (role change, removal), `POST /teams/{team}/leave`. The caller's teams are listed by `GET /me` |
 | Users | `GET /users?query=` (lookup for adding members, for admins of a shared team) |
 | Heaps | `POST /teams/{team}/heaps`, `GET/PATCH /teams/{team}/heaps/{heap}` (name and slug), `POST /teams/{team}/heaps/{heap}/archive`, `POST /teams/{team}/heaps/{heap}/unarchive` |
-| Ranked list | `GET /teams/{team}/heaps/{heap}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, and the `as_of` value |
+| Ranked list | `GET /teams/{team}/heaps/{heap}/items?as_of=&open=&in_progress=&blocked=&blocked_layout=&tag=&effort=&impact=&param=&sort=&sort_parameter=` returns the pinned, ranked and blocked groups, `hidden_count`, `unfiltered_count`, `in_progress_count`, and the `as_of` value |
 | Closed items | `GET /teams/{team}/heaps/{heap}/items/closed?cursor=` |
 | Items | `POST /teams/{team}/heaps/{heap}/items`, `GET/PATCH /teams/{team}/heaps/{heap}/items/{item}`, `POST /teams/{team}/heaps/{heap}/items/{item}/reopen` |
 | Due choices | `GET /due-choices`: the rough due times a due picker offers ("next week"), each with its date in the request's timezone and the label an item due then reads back with |
