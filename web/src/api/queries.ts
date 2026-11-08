@@ -70,9 +70,8 @@ const usersKey = (query: string) => ["users", query] as const;
 /**
  * The ranked list in one view, kept stable within a session: the first response's `as_of` is sent back on every
  * refetch and view change, so only edited items move. `refresh` drops it and ranks at the current time. While a
- * new view loads, the previous one stays on screen.
+ * new view loads, the previous one stays on screen. Fetched only while `enabled`.
  */
-/** The ranked list for `view`. Fetched only while `enabled`. */
 export function useRankedList(heap: HeapRef, view: ListViewQuery, enabled = true) {
   const asOf = useRef<number | undefined>(undefined);
   const query = useQuery({

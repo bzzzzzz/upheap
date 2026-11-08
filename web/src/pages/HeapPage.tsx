@@ -68,7 +68,6 @@ export function HeapPage({
   const index = onScreen.findIndex((entry) => entry.item.key === itemKey);
   const pane = itemKey && closeItem && (
     <ItemPane
-      key={itemKey}
       heapRef={heapRef}
       itemKey={itemKey}
       entry={place?.entry}
@@ -300,7 +299,12 @@ function ListPage({
           view={view}
           onChange={onViewChange}
           shown={shown}
-          total={unfiltered.data && everyEntry(shownSections(unfiltered.data, search)).length}
+          // Only once both lists are for this view, so a count from the last one never shows ("5 of 3").
+          total={
+            unfiltered.data && !unfiltered.isPlaceholderData && !list.isPlaceholderData
+              ? everyEntry(shownSections(unfiltered.data, search)).length
+              : undefined
+          }
         />
       )}
 
@@ -346,7 +350,8 @@ const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => 
 
 /**
  * How many items the view hides by their state, with the fix (ux-overview.md, The list §4): Show them puts every
- * hidden state back in the list. Under the default view that's the blocked items, and the note says so.
+ * hidden state back in the list, at its default (In progress pinned, Open shown), or shown for Blocked, which is
+ * hidden by default. Under the default view that's the blocked items, and the note says so.
  */
 function HiddenNote({
   count,
@@ -362,7 +367,7 @@ function HiddenNote({
   const show = () =>
     onViewChange({
       ...view,
-      ...Object.fromEntries(hidden.map((state) => [state, DEFAULT_MODES[state] === "shown" ? undefined : "shown"])),
+      ...Object.fromEntries(hidden.map((state) => [state, DEFAULT_MODES[state] === "hidden" ? "shown" : undefined])),
     });
   return (
     <p className="mt-6 text-center text-sm text-muted">

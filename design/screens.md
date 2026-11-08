@@ -72,7 +72,8 @@ steps that differ from their flow say so.
 5. Re-size or re-date: P-row → M-item, then effort, impact or P-due. The item moves at once.
 6. Block: Blocked in M-item, and P-blocker for what it waits for. It leaves the list, since blocked items are
    hidden by default.
-7. Unblock: P-hidden-count → M-view-settings shows blocked items; open one in M-item and pick Open or In progress.
+7. Unblock: P-hidden-count's Show them puts blocked items in the list; open one in M-item and pick Unblock or
+   Start.
 8. Find an item: P-search, then M-item.
 
 **L3. Weekly review** (weekly)
@@ -643,7 +644,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 #### P-hidden-count: Hidden items note
 
 - "3 blocked items are hidden. Show them" under the list, from `hidden_count` ("3 items are hidden" when states
-  other than blocked are hidden too). Show them puts every hidden state back in the list. Shows whenever a
+  other than blocked are hidden too). Show them puts every hidden state back in the list, at its default (Blocked shown). Shows whenever a
   blocked item exists under the default view.
 - **Freq 3.** Built.
 - **Must:** local 4, server 4. Blocked items are hidden by default; without the note they vanish, and unblocking
@@ -663,7 +664,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 - **Actions by state:**
   - Unchanged saved view open: Rename, Archive (M-view-archive), and a collapsed "History of {name}"
     (P-view-history).
-  - Changed (P-view-changed): Save to {name}, Save as a new view…, Back to {name} (or Back to the default view).
+  - Changed (P-view-changed): the dot's menu, with Save to {name}, Save as a new view… and Undo changes.
 - **Who:** every member sees and edits views (`create` on the list; `edit`, `archive` on each).
 - **Freq 4.** **Source:** Req Heaps §4, TD API saved views; `SavedViewsBar.tsx`. Built.
 - **Must:** local 2, server 2. Filters and search rebuild any view by hand.

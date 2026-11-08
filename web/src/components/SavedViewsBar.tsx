@@ -52,12 +52,16 @@ export function SavedViewsBar({
   const canCreate = views.data.allowed_actions.includes("create");
   const canSave = selected?.allowed_actions.includes("edit") === true;
   const onChangedAction = (key: ChangedAction) => {
-    if (key === "save" && selected) {
-      update.mutate({ saved: selected, patch: { view: toViewInput(view) } });
-    } else if (key === "save-new") {
-      setNaming("new");
-    } else {
-      onViewChange(base);
+    switch (key) {
+      case "save":
+        if (selected) update.mutate({ saved: selected, patch: { view: toViewInput(view) } });
+        break;
+      case "save-new":
+        setNaming("new");
+        break;
+      case "undo":
+        onViewChange(base);
+        break;
     }
   };
   const chip = (saved: SavedView | undefined, name: string) =>

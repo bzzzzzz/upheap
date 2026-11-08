@@ -38,7 +38,6 @@ export function CopyLink({
       <button
         type="button"
         onClick={() => void navigator.clipboard.writeText(shortLink(...handles)).then(() => setCopied(true))}
-        aria-description={description}
         title={description}
         className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-soft hover:bg-sunken ${className}`}
       >

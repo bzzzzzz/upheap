@@ -50,6 +50,13 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   // The user's own changes read as theirs.
   await expect(pane.getByRole("region", { name: "History" })).toContainText("You added item");
 
+  // Done leaves the item open in the pane, which offers to reopen it.
+  await changeState(page, "Done");
+  await expect(row(page, "Write the team rota")).toHaveCount(0);
+  await changeState(page, "Reopen");
+  await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Start");
+  await expect(row(page, "Write the team rota")).toBeVisible();
+
   // Back closes the item and leaves the list where it was.
   await page.goBack();
   await expect(pane).toHaveCount(0);

@@ -5,7 +5,7 @@ import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, Item, ItemState, RankedItem } from "../api/client";
-import { changeLabel, SIZE_LABELS, STATE_LABELS } from "./labels";
+import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { ParameterChips } from "./ParameterPicker";
@@ -68,6 +68,8 @@ export function ItemRow({
   const canMarkDone = item.allowed_actions.includes("change_state");
   const onMarkDone = () => onChangeState(item, "done");
   const touch = useMedia(TOUCH);
+  // On a touch screen a swipe does what the hover actions do.
+  const actions = canMarkDone && !touch && !isClosed(item.state);
   const swipe = useSwipe(canMarkDone && touch, (state, onError) => onChangeState(item, state, onError));
 
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
@@ -97,7 +99,7 @@ export function ItemRow({
         {...swipe.dragProps}
         className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
-        }`}
+        } ${actions ? (item.state === "open" ? "pr-22" : "pr-11") : ""}`}
       >
         <StateCircle item={item} disabled={!canMarkDone} onPress={onMarkDone} />
         <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
@@ -140,7 +142,7 @@ export function ItemRow({
             {item.impact ? SIZE_LABELS[item.impact] : "–"}
           </span>
         )}
-        {canMarkDone && !touch && <RowActions item={item} onChangeState={onChangeState} />}
+        {actions && <RowActions item={item} onChangeState={onChangeState} />}
       </motion.div>
     </motion.li>
   );
@@ -244,14 +246,15 @@ function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPic
 
 /**
  * What a hovered row offers besides its circle: Start for an open item, and ⋯ for the other states. Over the row's
- * right edge, on the row's own background, so they cover the sizes rather than push the title. Shown while the row
- * is hovered, has the focus (so the keyboard reaches them too) or has its menu open.
+ * right edge, in room the row keeps for them, so they never cover the title or the sizes. Shown while the row is
+ * hovered, has the focus (so the keyboard reaches them too) or has its menu open. ⋯ lists the states in the pane's
+ * order (NEXT_STATES), less Done, which is the circle's, then Won't do.
  */
 function RowActions({ item, onChangeState }: { item: Item; onChangeState: ChangeState }) {
   const start = item.state === "open";
-  // Done is the circle's job, and Start has its own button.
-  const more = (["open", "in_progress", "blocked", "wont_do"] as const).filter(
-    (state) => state !== item.state && !(start && state === "in_progress"),
+  const next = isClosed(item.state) ? [] : NEXT_STATES[item.state as keyof typeof NEXT_STATES];
+  const more = [...next, "wont_do" as const].filter(
+    (state) => state !== "done" && !(start && state === "in_progress"),
   );
   return (
     <div className="absolute inset-y-0 right-0 z-10 flex items-center gap-0.5 bg-inherit pr-1.5 pl-2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">

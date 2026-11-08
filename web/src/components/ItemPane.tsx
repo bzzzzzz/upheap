@@ -54,10 +54,15 @@ export function ItemPane({
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
   const drag = useDragToClose(onClose);
+  // The ↑ or ↓ that walked to this item, so focus stays on it for the next step.
+  const walkedBy = useRef<string | undefined>(undefined);
 
   // Focus moves to the item as it opens, so the keyboard carries on from there; Escape closes it (HeapPage).
   useEffect(() => {
-    paneRef.current?.focus({ preventScroll: true });
+    const label = walkedBy.current;
+    walkedBy.current = undefined;
+    const walk = label && paneRef.current?.querySelector<HTMLElement>(`[aria-label="${label}"]`);
+    (walk || paneRef.current)?.focus({ preventScroll: true });
   }, [itemKey]);
 
   let body: ReactNode;
@@ -109,8 +114,16 @@ export function ItemPane({
           {/* On a phone the sheet closes and the next row is a tap away, so only the pane walks the list. */}
           {entry && (
             <div className="flex max-sm:hidden">
-              <WalkLink heapRef={heapRef} itemKey={previousKey} label="Previous item" icon={ChevronUp} />
-              <WalkLink heapRef={heapRef} itemKey={nextKey} label="Next item" icon={ChevronDown} />
+              {(["Previous item", "Next item"] as const).map((label) => (
+                <WalkLink
+                  key={label}
+                  heapRef={heapRef}
+                  itemKey={label === "Previous item" ? previousKey : nextKey}
+                  label={label}
+                  icon={label === "Previous item" ? ChevronUp : ChevronDown}
+                  onWalk={() => (walkedBy.current = label)}
+                />
+              ))}
             </div>
           )}
           {/* The key is the link's own name, so the button says what it copies (ux-overview.md, The item §3). */}
@@ -135,23 +148,28 @@ export function ItemPane({
   );
 }
 
-/** A header button that opens the item above or below this one, in place of it. Disabled at either end of the list. */
+/**
+ * A header button that opens the item above or below this one, in place of it. Disabled at either end of the list,
+ * and still focusable there, so focus that walked to the end stays put and a screen reader still finds it.
+ */
 function WalkLink({
   heapRef,
   itemKey,
   label,
   icon: Icon,
+  onWalk,
 }: {
   heapRef: HeapRef;
   itemKey: string | undefined;
   label: string;
   icon: typeof ChevronUp;
+  onWalk: () => void;
 }) {
   const className =
     "flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken aria-disabled:opacity-40 aria-disabled:hover:bg-transparent";
   if (itemKey === undefined) {
     return (
-      <span role="link" aria-disabled="true" aria-label={label} className={className}>
+      <span role="link" tabIndex={0} aria-disabled="true" aria-label={label} className={className}>
         <Icon aria-hidden="true" className="size-4" />
       </span>
     );
@@ -165,6 +183,7 @@ function WalkLink({
       replace
       state={(prev) => prev}
       aria-label={label}
+      onClick={onWalk}
       className={className}
     >
       <Icon aria-hidden="true" className="size-4" />

@@ -1,4 +1,4 @@
-import { addItem, closeItem, expect, itemPane, openItem, row, test } from "./fixtures";
+import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
 
 // One step ahead in the list and the item (design/ux-overview.md, What "one step ahead" means), with a mouse: the
 // rows' hover actions don't show on a touch screen, which swipes instead.
@@ -35,16 +35,19 @@ test("a hovered row starts its item, and Done offers to start the next one", asy
   await expect(row(page, "Slog")).toHaveCount(0);
 });
 
-test("the item pane walks the list, and its key copies the link", async ({ page }) => {
+test("the item pane walks the list, and its key copies the link", async ({ page, heapPath }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
   const pane = itemPane(page);
 
   await openItem(page, "Quick win");
   await expect(pane.getByRole("link", { name: "Previous item" })).toHaveAttribute("aria-disabled", "true");
-  await pane.getByRole("link", { name: "Next item" }).click();
+  // From the keyboard, focus stays on the arrow, there for the next step, even once it's at the end.
+  await pane.getByRole("link", { name: "Next item" }).focus();
+  await page.keyboard.press("Enter");
   await expect(pane.getByLabel("Title", { exact: true })).toHaveValue("Slog");
   await expect(pane.getByRole("link", { name: "Next item" })).toHaveAttribute("aria-disabled", "true");
+  await expect(pane.getByRole("link", { name: "Next item" })).toBeFocused();
 
   const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
   await expect(pane.getByRole("button", { name: key, exact: true })).toBeVisible();
@@ -52,10 +55,12 @@ test("the item pane walks the list, and its key copies the link", async ({ page 
   // Walking replaces the item rather than adding to the history, so it still closes in one step.
   await pane.getByRole("link", { name: "Previous item" }).click();
   await expect(pane.getByLabel("Title", { exact: true })).toHaveValue("Quick win");
-  await closeItem(page);
+  await page.goBack();
+  await expect(pane).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
 });
 
-test("filters show as chips with what they leave out, and a changed view can be undone", async ({ page }) => {
+test("filters show as chips with what they leave out, and a changed view is saved or undone", async ({ page }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
 
@@ -80,5 +85,23 @@ test("filters show as chips with what they leave out, and a changed view can be 
   await filters.getByRole("button", { name: "Close" }).click();
   await on.getByRole("button", { name: "Remove filter Effort S" }).click();
   await expect(on).toHaveCount(0);
+  await expect(row(page, "Slog")).toBeVisible();
+
+  // Saved as a new view from the dot's menu, then changed again and saved to it.
+  await page.getByRole("button", { name: "Filters" }).click();
+  await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
+  await filters.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Default (changed)" }).click();
+  await page.getByRole("menuitem", { name: "Save as a new view…" }).click();
+  await page.getByLabel("Name of the new view").fill("Small");
+  await page.getByRole("button", { name: "Save view" }).click();
+  const views = page.getByRole("navigation", { name: "Saved views" });
+  await expect(views.getByRole("link", { name: "Small" })).toHaveAttribute("aria-current", "page");
+
+  await on.getByRole("button", { name: "Remove filter Effort S" }).click();
+  await expect(row(page, "Slog")).toBeVisible();
+  await page.getByRole("button", { name: "Small (changed)" }).click();
+  await page.getByRole("menuitem", { name: "Save to Small" }).click();
+  await expect(views.getByRole("link", { name: "Small" })).toHaveAttribute("aria-current", "page");
   await expect(row(page, "Slog")).toBeVisible();
 });
