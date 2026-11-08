@@ -72,7 +72,7 @@ Tables:
 | `teams` | id, name, slug (unique; for a personal team, its owner's username), personal_user_id (unique, nullable: set on a user's personal team), created_at, version |
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
 | `heaps` | id, team_id, name, slug (unique per team), age_weight, deadline_weight, value_weight, archived_at, version |
-| `items` | id, heap_id, key (unique per heap), title, description, state, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
+| `items` | id, heap_id, key (unique per heap), title, description, state, need, effort, impact, due_at, due_firm, blocked_by_item_id, created_at, closed_at, version |
 | `tags` | id, heap_id, name, name_key (lowercased name, unique per heap), description, created_at, version |
 | `item_tags` | item_id, tag_id, added_at, removed_at (set when the tag is taken off; adding it again clears it) |
 | `parameters` | id, heap_id, name, weight, created_at, archived_at, version |
@@ -85,7 +85,8 @@ Tables:
 Notes:
 
 - Effort and impact are columns on `items` rather than custom parameters. They are fixed, apply to every heap, and share one weight (`heaps.value_weight`).
-- The age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
+- Need is a column on `items` too, for the same reasons, and is never null. Its weight is `heaps.need_weight`.
+- The need, age and deadline weights live on `heaps`, next to `value_weight`. Together with the parameter weights, they make up the heap's ranking policy.
 - A user's username is the slug of their personal team, so usernames and team slugs share one namespace under one unique index. A personal team has its owner as its only member, can't take others, and its slug never changes.
 - A team always has at least one admin. The service layer enforces this inside the transaction that changes membership.
 - The application can only insert into `audit_log`. There is no update or delete code path for it.
@@ -105,10 +106,11 @@ fn rank(formula: FormulaVersion, policy: &HeapPolicy, items: &[ItemForRanking], 
 ```
 
 1. The service loads the heap's policy, all non-closed items, their parameter values, and the blocking edges, then calls `rank`. Heaps are expected to hold at most a few thousand open items, so ranking them in memory on each request is cheap. A per-heap cache invalidated on write can be added if measurements call for it.
-2. Each factor (age, deadline proximity, value per effort, each custom parameter) produces a weighted component. The final score is a combination of these. The exact formula is still open and lives behind one function, so changing it doesn't affect the API.
-   - **Formula versioning:** each formula is a named version (`FormulaVersion::V1`, …). The server uses one version at a time, set in code, not stored per heap. Tests pin expected orderings per version, so a formula change shows up as an explicit test update. Because scores are never stored, switching versions needs no migration.
-3. **Blocker inheritance:** the blocking edges form a forest, because cycles are rejected on write. Each item's effective score is the maximum of its own score and the effective scores of the items it blocks, times a boost (1.1 in `V1`). This is computed with a memoized walk over the graph, so it is linear in the number of items. Equal scores go to the item that blocks the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
-   - **Custom parameters** in `V1`: each parameter in use adds its weight times where the item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value counts as the last option, so a parameter with a single option adds nothing, and an archived option counts as the option that replaced it. Archived parameters don't count. The contributor reads "Customer: Enterprise".
+2. Each factor (need, age, deadline proximity, value per effort, each custom parameter) produces a weighted component. The final score is a combination of these. The formula lives behind one function, so changing it doesn't affect the API.
+   - **Formula versioning:** each formula is a named version (`FormulaVersion::V2`, …). The server uses one version at a time, set in code, not stored per heap. Tests pin expected orderings per version, so a formula change shows up as an explicit test update. Because scores are never stored, switching versions needs no migration.
+3. **Blocker inheritance:** the blocking edges form a forest, because cycles are rejected on write. Each item's effective score is the maximum of its own score and the effective scores of the items it blocks, times a boost (1.1 in `V2`). This is computed with a memoized walk over the graph, so it is linear in the number of items. Equal scores go to the item that blocks the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
+   - **Need** in `V2` counts twice. On its own it adds its weight times 0 for an idea, 0.25 for nice to have, 0.5 for expected and 2 for critical: the deadline factor's pull nine days out, three days out, and just past an exact deadline. It also scales age: an idea ages at a quarter of the rate of an expected item, nice to have at half, critical at one and a half. The contributor reads "Need: Critical". An idea's need adds nothing and has no contributor, so when the rate isn't an expected item's the age contributor carries it: "Waiting 12 months (idea, ages slowly)", "Waiting 3 weeks (critical, ages fast)". The need component comes last, so a tie in the contributors goes to the more telling factor. `V2` replaced `V1`, which had no need: items from before it count as expected, which leaves their age as it was, so they mostly keep their order among themselves. Blockers are the exception: expected adds the same amount to every item, and a blocker takes on 1.1 times the score of what it blocks, so a blocker can move above an item it was just below.
+   - **Custom parameters** in `V2`: each parameter in use adds its weight times where the item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value counts as the last option, so a parameter with a single option adds nothing, and an archived option counts as the option that replaced it. Archived parameters don't count. The contributor reads "Customer: Enterprise".
 4. **Contributors** are the largest weighted components, returned with a label and a relative share (for example "Deadline in a few days" or "Blocks *Migrate auth*"). Scores themselves are never returned.
 5. **Ties** that the chain length (point 3) doesn't settle are broken by `created_at`, oldest first. The ID is the final tie-breaker, which makes the order fully deterministic.
 

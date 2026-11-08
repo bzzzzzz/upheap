@@ -12,6 +12,7 @@ mod m20261110_000006_audit_entity;
 mod m20261111_000007_sign_in_attempts;
 mod m20261111_000008_exact_email;
 mod m20261112_000009_handles;
+mod m20261113_000010_need;
 
 pub struct Migrator;
 
@@ -28,6 +29,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261111_000007_sign_in_attempts::Migration),
             Box::new(m20261111_000008_exact_email::Migration),
             Box::new(m20261112_000009_handles::Migration),
+            Box::new(m20261113_000010_need::Migration),
         ]
     }
 }

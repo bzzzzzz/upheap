@@ -174,8 +174,12 @@ impl TestApp {
         })
     }
 
-    /// Creates an item in `heap` from `body`, whatever the outcome.
-    pub async fn create_item(&self, session: &str, heap: &str, body: Value) -> Result<TestResponse> {
+    /// Creates an item in `heap` from `body`, whatever the outcome. A body without a `need` gets `"expected"`, so
+    /// tests about other fields don't have to say it; send the request yourself to leave it out.
+    pub async fn create_item(&self, session: &str, heap: &str, mut body: Value) -> Result<TestResponse> {
+        if let Value::Object(fields) = &mut body {
+            fields.entry("need").or_insert_with(|| Value::from("expected"));
+        }
         self.send(
             Method::POST,
             &format!("{}/items", self.heap_url(heap).await?),

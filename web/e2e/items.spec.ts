@@ -150,18 +150,28 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await page.keyboard.press("n");
   const dialog = page.getByRole("dialog", { name: "Add an item" });
   const due = dialog.getByRole("radiogroup", { name: "Due" });
+  const need = dialog.getByRole("radiogroup", { name: "Need" });
+  const add = dialog.getByRole("button", { name: "Add", exact: true });
+
+  // Every item needs a need: Add stays off until one is picked, and the pick explains itself.
+  await dialog.getByLabel("Title").fill("Book the dentist");
+  await expect(add).toBeDisabled();
+  await need.getByRole("radio", { name: "Nice to have", exact: true }).click();
+  await expect(dialog.getByText("Wanted, but nobody is waiting for it.")).toBeVisible();
+  await expect(add).toBeEnabled();
 
   // A rough choice reads back with the label it was picked by, which comes from the server.
-  await dialog.getByLabel("Title").fill("Book the dentist");
   await due.getByRole("radio", { name: "next week" }).click();
   await dialog.getByLabel("Add another").check();
   await dialog.getByLabel("Title").press("Enter");
   await expect(row(page, "Book the dentist").getByText("next week", { exact: true })).toBeVisible();
 
-  // With Add another, the dialog stays open and clears.
+  // With Add another, the dialog stays open and clears, the need too.
   await expect(dialog.getByLabel("Title")).toHaveValue("");
   await expect(due.getByRole("radio", { name: "next week" })).not.toBeChecked();
+  await expect(need.getByRole("radio", { name: "Nice to have", exact: true })).not.toBeChecked();
   await dialog.getByLabel("Title").fill("Renew the passport");
+  await need.getByRole("radio", { name: "Critical", exact: true }).click();
   await due.getByRole("radio", { name: "Exact date" }).click();
   await dialog.getByLabel("Exact due date").fill(dayFromToday(-1));
   await dialog.getByLabel("Title").press("ControlOrMeta+Enter");

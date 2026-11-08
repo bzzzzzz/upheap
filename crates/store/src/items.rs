@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
-use domain::item::{Description, Due, Item, ItemState, ItemSummary, Size, StateKind, Title};
+use domain::item::{Description, Due, Item, ItemState, ItemSummary, Need, Size, StateKind, Title};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -376,6 +376,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         title: Set(item.title.as_str().to_owned()),
         description: Set(item.description.as_ref().map(|d| d.as_str().to_owned())),
         state: Set(item.state.kind().code().to_owned()),
+        need: Set(item.need.code().to_owned()),
         effort: Set(item.effort.map(|s| s.code().to_owned())),
         impact: Set(item.impact.map(|s| s.code().to_owned())),
         due_at: Set(item.due.map(|d| d.at.as_millis())),
@@ -400,6 +401,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         .transpose()?;
     let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, blocked_by)
         .map_err(|e| read.corrupt(e.to_string()))?;
+    let need = Need::from_code(&row.need).ok_or_else(|| read.corrupt(format!("unknown need {:?}", row.need)))?;
     let due = match (row.due_at, row.due_firm) {
         (None, None) => None,
         (Some(at), Some(firm)) => Some(Due {
@@ -423,6 +425,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         title: Title::parse(&row.title).map_err(|e| read.corrupt(e.to_string()))?,
         description,
         state,
+        need,
         effort: size(row.effort)?,
         impact: size(row.impact)?,
         due,

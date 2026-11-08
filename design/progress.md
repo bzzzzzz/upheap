@@ -6,7 +6,7 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
-rate limiting, and readable handles in every URL. OIDC and CLI sign-in are not started. All 229 Rust tests pass
+rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 240 Rust tests pass
 (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4, the 15 Playwright tests pass at each of
 three widths, and 16 against the local build, and the web typecheck and lint are clean. CI
 runs all of them on every pull request.
@@ -20,9 +20,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Local accounts: register, sign in, sign out | Off Auth §2–3 | ✅ | argon2id, hashed session tokens, CSRF header |
 | Personal team and heap on registration | Off Teams §3 | ✅ | Named by the username; private to its owner, so it takes no members |
 | Readable IDs: usernames, slugs, item keys, short links | [readable-ids.md](readable-ids.md) | ✅ | `/teams/{team}/heaps/{heap}/items/{item}` in the app and the API, `/h/…` short links with Copy link, slugs editable on team and heap pages; a migration fills them in on existing data |
-| Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue |
+| Items: fields, states, due times, unset values | Req Items §1–4, 6 | ✅ | Loose vs exact due, fuzzy labels, overdue; need (idea, nice to have, expected, critical) required on every new item, changeable but never cleared |
 | Reopen within one week | Req Items §7 | ✅ | 7×24h, enforced on the server |
-| Ranking: age, deadline, value per effort, custom parameters | Req Priority §1–10 | 🟡 | Placeholder formula `V1` with blocker inheritance and custom parameters; the heap's own weights can't be changed yet |
+| Ranking: need, age, deadline, value per effort, custom parameters | Req Priority §1–10 | 🟡 | Formula `V2`: need as a factor and as the rate items age at, with blocker inheritance and custom parameters; the heap's own weights can't be changed yet |
 | Main list view | Req Views: List items | ✅ | Per-state pinned/shown/hidden, blocked grouped or mixed in, `sort=`, tag/effort/impact/option filters and sort by a parameter, client text search (`/`), inline edits, `N`; the view lives in the URL |
 | Closed items view | Req Views: Closed items | ✅ | Cursor paging, reopen |
 | Add item | Req Views: Add item | ✅ | A dialog (`N`) with every field: rough due choices or an exact date, S M L XL buttons, tags created by typing a new name, and the parameters linked to the chosen tags; Add another for several in a row |
@@ -81,7 +81,16 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] Admin endpoints; archiving with replacement (`replacement_required`, `parameter_in_use`)
   - [x] Parameters in ranking and contributors
   - [x] Suggest linked parameters when a tag is added; Manage parameters view
-  - [ ] Edit the heap's own weights (age, deadline, value)
+  - [ ] Edit the heap's own weights (need, age, deadline, value)
+- [ ] **Need**
+  - [x] `items.need`, required on create, never cleared; existing items migrated to `expected`
+  - [x] Need in ranking (`V2`): its own factor and the rate items age at; "Need: Critical" contributor
+  - [x] Need picker in the Add dialog (required) and the item pane; audited
+  - [ ] Filter and sort the list by need, like effort and impact
+  - [ ] Show the need in the list row, so a critical item stands out without opening it
+  - Making `need` required on `POST …/items` broke API §3 (breaking changes are additive or versioned) on purpose:
+    defaulting it would guess a value the user didn't pick, and there are no outside clients yet. Release notes
+    call it out.
 - [x] **Saved views**
   - [x] `saved_views` table with the list view as JSON; archived, never deleted
   - [x] `GET/POST …/heaps/{heap}/views`, `PATCH …/views/{view_id}`, `POST …/views/{view_id}/archive`; any member, like tags

@@ -37,6 +37,51 @@ impl Size {
     }
 }
 
+/// How much the item is needed: what happens if it never gets done. Ordered from least to most needed.
+///
+/// It is separate from impact, which says how much doing the item gains. Need says how much skipping it costs, so
+/// a small fix someone is waiting for can outrank a bigger win nobody asked for. Each step is told apart from the
+/// next by who is affected when the item is skipped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Need {
+    /// Kept so it isn't forgotten. Nobody has decided it's wanted, and nothing is lost if it never happens.
+    Idea,
+    /// Wanted, but nobody is waiting for it. Skipping it only misses a gain.
+    NiceToHave,
+    /// Someone is counting on it. Skipping it lets them down.
+    Expected,
+    /// It has to happen. Skipping it does real damage: an outage, a lost customer, a broken commitment.
+    Critical,
+}
+
+impl Need {
+    pub const ALL: [Self; 4] = [Self::Idea, Self::NiceToHave, Self::Expected, Self::Critical];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Idea => "idea",
+            Self::NiceToHave => "nice_to_have",
+            Self::Expected => "expected",
+            Self::Critical => "critical",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|need| need.code() == code)
+    }
+
+    /// The step's name as people read it, in contributors and audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Idea => "Idea",
+            Self::NiceToHave => "Nice to have",
+            Self::Expected => "Expected",
+            Self::Critical => "Critical",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Title(String);
 
@@ -207,11 +252,12 @@ pub enum ItemError {
     NotBlocked { item_id: ItemId },
 }
 
-/// The fields of a new item. Everything except the title is optional.
+/// The fields of a new item. Everything except the title and the need is optional.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewItem {
     pub title: Title,
     pub description: Option<Description>,
+    pub need: Need,
     pub effort: Option<Size>,
     pub impact: Option<Size>,
     pub due: Option<Due>,
@@ -226,6 +272,8 @@ pub struct NewItem {
 pub struct ItemPatch {
     pub title: Option<Title>,
     pub description: Option<Option<Description>>,
+    /// Need can be changed but never cleared, so it has no inner `Option`.
+    pub need: Option<Need>,
     pub effort: Option<Option<Size>>,
     pub impact: Option<Option<Size>>,
     pub due: Option<Option<Due>>,
@@ -244,6 +292,7 @@ impl ItemPatch {
     pub fn edits_fields(&self) -> bool {
         self.title.is_some()
             || self.description.is_some()
+            || self.need.is_some()
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
@@ -281,6 +330,7 @@ pub struct Item {
     pub title: Title,
     pub description: Option<Description>,
     pub state: ItemState,
+    pub need: Need,
     /// `None` when unset, which ranks as the largest effort.
     pub effort: Option<Size>,
     /// `None` when unset, which ranks as the smallest impact.
@@ -305,6 +355,7 @@ impl Item {
             title: fields.title,
             description: fields.description,
             state: ItemState::Open,
+            need: fields.need,
             effort: fields.effort,
             impact: fields.impact,
             due: fields.due,
@@ -355,6 +406,7 @@ impl Item {
         let edited = Self {
             title: patch.title.clone().unwrap_or_else(|| self.title.clone()),
             description: patch.description.clone().unwrap_or_else(|| self.description.clone()),
+            need: patch.need.unwrap_or(self.need),
             effort: patch.effort.unwrap_or(self.effort),
             impact: patch.impact.unwrap_or(self.impact),
             due: patch.due.unwrap_or(self.due),
@@ -420,6 +472,7 @@ mod tests {
         let fields = NewItem {
             title: Title::parse("Write tests").expect("valid"),
             description: None,
+            need: Need::Expected,
             effort: None,
             impact: None,
             due: None,
@@ -558,6 +611,36 @@ mod tests {
         };
 
         expect_that!(item.apply_patch(&patch, at(1)), ok(none()));
+    }
+
+    #[gtest]
+    fn a_patch_changes_the_need_but_not_of_a_closed_item() {
+        let patch = ItemPatch {
+            need: Some(Need::Critical),
+            ..ItemPatch::default()
+        };
+        let closed = sample_item()
+            .apply_patch(&closing_patch(), at(1))
+            .expect("ok")
+            .expect("changed");
+
+        let edited = sample_item()
+            .apply_patch(&patch, at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(edited.need, eq(Need::Critical));
+        expect_that!(
+            closed.apply_patch(&patch, at(2)),
+            err(eq(&ItemError::Closed { item_id: closed.id }))
+        );
+    }
+
+    #[gtest]
+    fn need_codes_round_trip() {
+        for need in Need::ALL {
+            expect_that!(Need::from_code(need.code()), some(eq(need)));
+        }
     }
 
     #[gtest]

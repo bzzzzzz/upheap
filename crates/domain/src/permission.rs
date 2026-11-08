@@ -79,7 +79,7 @@ pub fn visible_audit_actions(role: Role) -> Vec<AuditAction> {
 /// An action a client may offer on an item.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ItemAction {
-    /// Change the title, description, effort, impact, due time or tags.
+    /// Change the title, description, need, effort, impact, due time or tags.
     Edit,
     /// Move between non-closed states, or close.
     ChangeState,

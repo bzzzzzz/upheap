@@ -699,7 +699,8 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
      "Done · yesterday" and, when the week is over, "It can't be reopened."; picking an open state reopens it.
   3. When blocked: P-blocker.
   4. "Why it's #3": the contributors, as one line ("Overdue by 2 days · Blocks “Ship release”").
-  5. Effort and Impact: S M L XL buttons; pressing the picked one clears it.
+  5. Need: Idea, Nice to have, Expected, Critical, with a line saying what the picked one means; it can't be cleared.
+     Effort and Impact: S M L XL buttons; pressing the picked one clears it.
   6. P-due.
   7. P-tag-picker.
   8. Parameters: P-param-picker for each parameter in use; archived parameters and archived options a closed item
@@ -745,7 +746,8 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 - **Trigger:** "Add an item" above the list, or `N`. **Who:** members of an unarchived heap.
 - **Purpose:** the fastest path in the app (Req Views: Add item).
-- **Contents:** title (focused, "What needs doing?"), Description, Effort, Impact, P-due, P-tag-picker, and the
+- **Contents:** title (focused, "What needs doing?"), Description, Need (required; Add stays off until it's picked),
+  Effort, Impact, P-due, P-tag-picker, and the
   parameters linked to the chosen tags, which appear as tags are added (Req Custom parameters §3). Footer: Add
   another (checkbox, remembered while the page is open), Cancel, Add.
 - **Actions:** Add (or Enter in the title, or `⌘↵`); with Add another, the dialog clears and stays.

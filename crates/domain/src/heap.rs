@@ -8,6 +8,7 @@ use crate::{HeapId, TeamId, Timestamp, Version};
 /// factor off. Custom parameter weights will join these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HeapPolicy {
+    pub need_weight: u16,
     pub age_weight: u16,
     pub deadline_weight: u16,
     /// Shared by effort and impact, which count together as one value-per-effort factor.
@@ -17,6 +18,7 @@ pub struct HeapPolicy {
 impl Default for HeapPolicy {
     fn default() -> Self {
         Self {
+            need_weight: 10,
             age_weight: 10,
             deadline_weight: 10,
             value_weight: 10,

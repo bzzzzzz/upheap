@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use domain::audit::{AuditAction, EntityType};
 use domain::due::{describe_due_date, describe_time};
-use domain::item::{Due, Size, StateKind};
+use domain::item::{Due, Need, Size, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
 use domain::team::Role;
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
@@ -328,13 +328,14 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 17] = [
+const FIELD_ORDER: [&str; 18] = [
     "title",
     "name",
     "display_name",
     "description",
     "state",
     "blocked_by",
+    "need",
     "effort",
     "impact",
     "due",
@@ -441,6 +442,7 @@ fn describe_field(field: &str) -> &str {
         "description" => "Description",
         "state" => "State",
         "blocked_by" => "Blocked by",
+        "need" => "Need",
         "effort" => "Effort",
         "impact" => "Impact",
         "due" => "Due",
@@ -462,6 +464,7 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
     }
     let text = match field {
         "state" => describe_state(StateKind::from_code(value.as_str()?)?).to_owned(),
+        "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
         "due" => describe_recorded_due(value, tz)?,

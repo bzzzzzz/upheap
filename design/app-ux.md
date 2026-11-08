@@ -107,7 +107,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it, instead of a
    separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens with the state (a segmented control on a wide screen; Start, Blocked and Done buttons on a phone), then
-   "Why it's #3" from the contributors, then effort and impact as S M L XL buttons, due, tags, parameters, the
+   "Why it's #3" from the contributors, then the need's four steps, effort and impact as S M L XL buttons, due, tags,
+   parameters, the
    description and the history.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
@@ -121,9 +122,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 1. Clicking or tapping "Add an item" (or pressing `N`) opens the Add dialog: a modal over the list on a wide screen
    and a tablet, a sheet above the keyboard on a phone. The field above the list stays only as the way in.
-2. The dialog has every field Add item takes: title (focused), description, effort, impact, due, tags, and the
+2. The dialog has every field Add item takes: title (focused), description, need, effort, impact, due, tags, and the
    parameters linked to the chosen tags, which appear as soon as a tag is added. Each is optional apart from the
-   title.
+   title and the need: Add stays off until a need is picked. Nothing is picked for you, so every need is someone's
+   choice. Under the four steps (two a row on a phone) a line says what the picked one means.
 3. Add saves and closes (`⌘↵` / `Ctrl↵` on a keyboard). With "Add another" ticked, the dialog stays open and clears,
    for entering several items in a row. Escape, Cancel or a tap outside closes it; if a title was typed, it asks
    first.

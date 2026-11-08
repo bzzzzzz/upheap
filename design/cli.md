@@ -67,7 +67,7 @@ be typed dozens of times a day for no gain in clarity, and the same verb still m
 
 ### Items
 
-**`upheap add <title>`** takes `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
+**`upheap add <title>`** needs `--need` (`idea`, `nice-to-have`, `expected`, `critical`), and takes `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
 `--due <when>` and `--tag <name>` (repeatable). It prints the new item and where it landed: "Added *Rotate the staging
 certs*, now 4th of 31". The position comes from one read of the ranked list after the add, so it's the server's
 number.

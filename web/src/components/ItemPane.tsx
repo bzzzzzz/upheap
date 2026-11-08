@@ -14,6 +14,7 @@ import { DuePicker } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { isClosed, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
+import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { TagPicker } from "./TagPicker";
 
@@ -232,6 +233,14 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           <span className="text-sm">{entry.contributors.map((c) => c.label).join(" · ")}</span>
         </div>
       )}
+
+      <NeedPicker
+        value={item.need}
+        disabled={!canEdit}
+        onChange={(need) => {
+          if (need !== item.need) save({ need });
+        }}
+      />
 
       <div className="grid grid-cols-2 gap-3">
         <ChoiceButtons

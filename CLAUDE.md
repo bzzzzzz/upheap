@@ -1,7 +1,7 @@
 # Upheap
 
-A ranked todo list for teams. Items go into a heap with a rough size, impact and due date, and the server ranks
-them, explains each position, and keeps the ranking current as time passes. One binary serves the API and the
+A ranked todo list for teams. Items go into a heap with a need, a rough size, impact and due date, and the server
+ranks them, explains each position, and keeps the ranking current as time passes. One binary serves the API and the
 web app, on SQLite or MySQL.
 
 ## Components

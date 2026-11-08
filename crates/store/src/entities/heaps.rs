@@ -9,6 +9,7 @@ pub struct Model {
     pub team_id: String,
     pub slug: String,
     pub name: String,
+    pub need_weight: i32,
     pub age_weight: i32,
     pub deadline_weight: i32,
     pub value_weight: i32,

@@ -653,7 +653,7 @@ impl World {
                 Method::POST,
                 &format!("{}/items", self.heap_path()),
                 Some(&self.admin.session),
-                Some(json!({ "title": "Target" })),
+                Some(json!({ "need": "expected", "title": "Target" })),
             )
             .await?;
         let key = created.body["key"].as_str().context("item has no key")?.to_owned();
@@ -807,7 +807,7 @@ impl World {
                 Some(json!({ "email": email, "username": username, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
-            RequestBody::NewItem => Some(json!({ "title": "New" })),
+            RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
