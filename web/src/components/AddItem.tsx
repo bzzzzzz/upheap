@@ -4,12 +4,12 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent,
 import { Dialog, Modal, ModalOverlay, ToggleButtonGroup } from "react-aria-components";
 
 import type { DueInput, HeapRef, ItemTag, Me, Need, Parameter, Size } from "../api/client";
-import { useCachedRankedList, useCreateItem, useMe, useParameters, useTags } from "../api/queries";
+import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
 import { SIZE_LABELS, SIZES } from "./labels";
-import { placeOf, splitList, toListQuery, type ListSearch } from "./listView";
+import { matchesSearch, placeOf, splitList, toListQuery, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
@@ -24,9 +24,19 @@ const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }
  * The way in to adding an item (app-ux.md, Adding an item): a field-like button above the list, or `N`, opens the Add
  * dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone, where the
  * + in the middle of the tabs opens it instead of this button (ux-overview.md, What comes first §1). `view` is the
- * list's, for the dialog to start from.
+ * list's, for the dialog to start from, and `search` the text the list is narrowed by.
  */
-export function AddItem({ heapRef, view, disabled }: { heapRef: HeapRef; view: ListSearch; disabled: boolean }) {
+export function AddItem({
+  heapRef,
+  view,
+  search,
+  disabled,
+}: {
+  heapRef: HeapRef;
+  view: ListSearch;
+  search: string;
+  disabled: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -63,7 +73,7 @@ export function AddItem({ heapRef, view, disabled }: { heapRef: HeapRef; view: L
           N
         </kbd>
       </button>
-      {open && <AddItemDialog heapRef={heapRef} view={view} onClose={() => setOpen(false)} />}
+      {open && <AddItemDialog heapRef={heapRef} view={view} search={search} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -127,18 +137,30 @@ const sameHeap = (a: HeapRef, b: HeapRef) => a.team === b.team && a.heap === b.h
 export function AddItemDialog({
   heapRef,
   view,
+  search = "",
   onClose,
 }: {
   heapRef: HeapRef;
   /** The list's view, when the dialog opens over the list. */
   view: ListSearch | undefined;
+  /** The text the list on screen is narrowed by, which may hide the new item. */
+  search?: string;
   onClose: () => void;
 }) {
   const phone = useMedia(PHONE);
   const { data: me } = useMe();
   const navigate = useNavigate();
   const showToast = useToast();
-  const cachedList = useCachedRankedList();
+  const refetchList = useRefetchRankedList();
+  // Counts adds and heap changes, so only the newest add's message is shown, and none for a heap left since.
+  const latest = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   // The heap the item goes into, the one on screen unless another is chosen.
   const [target, setTarget] = useState(heapRef);
   const onScreen = sameHeap(target, heapRef);
@@ -210,6 +232,7 @@ export function AddItemDialog({
 
   const chooseHeap = (next: HeapRef) => {
     if (sameHeap(next, target)) return;
+    latest.current += 1;
     // Tags and parameter values belong to a heap; the rest carries over.
     setEdits({
       title: draft.title,
@@ -226,9 +249,10 @@ export function AddItemDialog({
     event.preventDefault();
     const need = draft.need;
     if (!canAdd || need === null) return;
-    const into = { heap: target, heapName, onScreen, addAnother };
-    // Through the promise rather than `onSuccess`, which waits for nothing; it settles once the list on screen has
-    // been fetched again, ranking the new item.
+    const into = { heap: target, heapName, onScreen, addAnother, title: draft.title };
+    const add = ++latest.current;
+    // Through the promise rather than `onSuccess`, which is dropped once the dialog has closed. It settles as soon as
+    // the server has the item, so the next one can be typed and added while the list catches up.
     create
       .mutateAsync({
         heap: target,
@@ -249,28 +273,35 @@ export function AddItemDialog({
         },
       })
       .then(
-        (item) => {
-          const list = into.onScreen && view ? cachedList(heapRef, toListQuery(view)) : undefined;
+        async (item) => {
+          if (into.addAnother) {
+            setConfirmingDiscard(false);
+            setOpenAfterDiscard(null);
+            // A title typed since Enter is the next item's, and stays.
+            setEdits((current) =>
+              current.title !== undefined && current.title !== into.title ? { title: current.title } : {},
+            );
+            setRound((n) => n + 1);
+            titleRef.current?.focus();
+          } else {
+            onClose();
+          }
+          // Where it landed, from the list on screen fetched again; not if the search there hides it.
+          const list = into.onScreen && view ? await refetchList(heapRef, toListQuery(view)) : undefined;
           const place = list && placeOf(list, item.key);
+          const shown = place && matchesSearch(place.entry, search) ? place : undefined;
           const result: Added = {
             title: item.title,
             key: item.key,
             heap: into.heap,
             heapName: into.heapName,
-            place: place && { position: place.entry.position, section: place.section },
+            place: shown && { position: shown.entry.position, section: shown.section },
           };
           if (!into.addAnother) {
             showToast({ message: addedMessage(result), action: { label: "Open it", run: () => openItem(result) } });
-            onClose();
-            return;
+          } else if (mounted.current && latest.current === add) {
+            setAdded(result);
           }
-          setAdded(result);
-          // Also out of a discard asked for while the add was on its way: there's nothing left to discard.
-          setConfirmingDiscard(false);
-          setOpenAfterDiscard(null);
-          setEdits({});
-          setRound((n) => n + 1);
-          titleRef.current?.focus();
         },
         // Shown as `create.error`.
         () => {},

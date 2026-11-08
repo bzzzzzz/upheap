@@ -75,6 +75,7 @@ export function ChoiceButtons<T extends string>({
   hint?: ReactNode;
 }) {
   const labelId = useId();
+  const hintId = useId();
   const onSelectionChange = (keys: Set<Key>) => {
     const [picked] = [...keys];
     onChange(picked === undefined ? null : (String(picked) as T));
@@ -99,13 +100,19 @@ export function ChoiceButtons<T extends string>({
           <ToggleButton
             key={option.id}
             id={option.id}
+            // On each button: the group passes no `aria-describedby` on.
+            aria-describedby={hint ? hintId : undefined}
             className={`${choiceButtonClass} rounded-lg ${grid ? "min-w-11" : "px-1"}${toneClass}`}
           >
             {option.label}
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
-      {hint && <span className="text-xs text-muted">{hint}</span>}
+      {hint && (
+        <span id={hintId} className="text-xs text-muted">
+          {hint}
+        </span>
+      )}
     </FieldFrame>
   );
 }

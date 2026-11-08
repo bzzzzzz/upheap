@@ -269,7 +269,7 @@ function ListPage({
 
       {savedViews}
 
-      <AddItem heapRef={heapRef} view={view} disabled={heap.archived} />
+      <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
 
       {controls}
 

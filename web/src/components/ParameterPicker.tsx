@@ -42,6 +42,7 @@ export function ParameterPicker({
   hint?: ReactNode;
 }) {
   const id = useId();
+  const hintId = useId();
   const options = parameter.options;
   if (options.length <= MAX_BUTTONS && options.every((option) => option.label.length <= MAX_BUTTON_LABEL)) {
     return (
@@ -70,6 +71,7 @@ export function ParameterPicker({
         id={id}
         value={value ?? ""}
         disabled={disabled}
+        aria-describedby={hint ? hintId : undefined}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
         className="h-9 rounded-lg border border-line bg-surface px-2 text-sm text-ink pointer-coarse:h-11"
       >
@@ -80,7 +82,11 @@ export function ParameterPicker({
           </option>
         ))}
       </select>
-      {hint && <span className="text-xs text-muted">{hint}</span>}
+      {hint && (
+        <span id={hintId} className="text-xs text-muted">
+          {hint}
+        </span>
+      )}
     </FieldFrame>
   );
 }

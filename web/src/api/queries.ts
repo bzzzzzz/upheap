@@ -188,13 +188,17 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
 }
 
 /**
- * Reads a view of a heap's ranked list as last fetched, if it's cached. The list views on screen are fetched again
- * before a `useCreateItem` mutation's promise settles, so read after it they rank the new item: Add says where it
- * landed from the list itself rather than from a second request (ux-tracker.md, open question 4).
+ * Fetches a view of a heap's ranked list again, the one on screen, and gives it back. A fetch already on its way, as
+ * after an add invalidates the heap, is waited for rather than started again, so Add says where an item landed from
+ * the list itself rather than from a second request (ux-tracker.md, open question 4). `undefined` if it fails.
  */
-export function useCachedRankedList() {
+export function useRefetchRankedList() {
   const queryClient = useQueryClient();
-  return (heap: HeapRef, view: ListViewQuery) => queryClient.getQueryData<RankedList>(rankedViewKey(heap, view));
+  return async (heap: HeapRef, view: ListViewQuery): Promise<RankedList | undefined> => {
+    const queryKey = rankedViewKey(heap, view);
+    await queryClient.refetchQueries({ queryKey, exact: true }, { cancelRefetch: false });
+    return queryClient.getQueryData<RankedList>(queryKey);
+  };
 }
 
 /**
@@ -206,8 +210,8 @@ export function useCreateItem() {
   return useMutation({
     mutationFn: async ({ heap, body }: { heap: HeapRef; body: NewItem }) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
-    // Returned, so the mutation settles only once the views on screen have been fetched again.
-    onSettled: (_item, _error, { heap }) => invalidateHeap(queryClient, heap),
+    // Not returned: the mutation is done once the server has the item, and the lists catch up after.
+    onSettled: (_item, _error, { heap }) => void invalidateHeap(queryClient, heap),
   });
 }
 

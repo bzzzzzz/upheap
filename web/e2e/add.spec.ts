@@ -105,6 +105,45 @@ test("Add says where the item landed, in a toast or in the dialog, and Add anoth
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Last one");
 });
 
+test("the next item can be typed and added while the list catches up", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await dialog.getByLabel("Add another").check();
+
+  // The list takes its time to come back after each add.
+  await page.route(/\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/, async (route) => {
+    if (route.request().method() === "GET") await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+  await fillIn(page, "Buy milk");
+  await dialog.getByLabel("Title").press("Enter");
+  // Cleared as soon as the server has the item, before the list says where it went.
+  await expect(dialog.getByLabel("Title")).toHaveValue("");
+  await fillIn(page, "Call Sam");
+  await expect(dialog.getByRole("status")).toContainText("“Buy milk”");
+  await expect(dialog.getByLabel("Title")).toHaveValue("Call Sam");
+  await dialog.getByLabel("Title").press("Enter");
+  await expect(dialog.getByLabel("Title")).toHaveValue("");
+  await expect(dialog.getByRole("status")).toContainText("“Call Sam”");
+  await page.unroute(/\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/);
+  await page.keyboard.press("Escape");
+  await expect(row(page, "Buy milk")).toBeVisible();
+  await expect(row(page, "Call Sam")).toBeVisible();
+});
+
+test("an item the list's search hides is added without a position", async ({ page }) => {
+  test.skip(isPhone(page), "The phone's + opens Add from the tabs, which don't know the list's search.");
+  await addItem(page, "Water the plants");
+  await page.getByLabel("Search items").fill("plants");
+  await addItem(page, "Pay the rent", {}, { listed: false });
+  const toast = page.getByRole("status").filter({ hasText: "Added “Pay the rent” to " });
+  await expect(toast).toBeVisible();
+  await expect(toast).not.toContainText("#");
+  await page.getByLabel("Search items").fill("");
+  await expect(row(page, "Pay the rent")).toBeVisible();
+});
+
 test("the item goes into the heap chosen in the dialog's title", async ({ page, heapPath }) => {
   // A second heap to choose, from the team's page.
   await page.goto(heapPath.replace(/\/heaps\/[^/]+$/, ""));
