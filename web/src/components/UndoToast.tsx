@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { useParams, useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
@@ -23,20 +23,22 @@ const ToastContext = createContext<ShowToast>(() => {
 
 /**
  * The app's one toast, shared by everything that shows one (the list's state changes, Add), so a new toast replaces
- * the last instead of stacking on it. A toast belongs to the page it was shown on: going to another page, such as
- * opening an item, puts it away, so it never covers the item sheet's buttons on a phone.
+ * the last instead of stacking on it. A toast belongs to the heap it was shown in: going to another heap, or to a
+ * page of no heap, puts it away. Opening, walking and closing items keeps it, as the list stays under them.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const path = useRouterState({ select: (state) => state.location.pathname });
-  const [shown, setShown] = useState<{ toast: Toast; path: string } | null>(null);
-  const show = useCallback<ShowToast>((toast) => setShown({ toast: { ...toast, id: Date.now() }, path }), [path]);
+  const { team, heap } = useParams({ strict: false });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const owner = team !== undefined && heap !== undefined ? `heap:${team}/${heap}` : pathname;
+  const [shown, setShown] = useState<{ toast: Toast; owner: string } | null>(null);
+  const show = useCallback<ShowToast>((toast) => setShown({ toast: { ...toast, id: Date.now() }, owner }), [owner]);
   const dismiss = useCallback(() => setShown(null), []);
-  // Put away for good once the page changes, so coming back doesn't bring it back.
-  if (shown && shown.path !== path) setShown(null);
+  // Put away for good once the heap changes, so coming back doesn't bring it back.
+  if (shown && shown.owner !== owner) setShown(null);
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <UndoToast toast={shown?.path === path ? shown.toast : null} onDismiss={dismiss} />
+      <UndoToast toast={shown?.owner === owner ? shown.toast : null} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
 }

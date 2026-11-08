@@ -142,7 +142,7 @@ export function AddItemDialog({
   // The heap the item goes into, the one on screen unless another is chosen.
   const [target, setTarget] = useState(heapRef);
   const onScreen = sameHeap(target, heapRef);
-  const create = useCreateItem(target);
+  const create = useCreateItem();
   const parameters = useParameters(target);
   const prefill = usePrefill(heapRef, view);
   const [addAnother, setAddAnother] = useAddAnother();
@@ -196,6 +196,8 @@ export function AddItemDialog({
 
   // Open it in the dialog leaves the draft behind, so with a title typed it asks first.
   const onOpenAdded = (event: MouseEvent, item: Added) => {
+    // A new tab or window leaves the dialog as it is.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (draft.title.trim() !== "") {
       setOpenAfterDiscard(item);
@@ -229,19 +231,22 @@ export function AddItemDialog({
     // been fetched again, ranking the new item.
     create
       .mutateAsync({
-        title: draft.title,
-        need,
-        description: draft.description.trim() === "" ? null : draft.description,
-        effort: draft.effort,
-        impact: draft.impact,
-        due: draft.due,
-        tag_ids: draft.tags.map((tag) => tag.id),
-        parameter_values: Object.fromEntries(
-          suggested.flatMap((parameter) => {
-            const option = draft.values[parameter.id];
-            return option ? [[parameter.id, option]] : [];
-          }),
-        ),
+        heap: target,
+        body: {
+          title: draft.title,
+          need,
+          description: draft.description.trim() === "" ? null : draft.description,
+          effort: draft.effort,
+          impact: draft.impact,
+          due: draft.due,
+          tag_ids: draft.tags.map((tag) => tag.id),
+          parameter_values: Object.fromEntries(
+            suggested.flatMap((parameter) => {
+              const option = draft.values[parameter.id];
+              return option ? [[parameter.id, option]] : [];
+            }),
+          ),
+        },
       })
       .then(
         (item) => {
@@ -260,6 +265,9 @@ export function AddItemDialog({
             return;
           }
           setAdded(result);
+          // Also out of a discard asked for while the add was on its way: there's nothing left to discard.
+          setConfirmingDiscard(false);
+          setOpenAfterDiscard(null);
           setEdits({});
           setRound((n) => n + 1);
           titleRef.current?.focus();

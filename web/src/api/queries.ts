@@ -197,13 +197,17 @@ export function useCachedRankedList() {
   return (heap: HeapRef, view: ListViewQuery) => queryClient.getQueryData<RankedList>(rankedViewKey(heap, view));
 }
 
-export function useCreateItem(heap: HeapRef) {
+/**
+ * Adds an item to `heap`. The heap goes with each call rather than with the hook, as the Add dialog can change heap
+ * while an add is on its way, and the views to fetch again are those of the heap the item went into.
+ */
+export function useCreateItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: NewItem) =>
+    mutationFn: async ({ heap, body }: { heap: HeapRef; body: NewItem }) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Returned, so the mutation settles only once the views on screen have been fetched again.
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: (_item, _error, { heap }) => invalidateHeap(queryClient, heap),
   });
 }
 
