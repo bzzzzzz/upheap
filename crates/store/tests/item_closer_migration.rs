@@ -57,7 +57,8 @@ async fn insert_update_entry(db: &DatabaseConnection, n: u128, actor: u128, item
 #[gtest]
 #[tokio::test]
 async fn closed_items_get_the_closer_from_the_entry_at_their_close_time() -> Result<()> {
-    // Arrange: Bob edits item 10 and Ada closes it at 1000; item 11, closed at 2000, has only an earlier edit.
+    // Arrange: Bob edits item 10 and Ada closes it at 1000; item 11, closed at 2000, has only an earlier edit;
+    // item 12, closed at 3000, has updates by both Ada and Bob in that millisecond, so either could be the close.
     let db = store::testing::database_before_migration(BEFORE_ITEM_CLOSER).await?;
     for (n, name) in [(5, "Ada"), (6, "Bob")] {
         run(
@@ -93,6 +94,9 @@ async fn closed_items_get_the_closer_from_the_entry_at_their_close_time() -> Res
     insert_update_entry(&db, 20, 6, 10, 500).await?;
     insert_update_entry(&db, 21, 5, 10, 1000).await?;
     insert_update_entry(&db, 22, 6, 11, 1999).await?;
+    insert_closed_item(&db, 12, "n5z7c", 3000).await?;
+    insert_update_entry(&db, 23, 5, 12, 3000).await?;
+    insert_update_entry(&db, 24, 6, 12, 3000).await?;
 
     // Act
     store::run_migrations(&db).await?;
@@ -108,5 +112,7 @@ async fn closed_items_get_the_closer_from_the_entry_at_their_close_time() -> Res
     );
     expect_that!(untraced.state.kind(), eq(StateKind::Done));
     expect_that!(untraced.state.closed_by(), none());
+    let ambiguous = find(12).await?.context("item 12")?;
+    expect_that!(ambiguous.state.closed_by(), none());
     Ok(())
 }

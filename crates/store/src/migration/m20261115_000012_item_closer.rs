@@ -2,7 +2,8 @@
 //!
 //! Items already closed are filled in from the audit log. Closing writes the item's `closed_at` and its
 //! `item_updated` entry's `created_at` from the same instant, so the closing entry is the one at that timestamp, found
-//! without reading any JSON diff. An item with no matching entry keeps `NULL` and shows no closer. The column stays
+//! without reading any JSON diff. An item with no matching entry, or with entries by different users at that instant, keeps `NULL` and shows no
+//! closer. The column stays
 //! nullable on every backend for those items, and because SQLite can't make a column `NOT NULL` without rebuilding its
 //! table. The store writes it every time an item is closed and clears it on reopening.
 //!
@@ -27,10 +28,12 @@ enum Users {
     Id,
 }
 
-/// Fills `closed_by` from the actor of each closed item's update entry at its close time. `MIN` picks one actor
+/// Fills `closed_by` from the actor of each closed item's update entry at its close time. Two updates in the same
+/// millisecond by different users leave it `NULL`, since either could be the close; `MIN` and `MAX` compare them
 /// without `LIMIT`, which MySQL refuses in some subqueries.
 const BACKFILL: &str = "UPDATE items SET closed_by = ( \
-     SELECT MIN(audit_log.actor_user_id) FROM audit_log \
+     SELECT CASE WHEN MIN(audit_log.actor_user_id) = MAX(audit_log.actor_user_id) \
+     THEN MIN(audit_log.actor_user_id) END FROM audit_log \
      WHERE audit_log.entity_type = 'item' AND audit_log.entity_id = items.id \
      AND audit_log.action = 'item_updated' AND audit_log.created_at = items.closed_at) \
      WHERE closed_at IS NOT NULL AND closed_by IS NULL";

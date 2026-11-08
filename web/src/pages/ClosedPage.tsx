@@ -60,7 +60,7 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
       </p>
       {items.length === 0 && <p className="py-12 text-center text-muted">Nothing closed yet.</p>}
       {toSections(items).map((section, index) => (
-        <ClosedGroup
+        <ClosedGroupSection
           // Groups can repeat, in the unlikely case the clock moves between pages, so the index keeps keys unique.
           key={`${index}-${section.group}`}
           section={section}
@@ -90,7 +90,7 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
   );
 }
 
-function ClosedGroup({
+function ClosedGroupSection({
   section,
   heapRef,
   reopening,
