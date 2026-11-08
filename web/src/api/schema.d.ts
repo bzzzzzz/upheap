@@ -853,6 +853,14 @@ export interface components {
              * @description UTC milliseconds; set exactly when the item is closed.
              */
             closed_at?: number | null;
+            closed_by?: null | components["schemas"]["UserRef"];
+            /**
+             * @description Which part of the closed list it belongs in, in the request's timezone: "Today" for the same calendar day,
+             *     "This week" for 1 to 6 days before, and "Earlier" for anything older. `null` when the item is open. Clients
+             *     group consecutive items with the same label.
+             * @example This week
+             */
+            closed_group?: string | null;
             /** @description When it was closed, ready to show ("yesterday", "3 Nov"). */
             closed_label?: string | null;
             /**

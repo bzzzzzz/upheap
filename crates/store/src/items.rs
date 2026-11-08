@@ -384,6 +384,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         created_at: Set(item.created_at.as_millis()),
         created_by: Set(item.created_by.map(|id| id_to_db(id.as_uuid()))),
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
+        closed_by: Set(item.state.closed_by().map(|id| id_to_db(id.as_uuid()))),
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
     })
 }
@@ -400,7 +401,9 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         .as_deref()
         .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
         .transpose()?;
-    let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, blocked_by)
+    let user = |raw: Option<&str>| raw.map(|raw| read.uuid(raw).map(UserId::from_uuid)).transpose();
+    let closed_by = user(row.closed_by.as_deref())?;
+    let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, closed_by, blocked_by)
         .map_err(|e| read.corrupt(e.to_string()))?;
     let need = Need::from_code(&row.need).ok_or_else(|| read.corrupt(format!("unknown need {:?}", row.need)))?;
     let due = match (row.due_at, row.due_firm) {
@@ -434,11 +437,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
         created_at: read.timestamp(row.created_at)?,
-        created_by: row
-            .created_by
-            .as_deref()
-            .map(|raw| read.uuid(raw).map(UserId::from_uuid))
-            .transpose()?,
+        created_by: user(row.created_by.as_deref())?,
         version: read.version(row.version)?,
     })
 }

@@ -85,6 +85,41 @@ pub fn describe_ago(at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> String {
     }
 }
 
+/// Which part of the closed list an item closed at some time falls in, for a weekly review.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClosedGroup {
+    /// Closed on the same local date.
+    Today,
+    /// Closed 1 to 6 local calendar days before.
+    ThisWeek,
+    /// Closed 7 or more local calendar days before.
+    Earlier,
+}
+
+impl ClosedGroup {
+    /// The group's heading as people read it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Today => "Today",
+            Self::ThisWeek => "This week",
+            Self::Earlier => "Earlier",
+        }
+    }
+}
+
+/// The group of an item closed at `closed_at`, as seen at `as_of` by a user in `tz`, in calendar days. A
+/// `closed_at` after `as_of` counts as today.
+pub fn group_closed(closed_at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> ClosedGroup {
+    let days = local_date(closed_at, tz)
+        .until(local_date(as_of, tz))
+        .map_or(0, |span| span.get_days());
+    match days {
+        ..1 => ClosedGroup::Today,
+        1..7 => ClosedGroup::ThisWeek,
+        _ => ClosedGroup::Earlier,
+    }
+}
+
 /// The nearest fuzzy term for a loose due time. Past dates count as "in a few days".
 ///
 /// The bands leave room around each of the [due choices](list_due_choices), so a picked choice reads back as itself
@@ -310,6 +345,44 @@ mod tests {
 
         expect_that!(describe_ago(day(0), as_of, &utc()), eq("today"));
         expect_that!(describe_ago(day(0), as_of, &berlin), eq("yesterday"));
+    }
+
+    #[gtest]
+    fn closed_items_group_by_calendar_days() {
+        let start_of_day = Timestamp::from_millis(1_798_761_600_000).expect("in range"); // 2027-01-01T00:00Z
+        let end_of_day = Timestamp::from_millis(1_798_847_999_999).expect("in range"); // 2027-01-01T23:59:59.999Z
+
+        expect_that!(group_closed(day(0), day(0), &utc()), eq(ClosedGroup::Today));
+        expect_that!(group_closed(start_of_day, end_of_day, &utc()), eq(ClosedGroup::Today));
+        expect_that!(group_closed(day(1), day(0), &utc()), eq(ClosedGroup::Today));
+        // One millisecond before midnight is yesterday.
+        let just_before = Timestamp::from_millis(start_of_day.as_millis() - 1).expect("in range");
+        expect_that!(
+            group_closed(just_before, start_of_day, &utc()),
+            eq(ClosedGroup::ThisWeek)
+        );
+        expect_that!(group_closed(day(-6), day(0), &utc()), eq(ClosedGroup::ThisWeek));
+        expect_that!(group_closed(day(-7), day(0), &utc()), eq(ClosedGroup::Earlier));
+        expect_that!(group_closed(day(-400), day(0), &utc()), eq(ClosedGroup::Earlier));
+    }
+
+    #[gtest]
+    fn closed_groups_depend_on_the_timezone() {
+        // 2027-01-01T23:30Z is still 1 Jan in UTC but already 2 Jan in Berlin.
+        let as_of = Timestamp::from_millis(1_798_846_200_000).expect("in range");
+        let berlin = TimeZone::get("Europe/Berlin").expect("bundled");
+
+        expect_that!(group_closed(day(0), as_of, &utc()), eq(ClosedGroup::Today));
+        expect_that!(group_closed(day(0), as_of, &berlin), eq(ClosedGroup::ThisWeek));
+        expect_that!(group_closed(day(-6), as_of, &utc()), eq(ClosedGroup::ThisWeek));
+        expect_that!(group_closed(day(-6), as_of, &berlin), eq(ClosedGroup::Earlier));
+    }
+
+    #[gtest]
+    fn closed_group_labels() {
+        expect_that!(ClosedGroup::Today.label(), eq("Today"));
+        expect_that!(ClosedGroup::ThisWeek.label(), eq("This week"));
+        expect_that!(ClosedGroup::Earlier.label(), eq("Earlier"));
     }
 
     #[gtest]

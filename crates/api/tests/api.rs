@@ -6,6 +6,7 @@ use anyhow::Result;
 use axum::http::{Method, StatusCode};
 use common::TestApp;
 use domain::Duration;
+use domain::team::Role;
 use googletest::prelude::*;
 use serde_json::json;
 
@@ -256,6 +257,125 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
     expect_that!(outside.status, eq(StatusCode::CONFLICT));
     expect_that!(outside.body["code"], eq(&json!("reopen_window_expired")));
     expect_that!(closed.body["items"][0]["allowed_actions"], eq(&json!([])));
+    Ok(())
+}
+
+/// Closes the item `created`, as returned by the API, as the user of `session`, and returns the closed item.
+async fn close_item(
+    app: &TestApp,
+    session: &str,
+    created: &serde_json::Value,
+    state: &str,
+) -> Result<serde_json::Value> {
+    let url = app.item_url(created["id"].as_str().unwrap_or_default()).await?;
+    let closed = app
+        .patch(session, &url, &created["version"], json!({ "state": state }))
+        .await?;
+    anyhow::ensure!(closed.status == StatusCode::OK, "close failed: {}", closed.body);
+    Ok(closed.body)
+}
+
+#[gtest]
+#[tokio::test]
+async fn closed_items_say_who_closed_them_and_are_grouped_by_day() -> Result<()> {
+    // Arrange: Ada closes "Old"; three days later Sam, another member, closes "Mid"; four days after that Ada
+    // closes "New".
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register_as("ada@example.test", "Ada").await?;
+    let (sam, _) = app.register_as("sam@example.test", "Sam").await?;
+    let sam_me = app.send(Method::GET, "/api/v1/me", Some(&sam), None).await?;
+    let (team, heap) = app.shared_heap(&ada).await?;
+    app.add_member(
+        &team,
+        sam_me.body["user"]["id"].as_str().unwrap_or_default(),
+        Role::Member,
+    )
+    .await?;
+    let mut created = Vec::new();
+    for title in ["Old", "Mid", "New"] {
+        created.push(app.new_item(&ada, &heap, json!({ "title": title })).await?);
+    }
+    close_item(&app, &ada, &created[0], "done").await?;
+    app.clock.advance(Duration::from_days(3));
+    close_item(&app, &sam, &created[1], "wont_do").await?;
+    app.clock.advance(Duration::from_days(4));
+    let new = close_item(&app, &ada, &created[2], "done").await?;
+
+    // Act
+    let closed = app
+        .send(
+            Method::GET,
+            &format!("{}/items/closed", app.heap_url(&heap).await?),
+            Some(&ada),
+            None,
+        )
+        .await?;
+    let mid = app
+        .send(
+            Method::GET,
+            &app.item_url(created[1]["id"].as_str().unwrap_or_default()).await?,
+            Some(&ada),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(new["closed_by"]["display_name"], eq(&json!("Ada")));
+    expect_that!(new["closed_group"], eq(&json!("Today")));
+    let items = &closed.body["items"];
+    let summary = |i: usize| {
+        (
+            items[i]["title"].clone(),
+            items[i]["closed_group"].clone(),
+            items[i]["closed_by"]["display_name"].clone(),
+        )
+    };
+    expect_that!(summary(0), eq(&(json!("New"), json!("Today"), json!("Ada"))));
+    expect_that!(summary(1), eq(&(json!("Mid"), json!("This week"), json!("Sam"))));
+    expect_that!(summary(2), eq(&(json!("Old"), json!("Earlier"), json!("Ada"))));
+    expect_that!(items[1]["closed_by"]["id"], eq(&sam_me.body["user"]["id"]));
+    expect_that!(mid.body["closed_by"]["display_name"], eq(&json!("Sam")));
+    expect_that!(mid.body["closed_group"], eq(&json!("This week")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn reopening_clears_who_closed_an_item() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register_as("ada@example.test", "Ada").await?;
+    let created = app.new_item(&session, &heap, json!({ "title": "Ship it" })).await?;
+    let closed = close_item(&app, &session, &created, "done").await?;
+    let url = app.item_url(created["id"].as_str().unwrap_or_default()).await?;
+
+    // Act
+    let reopened = app
+        .send_with(
+            Method::POST,
+            &format!("{url}/reopen"),
+            Some(&session),
+            None,
+            &[common::CSRF, ("if-match", &closed["version"].to_string())],
+        )
+        .await?;
+    let item = app.send(Method::GET, &url, Some(&session), None).await?;
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(reopened.status, eq(StatusCode::OK));
+    for body in [&reopened.body, &item.body, &list.body["ranked"][0]["item"]] {
+        expect_that!(body["closed_by"], eq(&json!(null)));
+        expect_that!(body["closed_group"], eq(&json!(null)));
+        expect_that!(body["closed_at"], eq(&json!(null)));
+    }
     Ok(())
 }
 
