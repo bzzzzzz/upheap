@@ -57,8 +57,8 @@ pub async fn find_heap_by_slug(
 /// Every item and tag write takes this lock before touching any other row. Their audit entries reference the heap,
 /// so a write that locked an item first and the heap second could deadlock with one that went the other way.
 ///
-/// MySQL takes a row lock (`FOR UPDATE`). SQLite has no row locks and allows one writer at a time anyway: a second
-/// transaction that read before the first committed fails on its write instead of overwriting it.
+/// MySQL and Postgres take a row lock (`FOR UPDATE`). SQLite has no row locks and allows one writer at a time
+/// anyway: a second transaction that read before the first committed fails on its write instead of overwriting it.
 ///
 /// The heap returned is read under the lock, so whether it is archived can't change before the transaction ends.
 pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<Heap>, StoreError> {

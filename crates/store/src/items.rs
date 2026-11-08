@@ -95,9 +95,9 @@ pub async fn list_item_summaries(
 
 /// The item `id` of `heap_id`, without its tags, or `None` when the heap has no such item.
 ///
-/// It's a locking read (`FOR SHARE` on MySQL), which sees the latest committed row rather than the transaction's
-/// snapshot, so a check that walks the blocker chain after [`crate::heaps::lock_heap`] sees writes that committed
-/// while it waited for the lock. SQLite has no row locks and needs none (see `lock_heap`).
+/// It's a locking read (`FOR SHARE` on MySQL and Postgres), which sees the latest committed row rather than the
+/// transaction's snapshot, so a check that walks the blocker chain after [`crate::heaps::lock_heap`] sees writes
+/// that committed while it waited for the lock. SQLite has no row locks and needs none (see `lock_heap`).
 pub async fn find_item_summary_locking(
     db: &impl ConnectionTrait,
     heap_id: HeapId,

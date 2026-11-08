@@ -24,7 +24,7 @@ const IN_LIST_CHUNK: usize = 500;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Lock {
     None,
-    /// `FOR SHARE` on MySQL: sees the latest committed rows, not the transaction's snapshot.
+    /// `FOR SHARE` on MySQL and Postgres: sees the latest committed rows, not the transaction's snapshot.
     Share,
     /// `FOR UPDATE` on the parameter row, `FOR SHARE` on its options and tag links.
     Update,

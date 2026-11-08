@@ -409,6 +409,32 @@ async fn admins_find_users_by_the_start_of_a_name_or_of_an_email() -> Result<()>
     Ok(())
 }
 
+/// SQLite lowercases ASCII only and Postgres all of Unicode, so letters outside ASCII are where the backends could
+/// disagree. On every backend, they match as typed and ASCII letters in any case.
+#[gtest]
+#[tokio::test]
+async fn names_starting_with_a_capital_outside_ascii_are_found_as_typed() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register_as("ada@example.test", "Ada Lovelace").await?;
+    app.shared_heap(&ada).await?;
+    app.register_as("olaf@example.test", "Ölaf Ström").await?;
+
+    // Act: "Öla" and "STRö", URL-encoded.
+    let first_name = app
+        .send(Method::GET, "/api/v1/users?query=%C3%96la", Some(&ada), None)
+        .await?;
+    let last_name = app
+        .send(Method::GET, "/api/v1/users?query=STR%C3%B6", Some(&ada), None)
+        .await?;
+
+    // Assert
+    let olaf = || ("Ölaf Ström".to_owned(), json!(null));
+    expect_that!(found(&first_name), elements_are![eq(&olaf())]);
+    expect_that!(found(&last_name), elements_are![eq(&olaf())]);
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn a_user_who_is_no_shared_teams_admin_cannot_look_users_up() -> Result<()> {

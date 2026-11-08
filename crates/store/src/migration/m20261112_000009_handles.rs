@@ -11,8 +11,13 @@
 //!   heap names within each team, oldest first, with `-2`, `-3`… where one is taken.
 //! - Items get random keys.
 //!
-//! MySQL and Postgres then make the columns `NOT NULL`. SQLite can't change a column without rebuilding its table, which its
-//! foreign keys make unsafe inside a migration, so there they stay nullable and the store always writes them.
+//! MySQL and Postgres then make the columns `NOT NULL`. SQLite can't change a column without rebuilding its table,
+//! which its foreign keys make unsafe inside a migration, so there they stay nullable and the store always writes
+//! them.
+//!
+//! This migration was edited after release, against the rule (design/engineering-principles.md, Data 4): it made
+//! the columns `NOT NULL` on MySQL only, and now does on every backend but SQLite, so that Postgres gets them too.
+//! What it does on SQLite and MySQL is unchanged, and no Postgres database had run it before.
 
 use std::collections::{BTreeSet, HashMap};
 
