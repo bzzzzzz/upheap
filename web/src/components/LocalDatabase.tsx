@@ -9,6 +9,7 @@ import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import { formatAgo, formatDay, isDownloadStale, recordDownload, useLastDownloadAt, useNow } from "./lastDownload";
 import { PHONE, useMedia } from "./media";
+import { borderedClass, buttonClass, compactButtonClass } from "./buttons";
 import { problemMessage } from "./ProblemText";
 import { Sheet } from "./Sheet";
 
@@ -70,24 +71,10 @@ function Note({ database, className }: { database: LocalDatabase; className: str
   );
 }
 
-// Sizes from the WideAccount mockup. Touch and phones keep 44 px targets.
-const buttonClass =
-  "inline-flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-40 pointer-coarse:min-h-11";
-const borderedClass = "border border-line-strong bg-surface text-ink hover:bg-sunken";
-
-/** The Your data card's buttons. */
+/** The Your data card's buttons, sized as in the WideAccount mockup. */
 const cardButtonClass = `${buttonClass} rounded-[10px] px-3.5 py-[9px] max-sm:min-h-11`;
 const downloadClass = `${cardButtonClass} bg-ink font-semibold text-surface`;
 const openClass = `${cardButtonClass} ${borderedClass}`;
-
-/** The wide confirm's buttons, which the Account page's Save and Cancel share. */
-const compactClass = `${buttonClass} rounded-[9px] py-2`;
-export const compactButtonClass = {
-  primary: `${compactClass} bg-ink px-3.5 font-semibold text-surface`,
-  quiet: `${compactClass} px-3 text-ink-soft hover:text-ink`,
-  bordered: `${compactClass} px-3 ${borderedClass}`,
-  danger: `${compactClass} bg-overdue-ink px-3.5 font-semibold text-surface`,
-};
 
 /** The phone sheet's buttons: full width and 44 px tall. */
 const sheetButtonClass =

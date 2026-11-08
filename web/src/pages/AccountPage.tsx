@@ -1,5 +1,6 @@
 import { useMe, useUpdateMe } from "../api/queries";
-import { compactButtonClass, LocalDataSection } from "../components/LocalDatabase";
+import { compactButtonClass } from "../components/buttons";
+import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
