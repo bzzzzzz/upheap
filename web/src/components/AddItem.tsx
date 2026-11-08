@@ -2,11 +2,12 @@ import { Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
-import type { DueInput, HeapRef, ItemTag, Size } from "../api/client";
+import type { DueInput, HeapRef, ItemTag, Need, Size } from "../api/client";
 import { useCreateItem, useParameters } from "../api/queries";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
 import { SIZE_LABELS, SIZES } from "./labels";
+import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { TagPicker } from "./TagPicker";
 
@@ -69,6 +70,8 @@ export function AddItem({ heapRef, disabled }: { heapRef: HeapRef; disabled: boo
 type Draft = {
   title: string;
   description: string;
+  /** Required: Add stays off until one is picked. */
+  need: Need | null;
   effort: Size | null;
   impact: Size | null;
   due: DueInput | null;
@@ -77,12 +80,22 @@ type Draft = {
   values: Record<string, string | null>;
 };
 
-const EMPTY: Draft = { title: "", description: "", effort: null, impact: null, due: null, tags: [], values: {} };
+const EMPTY: Draft = {
+  title: "",
+  description: "",
+  need: null,
+  effort: null,
+  impact: null,
+  due: null,
+  tags: [],
+  values: {},
+};
 
 /**
- * Every field Add item takes, the title focused (Req Views: Add item). Picking a tag brings up the parameters linked
- * to it. Enter in the title or ⌘↵ adds; with Add another ticked the dialog clears for the next item instead of
- * closing. Closing with a title typed asks first, so a stray tap outside doesn't lose it.
+ * Every field Add item takes, the title focused (Req Views: Add item). The title and the need are required. Picking
+ * a tag brings up the parameters linked to it. Enter in the title or ⌘↵ adds; with Add another ticked the dialog
+ * clears for the next item instead of closing. Closing with a title typed asks first, so a stray tap outside doesn't
+ * lose it.
  */
 function AddItemDialog({
   heapRef,
@@ -111,6 +124,8 @@ function AddItemDialog({
       parameter.tag_ids.some((id) => draft.tags.some((tag) => tag.id === id)) || draft.values[parameter.id],
   );
 
+  const canAdd = draft.title.trim() !== "" && draft.need !== null && !create.isPending;
+
   const requestClose = () => {
     if (draft.title.trim() !== "" && !confirmingDiscard) {
       setConfirmingDiscard(true);
@@ -121,10 +136,12 @@ function AddItemDialog({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (draft.title.trim() === "" || create.isPending) return;
+    const need = draft.need;
+    if (!canAdd || need === null) return;
     create.mutate(
       {
         title: draft.title,
+        need,
         description: draft.description.trim() === "" ? null : draft.description,
         effort: draft.effort,
         impact: draft.impact,
@@ -196,6 +213,7 @@ function AddItemDialog({
                 className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
               />
             </label>
+            <NeedPicker value={draft.need} onChange={(need) => set("need", need)} />
             <div className="grid grid-cols-2 gap-3">
               <ChoiceButtons
                 label="Effort"
@@ -270,7 +288,7 @@ function AddItemDialog({
                 </button>
                 <button
                   type="submit"
-                  disabled={draft.title.trim() === "" || create.isPending}
+                  disabled={!canAdd}
                   title="⌘↵"
                   className="h-11 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
                 >

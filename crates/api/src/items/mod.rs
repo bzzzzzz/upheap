@@ -21,8 +21,8 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::dto::{
-    DueInputDto, HeapSummaryDto, IfMatchHeader, ItemDto, RankedItemDto, SizeDto, StateDto, double_option, non_null,
-    to_item_dto, to_ranked_dto,
+    DueInputDto, HeapSummaryDto, IfMatchHeader, ItemDto, NeedDto, RankedItemDto, SizeDto, StateDto, double_option,
+    never_null, non_null, to_item_dto, to_ranked_dto,
 };
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, IfMatch, TimeZoneHeader};
@@ -147,6 +147,8 @@ pub(crate) struct ClosedItemsDto {
 pub(crate) struct CreateItemDto {
     pub title: String,
     pub description: Option<String>,
+    /// Required: every item says how much it's needed.
+    pub need: NeedDto,
     pub effort: Option<SizeDto>,
     pub impact: Option<SizeDto>,
     pub due: Option<DueInputDto>,
@@ -164,6 +166,10 @@ pub(crate) struct ItemPatchDto {
     #[serde(default, deserialize_with = "double_option")]
     #[schema(value_type = Option<String>, nullable)]
     pub description: Option<Option<String>>,
+    /// Need can be changed but not cleared; `null` is refused.
+    #[serde(default, deserialize_with = "never_null")]
+    #[schema(value_type = NeedDto, required = false)]
+    pub need: Option<NeedDto>,
     #[serde(default, deserialize_with = "double_option")]
     #[schema(value_type = Option<SizeDto>, nullable)]
     pub effort: Option<Option<SizeDto>>,
@@ -200,6 +206,7 @@ impl ItemPatchDto {
                 Some(None) => Some(None),
                 Some(Some(raw)) => Some(Description::parse(raw)?),
             },
+            need: self.need.map(Into::into),
             effort: self.effort.map(|e| e.map(Into::into)),
             impact: self.impact.map(|i| i.map(Into::into)),
             due: match &self.due {
@@ -373,6 +380,7 @@ fn to_new_item(body: &CreateItemDto, tz: &TimeZone) -> Result<NewItem, Validatio
             .map(Description::parse)
             .transpose()?
             .flatten(),
+        need: body.need.into(),
         effort: body.effort.map(Into::into),
         impact: body.impact.map(Into::into),
         due: body.due.as_ref().map(|due| due.to_due(tz)).transpose()?,

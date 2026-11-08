@@ -21,6 +21,7 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
         team_id: Set(id_to_db(heap.team_id.as_uuid())),
         slug: Set(heap.slug.as_str().to_owned()),
         name: Set(heap.name.as_str().to_owned()),
+        need_weight: Set(i32::from(heap.policy.need_weight)),
         age_weight: Set(i32::from(heap.policy.age_weight)),
         deadline_weight: Set(i32::from(heap.policy.deadline_weight)),
         value_weight: Set(i32::from(heap.policy.value_weight)),
@@ -84,6 +85,7 @@ pub async fn update_heap(
     let row = heaps::ActiveModel {
         slug: Set(saved.slug.as_str().to_owned()),
         name: Set(saved.name.as_str().to_owned()),
+        need_weight: Set(i32::from(saved.policy.need_weight)),
         age_weight: Set(i32::from(saved.policy.age_weight)),
         deadline_weight: Set(i32::from(saved.policy.deadline_weight)),
         value_weight: Set(i32::from(saved.policy.value_weight)),
@@ -124,6 +126,7 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
         slug: read.handle(&row.slug)?,
         name: Name::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?,
         policy: HeapPolicy {
+            need_weight: read.weight(row.need_weight)?,
             age_weight: read.weight(row.age_weight)?,
             deadline_weight: read.weight(row.deadline_weight)?,
             value_weight: read.weight(row.value_weight)?,

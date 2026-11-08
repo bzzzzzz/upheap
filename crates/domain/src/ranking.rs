@@ -4,6 +4,10 @@
 //! change is always an explicit test update. Scores are never stored or returned, only positions and
 //! contributors.
 //!
+//! **Need** counts twice: as a factor of its own, for what skipping the item costs, and as the rate at which the
+//! item ages. Ideas age slowly, so an old idea doesn't climb past fresh work someone is waiting for; critical items
+//! age fast, because every day they wait costs more.
+//!
 //! **Custom parameters** count like the heap's own factors: each parameter in use adds its weight times where the
 //! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
 //! counts as the last option (Req Priority §4), and an archived option as the option that replaced it.
@@ -16,19 +20,23 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::due::fuzzy_label;
 use crate::heap::HeapPolicy;
-use crate::item::{Due, Item, Size};
+use crate::item::{Due, Item, Need, Size};
 use crate::parameter::Parameter;
 use crate::{ItemId, OptionId, ParameterId, Timestamp};
 
 /// A named version of the scoring formula.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaVersion {
-    /// Placeholder formula for the first release: a weighted sum of age, deadline proximity, value per effort and
-    /// the custom parameters. To be replaced by the formula designed separately.
-    V1,
+    /// A weighted sum of need, age scaled by need, deadline proximity, value per effort and the custom parameters.
+    ///
+    /// It replaced `V1`, which had no need. Items it ranked all count as expected, the step that leaves their age
+    /// as it was, so they mostly keep their order among themselves. The exception is blockers: expected adds the
+    /// same amount to every item, and a blocker takes on 1.1 times the score of what it blocks, so a blocker can
+    /// move above an item it was just below.
+    V2,
 }
 
-pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V1;
+pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V2;
 
 /// At most this many contributors are returned per item.
 pub const MAX_CONTRIBUTORS: usize = 2;
@@ -44,6 +52,7 @@ pub struct ItemForRanking<'a> {
     /// Shown in the "Blocks …" contributor of the item that blocks this one.
     pub title: &'a str,
     pub created_at: Timestamp,
+    pub need: Need,
     pub effort: Option<Size>,
     pub impact: Option<Size>,
     pub due: Option<Due>,
@@ -59,6 +68,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
             id: item.id,
             title: item.title.as_str(),
             created_at: item.created_at,
+            need: item.need,
             effort: item.effort,
             impact: item.impact,
             due: item.due,
@@ -71,6 +81,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
 /// Which factor a contributor comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Factor {
+    Need,
     Age,
     Deadline,
     Value,
@@ -246,14 +257,14 @@ fn score_components(
     as_of: Timestamp,
 ) -> Vec<Component> {
     match formula {
-        FormulaVersion::V1 => v1::components(policy, parameters, item, as_of),
+        FormulaVersion::V2 => v2::components(policy, parameters, item, as_of),
     }
 }
 
 /// Factor applied to a score a blocker inherits, because finishing both takes more work than finishing one.
 const fn blocker_boost(formula: FormulaVersion) -> f64 {
     match formula {
-        FormulaVersion::V1 => v1::BLOCKER_BOOST,
+        FormulaVersion::V2 => v2::BLOCKER_BOOST,
     }
 }
 
@@ -277,12 +288,12 @@ fn select_contributors(mut components: Vec<Component>, total: f64) -> Vec<Contri
         .collect()
 }
 
-mod v1 {
+mod v2 {
     //! Each factor yields a value of roughly 0 to 1 for typical items, multiplied by the heap's weight for it.
 
     use super::{Component, Factor, ItemForRanking, fuzzy_label};
     use crate::heap::HeapPolicy;
-    use crate::item::{Due, Size};
+    use crate::item::{Due, Need, Size};
     use crate::parameter::Parameter;
     use crate::{Duration, Timestamp};
 
@@ -304,13 +315,15 @@ mod v1 {
         as_of: Timestamp,
     ) -> Vec<Component> {
         let mut components = vec![
-            age(policy.age_weight, item.created_at, as_of),
+            age(policy.age_weight, item.need, item.created_at, as_of),
             value(policy.value_weight, item),
         ];
         if let Some(due) = item.due {
             components.push(deadline(policy.deadline_weight, due, as_of));
         }
         components.extend(parameters.iter().filter_map(|parameter| custom(parameter, item)));
+        // Last, so a tie in the contributors goes to the other factor: most items are expected, which says less.
+        components.push(need(policy.need_weight, item.need));
         components
     }
 
@@ -334,24 +347,65 @@ mod v1 {
         })
     }
 
-    fn age(weight: u16, created_at: Timestamp, as_of: Timestamp) -> Component {
-        let days = as_of.since(created_at).as_days_f64().max(0.0);
-        let raw = (1.0 + days).ln() / (1.0 + AGE_REFERENCE_DAYS).ln();
-        Component {
-            factor: Factor::Age,
-            value: f64::from(weight) * raw,
-            label: describe_wait(as_of.since(created_at)),
+    /// What skipping the item costs. The steps are set against the deadline factor, so they read in its terms: a
+    /// nice-to-have pulls like a deadline nine days off, an expected item like one three days off, and a critical
+    /// item like an exact deadline that has just passed. An idea adds nothing.
+    ///
+    /// Expected, the step most items have, is worth half of the best value per effort and of a month of waiting,
+    /// so it doesn't crowd them out of the contributors.
+    const fn need_points(need: Need) -> f64 {
+        match need {
+            Need::Idea => 0.0,
+            Need::NiceToHave => 0.25,
+            Need::Expected => 0.5,
+            Need::Critical => 2.0,
         }
     }
 
-    fn describe_wait(waited: Duration) -> String {
+    /// How fast an item ages, against an expected item. An idea takes four months to age as much as an expected
+    /// item does in one; a critical item ages half again as fast.
+    const fn aging_rate(need: Need) -> f64 {
+        match need {
+            Need::Idea => 0.25,
+            Need::NiceToHave => 0.5,
+            Need::Expected => 1.0,
+            Need::Critical => 1.5,
+        }
+    }
+
+    fn need(weight: u16, need: Need) -> Component {
+        Component {
+            factor: Factor::Need,
+            value: f64::from(weight) * need_points(need),
+            label: format!("Need: {}", need.label()),
+        }
+    }
+
+    /// Age scaled by need. When the rate isn't an expected item's, the label says so, since an idea's need adds
+    /// nothing and has no contributor of its own to explain why it sits low.
+    fn age(weight: u16, need: Need, created_at: Timestamp, as_of: Timestamp) -> Component {
+        let days = as_of.since(created_at).as_days_f64().max(0.0);
+        let raw = aging_rate(need) * (1.0 + days).ln() / (1.0 + AGE_REFERENCE_DAYS).ln();
+        Component {
+            factor: Factor::Age,
+            value: f64::from(weight) * raw,
+            label: describe_wait(as_of.since(created_at), need),
+        }
+    }
+
+    fn describe_wait(waited: Duration, need: Need) -> String {
         let days = waited.as_days_f64().floor() as i64;
-        match days {
-            ..1 => "Added today".to_owned(),
+        let wait = match days {
+            ..1 => return "Added today".to_owned(),
             1 => "Waiting 1 day".to_owned(),
             2..14 => format!("Waiting {days} days"),
             14..61 => format!("Waiting {} weeks", days / 7),
             _ => format!("Waiting {} months", days / 30),
+        };
+        match need {
+            Need::Expected => wait,
+            Need::Idea | Need::NiceToHave => format!("{wait} ({}, ages slowly)", need.label().to_lowercase()),
+            Need::Critical => format!("{wait} (critical, ages fast)"),
         }
     }
 
@@ -452,6 +506,7 @@ mod tests {
             id: id(n),
             title: "Item",
             created_at: day(created_day),
+            need: Need::Expected,
             effort: None,
             impact: None,
             due: None,
@@ -545,6 +600,7 @@ mod tests {
     #[gtest]
     fn zero_weights_leave_creation_order() {
         let policy = HeapPolicy {
+            need_weight: 0,
             age_weight: 0,
             deadline_weight: 0,
             value_weight: 0,
@@ -625,6 +681,7 @@ mod tests {
     #[gtest]
     fn a_blocker_wins_a_tie_with_what_it_blocks() {
         let policy = HeapPolicy {
+            need_weight: 0,
             age_weight: 0,
             deadline_weight: 0,
             value_weight: 0,
@@ -670,6 +727,84 @@ mod tests {
         expect_that!(
             ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
             not(contains(eq(&Factor::Blocks)))
+        );
+    }
+
+    #[gtest]
+    fn a_critical_item_outranks_a_bigger_win_nobody_is_waiting_for() {
+        let critical = ItemForRanking {
+            need: Need::Critical,
+            effort: Some(Size::M),
+            impact: Some(Size::S),
+            ..item(1, 0)
+        };
+        let win = ItemForRanking {
+            need: Need::NiceToHave,
+            effort: Some(Size::S),
+            impact: Some(Size::Xl),
+            ..item(2, -30)
+        };
+
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[win, critical], day(0));
+
+        expect_that!(order(&ranked), elements_are![eq(&critical.id), eq(&win.id)]);
+        expect_that!(ranked[0].contributors[0].factor, eq(Factor::Need));
+        expect_that!(ranked[0].contributors[0].label, eq("Need: Critical"));
+    }
+
+    #[gtest]
+    fn an_old_idea_stays_below_fresh_work_someone_expects() {
+        let idea = ItemForRanking {
+            need: Need::Idea,
+            ..item(1, -365)
+        };
+        let expected = item(2, -1);
+
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[idea, expected], day(0));
+
+        expect_that!(order(&ranked), elements_are![eq(&expected.id), eq(&idea.id)]);
+    }
+
+    #[gtest]
+    fn need_sets_how_fast_an_item_ages() {
+        // With need's own factor off, only the aging rate tells them apart: same age, different needs.
+        let policy = HeapPolicy {
+            need_weight: 0,
+            ..HeapPolicy::default()
+        };
+        let items = Need::ALL.map(|need| ItemForRanking {
+            need,
+            ..item(need as u128 + 1, -60)
+        });
+
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+
+        expect_that!(
+            order(&ranked),
+            elements_are![eq(&items[3].id), eq(&items[2].id), eq(&items[1].id), eq(&items[0].id)]
+        );
+        expect_that!(
+            ranked[0].contributors[0].label,
+            eq("Waiting 8 weeks (critical, ages fast)")
+        );
+        expect_that!(
+            ranked[3].contributors[0].label,
+            eq("Waiting 8 weeks (idea, ages slowly)")
+        );
+    }
+
+    #[gtest]
+    fn an_idea_has_no_need_contributor() {
+        let idea = ItemForRanking {
+            need: Need::Idea,
+            ..item(1, -10)
+        };
+
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[idea], day(0));
+
+        expect_that!(
+            ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
+            not(contains(eq(&Factor::Need)))
         );
     }
 
@@ -764,18 +899,24 @@ mod tests {
         prop::option::of(prop::sample::select(Size::ALL.to_vec()))
     }
 
+    fn arb_need() -> impl Strategy<Value = Need> {
+        prop::sample::select(Need::ALL.to_vec())
+    }
+
     fn arb_item() -> impl Strategy<Value = ItemForRanking<'static>> {
         (
             any::<u128>(),
             -400i64..0,
+            arb_need(),
             arb_size(),
             arb_size(),
             prop::option::of((-60i64..400, any::<bool>())),
         )
-            .prop_map(|(id, created, effort, impact, due)| ItemForRanking {
+            .prop_map(|(id, created, need, effort, impact, due)| ItemForRanking {
                 id: ItemId::from_uuid(Uuid::from_u128(id)),
                 title: "Item",
                 created_at: day(created),
+                need,
                 effort,
                 impact,
                 due: due.map(|(d, firm)| Due { at: day(d), firm }),
@@ -828,6 +969,23 @@ mod tests {
             let after = without(rank(CURRENT_FORMULA, &policy, &[], &edited, day(0)));
 
             prop_assert_eq!(before, after);
+        }
+
+        #[test]
+        fn raising_an_items_need_never_moves_it_down(
+            items in prop::collection::vec(arb_item(), 1..40),
+            index in any::<prop::sample::Index>(),
+        ) {
+            let policy = HeapPolicy::default();
+            let raised_at = index.index(items.len());
+            let mut raised = items.clone();
+            raised[raised_at].need = Need::Critical;
+            let id = items[raised_at].id;
+
+            let before = position_of(&rank(CURRENT_FORMULA, &policy, &[], &items, day(0)), id);
+            let after = position_of(&rank(CURRENT_FORMULA, &policy, &[], &raised, day(0)), id);
+
+            prop_assert!(after <= before);
         }
 
         #[test]

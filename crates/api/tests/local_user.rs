@@ -74,7 +74,7 @@ async fn the_local_user_works_in_their_heap_without_a_session() -> Result<()> {
             Method::POST,
             &format!("{}/items", app.heap_url(&heap).await?),
             None,
-            Some(json!({ "title": "Water the plants", "effort": "s", "impact": "m" })),
+            Some(json!({ "need": "expected", "title": "Water the plants", "effort": "s", "impact": "m" })),
         )
         .await?;
     let listed = app

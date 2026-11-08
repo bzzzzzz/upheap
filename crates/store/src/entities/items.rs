@@ -11,6 +11,7 @@ pub struct Model {
     pub title: String,
     pub description: Option<String>,
     pub state: String,
+    pub need: String,
     pub effort: Option<String>,
     pub impact: Option<String>,
     pub due_at: Option<i64>,

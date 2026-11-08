@@ -46,7 +46,7 @@ for (const [title, effort, impact] of [
   ["Big and dull", "xl", "s"],
   ["Small and valuable", "s", "xl"],
 ]) {
-  const created = await send("POST", `${heap}/items`, { title, effort, impact });
+  const created = await send("POST", `${heap}/items`, { title, need: "expected", effort, impact });
   assert.equal(created.status, 201, `POST an item: ${JSON.stringify(created.body)}`);
 }
 const list = await send("GET", `${heap}/items`, undefined, ["time-zone", "Europe/Berlin"]);

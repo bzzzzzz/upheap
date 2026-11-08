@@ -1,7 +1,8 @@
 # Upheap
 
-A todo list for people with more work than they can keep track of. Add items as they come up with a rough
-size, impact and due date; the app ranks everything and keeps the ranking current as time passes.
+A todo list for people with more work than they can keep track of. Add items as they come up with how much
+they're needed and a rough size, impact and due date; the app ranks everything and keeps the ranking current as
+time passes.
 
 Design docs: [requirements](design/requirements.md), [offering](design/offering.md),
 [technical design](design/technical-design.md), [engineering principles](design/engineering-principles.md).
@@ -9,7 +10,8 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 ## What works today
 
 - Local accounts: register, sign in, sign out. Registering creates your personal team and heap.
-- The ranked list: items ordered by age, deadline proximity and value per effort (placeholder formula `V1`),
+- The ranked list: items ordered by need, age (faster the more an item is needed), deadline proximity and value
+  per effort (formula `V2`),
   with the top reasons for each position. The order stays stable within a session (`as_of`) and edited items
   move with an animation.
 - List view controls: each state pinned, shown or hidden (in progress pinned and blocked hidden by default),

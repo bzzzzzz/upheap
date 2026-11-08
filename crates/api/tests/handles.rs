@@ -234,7 +234,7 @@ async fn an_id_from_another_heap_of_the_team_is_not_found_under_this_one() -> Re
         &app,
         &ada,
         &format!("{personal}/items"),
-        json!({ "title": "Task", "tag_ids": [tag_id] }),
+        json!({ "need": "expected", "title": "Task", "tag_ids": [tag_id] }),
     )
     .await?;
 

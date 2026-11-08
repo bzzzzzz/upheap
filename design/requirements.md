@@ -4,7 +4,7 @@
 
 ## Pitch
 
-Upheap is a todo list for people with more work than they can keep track of. You add items as they come up, with a rough size, impact, and due date. The app ranks everything by how long it has waited, how close its deadline is, and how much it matters, and keeps that ranking current as time passes. A heap can be personal or shared by a team.
+Upheap is a todo list for people with more work than they can keep track of. You add items as they come up, with how much they're needed and a rough size, impact, and due date. The app ranks everything by how much it's needed, how long it has waited, how close its deadline is, and how much it's worth, and keeps that ranking current as time passes. A heap can be personal or shared by a team.
 
 It answers questions like:
 
@@ -27,12 +27,19 @@ It answers questions like:
 
 1. An item is a finishable piece of work with a title and an optional description.
 2. An item can have an effort size and an impact, each on the scale S, M, L, XL.
+   - Every item says how much it's **needed**, picked when it's added: what happens if it never gets done. Need is separate from impact, which is what doing the item gains; need is what skipping it costs, so an item nobody would miss can be valuable, and an urgent one can be small. The steps, from least to most needed:
+     - **Idea:** kept so it isn't forgotten. Nobody has decided it's wanted, and nothing is lost if it never happens.
+     - **Nice to have:** wanted, but nobody is waiting for it. Skipping it only misses a gain.
+     - **Expected:** someone is counting on it. Skipping it lets them down.
+     - **Critical:** it has to happen. Skipping it does real damage: an outage, a lost customer, a broken commitment.
+   - Each step is told apart from the next by who is affected when the item is skipped: no one, no one yet, someone, or the team and the people it serves.
+   - Need can be changed but not cleared. Items made before need existed count as expected.
 3. An item can have a due time, given either loosely or as an exact deadline date.
    - A loose due time is stored as a date, marked as not firm. It is shown in fuzzy terms such as "in a few days", "next week", "in a few weeks", "next month" or "in several months".
    - A loose due time never becomes overdue. Once its date has passed, it keeps showing the nearest term, for example "in a few days".
    - An exact deadline can become overdue.
    - A loose due time is picked from rough choices ("next week") rather than a date, and reads back with the term it was picked by.
-4. Effort, impact, due time and custom parameters can all be left unset. An unset value counts as the lowest-priority option for that parameter, and the interface shows it as unset.
+4. Effort, impact, due time and custom parameters can all be left unset; need can't. An unset value counts as the lowest-priority option for that parameter, and the interface shows it as unset.
 5. An item can have any number of tags, used to group similar items. A tag has a name and an optional description.
 6. An item is always in one state: open, in progress, blocked, done, or won't do. Done and won't do are closed (terminal) states. Items are never deleted. Work that won't happen is closed as won't do.
 7. A closed item can be reopened within one week of being closed. After that it can't be reopened.
@@ -47,8 +54,9 @@ It answers questions like:
 
 ### Priority
 
-1. Each item has a combined priority score based on age, deadline proximity, effort and impact, and custom parameters. The heap's weights (Custom parameters §2) set their relative influence, and they apply to everyone in the team.
-2. **Age** counts from the item's creation, including any time spent in progress or blocked. Items are not expected to stay in those states long. A reopened item keeps its original creation time.
+1. Each item has a combined priority score based on need, age, deadline proximity, effort and impact, and custom parameters. The heap's weights (Custom parameters §2) set their relative influence, and they apply to everyone in the team.
+2. **Age** counts from the item's creation, including any time spent in progress or blocked. Items are not expected to stay in those states long. A reopened item keeps its original creation time. How fast an item ages depends on its need: an idea ages slowly, so old ideas don't climb past fresh work someone is waiting for, and a critical item ages fastest.
+   - **Need** also counts on its own: the more an item is needed, the higher it ranks. A critical item pulls about as hard as an exact deadline that has just passed; an idea adds nothing.
 3. **Deadline proximity** rises as the due date approaches. Past an exact deadline, the score keeps climbing, probably with an overdue multiplier (details to be decided with the formula). Loose due times never become overdue (Items §3): past their date, the score keeps rising slowly, without the overdue multiplier.
 4. **Unset values** count as the lowest-priority option (Items §4).
 5. **Blockers** take on the priority of the most important item they block, possibly with a small extra boost, because finishing both takes more effort. This carries through chains: if A blocks B and B blocks C, A can inherit C's priority. Blocking cycles are not allowed; the app refuses a block that would create one.
@@ -78,7 +86,7 @@ It answers questions like:
 
 **Add item.** The fastest path in the app.
 
-1. The user enters a title and optionally a description, picks effort, impact, and due time, and adds tags. Everything except the title is optional.
+1. The user enters a title, picks how much the item is needed, and optionally adds a description, effort, impact, due time and tags. Everything except the title and the need is optional.
 2. Typing a tag that doesn't exist yet creates it.
 3. Adding a tag brings up the custom parameters linked to it.
 4. Saving takes the user back to where they were, ready to add another item.

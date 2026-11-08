@@ -4,7 +4,7 @@
 
 use domain::due::{describe_date, describe_due};
 use domain::heap::Heap;
-use domain::item::{Due, ItemSummary, Size, StateKind};
+use domain::item::{Due, ItemSummary, Need, Size, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
@@ -45,6 +45,44 @@ impl From<SizeDto> for Size {
             SizeDto::M => Self::M,
             SizeDto::L => Self::L,
             SizeDto::Xl => Self::Xl,
+        }
+    }
+}
+
+/// How much an item is needed: what happens if it never gets done, from least to most.
+///
+/// - `idea`: kept so it isn't forgotten; nothing is lost if it never happens.
+/// - `nice_to_have`: wanted, but nobody is waiting for it.
+/// - `expected`: someone is counting on it; skipping it lets them down.
+/// - `critical`: it has to happen; skipping it does real damage.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Need)]
+pub(crate) enum NeedDto {
+    Idea,
+    NiceToHave,
+    Expected,
+    Critical,
+}
+
+impl From<Need> for NeedDto {
+    fn from(need: Need) -> Self {
+        match need {
+            Need::Idea => Self::Idea,
+            Need::NiceToHave => Self::NiceToHave,
+            Need::Expected => Self::Expected,
+            Need::Critical => Self::Critical,
+        }
+    }
+}
+
+impl From<NeedDto> for Need {
+    fn from(need: NeedDto) -> Self {
+        match need {
+            NeedDto::Idea => Self::Idea,
+            NeedDto::NiceToHave => Self::NiceToHave,
+            NeedDto::Expected => Self::Expected,
+            NeedDto::Critical => Self::Critical,
         }
     }
 }
@@ -255,6 +293,7 @@ pub(crate) struct ItemDto {
     /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be
     /// closed: finishing a blocker doesn't unblock what waits for it.
     pub blocked_by: Option<ItemRefDto>,
+    pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,
     /// `null` when unset.
@@ -290,6 +329,8 @@ pub(crate) struct ContributorDto {
 #[serde(rename_all = "snake_case")]
 #[schema(as = Factor)]
 pub(crate) enum FactorDto {
+    /// How much the item is needed.
+    Need,
     Age,
     Deadline,
     Value,
@@ -302,6 +343,7 @@ pub(crate) enum FactorDto {
 impl From<Contributor> for ContributorDto {
     fn from(contributor: Contributor) -> Self {
         let factor = match contributor.factor {
+            Factor::Need => FactorDto::Need,
             Factor::Age => FactorDto::Age,
             Factor::Deadline => FactorDto::Deadline,
             Factor::Value => FactorDto::Value,
@@ -361,6 +403,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         description: item.description.map(|d| d.as_str().to_owned()),
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
+        need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
         due: item.due.map(|due| {
@@ -409,9 +452,29 @@ where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
 {
+    refuse_null(deserializer, "must not be null; send [] to clear")
+}
+
+/// As [`non_null`], for a field that can't be cleared at all, such as need.
+pub(crate) fn never_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    refuse_null(
+        deserializer,
+        "must not be null; it can't be cleared, so leave it out to keep it",
+    )
+}
+
+fn refuse_null<'de, D, T>(deserializer: D, message: &'static str) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
     Option::<T>::deserialize(deserializer)?
         .map(Some)
-        .ok_or_else(|| serde::de::Error::custom("must not be null; send [] to clear"))
+        .ok_or_else(|| serde::de::Error::custom(message))
 }
 
 /// Deserializes a field that can be absent (leave unchanged), `null` (clear) or a value (set).

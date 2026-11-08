@@ -39,7 +39,7 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
         &session,
         &app.item_url(&id).await?,
         &item["version"],
-        json!({ "title": "Rotate all keys", "state": "in_progress", "tag_ids": [ops] }),
+        json!({ "title": "Rotate all keys", "state": "in_progress", "need": "critical", "tag_ids": [ops] }),
     )
     .await?;
     app.new_item(&session, &heap, json!({ "title": "Something else" }))
@@ -72,6 +72,7 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
         eq(&json!([
             { "field": "title", "label": "Title", "before": "Rotate keys", "after": "Rotate all keys" },
             { "field": "state", "label": "State", "before": "Open", "after": "In progress" },
+            { "field": "need", "label": "Need", "before": "Expected", "after": "Critical" },
             { "field": "tags", "label": "Tags", "before": null, "after": "ops" },
         ]))
     );
@@ -81,6 +82,7 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
         eq(&json!([
             { "field": "title", "label": "Title", "before": null, "after": "Rotate keys" },
             { "field": "state", "label": "State", "before": null, "after": "Open" },
+            { "field": "need", "label": "Need", "before": null, "after": "Expected" },
             { "field": "effort", "label": "Effort", "before": null, "after": "M" },
         ]))
     );
@@ -444,6 +446,7 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
         eq(&json!([
             { "field": "title", "label": "Title", "before": null, "after": "Valued" },
             { "field": "state", "label": "State", "before": null, "after": "Open" },
+            { "field": "need", "label": "Need", "before": null, "after": "Expected" },
             { "field": format!("parameters.{pid}"), "label": "Customer", "before": null, "after": "Small" },
         ]))
     );

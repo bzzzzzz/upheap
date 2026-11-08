@@ -282,25 +282,27 @@ async fn a_higher_option_ranks_an_item_higher_and_explains_it() -> Result<()> {
     )
     .await?
     .body;
+    // Ideas, so need adds nothing and the parameter is the whole of the top item's priority.
     let value = |label: &str| json!({ id(&customer): option_id(&customer, label) });
     app.new_item(
         &session,
         &heap,
-        json!({ "title": "Older, free", "parameter_values": value("Free") }),
+        json!({ "need": "idea", "title": "Older, free", "parameter_values": value("Free") }),
     )
     .await?;
     app.clock.advance(domain::Duration::from_days(10));
-    app.new_item(&session, &heap, json!({ "title": "Unset" })).await?;
+    app.new_item(&session, &heap, json!({ "need": "idea", "title": "Unset" }))
+        .await?;
     app.new_item(
         &session,
         &heap,
-        json!({ "title": "Enterprise", "parameter_values": value("Enterprise") }),
+        json!({ "need": "idea", "title": "Enterprise", "parameter_values": value("Enterprise") }),
     )
     .await?;
     app.new_item(
         &session,
         &heap,
-        json!({ "title": "Pro", "parameter_values": value("Pro") }),
+        json!({ "need": "idea", "title": "Pro", "parameter_values": value("Pro") }),
     )
     .await?;
 

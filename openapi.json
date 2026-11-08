@@ -3977,7 +3977,8 @@
       "CreateItemRequest": {
         "type": "object",
         "required": [
-          "title"
+          "title",
+          "need"
         ],
         "properties": {
           "description": {
@@ -4015,6 +4016,10 @@
                 "$ref": "#/components/schemas/Size"
               }
             ]
+          },
+          "need": {
+            "$ref": "#/components/schemas/Need",
+            "description": "Required: every item says how much it's needed."
           },
           "parameter_values": {
             "type": [
@@ -4227,6 +4232,7 @@
       "Factor": {
         "type": "string",
         "enum": [
+          "need",
           "age",
           "deadline",
           "value",
@@ -4350,6 +4356,7 @@
           "heap_id",
           "title",
           "state",
+          "need",
           "tags",
           "parameters",
           "created_at",
@@ -4444,6 +4451,9 @@
             "type": "string",
             "description": "Five characters, unique within the heap and never changed; the item's path is `…/items/{key}`.",
             "example": "k3x9a"
+          },
+          "need": {
+            "$ref": "#/components/schemas/Need"
           },
           "parameters": {
             "type": "array",
@@ -4584,6 +4594,10 @@
                 "$ref": "#/components/schemas/Size"
               }
             ]
+          },
+          "need": {
+            "$ref": "#/components/schemas/Need",
+            "description": "Need can be changed but not cleared; `null` is refused."
           },
           "parameter_values": {
             "type": "object",
@@ -4936,6 +4950,16 @@
             "$ref": "#/components/schemas/Role"
           }
         }
+      },
+      "Need": {
+        "type": "string",
+        "description": "How much an item is needed: what happens if it never gets done, from least to most.\n\n- `idea`: kept so it isn't forgotten; nothing is lost if it never happens.\n- `nice_to_have`: wanted, but nobody is waiting for it.\n- `expected`: someone is counting on it; skipping it lets them down.\n- `critical`: it has to happen; skipping it does real damage.",
+        "enum": [
+          "idea",
+          "nice_to_have",
+          "expected",
+          "critical"
+        ]
       },
       "OptionArrangement": {
         "type": "object",

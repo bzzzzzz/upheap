@@ -722,6 +722,8 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /** @description Required: every item says how much it's needed. */
+            need: components["schemas"]["Need"];
             /** @description An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use. */
             parameter_values?: {
                 [key: string]: string;
@@ -803,7 +805,7 @@ export interface components {
             firm: boolean;
         };
         /** @enum {string} */
-        Factor: "age" | "deadline" | "value" | "parameter" | "blocks";
+        Factor: "need" | "age" | "deadline" | "value" | "parameter" | "blocks";
         Heap: {
             allowed_actions: components["schemas"]["HeapAction"][];
             /**
@@ -877,6 +879,7 @@ export interface components {
              * @example k3x9a
              */
             key: string;
+            need: components["schemas"]["Need"];
             /**
              * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
              *     by parameter name.
@@ -927,6 +930,8 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /** @description Need can be changed but not cleared; `null` is refused. */
+            need?: components["schemas"]["Need"];
             /**
              * @description Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep
              *     their values.
@@ -1039,6 +1044,16 @@ export interface components {
         MemberPatchRequest: {
             role: components["schemas"]["Role"];
         };
+        /**
+         * @description How much an item is needed: what happens if it never gets done, from least to most.
+         *
+         *     - `idea`: kept so it isn't forgotten; nothing is lost if it never happens.
+         *     - `nice_to_have`: wanted, but nobody is waiting for it.
+         *     - `expected`: someone is counting on it; skipping it lets them down.
+         *     - `critical`: it has to happen; skipping it does real damage.
+         * @enum {string}
+         */
+        Need: "idea" | "nice_to_have" | "expected" | "critical";
         /** @description One option of a new arrangement. */
         OptionArrangement: {
             /** Format: uuid */

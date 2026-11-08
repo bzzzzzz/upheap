@@ -73,14 +73,14 @@ async fn items_are_ranked_with_contributors() -> Result<()> {
         Method::POST,
         &items,
         Some(&session),
-        Some(json!({ "title": "Large", "effort": "xl", "impact": "l" })),
+        Some(json!({ "need": "expected", "title": "Large", "effort": "xl", "impact": "l" })),
     )
     .await?;
     app.send(
         Method::POST,
         &items,
         Some(&session),
-        Some(json!({ "title": "Small", "effort": "s", "impact": "l" })),
+        Some(json!({ "need": "expected", "title": "Small", "effort": "s", "impact": "l" })),
     )
     .await?;
 
@@ -110,7 +110,7 @@ async fn edits_need_the_current_version() -> Result<()> {
             Method::POST,
             &format!("{}/items", app.heap_url(&heap).await?),
             Some(&session),
-            Some(json!({ "title": "Task" })),
+            Some(json!({ "need": "expected", "title": "Task" })),
         )
         .await?;
     let item = app.item_url(created.body["id"].as_str().unwrap_or_default()).await?;
@@ -163,7 +163,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
                 Method::POST,
                 &format!("{}/items", app.heap_url(&heap).await?),
                 Some(&session),
-                Some(json!({ "title": title })),
+                Some(json!({ "need": "expected", "title": title })),
             )
             .await?;
         let id = created.body["id"].as_str().unwrap_or_default().to_owned();
@@ -239,7 +239,7 @@ async fn outsiders_get_not_found() -> Result<()> {
             Method::POST,
             &format!("{}/items", app.heap_url(&heap).await?),
             Some(&outsider),
-            Some(json!({ "title": "x" })),
+            Some(json!({ "need": "expected", "title": "x" })),
         )
         .await?;
 

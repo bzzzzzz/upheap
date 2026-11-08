@@ -12,9 +12,9 @@ req "$BASE/api/v1/auth/register" -d '{"email":"dev@example.test","display_name":
 HEAP=$(req "$BASE/api/v1/me" | python3 -c 'import json,sys; print(json.load(sys.stdin)["teams"][0]["heaps"][0]["id"])')
 in_days() { python3 -c "import datetime; print(datetime.date.today() + datetime.timedelta(days=$1))"; }
 add() { req "$BASE/api/v1/heaps/$HEAP/items" -d "$1" >/dev/null; }
-add '{"title":"Fix flaky login test","effort":"s","impact":"l"}'
-add "{\"title\":\"Renew TLS certificate\",\"effort\":\"s\",\"impact\":\"xl\",\"due\":{\"date\":\"$(in_days 2)\",\"firm\":true}}"
-add '{"title":"Write onboarding docs","effort":"l","impact":"m"}'
-add "{\"title\":\"Plan Q1 roadmap\",\"effort\":\"m\",\"impact\":\"l\",\"due\":{\"date\":\"$(in_days 20)\",\"firm\":false}}"
-add '{"title":"Tidy up old feature flags"}'
+add '{"title":"Fix flaky login test","need":"expected","effort":"s","impact":"l"}'
+add "{\"title\":\"Renew TLS certificate\",\"need\":\"critical\",\"effort\":\"s\",\"impact\":\"xl\",\"due\":{\"date\":\"$(in_days 2)\",\"firm\":true}}"
+add '{"title":"Write onboarding docs","need":"nice_to_have","effort":"l","impact":"m"}'
+add "{\"title\":\"Plan Q1 roadmap\",\"need\":\"expected\",\"effort\":\"m\",\"impact\":\"l\",\"due\":{\"date\":\"$(in_days 20)\",\"firm\":false}}"
+add '{"title":"Tidy up old feature flags","need":"idea"}'
 echo "Seeded heap $HEAP. Sign in at $BASE as dev@example.test."

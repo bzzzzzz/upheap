@@ -79,14 +79,21 @@ export async function expectOrder(page: Page, titles: string[]) {
   }
 }
 
-/** Adds an item through the Add dialog of the open list. */
-export async function addItem(page: Page, title: string, sizes: { effort?: Size; impact?: Size } = {}) {
+/** A need as the Add dialog and the item pane name it. */
+export type Need = "Idea" | "Nice to have" | "Expected" | "Critical";
+
+/** Adds an item through the Add dialog of the open list, as expected unless `need` says otherwise. */
+export async function addItem(page: Page, title: string, fields: { need?: Need; effort?: Size; impact?: Size } = {}) {
   await page.getByRole("button", { name: "Add an item" }).click();
   const dialog = page.getByRole("dialog", { name: "Add an item" });
   await dialog.getByLabel("Title").fill(title);
+  await dialog
+    .getByRole("radiogroup", { name: "Need" })
+    .getByRole("radio", { name: fields.need ?? "Expected", exact: true })
+    .click();
   for (const [field, size] of [
-    ["Effort", sizes.effort],
-    ["Impact", sizes.impact],
+    ["Effort", fields.effort],
+    ["Impact", fields.impact],
   ] as const) {
     if (size)
       await dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { name: size, exact: true }).click();
