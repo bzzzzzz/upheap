@@ -1,12 +1,16 @@
 // What the local build shows about its database, which lives in this browser (design/local-build.md). In the server
 // build `localDatabase` is null and these render their children or nothing.
-import { localDatabase, type LocalDatabase } from "#local-database";
+import { localDatabase, type DatabaseCounts, type LocalDatabase } from "#local-database";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { Check, Download } from "lucide-react";
 import { useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
-import { primaryButtonClass, quietButtonClass } from "./NameForm";
-import { ProblemText } from "./ProblemText";
+import { formatAgo, formatDay, isDownloadStale, recordDownload, useLastDownloadAt, useNow } from "./lastDownload";
+import { PHONE, useMedia } from "./media";
+import { problemMessage } from "./ProblemText";
+import { Sheet } from "./Sheet";
 
 /** The app, or while another tab has the database, why it can't open here. */
 export function LocalDatabaseGate({ children }: { children: ReactNode }) {
@@ -28,38 +32,59 @@ function Gate({ database, children }: { database: LocalDatabase; children: React
   );
 }
 
-/** Where the data lives, and whether the browser may clear it. Asks the browser to keep it. */
-export function StorageNote() {
+/**
+ * Where the data lives (screens.md, G-storage-note), whether the browser may clear it, and a nudge when no copy was
+ * downloaded in two weeks. Asks the browser to keep the data.
+ */
+export function StorageNote({ className }: { className: string }) {
   if (!localDatabase) return null;
-  return <Note database={localDatabase} />;
+  return <Note database={localDatabase} className={className} />;
 }
 
-function Note({ database }: { database: LocalDatabase }) {
+function Note({ database, className }: { database: LocalDatabase; className: string }) {
   const { data: kept } = useQuery({
     queryKey: ["local-database", "kept"],
     queryFn: database.keep,
     staleTime: Infinity,
   });
+  const lastAt = useLastDownloadAt();
+  const now = useNow();
+  const stale = isDownloadStale(lastAt, now);
+  const link = (
+    <Link to="/account" className="font-medium text-ink underline underline-offset-2 hover:text-accent-ink">
+      Download a copy
+    </Link>
+  );
   return (
-    <footer className="mt-16 border-t border-stone-200 pt-4 text-xs text-stone-500 dark:border-stone-800">
-      Your heaps are stored only in this browser
-      {kept === false && ", which may clear them when it runs low on space"}.{" "}
-      <Link to="/account" className="underline hover:text-stone-900 dark:hover:text-stone-100">
-        Download a copy
-      </Link>{" "}
-      to keep them safe or move them to another browser.
+    <footer className={`text-xs leading-[1.45] text-ink-soft ${className}`}>
+      {kept !== false && !stale ? (
+        <>Stored only in this browser · {link}</>
+      ) : (
+        <>
+          Stored only in this browser{kept === false && ", which may clear it when space runs low"}.{" "}
+          {stale && (lastAt === null ? "No copy downloaded yet. " : `Last copy downloaded ${formatAgo(lastAt, now)}. `)}
+          {link}
+        </>
+      )}
     </footer>
   );
 }
 
-/** The Account page's export and import of the database. */
-export function LocalDataSection() {
-  if (!localDatabase) return null;
-  return <DataSection database={localDatabase} />;
+const buttonClass =
+  "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium disabled:opacity-40 pointer-coarse:h-11";
+const primaryClass = `${buttonClass} bg-ink font-semibold text-canvas`;
+const secondaryClass = `${buttonClass} border border-line bg-surface text-ink hover:bg-sunken`;
+const quietClass = `${buttonClass} text-ink-soft hover:bg-sunken`;
+const dangerClass = `${buttonClass} bg-overdue-ink font-semibold text-surface`;
+
+/** "1 heap", "2 heaps". */
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
-function DataSection({ database }: { database: LocalDatabase }) {
-  const download = useMutation({
+/** Downloads the database as `upheap-YYYY-MM-DD.sqlite3` and remembers when, for the storage note. */
+function useDownloadCopy(database: LocalDatabase) {
+  return useMutation({
     mutationFn: () => database.exportFile(),
     onSuccess: (file) => {
       const link = document.createElement("a");
@@ -67,40 +92,55 @@ function DataSection({ database }: { database: LocalDatabase }) {
       link.download = `upheap-${new Date().toISOString().slice(0, 10)}.sqlite3`;
       link.click();
       URL.revokeObjectURL(link.href);
+      recordDownload(Date.now());
     },
   });
-  const replace = useMutation({
-    mutationFn: (file: File) => database.importFile(file),
-    // Everything on screen came from the database it replaced, so start again from the top.
-    onSuccess: () => window.location.assign(import.meta.env.BASE_URL),
-  });
-  const input = useRef<HTMLInputElement>(null);
-  const [chosen, setChosen] = useState<File | null>(null);
+}
 
-  const cancel = () => {
+/** What the database in this browser holds, kept current by refetching whenever it's shown. */
+function useCurrentCounts(database: LocalDatabase) {
+  return useQuery({ queryKey: ["local-database", "count"], queryFn: () => database.count() });
+}
+
+/** The Account page's Your data card (screens.md, S-account): download a copy, or open one in place of the data. */
+export function LocalDataSection() {
+  if (!localDatabase) return null;
+  return <DataSection database={localDatabase} />;
+}
+
+function DataSection({ database }: { database: LocalDatabase }) {
+  const download = useDownloadCopy(database);
+  const current = useCurrentCounts(database);
+  const lastAt = useLastDownloadAt();
+  const now = useNow();
+  const input = useRef<HTMLInputElement>(null);
+  // Each pick gets its own number, so picking the same file again counts it again.
+  const picks = useRef(0);
+  const [chosen, setChosen] = useState<{ file: File; pick: number } | null>(null);
+
+  const close = () => {
     setChosen(null);
     if (input.current) input.current.value = "";
   };
 
   return (
-    <section aria-labelledby="local-data" className="mt-10 max-w-md">
-      <h2 id="local-data" className="mb-1 text-sm font-medium">
+    <section aria-labelledby="local-data" className="mt-8 max-w-xl rounded-[14px] border border-line bg-surface p-5">
+      <h2 id="local-data" className="text-base font-semibold">
         Your data
       </h2>
-      <p className="mb-3 text-sm text-stone-600 dark:text-stone-300">
-        Your heaps are stored only in this browser. A copy is one SQLite file that you can open here or in another
-        browser.
+      <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+        Everything is kept in this browser only. Clearing site data, or a browser that removes it, loses it. Download a
+        copy now and then, and open it here or in another browser to carry on.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={download.isPending}
-          onClick={() => download.mutate()}
-          className={primaryButtonClass}
-        >
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button type="button" disabled={download.isPending} onClick={() => download.mutate()} className={primaryClass}>
+          <Download aria-hidden="true" className="size-4" />
           Download a copy
         </button>
-        <label className={`${quietButtonClass} cursor-pointer`}>
+        {/* The input itself takes focus, so its label shows the focus ring. */}
+        <label
+          className={`${secondaryClass} cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent`}
+        >
           Open a copy…
           <input
             ref={input}
@@ -108,37 +148,167 @@ function DataSection({ database }: { database: LocalDatabase }) {
             accept=".sqlite3,.sqlite,.db,application/vnd.sqlite3"
             className="sr-only"
             onChange={(event) => {
-              replace.reset();
-              setChosen(event.target.files?.[0] ?? null);
+              const file = event.target.files?.[0];
+              if (!file) return;
+              // The confirm gives focus back to what had it when it opened, so make that the input.
+              event.target.focus();
+              setChosen({ file, pick: ++picks.current });
             }}
           />
         </label>
-        <ProblemText error={download.error} />
       </div>
+      {download.error && (
+        <p role="alert" className="mt-3 text-sm text-overdue-ink">
+          {problemMessage(download.error)}
+        </p>
+      )}
+      <p className="mt-3 text-xs text-muted">
+        {current.data &&
+          `${plural(current.data.heaps, "heap", "heaps")} · ${plural(current.data.items, "item", "items")} · `}
+        {lastAt === null ? "never downloaded" : `last downloaded ${formatDay(lastAt, now)}`}
+      </p>
       {chosen && (
-        <div
-          role="group"
-          aria-label="Replace your data"
-          className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
-        >
-          <p className="basis-full">
-            Replace everything here with {chosen.name}? What's here now will be gone, so download a copy first if you
-            want to keep it.
-          </p>
+        <ReplaceConfirm
+          key={chosen.pick}
+          database={database}
+          file={chosen.file}
+          pick={chosen.pick}
+          current={current.data}
+          onClose={close}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * Asks before a copy replaces everything (screens.md, M-local-import-confirm), saying what the copy holds and what
+ * goes: a modal on a wide screen and a sheet on a phone. A file that isn't an Upheap database is refused here,
+ * before anything changes.
+ */
+function ReplaceConfirm({
+  database,
+  file,
+  pick,
+  current,
+  onClose,
+}: {
+  database: LocalDatabase;
+  file: File;
+  pick: number;
+  current: DatabaseCounts | undefined;
+  onClose: () => void;
+}) {
+  const phone = useMedia(PHONE);
+  const now = useNow();
+  const copy = useQuery({
+    queryKey: ["local-database", "copy", pick],
+    queryFn: () => database.count(file),
+    // A file that isn't a database won't become one.
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+  const download = useDownloadCopy(database);
+  const replace = useMutation({
+    mutationFn: () => database.importFile(file),
+    // Everything on screen came from the database it replaced, so start again from the top.
+    onSuccess: () => window.location.assign(import.meta.env.BASE_URL),
+  });
+  const title = `Replace everything here with ${file.name}?`;
+  const requestClose = () => {
+    if (!replace.isPending) onClose();
+  };
+
+  const body = copy.isPending ? (
+    <p role="status" className="text-sm text-ink-soft">
+      Reading the copy…
+    </p>
+  ) : copy.isError ? (
+    <p role="alert" className="text-sm text-overdue-ink">
+      {problemMessage(copy.error)}
+    </p>
+  ) : (
+    <p className="text-sm leading-relaxed text-ink-soft">
+      The copy has {plural(copy.data.heaps, "heap", "heaps")} and {plural(copy.data.items, "item", "items")}
+      {copy.data.lastChangedAt !== null && `, from ${formatDay(copy.data.lastChangedAt, now)}`}. What&apos;s in this
+      browser now{current && ` (${plural(current.items, "item", "items")})`} is replaced and can&apos;t be brought back.
+    </p>
+  );
+  const buttons = (
+    <div className={phone ? "flex flex-col-reverse gap-2 pt-3" : "flex flex-wrap items-center justify-end gap-2 pt-5"}>
+      <button
+        type="button"
+        autoFocus
+        disabled={replace.isPending}
+        onClick={requestClose}
+        className={`${quietClass} ${phone ? "h-11 w-full" : ""}`}
+      >
+        Cancel
+      </button>
+      {copy.isSuccess && (
+        <>
+          <button
+            type="button"
+            disabled={download.isPending || replace.isPending}
+            onClick={() => download.mutate()}
+            className={`${secondaryClass} ${phone ? "h-11 w-full" : ""}`}
+          >
+            {download.isSuccess ? (
+              <>
+                <Check aria-hidden="true" className="size-4 text-done" strokeWidth={2.5} />
+                Downloaded
+              </>
+            ) : (
+              "Download current first"
+            )}
+          </button>
           <button
             type="button"
             disabled={replace.isPending}
-            onClick={() => replace.mutate(chosen)}
-            className={primaryButtonClass}
+            onClick={() => replace.mutate()}
+            className={`${dangerClass} ${phone ? "h-11 w-full" : ""}`}
           >
             Replace
           </button>
-          <button type="button" disabled={replace.isPending} onClick={cancel} className={quietButtonClass}>
-            Cancel
-          </button>
-          <ProblemText error={replace.error} />
-        </div>
+        </>
       )}
-    </section>
+    </div>
+  );
+  const failure = download.error ?? replace.error;
+  const problem = failure && (
+    <p role="alert" className="mt-3 text-sm text-overdue-ink">
+      {problemMessage(failure)}
+    </p>
+  );
+
+  if (phone) {
+    return (
+      <Sheet title={title} role="alertdialog" isOpen onClose={requestClose}>
+        <div className="flex flex-col pb-1">
+          {body}
+          {problem}
+          {buttons}
+        </div>
+      </Sheet>
+    );
+  }
+  return (
+    <ModalOverlay
+      isOpen
+      onOpenChange={(open) => !open && requestClose()}
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[18vh]"
+    >
+      <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-6 text-ink shadow-xl outline-none">
+        <Dialog role="alertdialog" className="outline-none">
+          <Heading slot="title" className="mb-2 text-base font-semibold break-words">
+            {title}
+          </Heading>
+          {body}
+          {problem}
+          {buttons}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }

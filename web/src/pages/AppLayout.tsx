@@ -56,7 +56,7 @@ export function AppLayout() {
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
                 <div className="lg:hidden">
-                  <StorageNote />
+                  <StorageNote className="mt-16 border-t border-line pt-4" />
                 </div>
               </div>
             </div>
@@ -199,8 +199,8 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
           <LogOut aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
           <span>Sign out</span>
         </SignOutButton>
-        <div className="hidden px-3 lg:block">
-          <StorageNote />
+        <div className="hidden lg:block">
+          <StorageNote className="px-2 pt-3" />
         </div>
       </div>
     </aside>

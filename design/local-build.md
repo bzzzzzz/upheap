@@ -133,13 +133,23 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 
 1. **Persistent storage.** Each start the app asks the browser to keep its data (`navigator.storage.persist()`)
    unless it already does, and its footer says plainly that the data lives only in this browser, and when the
-   browser hasn't agreed, that it may clear it when space runs low.
+   browser hasn't agreed, that it may clear it when space runs low. When no copy was downloaded in the last two
+   weeks, or ever, the footer says that too.
 2. **Export and import.** The Account page offers the database file as a download, and opening a copy replaces the
    local database after a confirmation. The export is a normal SQLite file with the server's schema, which leaves a
    path open to moving it onto a self-hosted server later.
    - **They aren't API endpoints.** They are about where this build keeps its data, which a server has no part
      in. The worker takes `export` and `import` messages beside the HTTP requests, in the same queue, so neither
      runs in the middle of a request.
+   - **Counting.** A `count` message, in the same queue, answers how many heaps and items a database holds (every
+     row, archived and closed included) and when its newest audit entry was written. Without a file it counts the
+     open database; with one it opens that file read-only in memory (`sqlite3_deserialize`), never in an OPFS slot,
+     and refuses it with the same checks and message as an import (`src/local/databaseFile.ts`). The replace confirm
+     uses it to say what the copy holds and what goes.
+   - **The last download is kept per browser.** Each successful download records its time in `localStorage`
+     (`upheap.lastDownloadAt`). It is a fact about this browser that no server ever sees, so the web app words it
+     itself with `Intl`, a deliberate exception to thin clients. Storage that can't be read or written counts as
+     never downloaded.
    - **An import can't lose the data.** The worker refuses a file that isn't a sound SQLite database with
      SeaORM's migration table. Otherwise it keeps a copy of the current database, swaps in the file, and opens it
      with the migrations, so an older copy is brought up to date. If that fails, as for a copy from a newer

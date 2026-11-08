@@ -17,7 +17,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 | Area | Entries | Must L / S | Boards | Design | Build | What the build has to change |
 | --- | --- | :---: | --- | :---: | :---: | --- |
-| Shell, browser | G-shell-wide, G-storage-note | 4 / 4 | Main | 🟡 | 🟡 | Heaps grouped by team with open counts; Team, Account, Sign out at the bottom; storage note mentions the last download only when it's over two weeks old or never happened |
+| Shell, browser | G-shell-wide, G-storage-note | 4 / 4 | Main | 🟡 | 🟡 | Heaps grouped by team with open counts; Team, Account, Sign out at the bottom. Built: the storage note, "Stored only in this browser · Download a copy", mentions the last download only when it's over two weeks old or never happened |
 | Shell, phone | G-shell-phone, M-more | 4 / 4 | PhoneList, PhoneMore | 🟡 | ✅ | Built: tabs Open, Closed, +, Activity, More, with + opening Add from any of the heap's pages; More as a card of 52 px rows above the tabs, with the team's name, the team count and the username as notes. Left: the member count beside Team, which needs it from the server |
 | Heap switcher | M-heap-switcher | 2 / 4 | PhoneSwitcher | 🟡 | 🟡 | Built: a sheet of 52 px rows by team (a popover beside the rail on a tablet), a check on the current heap, "New heap in \<team\>" when the team allows it, which asks for a name and opens the new heap. Left: open counts, which need the server |
 | The list | S-heap, P-row, P-search, P-hidden-count, P-saved-views | 5 / 5 | Main, PhoneList | 🟡 | ✅ | Built: hover Start and ⋯; filters as removable chips with "6 of 14" (the total is the list response's `unfiltered_count`); the changed view's dot, with Save and Undo behind the chip; "Show them" |
@@ -29,7 +29,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | ✅ | Built: "Add to \<heap\> ▾" chooses the heap (tags and parameter values clear, the rest stays); the list's filters prefill tags, and effort, impact or a parameter where they pick one value, silently, also after each Add another; "Added “X” at #4 in Up next" with Open it, in the dialog with Add another and in the toast without, the position read from the list refetched after the add; Add another remembered per device; due starts at None. Phone: a sheet with chips for need, effort, impact, tags and due, and More fields for the description and parameters. Need stays, as its own row of chips, though the mockups predate it. Left: on a phone, a parameter that a newly added tag asks for sits under More fields, closed, unless the prefill opened it; a badge on More fields, or opening it, would show it |
 | Conflicts | E-conflict | n/a / 4 | Main | 🟡 | 🟡 | Says what was lost ("your change (due: next week) wasn't saved") with Apply mine again |
 | Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | ✅ | Built: sections Today, This week and Earlier from each item's `closed_group`, one section per run across loaded pages; one intro line on the week limit, shorter on a phone; "Done · today by you" from `closed_by` ("you" as in Added by), with no "by" when the closer isn't known; a state mark on wide screens; Reopen only while allowed, 44 px on a phone; no tag chips. Left: the "team · heap" line over the title, which no other page has yet and the closed response can't fill (it has no team name); "by" in the item's state line |
-| Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | 🟡 | The confirm names the file, compares item counts and offers Download current first. No phone board yet |
+| Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | ✅ | Built: the Your data card with Download a copy, Open a copy… and "2 heaps · 41 items · last downloaded 26 Oct"; the confirm names the file, says what the copy holds and from when, compares item counts and offers Download current first; a file that isn't an Upheap database is refused in the confirm. The worker counts the file in memory (`count`); the last download is kept in localStorage. No phone board yet: on a phone the confirm is a sheet like the others, with full-width 44 px buttons |
 | Tab lock (local) | S-tab-lock | 4 / n/a | WideTeams | 🟡 | ✅ | Matches today's page |
 | Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | 🟡 | Errors inline under their field (username taken, password too short); a signed-out link says where it leads and opens the item after sign-in |
 | Session expired | G-session-expired | n/a / 4 | — | ⬜ | 🟡 | Signing in again should return to the page the user was on |
@@ -71,7 +71,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    3. ~~Add.~~ Done, with no server change: the position comes from the list refetched after the add.
    4. ~~Closed.~~ Done. One API change: `closed_by` and `closed_group` on Item, and a nullable `items.closed_by`
       column, filled in for closed items from the audit log. Items with no matching entry show no "by".
-   5. Your data.
+   5. ~~Your data.~~ Done, with no API change: the worker's `count` message reads a copy before it replaces
+      anything, and the last download is kept in this browser.
    6. Sign in and create account.
    7. Team and Teams.
    8. Session expiry return.
