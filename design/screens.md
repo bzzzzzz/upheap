@@ -456,10 +456,13 @@ overlays are the same components.
 
 ### G-session-expired: Session expired
 
-- **Behaviour:** any `401` sends the user to S-sign-in (`main.tsx` query cache) with the page they were on as
-  `redirect`, as the route guard does for a signed-out visit, so after signing in they're back there. During a
+- **Behaviour:** any `401`, from a query or a write (`main.tsx`, the query and mutation caches), sends the user to
+  S-sign-in with the page they were on as `redirect`, as the route guard does for a signed-out visit, so after
+  signing in they're back there. It replaces the page in history, so Back doesn't return to it signed out. During a
   pending navigation the page is the one being opened, so the guard and the handler agree. Nothing happens on
-  S-sign-in itself. The notice reads "Sign in to open that page."; there's no "your session ended" line.
+  S-sign-in itself, where a wrong password is a `401` too. Signing in drops the query cache, so whoever signs in
+  sees nothing cached for the last user. The notice reads "Sign in to open that page." or names the item; there's
+  no "your session ended" line.
 - **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built.
 - **Must:** local n/a, server 4. Without it a `401` leaves every page failing, with no way back to sign-in.
 
@@ -498,8 +501,9 @@ order §4–5). See Gaps.
   inputs shows under it, which gets focus; any other (`invalid_credentials`, E-throttled, E-registration-closed) is
   one line above the button. Editing an input clears its error. The board has no tagline, so the page has none.
 - **From a link:** a signed-out visit to any page of the app goes to `/login?redirect=<path>` (a plain visit to `/`
-  to `/login`). A notice above the switch says where it leads: "Sign in to open the link to PER-12." for an item,
-  "Sign in to open that page." otherwise.
+  to `/login`). A notice above the switch says where it leads: "Sign in to open the link to 3n2ay." for an item
+  whose segment has an item key's shape (five lowercase Crockford base32 characters, one a digit), so a crafted
+  link can't put its own words there, and "Sign in to open that page." otherwise.
 - **Exits:** to `redirect` when, as the URL parser normalises it, it's a same-origin path that the router matches
   to one of the signed-in pages; otherwise (`//evil.example`, `/.//evil.example`, `javascript:…`, `/LOGIN`, a path
   no page answers) to `/`, which redirects to the first unarchived heap.
