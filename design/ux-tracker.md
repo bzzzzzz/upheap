@@ -31,7 +31,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | ✅ | Built: sections Today, This week and Earlier from each item's `closed_group`, one section per run across loaded pages; one intro line on the week limit, shorter on a phone; "Done · today by you" from `closed_by` ("you" as in Added by), with no "by" when the closer isn't known; a state mark on wide screens; Reopen only while allowed, 44 px on a phone; no tag chips. Left: the "team · heap" line over the title, which no other page has yet and the closed response can't fill (it has no team name); "by" in the item's state line |
 | Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | ✅ | Built: the Your data card with Download a copy, Open a copy… and "2 heaps · 41 items · last downloaded 26 Oct"; the confirm names the file, says what the copy holds and from when, compares item counts and offers Download current first; a file that isn't an Upheap database is refused in the confirm. The worker counts the file in memory (`count`); the last download is kept in localStorage. No phone board yet: on a phone the confirm is a sheet like the others, with full-width 44 px buttons |
 | Tab lock (local) | S-tab-lock | 4 / n/a | WideTeams | 🟡 | ✅ | Matches today's page |
-| Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | 🟡 | Errors inline under their field (username taken, password too short); a signed-out link says where it leads and opens the item after sign-in |
+| Sign in, create account | S-sign-in, S-register | n/a / 5 | WideSignIn, PhoneSignIn | 🟡 | ✅ | Built: a 380 px card on a wide screen, the bare form on a phone, with a Sign in / Create account switch; a problem whose `field` names an input shows under it (username taken, email taken, password too short), with focus on it, and any other (wrong password, too many attempts, registration closed) above the button; a signed-out link goes to `/login?redirect=…`, says where it leads ("Sign in to open the link to PER-12.", or "…that page.") and opens it after sign-in. The tagline is left out, as on the boards. Left: "Email or username", as the server signs in by email only |
 | Session expired | G-session-expired | n/a / 4 | — | ⬜ | 🟡 | Signing in again should return to the page the user was on |
 | Empty heap, first open | E-heap-empty | 1 / 1 | WideSignIn | 🟡 | 🟡 | Add your first item, and (server) Create a team. Not in the must-have set; drawn because it's the first screen after sign-up |
 | Teams | S-teams | n/a / 5 | WideTeams | 🟡 | 🟡 | Create team inline, with name and link name |
@@ -73,7 +73,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
       column, filled in for closed items from the audit log. Items with no matching entry show no "by".
    5. ~~Your data.~~ Done, with no API change: the worker's `count` message reads a copy before it replaces
       anything, and the last download is kept in this browser.
-   6. Sign in and create account.
+   6. ~~Sign in and create account.~~ Done. One API change: `email_taken` names `field` `email`, as `handle_taken`
+      names `username`.
    7. Team and Teams.
    8. Session expiry return.
 
