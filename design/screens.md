@@ -281,10 +281,14 @@ with P-due)*, E-conflict (server).
 
 M-add-item, with P-due and P-tag-picker as in M-item.
 
-- **Browser:** a centred dialog near the top: title (focused), description, effort, impact, due, tags; Add
-  another; Cancel and Add.
-- **Phone:** a bottom sheet above the keyboard with the same fields; the title first and Add reachable without
-  closing the keyboard.
+- **Browser:** a centred dialog near the top, 600 px wide: "Add to \<heap\> ▾" and ✕; the "Added at #4" line with
+  Open it; title (focused), description; then labels beside their fields: need, effort, impact, due (starting at
+  None), tags, and the parameters the tags ask for, each saying which tag asked; Add another; Cancel and Add. The
+  tablet uses it too.
+- **Phone:** a bottom sheet above the keyboard: "Add to \<heap\> ▾" with the "added at #4" note beside it; the
+  title first; chips that scroll sideways for need, effort and impact (each opening a sheet of S M L XL), tags and
+  due; More fields for the description and parameters; Add another, More fields and Add in the last row, reachable
+  without closing the keyboard.
 
 ### S-closed: Closed items
 
@@ -753,15 +757,23 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### M-add-item: Add an item
 
-- **Trigger:** "Add an item" above the list, or `N`. **Who:** members of an unarchived heap.
+- **Trigger:** "Add an item" above the list, or `N`; + in the phone's tabs. **Who:** members of an unarchived heap.
 - **Purpose:** the fastest path in the app (Req Views: Add item).
-- **Contents:** title (focused, "What needs doing?"), Description, Need (required; Add stays off until it's picked),
-  Effort, Impact, P-due, P-tag-picker, and the
-  parameters linked to the chosen tags, which appear as tags are added (Req Custom parameters §3). Footer: Add
-  another (checkbox, remembered while the page is open), Cancel, Add.
-- **Actions:** Add (or Enter in the title, or `⌘↵`); with Add another, the dialog clears and stays.
-- **Presentation:** a centred modal near the top on tablet and wide; a bottom sheet above the keyboard on a phone.
-- **Not shown:** where the new item landed. The CLI prints "now 4th of 31"; the web app could too (Gaps).
+- **Contents:** "Add to \<heap\> ▾", which chooses among the unarchived heaps (tags and parameter values clear);
+  the "Added “X” at #4 in Up next" line with Open it, after an add with Add another; title (focused, "What needs
+  doing?"), Description ("Optional"), Need (required; Add stays off until it's picked), Effort, Impact, P-due
+  (starting at None), P-tag-picker, and the parameters linked to the chosen tags, which appear as tags are added,
+  each with "Asked because of the tag x" (Req Custom parameters §3). It starts from the list's filters: their tags,
+  and effort, impact or a parameter's option where they pick one value. Footer: Add another (checkbox, remembered
+  on the device), Cancel, Add.
+- **Actions:** Add (or Enter in the title, or `⌘↵`): without Add another the dialog closes and the toast says where
+  the item landed, with Open it; with it, the dialog says so and goes back to its starting point. The position is
+  the one in the list on screen, fetched again after the add; an item the list doesn't show (another heap, or hidden
+  by the view) gets "Added “X” to \<heap\>".
+- **Presentation:** a centred modal near the top, 600 px wide, labels beside the fields, on tablet and wide. On a
+  phone a bottom sheet above the keyboard: the heap and the "added at #4" note on one line, the title, then chips
+  that scroll sideways for need, effort and impact (each a sheet of S M L XL), tags (+ Tag opens the picker in a
+  sheet) and due (no None: a second tap clears); More fields shows the description and parameters.
 - **Freq 5.** **Source:** app-ux.md Adding an item; `AddItem.tsx`. Built.
 - **Must:** local 5, server 5. The only way to get work into a heap.
 

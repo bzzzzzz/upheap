@@ -59,13 +59,14 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
 
 ### Adding (M-add-item)
 
-1. **Prefilled from context, silently:** the heap you're on, and the active filter's tags, effort and impact. No
-   label explains the prefill, and the tag picker's own suggestions are enough. The heap can be changed from the
-   dialog title.
+1. **Prefilled from context, silently:** the heap you're on, and the active filter's tags, and its effort, impact
+   and parameter options where it picks one value. No label explains the prefill, and the tag picker's own
+   suggestions are enough. The heap can be changed from the dialog title.
 2. **It says where the item landed** ("Added at #4 in Up next. Open it"), inline when Add another is on and in the
    toast when it's off (gap 9).
 3. **Add another is remembered per device.** This settles the conflict between requirements.md and the code.
-4. **Due defaults to None**, with the rough choices one tap away.
+4. **Due defaults to None**, with the rough choices one tap away. On a phone's row of due chips nothing is picked
+   instead, and a second tap on a chip clears it.
 
 ### Search and navigation
 
@@ -163,6 +164,7 @@ for in the first set.
 
 ## Needs from the server
 
-1. The new item's position in the Add response, or one list refetch, for "Added at #4".
+1. ~~The new item's position in the Add response, or one list refetch, for "Added at #4".~~ Settled: the list on
+   screen is fetched again after an add, and the position is read from it.
 2. Later: item search across heaps for ⌘K.
 3. Later, optional: username suggestions.

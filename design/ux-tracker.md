@@ -24,9 +24,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Undo toast | G-toast | 3 / 3 | Main, PhoneList | 🟡 | ✅ | Built: "Start next" only when nothing else in the heap is in progress, counting items the view or a filter hides (the list response's `in_progress_count`) |
 | Item, browser | M-item | 5 / 5 | Main | 🟡 | ✅ | Built: main button, others, Won't do under ⋯; key as the copy-link button; ↑ ↓; contributor bars; "Added by Sam 4 days ago" beside History, from the item's `created_by` and `created_label` ("by you" for the viewer's own, as History says "You") |
 | Item, phone | M-item | 5 / 5 | PhoneItem | 🟡 | 🟡 | Built: the state buttons in a bar at the bottom of the sheet, the likeliest next state wider, with Won't do under ⋯ at the end of the bar rather than in the header; the state as a line under the title; due, tags, parameters and description as rows that open sheets. The buttons keep the wide screen's names (Block, not Blocked). Left: the "Added" row among the fields; until then "Added by" shows beside History |
-| Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone, in the item: built, a sheet of 52 px rows, Exact date with its date field, and Clear due; a rough choice or Clear closes it. Left: the phone Add dialog still has the pills (step 4.3), and the browser pane's dropdown isn't mocked yet |
+| Due picker | P-due | 5 / 5 | AddDialog, PhoneDue | 🟡 | 🟡 | Phone, in the item: built, a sheet of 52 px rows, Exact date with its date field, and Clear due; a rough choice or Clear closes it. Phone, in Add: a row of chips that scrolls sideways, the rough choices then Exact date, a second tap clearing the picked one. Add on a wide screen starts at None. Left: the browser pane's dropdown isn't mocked yet |
 | Tag picker | P-tag-picker | 2 / 3 | — | ⬜ | ✅ | The open combobox isn't mocked; today's is fine until then |
-| Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | 🟡 | Heap chooser in the title; prefill from the active filter, without a label; "Added at #4 · Open it" (needs the position from the server); Add another remembered per device; due starts at None. Phone: one-tap chips and More fields |
+| Add an item | M-add-item | 5 / 5 | AddDialog, PhoneAdd | 🟡 | ✅ | Built: "Add to \<heap\> ▾" chooses the heap (tags and parameter values clear, the rest stays); the list's filters prefill tags, and effort, impact or a parameter where they pick one value, silently, also after each Add another; "Added “X” at #4 in Up next" with Open it, in the dialog with Add another and in the toast without, the position read from the list refetched after the add; Add another remembered per device; due starts at None. Phone: a sheet with chips for need, effort, impact, tags and due, and More fields for the description and parameters. Need stays, as its own row of chips, though the mockups predate it |
 | Conflicts | E-conflict | n/a / 4 | Main | 🟡 | 🟡 | Says what was lost ("your change (due: next week) wasn't saved") with Apply mine again |
 | Closed | S-closed, P-reopen | 4 / 4 | WideClosed, PhoneClosed | 🟡 | 🟡 | Grouped by day; one intro line explains the week limit; who closed it; Reopen while allowed, nothing after |
 | Your data (local) | S-account, P-local-export, P-local-import, M-local-import-confirm | 4 / n/a | WideAccount | 🟡 | 🟡 | The confirm names the file, compares item counts and offers Download current first. No phone board yet |
@@ -46,7 +46,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
    screen), hidden-items note (4, not 3), switching saved views (3, not 4), conflicts in a shared heap (2, not 1).
 3. **app-ux.md disagrees with the mockups** on the tablet. The phone tabs and the item's state buttons now follow
    the mockups there.
-4. **"Added at #4"** needs the new item's position from the Add response, or a list refetch.
+4. ~~**"Added at #4"** needs the new item's position from the Add response, or a list refetch.~~ Settled: the list
+   on screen is fetched again after an add anyway, and the position is read from it. An item added to another heap,
+   or one the view hides, gets "Added to \<heap\>" without a position.
 5. **Username suggestions** when the chosen one is taken: worth the server work?
 6. **Links:** screens.md, ux-overview.md and this file aren't linked from CLAUDE.md, app-ux.md or progress.md yet.
 
@@ -63,7 +65,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
       yes or no, because the item just marked done may be the one in progress.
    2. ~~The phone tabs, item bar and sheets.~~ Done, apart from open counts in the heap switcher and the member
       count in More, which wait on the server, and the "Added" row among the phone's fields.
-   3. Add.
+   3. ~~Add.~~ Done, with no server change: the position comes from the list refetched after the add.
    4. Closed.
    5. Your data.
    6. Sign in and create account.
