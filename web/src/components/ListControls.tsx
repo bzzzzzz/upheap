@@ -1,6 +1,7 @@
+import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-import type { BlockedLayout, HeapRef, Parameter, StateMode } from "../api/client";
+import type { BlockedLayout, HeapRef, Parameter, Size, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
 import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PopoverSheet } from "./PopoverSheet";
@@ -14,6 +15,7 @@ import {
   SORTS,
   splitList,
   STATE_MODES,
+  withoutFilters,
   type ListSearch,
 } from "./listView";
 
@@ -31,7 +33,6 @@ export function ListControls({
   onSearch,
   panel,
   onPanel,
-  panelFocus,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
@@ -40,17 +41,12 @@ export function ListControls({
   onSearch: (text: string) => void;
   panel: Panel;
   onPanel: (panel: Panel) => void;
-  /** Changing it brings the panel's button into view, as the panel opens from it. */
-  panelFocus: number;
 }) {
   const parameters = useParameters(heapRef);
   const searchRef = useRef<HTMLInputElement>(null);
   const filtersRef = useRef<HTMLButtonElement>(null);
   const viewRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (panelFocus > 0) viewRef.current?.scrollIntoView({ block: "nearest" });
-  }, [panelFocus]);
   const filters = filterCount(view);
   const viewChanged = SHOWN_STATES.some((state) => view[state] !== undefined) || view.blocked_layout !== undefined;
 
@@ -132,6 +128,75 @@ export function ListControls({
       <PopoverSheet title="View settings" triggerRef={viewRef} isOpen={panel === "view"} onClose={() => onPanel(null)}>
         <ViewPanel view={view} onChange={onChange} />
       </PopoverSheet>
+    </div>
+  );
+}
+
+/**
+ * The filters that are on, as chips that each take one off, so the user always sees why the list is short
+ * (ux-overview.md, The list §3). `shown` of `total` says how much they leave out; `total` is the view's count without
+ * them, `undefined` until it has loaded.
+ */
+export function FilterChips({
+  heapRef,
+  view,
+  onChange,
+  shown,
+  total,
+}: {
+  heapRef: HeapRef;
+  view: ListSearch;
+  onChange: (view: ListSearch) => void;
+  shown: number;
+  total: number | undefined;
+}) {
+  const tags = useTags(heapRef);
+  const parameters = useParameters(heapRef);
+  const options = [...(parameters.data?.parameters ?? []), ...(parameters.data?.archived ?? [])].flatMap((parameter) =>
+    [...parameter.options, ...parameter.archived_options].map((option) => ({
+      id: option.id,
+      label: `${parameter.name}: ${option.label}`,
+    })),
+  );
+  const chips = [
+    ...splitList(view.tag).map((id) => ({
+      key: `tag:${id}`,
+      label: tags.data?.tags.find((tag) => tag.id === id)?.name ?? "A tag",
+      remove: () => onChange({ ...view, tag: toggled(view.tag, id) }),
+    })),
+    ...(["effort", "impact"] as const).flatMap((field) =>
+      splitList(view[field]).map((size) => ({
+        key: `${field}:${size}`,
+        label: `${field === "effort" ? "Effort" : "Impact"} ${SIZE_LABELS[size as Size]}`,
+        remove: () => onChange({ ...view, [field]: toggled(view[field], size) }),
+      })),
+    ),
+    ...splitList(view.param).map((id) => ({
+      key: `param:${id}`,
+      label: options.find((option) => option.id === id)?.label ?? "An option",
+      remove: () => onChange({ ...view, param: toggled(view.param, id) }),
+    })),
+  ];
+
+  return (
+    <div role="group" aria-label="Filters on" className="mt-3 flex flex-wrap items-center gap-1.5">
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          type="button"
+          onClick={chip.remove}
+          aria-label={`Remove filter ${chip.label}`}
+          className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1.5 pl-2.5 text-xs text-ink-soft hover:bg-line pointer-coarse:h-9"
+        >
+          {chip.label}
+          <X aria-hidden="true" className="size-3" />
+        </button>
+      ))}
+      {total !== undefined && (
+        <span className="ml-1 text-xs text-muted tabular-nums">
+          {shown} of {total}
+        </span>
+      )}
     </div>
   );
 }
@@ -338,7 +403,7 @@ function FiltersPanel({
       {filterCount(view) > 0 && (
         <button
           type="button"
-          onClick={() => onChange({ ...view, tag: undefined, effort: undefined, impact: undefined, param: undefined })}
+          onClick={() => onChange(withoutFilters(view))}
           className="self-start text-sm text-muted underline hover:text-ink"
         >
           Clear filters

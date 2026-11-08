@@ -35,3 +35,25 @@ export const STATES: readonly ItemState[] = ["open", "in_progress", "blocked", "
 
 /** Done and won't do are the closed states. */
 export const isClosed = (state: ItemState) => state === "done" || state === "wont_do";
+
+/**
+ * A button that moves an item from `from` to `to`, named for what it does: Start, Block, Done, Won't do, and for
+ * going back to open, Unblock, Reopen or Back to open.
+ */
+export function changeLabel(from: ItemState, to: ItemState): string {
+  if (to === "in_progress") return "Start";
+  if (to === "blocked") return "Block";
+  if (to !== "open") return STATE_LABELS[to];
+  if (from === "blocked") return "Unblock";
+  return isClosed(from) ? "Reopen" : "Back to open";
+}
+
+/**
+ * The likeliest next state of a non-closed item, for the item's main button (ux-overview.md, The item §1), then the
+ * other states it can move to besides Won't do, which sits apart.
+ */
+export const NEXT_STATES: Record<Exclude<ItemState, "done" | "wont_do">, readonly [ItemState, ...ItemState[]]> = {
+  open: ["in_progress", "blocked", "done"],
+  in_progress: ["done", "blocked", "open"],
+  blocked: ["open", "in_progress", "done"],
+};

@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, SavedView } from "../api/client";
 import { useArchiveSavedView, useCreateSavedView, useSavedViews, useUpdateSavedView } from "../api/queries";
 import { HistoryDisclosure } from "./AuditHistory";
 import { searchFor, showSameList, toViewInput, type ListSearch } from "./listView";
+import { MenuEntry, MenuPopover } from "./Menu";
 import { inputClass, primaryButtonClass, quietButtonClass } from "./NameForm";
 import { ProblemText } from "./ProblemText";
 import { useConfirmation } from "./useConfirmation";
@@ -13,8 +15,9 @@ type Naming = "new" | "rename" | null;
 
 /**
  * The heap's saved views, as links, and what can be done with the open one. Opening a view puts its settings and its
- * ID in the URL. Changing the list afterwards keeps the ID, so the bar can offer to save the change into the view or
- * as a new one. Every member sees the same views.
+ * ID in the URL. Changing the list afterwards keeps the ID, and the view's chip shows a dot: pressing it offers to save
+ * the change into the view or as a new one, or to undo it (ux-overview.md, The list §3). Every member sees the same
+ * views.
  */
 export function SavedViewsBar({
   heapRef,
@@ -26,6 +29,7 @@ export function SavedViewsBar({
   onViewChange: (view: ListSearch) => void;
 }) {
   const views = useSavedViews(heapRef);
+  const update = useUpdateSavedView(heapRef);
   const [naming, setNaming] = useState<Naming>(null);
   // An ID that names no view in use (archived since, say) leaves the URL, so equal lists keep equal URLs. Not while
   // the list is refetching: a view just created may not be in it yet.
@@ -46,6 +50,40 @@ export function SavedViewsBar({
   const base: ListSearch = selected ? searchFor(selected) : {};
   const changed = !showSameList(view, base);
   const canCreate = views.data.allowed_actions.includes("create");
+  const canSave = selected?.allowed_actions.includes("edit") === true;
+  const onChangedAction = (key: ChangedAction) => {
+    switch (key) {
+      case "save":
+        if (selected) update.mutate({ saved: selected, patch: { view: toViewInput(view) } });
+        break;
+      case "save-new":
+        setNaming("new");
+        break;
+      case "undo":
+        onViewChange(base);
+        break;
+    }
+  };
+  const chip = (saved: SavedView | undefined, name: string) =>
+    saved?.id === selected?.id && changed ? (
+      <ChangedChip
+        key={saved?.id ?? ""}
+        name={name}
+        canSave={canSave}
+        canCreate={canCreate}
+        pending={update.isPending}
+        onAction={onChangedAction}
+      />
+    ) : (
+      <ViewLink
+        key={saved?.id ?? ""}
+        heapRef={heapRef}
+        search={saved ? searchFor(saved) : {}}
+        current={saved?.id === selected?.id}
+      >
+        {name}
+      </ViewLink>
+    );
 
   return (
     <div className="mt-4 flex flex-col gap-2">
@@ -54,21 +92,10 @@ export function SavedViewsBar({
         aria-label="Saved views"
         className="flex items-center gap-1.5 max-sm:-mx-4 max-sm:overflow-x-auto max-sm:px-4 max-sm:[scrollbar-width:none] sm:flex-wrap [&>*]:shrink-0"
       >
-        <ViewLink heapRef={heapRef} search={{}} current={!selected} changed={changed}>
-          Default
-        </ViewLink>
-        {views.data.views.map((saved) => (
-          <ViewLink
-            key={saved.id}
-            heapRef={heapRef}
-            search={searchFor(saved)}
-            current={saved.id === selected?.id}
-            changed={changed}
-          >
-            {saved.name}
-          </ViewLink>
-        ))}
+        {chip(undefined, "Default")}
+        {views.data.views.map((saved) => chip(saved, saved.name))}
       </nav>
+      <ProblemText error={update.error} />
       {naming === "new" && (
         <CreateView
           heapRef={heapRef}
@@ -82,16 +109,6 @@ export function SavedViewsBar({
       )}
       {naming === "rename" && selected && (
         <RenameView heapRef={heapRef} saved={selected} onDone={() => setNaming(null)} />
-      )}
-      {naming === null && changed && (
-        <ChangedActions
-          heapRef={heapRef}
-          view={view}
-          selected={selected}
-          canCreate={canCreate}
-          onSaveAsNew={() => setNaming("new")}
-          onDiscard={() => onViewChange(base)}
-        />
       )}
       {naming === null && !changed && selected && (
         <SelectedActions
@@ -113,18 +130,19 @@ export function SavedViewsBar({
   );
 }
 
+const chipClass = "rounded-full px-2.5 py-0.5 text-sm whitespace-nowrap";
+const currentChipClass = "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900";
+
 function ViewLink({
   heapRef,
   search,
   current,
-  changed,
   children,
 }: {
   heapRef: HeapRef;
   search: ListSearch;
   current: boolean;
-  changed: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <Link
@@ -135,58 +153,57 @@ function ViewLink({
       activeOptions={{ exact: true, includeSearch: true }}
       activeProps={{}}
       aria-current={current ? "page" : undefined}
-      className={`rounded-full px-2.5 py-0.5 text-sm whitespace-nowrap ${
-        current
-          ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
-          : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+      className={`${chipClass} ${
+        current ? currentChipClass : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
       }`}
     >
       {children}
-      {current && changed && <span className="ml-1 opacity-70">(changed)</span>}
     </Link>
   );
 }
 
-/** The list differs from the open view: save it into that view, save it as a new one, or go back. */
-function ChangedActions({
-  heapRef,
-  view,
-  selected,
+type ChangedAction = "save" | "save-new" | "undo";
+
+/**
+ * The open view's chip once the list differs from it: a dot says so, and pressing it offers to save the change into
+ * the view (not into Default, which isn't saved), to save it as a new view, or to undo it.
+ */
+function ChangedChip({
+  name,
+  canSave,
   canCreate,
-  onSaveAsNew,
-  onDiscard,
+  pending,
+  onAction,
 }: {
-  heapRef: HeapRef;
-  view: ListSearch;
-  selected: SavedView | undefined;
+  name: string;
+  canSave: boolean;
   canCreate: boolean;
-  onSaveAsNew: () => void;
-  onDiscard: () => void;
+  pending: boolean;
+  onAction: (action: ChangedAction) => void;
 }) {
-  const update = useUpdateSavedView(heapRef);
-  const canSave = selected?.allowed_actions.includes("edit") === true;
   return (
-    <div className="flex flex-wrap items-center gap-1 text-sm">
-      {selected && canSave && (
-        <button
-          type="button"
-          disabled={update.isPending}
-          onClick={() => update.mutate({ saved: selected, patch: { view: toViewInput(view) } })}
-          className={quietButtonClass}
+    <MenuTrigger>
+      <Button
+        aria-current="page"
+        className={`${chipClass} ${currentChipClass} inline-flex items-center gap-1.5 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-2 data-[focus-visible]:outline-accent`}
+      >
+        {name}
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />
+        <span className="sr-only">(changed)</span>
+      </Button>
+      <MenuPopover placement="bottom start">
+        <Menu
+          aria-label={`Changes to ${name}`}
+          className="outline-none"
+          disabledKeys={pending ? ["save"] : []}
+          onAction={(key) => onAction(key as ChangedAction)}
         >
-          Save to {selected.name}
-        </button>
-      )}
-      {canCreate && (
-        <button type="button" onClick={onSaveAsNew} className={quietButtonClass}>
-          Save as a new view…
-        </button>
-      )}
-      <button type="button" onClick={onDiscard} className={quietButtonClass}>
-        {selected ? `Back to ${selected.name}` : "Back to the default view"}
-      </button>
-      <ProblemText error={update.error} />
-    </div>
+          {canSave && <MenuEntry id="save">{`Save to ${name}`}</MenuEntry>}
+          {canCreate && <MenuEntry id="save-new">Save as a new view…</MenuEntry>}
+          <MenuEntry id="undo">Undo changes</MenuEntry>
+        </Menu>
+      </MenuPopover>
+    </MenuTrigger>
   );
 }
 

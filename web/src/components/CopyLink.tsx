@@ -1,5 +1,5 @@
 import { Check, Link2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /**
  * The short link to a team, heap or item (design/readable-ids.md): `/h/` and its handles, which the router expands
@@ -10,8 +10,21 @@ export function shortLink(...handles: string[]): string {
     .href;
 }
 
-/** Copies the short link to what `handles` name, and says so for a moment. */
-export function CopyLink({ handles, className = "" }: { handles: string[]; className?: string }) {
+/**
+ * Copies the short link to what `handles` name, and says so for a moment. `label` replaces "Copy link" as the button's
+ * text, such as an item's key, and `description` then says what the button does.
+ */
+export function CopyLink({
+  handles,
+  label = "Copy link",
+  description,
+  className = "",
+}: {
+  handles: string[];
+  label?: ReactNode;
+  description?: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -19,14 +32,21 @@ export function CopyLink({ handles, className = "" }: { handles: string[]; class
     return () => window.clearTimeout(timer);
   }, [copied]);
 
+  // The status sits beside the button rather than in it, as a live region inside a button doesn't name it.
   return (
-    <button
-      type="button"
-      onClick={() => void navigator.clipboard.writeText(shortLink(...handles)).then(() => setCopied(true))}
-      className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-soft hover:bg-sunken ${className}`}
-    >
-      {copied ? <Check aria-hidden="true" className="size-3.5" /> : <Link2 aria-hidden="true" className="size-3.5" />}
-      <span role="status">{copied ? "Copied" : "Copy link"}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => void navigator.clipboard.writeText(shortLink(...handles)).then(() => setCopied(true))}
+        title={description}
+        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-soft hover:bg-sunken ${className}`}
+      >
+        {copied ? <Check aria-hidden="true" className="size-3.5" /> : <Link2 aria-hidden="true" className="size-3.5" />}
+        <span>{copied ? "Copied" : label}</span>
+      </button>
+      <span role="status" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
+    </>
   );
 }

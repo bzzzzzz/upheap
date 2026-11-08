@@ -132,6 +132,15 @@ export const filterCount = (search: ListSearch) =>
   splitList(search.impact).length +
   splitList(search.param).length;
 
+/** The same view with no filters on. */
+export const withoutFilters = (search: ListSearch): ListSearch => ({
+  ...search,
+  tag: undefined,
+  effort: undefined,
+  impact: undefined,
+  param: undefined,
+});
+
 /**
  * The text search, the one filter the client runs: every word must appear in the title or description, ignoring
  * case. Matches keep the order the server sent.

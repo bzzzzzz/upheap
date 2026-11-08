@@ -1,7 +1,8 @@
-import { X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ChevronDown, ChevronUp, Ellipsis, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
@@ -9,19 +10,17 @@ import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
 import { CopyLink } from "./CopyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
-import { choiceButtonClass, ChoiceButtons, FieldLabel } from "./ChoiceButtons";
+import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
-import { isClosed, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
+import { MenuEntry, MenuPopover } from "./Menu";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { TagPicker } from "./TagPicker";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
-
-/** The states the segmented control offers. Won't do sits apart, as it's rarely the one wanted. */
-const SEGMENTS: readonly ItemState[] = ["open", "in_progress", "blocked", "done"];
 
 /** How far the sheet (down) or the panel (right) is dragged by its top bar before letting go closes it. */
 const CLOSE_DISTANCE = 120;
@@ -31,28 +30,39 @@ const CLOSE_SPEED = 600;
  * One item over its list (app-ux.md, The item): a pane beside the list on a wide screen, a panel over the right of
  * the list on a tablet, with the list still live beside it, and a sheet from the bottom on a phone. Each change saves
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
+ * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
+ * pane (ux-overview.md, The item §2).
  */
 export function ItemPane({
   heapRef,
   itemKey,
   entry,
   section,
+  previousKey,
+  nextKey,
   onClose,
 }: {
   heapRef: HeapRef;
   itemKey: string;
   entry: RankedItem | undefined;
   section: string | undefined;
+  previousKey: string | undefined;
+  nextKey: string | undefined;
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
   const drag = useDragToClose(onClose);
+  // The ↑ or ↓ that walked to this item, so focus stays on it for the next step.
+  const walkedBy = useRef<string | undefined>(undefined);
 
   // Focus moves to the item as it opens, so the keyboard carries on from there; Escape closes it (HeapPage).
   useEffect(() => {
-    paneRef.current?.focus({ preventScroll: true });
+    const label = walkedBy.current;
+    walkedBy.current = undefined;
+    const walk = label && paneRef.current?.querySelector<HTMLElement>(`[aria-label="${label}"]`);
+    (walk || paneRef.current)?.focus({ preventScroll: true });
   }, [itemKey]);
 
   let body: ReactNode;
@@ -101,7 +111,27 @@ export function ItemPane({
               </span>
             )}
           </h2>
-          <CopyLink handles={[heapRef.team, heapRef.heap, itemKey]} />
+          {/* On a phone the sheet closes and the next row is a tap away, so only the pane walks the list. */}
+          {entry && (
+            <div className="flex max-sm:hidden">
+              {(["Previous item", "Next item"] as const).map((label) => (
+                <WalkLink
+                  key={label}
+                  heapRef={heapRef}
+                  itemKey={label === "Previous item" ? previousKey : nextKey}
+                  label={label}
+                  icon={label === "Previous item" ? ChevronUp : ChevronDown}
+                  onWalk={() => (walkedBy.current = label)}
+                />
+              ))}
+            </div>
+          )}
+          {/* The key is the link's own name, so the button says what it copies (ux-overview.md, The item §3). */}
+          <CopyLink
+            handles={[heapRef.team, heapRef.heap, itemKey]}
+            label={<span className="font-mono">{itemKey}</span>}
+            description={`Copy the link to ${itemKey}`}
+          />
           <button
             type="button"
             onClick={onClose}
@@ -115,6 +145,49 @@ export function ItemPane({
         <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] sm:px-5">{body}</div>
       </motion.section>
     </>
+  );
+}
+
+/**
+ * A header button that opens the item above or below this one, in place of it. Disabled at either end of the list,
+ * and still focusable there, so focus that walked to the end stays put and a screen reader still finds it.
+ */
+function WalkLink({
+  heapRef,
+  itemKey,
+  label,
+  icon: Icon,
+  onWalk,
+}: {
+  heapRef: HeapRef;
+  itemKey: string | undefined;
+  label: string;
+  icon: typeof ChevronUp;
+  onWalk: () => void;
+}) {
+  const className =
+    "flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken aria-disabled:opacity-40 aria-disabled:hover:bg-transparent";
+  if (itemKey === undefined) {
+    return (
+      <span role="link" tabIndex={0} aria-disabled="true" aria-label={label} className={className}>
+        <Icon aria-hidden="true" className="size-4" />
+      </span>
+    );
+  }
+  return (
+    <Link
+      to="/teams/$team/heaps/$heap/items/$item"
+      params={{ ...heapRef, item: itemKey }}
+      search={true}
+      // In place of this item, so Back still closes the pane rather than walking back up the list.
+      replace
+      state={(prev) => prev}
+      aria-label={label}
+      onClick={onWalk}
+      className={className}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+    </Link>
   );
 }
 
@@ -206,18 +279,12 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         className="field-sizing-content resize-none bg-transparent text-lg leading-snug font-semibold outline-none disabled:opacity-100"
       />
 
-      <StateControl
+      <StateActions
         item={item}
         disabled={!canChangeState}
         canReopen={canReopen}
         onChange={(state) => state !== item.state && save({ state })}
       />
-      {closed && item.closed_label && (
-        <p className="-mt-3 text-xs text-muted">
-          {STATE_LABELS[item.state]} · {item.closed_label}
-          {!canReopen && ". It can't be reopened."}
-        </p>
-      )}
       {item.state === "blocked" && (
         <BlockerSelect
           value={item.blocked_by}
@@ -227,12 +294,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         />
       )}
 
-      {entry && entry.contributors.length > 0 && (
-        <div className="flex flex-col gap-1 rounded-lg bg-sunken px-3 py-2">
-          <span className="text-xs font-medium text-ink-soft">Why it's #{entry.position}</span>
-          <span className="text-sm">{entry.contributors.map((c) => c.label).join(" · ")}</span>
-        </div>
-      )}
+      {entry && entry.contributors.length > 0 && <WhyItRanks entry={entry} />}
 
       <NeedPicker
         value={item.need}
@@ -333,10 +395,43 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 }
 
 /**
- * The item's state as a segmented control, with Won't do beside it. A closed item that can be reopened offers the
- * open states; picking one reopens it.
+ * Why the item ranks where it does (ux-overview.md, The item §4): each contributor, with a bar for its share of the
+ * item's priority.
  */
-function StateControl({
+function WhyItRanks({ entry }: { entry: RankedItem }) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2.5">
+      <h3 id={headingId} className="text-xs font-medium text-ink-soft">
+        Why it's #{entry.position}
+      </h3>
+      <ul className="flex flex-col gap-2">
+        {entry.contributors.map((contributor, index) => (
+          // A factor can come up more than once, such as two parameters.
+          <li key={index} className="flex flex-col gap-1">
+            <span className="text-sm">
+              {contributor.label}
+              <span className="sr-only">, {contributor.share_percent}% of its priority</span>
+            </span>
+            <span aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-line">
+              <span
+                className="block h-full rounded-full bg-accent"
+                style={{ width: `${contributor.share_percent}%` }}
+              />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * The item's state and the ways out of it (ux-overview.md, The item §1): the likeliest next state as the main button,
+ * the other states beside it, and Won't do under ⋯, as it's rarely the one wanted. A closed item says when it closed,
+ * and offers Reopen while it still can be.
+ */
+function StateActions({
   item,
   disabled,
   canReopen,
@@ -348,51 +443,70 @@ function StateControl({
   onChange: (state: ItemState) => void;
 }) {
   const labelId = useId();
-  const closed = isClosed(item.state);
-  // From a closed state only the open ones lead anywhere, and only when the item can still be reopened.
-  const unavailable = closed ? SEGMENTS.filter((state) => isClosed(state) || !canReopen) : [];
-  const onSelectionChange = (keys: Set<Key>) => {
-    const [picked] = [...keys];
-    if (picked !== undefined) onChange(picked as ItemState);
-  };
+  const header = (
+    <div className="flex items-baseline gap-2">
+      <FieldLabel id={labelId}>State</FieldLabel>
+      <span className={`text-sm font-medium ${item.state === "in_progress" ? "text-accent-ink" : "text-ink"}`}>
+        {STATE_LABELS[item.state]}
+        {item.closed_label && <span className="font-normal text-muted"> · {item.closed_label}</span>}
+      </span>
+    </div>
+  );
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <FieldLabel id={labelId}>State</FieldLabel>
-        {!closed && (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange("wont_do")}
-            className="-my-2 h-8 rounded-lg px-2 text-xs text-ink-soft hover:bg-sunken disabled:opacity-50 pointer-coarse:h-11"
-          >
-            Won't do
-          </button>
+  if (item.state === "done" || item.state === "wont_do") {
+    return (
+      <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
+        {header}
+        {canReopen ? (
+          <div>
+            <button type="button" onClick={() => onChange("open")} className={stateButtonClass(true)}>
+              {changeLabel(item.state, "open")}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted">It can't be reopened.</p>
         )}
       </div>
-      <ToggleButtonGroup
-        aria-labelledby={labelId}
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={[item.state]}
-        onSelectionChange={onSelectionChange}
-        isDisabled={disabled}
-        className="grid grid-cols-4 gap-0.5 rounded-xl bg-sunken p-0.5"
-      >
-        {SEGMENTS.map((state) => (
-          <ToggleButton
+    );
+  }
+
+  const [main, ...others] = NEXT_STATES[item.state];
+  return (
+    <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1.5">
+      {header}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {[main, ...others].map((state) => (
+          <button
             key={state}
-            id={state}
-            isDisabled={unavailable.includes(state)}
-            className={`${choiceButtonClass} rounded-lg border-transparent bg-transparent px-1 whitespace-nowrap data-[selected]:border-transparent data-[selected]:bg-surface data-[selected]:font-medium data-[selected]:text-ink data-[selected]:shadow-sm ${
-              state === "done" ? "data-[selected]:text-done" : ""
-            }`}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(state)}
+            className={stateButtonClass(state === main)}
           >
-            {STATE_LABELS[state]}
-          </ToggleButton>
+            {changeLabel(item.state, state)}
+          </button>
         ))}
-      </ToggleButtonGroup>
+        <MenuTrigger>
+          <Button
+            aria-label="More states"
+            isDisabled={disabled}
+            className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
+          >
+            <Ellipsis aria-hidden="true" className="size-4" />
+          </Button>
+          <MenuPopover placement="bottom end">
+            <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
+              <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
+            </Menu>
+          </MenuPopover>
+        </MenuTrigger>
+      </div>
     </div>
   );
 }
+
+/** The main state button is filled with the accent, the next action's colour, with dark text for contrast in both themes. */
+const stateButtonClass = (main: boolean) =>
+  `h-9 rounded-lg px-3 text-sm font-medium disabled:opacity-50 pointer-coarse:h-11 ${
+    main ? "bg-accent text-stone-950 hover:brightness-95" : "border border-line bg-surface text-ink hover:border-muted"
+  }`;
