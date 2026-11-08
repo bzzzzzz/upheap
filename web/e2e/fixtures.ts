@@ -121,9 +121,45 @@ export async function expectOrder(page: Page, titles: string[]) {
 /** A need as the Add dialog and the item pane name it. */
 export type Need = "Idea" | "Nice to have" | "Expected" | "Critical";
 
+/** The Add dialog, open over the page. Its name goes on with the heap the item goes into. */
+export const addDialog = (page: Page): Locator => page.getByRole("dialog", { name: /^Add an item to / });
+
+/** Whether the page is as wide as a phone, where the Add dialog is a sheet of chips. */
+export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 640;
+
+/**
+ * Picks `size` for the Add dialog's `field`: among its buttons, or on a phone from the sheet its chip opens. Picking
+ * the size it has clears it.
+ */
+export async function pickSize(page: Page, field: "Effort" | "Impact", size: Size) {
+  const dialog = addDialog(page);
+  if (isPhone(page)) {
+    await dialog.getByRole("button", { name: new RegExp(`^${field} `) }).click();
+    const sheet = page.getByRole("dialog", { name: field, exact: true });
+    await sheet.getByRole("radio", { name: size, exact: true }).click();
+    await expect(sheet).toHaveCount(0);
+  } else {
+    await dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { name: size, exact: true }).click();
+  }
+}
+
+/** Expects the Add dialog's `field` to have `size`, or with `null` no size. */
+export async function expectSize(page: Page, field: "Effort" | "Impact", size: Size | null) {
+  const dialog = addDialog(page);
+  if (isPhone(page)) {
+    await expect(dialog.getByRole("button", { name: `${field} ${size ?? "not set"}`, exact: true })).toBeVisible();
+  } else if (size) {
+    await expect(
+      dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { name: size, exact: true }),
+    ).toBeChecked();
+  } else {
+    await expect(dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { checked: true })).toHaveCount(0);
+  }
+}
+
 /**
  * Adds an item through the Add dialog, as expected unless `need` says otherwise. With `listed`, the default, the page
- * is the open list, and the new row shows there.
+ * is the open list, and the new row shows there. Add another must be off, as it is unless a test ticks it.
  */
 export async function addItem(
   page: Page,
@@ -132,19 +168,14 @@ export async function addItem(
   { listed = true }: { listed?: boolean } = {},
 ) {
   await page.getByRole("button", { name: "Add an item" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add an item" });
+  const dialog = addDialog(page);
   await dialog.getByLabel("Title").fill(title);
   await dialog
     .getByRole("radiogroup", { name: "Need" })
     .getByRole("radio", { name: fields.need ?? "Expected", exact: true })
     .click();
-  for (const [field, size] of [
-    ["Effort", fields.effort],
-    ["Impact", fields.impact],
-  ] as const) {
-    if (size)
-      await dialog.getByRole("radiogroup", { name: field }).getByRole("radio", { name: size, exact: true }).click();
-  }
+  if (fields.effort) await pickSize(page, "Effort", fields.effort);
+  if (fields.impact) await pickSize(page, "Impact", fields.impact);
   await dialog.getByLabel("Title").press("Enter");
   await expect(dialog).toHaveCount(0);
   if (listed) await expect(row(page, title)).toBeVisible();

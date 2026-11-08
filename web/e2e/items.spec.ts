@@ -1,4 +1,5 @@
 import {
+  addDialog,
   addItem,
   changeState,
   closeField,
@@ -161,7 +162,7 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
   await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
   await page.keyboard.press("n");
-  const dialog = page.getByRole("dialog", { name: "Add an item" });
+  const dialog = addDialog(page);
   const due = dialog.getByRole("radiogroup", { name: "Due" });
   const need = dialog.getByRole("radiogroup", { name: "Need" });
   const add = dialog.getByRole("button", { name: "Add", exact: true });
@@ -178,6 +179,8 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByLabel("Add another").check();
   await dialog.getByLabel("Title").press("Enter");
   await expect(row(page, "Book the dentist").getByText("next week", { exact: true })).toBeVisible();
+  // It says where the item landed, in the dialog.
+  await expect(dialog.getByRole("status")).toContainText(/“Book the dentist”.* at #1/);
 
   // With Add another, the dialog stays open and clears, the need too.
   await expect(dialog.getByLabel("Title")).toHaveValue("");
@@ -189,6 +192,8 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByLabel("Exact due date").fill(dayFromToday(-1));
   await dialog.getByLabel("Title").press("ControlOrMeta+Enter");
   await expect(row(page, "Renew the passport").getByText("Overdue · yesterday", { exact: true })).toBeVisible();
+  // Overdue and critical, it went in at the top.
+  await expect(dialog.getByRole("status")).toContainText(/“Renew the passport”.* at #1/);
 
   // Closing with a title typed asks first.
   await dialog.getByLabel("Title").fill("A stray thought");
@@ -196,6 +201,25 @@ test("the Add dialog adds items in a row, with rough or exact due times", async 
   await dialog.getByRole("button", { name: "Discard" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(row(page, "A stray thought")).toHaveCount(0);
+});
+
+test("the Undo toast stays while items open and close over the list", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 640, "On a phone the item sheet covers the list.");
+  await addItem(page, "Quick win", { effort: "S", impact: "XL" });
+  await addItem(page, "Slog", { effort: "XL", impact: "S" });
+  await addItem(page, "Middling", { effort: "M", impact: "M" });
+
+  // Done from a row while another item is open, then another item opened and the pane closed.
+  await openItem(page, "Quick win");
+  await row(page, "Slog").getByRole("button", { name: "Mark Slog done" }).click();
+  await expect(row(page, "Slog")).toHaveCount(0);
+  const toast = page.getByRole("status").filter({ hasText: "“Slog” is done." });
+  await expect(toast).toBeVisible();
+  await openItem(page, "Middling");
+  await page.keyboard.press("Escape");
+  await expect(itemPane(page)).toHaveCount(0);
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(row(page, "Slog")).toBeVisible();
 });
 
 test("a short link opens the item it names", async ({ page, heapPath }) => {
@@ -217,6 +241,13 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
   await addItem(page, "Plan the offsite");
   await openItem(page, "Plan the offsite");
   const pane = itemPane(page);
+
+  // The toast from adding it stays under the sheet, which keeps its bar of states usable.
+  await expect(page.getByRole("status").filter({ hasText: "Added “Plan the offsite”" })).toBeVisible();
+  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More states" }).click();
+  await expect(page.getByRole("dialog", { name: "More states" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "More states" })).toHaveCount(0);
 
   // The description saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
   await (await field(page, "Description")).getByLabel("Description").fill("Venue first");

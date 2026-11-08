@@ -1,7 +1,7 @@
-import { useId } from "react";
+import { useId, type ReactNode } from "react";
 
 import type { ItemParameter, Parameter } from "../api/client";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { ChoiceButtons, FieldFrame, type FieldLayout } from "./ChoiceButtons";
 
 /** The parameters of an item that has a value, as "Name: Label" chips. */
 export function ParameterChips({ parameters, className }: { parameters: ItemParameter[]; className?: string }) {
@@ -24,20 +24,25 @@ const MAX_BUTTON_LABEL = 12;
 
 /**
  * Picks a value for one of the heap's parameters, as effort and impact are picked: a row of option buttons when there
- * are a few short options, or a menu otherwise.
+ * are a few short options, or a menu otherwise. `hint`, under the control, says why it's asked.
  */
 export function ParameterPicker({
   parameter,
   value,
   onChange,
   disabled,
+  layout = "stack",
+  hint,
 }: {
   parameter: Parameter;
   value: string | null;
   onChange: (optionId: string | null) => void;
   disabled?: boolean;
+  layout?: FieldLayout;
+  hint?: ReactNode;
 }) {
   const id = useId();
+  const hintId = useId();
   const options = parameter.options;
   if (options.length <= MAX_BUTTONS && options.every((option) => option.label.length <= MAX_BUTTON_LABEL)) {
     return (
@@ -48,18 +53,25 @@ export function ParameterPicker({
         onChange={onChange}
         disabled={disabled}
         tone="param"
+        layout={layout}
+        hint={hint}
       />
     );
   }
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-param-ink">
-        {parameter.name}
-      </label>
+    <FieldFrame
+      layout={layout}
+      label={
+        <label htmlFor={id} className="text-xs font-medium text-param-ink">
+          {parameter.name}
+        </label>
+      }
+    >
       <select
         id={id}
         value={value ?? ""}
         disabled={disabled}
+        aria-describedby={hint ? hintId : undefined}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
         className="h-9 rounded-lg border border-line bg-surface px-2 text-sm text-ink pointer-coarse:h-11"
       >
@@ -70,6 +82,11 @@ export function ParameterPicker({
           </option>
         ))}
       </select>
-    </div>
+      {hint && (
+        <span id={hintId} className="text-xs text-muted">
+          {hint}
+        </span>
+      )}
+    </FieldFrame>
   );
 }

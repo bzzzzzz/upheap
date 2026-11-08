@@ -3,27 +3,34 @@ import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components
 
 import type { DueInput } from "../api/client";
 import { useDueChoices } from "../api/queries";
-import { choiceButtonClass, FieldLabel } from "./ChoiceButtons";
+import { choiceButtonClass, FieldFrame, FieldLabel, type FieldLayout } from "./ChoiceButtons";
 import { SheetChoice } from "./Sheet";
 
 const EXACT = "exact";
+const NONE = "none";
 
 /**
  * Picks a due time (app-ux.md, Due): the server's rough choices first, each a loose due time, and Exact date last,
  * the only one that opens a date field and the only one that can go overdue. Pressing the picked choice again clears
- * the due time.
+ * the due time. With `noneChoice`, as in the Add dialog, None comes first and is picked while there's no due time
+ * (ux-overview.md, Adding §4). As `chips`, for the phone's Add sheet, the choices are one row that scrolls sideways,
+ * named but without a label to show.
  */
 export function DuePicker({
   value,
   onChange,
   disabled,
   current,
+  noneChoice = false,
+  layout = "stack",
 }: {
   value: DueInput | null;
   onChange: (value: DueInput | null) => void;
   disabled?: boolean;
   /** How the saved due time reads now, beside the label, as a loose one picked days ago may match no choice. */
   current?: string;
+  noneChoice?: boolean;
+  layout?: FieldLayout | "chips";
 }) {
   const choices = useDueChoices();
   const labelId = useId();
@@ -31,7 +38,7 @@ export function DuePicker({
   // Exact date stays picked while its field is still empty, before there's a due time to send.
   const [exact, setExact] = useState(value?.firm ?? false);
   const rough = value && !value.firm ? choices.data?.find((choice) => choice.date === value.date) : undefined;
-  const picked = exact ? EXACT : (rough?.date ?? null);
+  const picked = exact ? EXACT : (rough?.date ?? (noneChoice && value === null ? NONE : null));
 
   const onSelectionChange = (keys: Set<Key>) => {
     const [key] = [...keys];
@@ -41,30 +48,44 @@ export function DuePicker({
       return;
     }
     setExact(false);
-    onChange(key === undefined ? null : { date: String(key), firm: false });
+    onChange(key === undefined || key === NONE ? null : { date: String(key), firm: false });
   };
 
+  const chips = layout === "chips";
+  const choiceClass = `${choiceButtonClass} rounded-full`;
+  const label = chips ? (
+    <span id={labelId} className="sr-only">
+      Due
+    </span>
+  ) : (
+    <div className="flex items-baseline gap-2">
+      <FieldLabel id={labelId}>Due</FieldLabel>
+      {current && <span className="text-xs text-muted">{current}</span>}
+    </div>
+  );
+
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline gap-2">
-        <FieldLabel id={labelId}>Due</FieldLabel>
-        {current && <span className="text-xs text-muted">{current}</span>}
-      </div>
+    <FieldFrame layout={chips ? "stack" : layout} label={label}>
       <ToggleButtonGroup
         aria-labelledby={labelId}
         selectionMode="single"
         selectedKeys={picked === null ? [] : [picked]}
         onSelectionChange={onSelectionChange}
         isDisabled={disabled}
-        className="flex flex-wrap gap-1.5"
+        className={chips ? "-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]" : "flex flex-wrap gap-1.5"}
       >
+        {noneChoice && (
+          <ToggleButton id={NONE} className={choiceClass}>
+            None
+          </ToggleButton>
+        )}
         {(choices.data ?? []).map((choice) => (
-          <ToggleButton key={choice.date} id={choice.date} className={`${choiceButtonClass} rounded-full`}>
+          <ToggleButton key={choice.date} id={choice.date} className={choiceClass}>
             {/* The server's label is lower case, as it reads inside a sentence. */}
             <span className="inline-block first-letter:uppercase">{choice.label}</span>
           </ToggleButton>
         ))}
-        <ToggleButton id={EXACT} className={`${choiceButtonClass} rounded-full`}>
+        <ToggleButton id={EXACT} className={choiceClass}>
           Exact date
         </ToggleButton>
       </ToggleButtonGroup>
@@ -85,7 +106,7 @@ export function DuePicker({
         </div>
       )}
       {choices.isError && <span className="text-xs text-overdue-ink">The rough choices didn't load.</span>}
-    </div>
+    </FieldFrame>
   );
 }
 

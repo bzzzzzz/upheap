@@ -9,14 +9,17 @@ import { CopyLink } from "../components/CopyLink";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
+import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
 import { SavedViewsBar } from "../components/SavedViewsBar";
-import { UndoToast, type Toast } from "../components/UndoToast";
+import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
   filterCount,
   matchesSearch,
+  pinnedTitle,
+  placeOf,
   SHOWN_STATES,
   toListQuery,
   type ListSearch,
@@ -39,7 +42,7 @@ export function HeapPage({
   onViewChange: (view: ListSearch) => void;
 }) {
   const list = useRankedList(heapRef, toListQuery(view));
-  const [search, setSearch] = useState("");
+  const { search, setSearch } = useListSearch();
   const [panel, setPanel] = useState<Panel>(null);
   const changeState = useChangeState(heapRef, list.data);
   const closeItem = useCloseItem(heapRef, itemKey);
@@ -95,27 +98,9 @@ export function HeapPage({
         />
       </div>
       {pane}
-      <UndoToast toast={changeState.toast} onDismiss={changeState.dismiss} />
     </div>
   );
 }
-
-/** Where an item sits in the list, for the pane's "#3 · Up next". */
-function placeOf(list: RankedList, itemKey: string): { entry: RankedItem; section: string | undefined } | undefined {
-  const sections: [RankedItem[], string | undefined][] = [
-    [list.pinned, pinnedTitle(list.pinned)],
-    [list.ranked, list.pinned.length > 0 ? "Up next" : undefined],
-    [list.blocked, "Blocked"],
-  ];
-  for (const [entries, section] of sections) {
-    const entry = entries.find((e) => e.item.key === itemKey);
-    if (entry) return { entry, section };
-  }
-  return undefined;
-}
-
-const pinnedTitle = (pinned: RankedItem[]) =>
-  pinned.every((entry) => entry.item.state === "in_progress") ? "In progress" : "Pinned";
 
 /**
  * Changes an item's state from the list, by its circle, `x`, a swipe or a row's buttons, then offers to undo it
@@ -124,33 +109,30 @@ const pinnedTitle = (pinned: RankedItem[]) =>
  */
 function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
-  const [toast, setToast] = useState<Toast | null>(null);
-  const dismiss = useCallback(() => setToast(null), []);
-  const failed = (error: Error) => setToast({ id: Date.now(), message: itemProblem(error), error: true });
+  const setToast = useToast();
+  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
 
   const run: ChangeState = (item, state, onError) => {
     const next = state === "done" && list ? nextToStart(list, item) : undefined;
-    update.mutate(
-      { item, patch: { state } },
-      {
-        onSuccess: (saved) => {
-          const restore: ItemPatch = { state: item.state };
-          if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
-          setToast({
-            id: Date.now(),
-            message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
-            undo: () => update.mutate({ item: saved, patch: restore }, { onError: failed }),
-            action: next && { label: `Start next: ${next.title}`, run: () => run(next, "in_progress") },
-          });
-        },
-        onError: (error) => {
-          failed(error);
-          onError?.();
-        },
+    // `mutateAsync`, not `mutate` with callbacks: the toast can outlive the list (it stays while in the heap), and
+    // TanStack drops a call's callbacks once the component that made it has unmounted.
+    update.mutateAsync({ item, patch: { state } }).then(
+      (saved) => {
+        const restore: ItemPatch = { state: item.state };
+        if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
+        setToast({
+          message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
+          undo: () => update.mutateAsync({ item: saved, patch: restore }).then(undefined, failed),
+          action: next && { label: `Start next: ${next.title}`, run: () => run(next, "in_progress") },
+        });
+      },
+      (error: Error) => {
+        failed(error);
+        onError?.();
       },
     );
   };
-  return { run, toast, dismiss };
+  return { run };
 }
 
 /**
@@ -287,7 +269,7 @@ function ListPage({
 
       {savedViews}
 
-      <AddItem heapRef={heapRef} disabled={heap.archived} />
+      <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
 
       {controls}
 

@@ -130,10 +130,17 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 2. The dialog has every field Add item takes: title (focused), description, need, effort, impact, due, tags, and the
    parameters linked to the chosen tags, which appear as soon as a tag is added. Each is optional apart from the
    title and the need: Add stays off until a need is picked. Nothing is picked for you, so every need is someone's
-   choice. Under the four steps (two a row on a phone) a line says what the picked one means.
-3. Add saves and closes (`⌘↵` / `Ctrl↵` on a keyboard). With "Add another" ticked, the dialog stays open and clears,
-   for entering several items in a row. Escape, Cancel or a tap outside closes it; if a title was typed, it asks
-   first.
+   choice. Under the four steps a line says what the picked one means. On a phone the need, effort, impact, tags and
+   due are chips in rows that scroll sideways, effort and impact opening a sheet of sizes; the description and the
+   parameters are under More fields.
+3. It starts from where it was opened: the heap on screen, and the list's filtered tags, and effort, impact or a
+   parameter where the filters pick one value. Nothing says so. The title, "Add to \<heap\> ▾", chooses another heap;
+   tags and parameter values belong to a heap, so they clear, and the rest stays.
+4. Add saves and closes (`⌘↵` / `Ctrl↵` on a keyboard), and a toast says where the item landed ("Added “X” at #4 in
+   Up next", read from the list as the server ranks it) with Open it. With "Add another" ticked, the dialog stays
+   open, says the same in a line of its own, and goes back to how it started, keeping anything changed while it was
+   being added. Add another is remembered on the device. Escape, Cancel or a tap outside closes it; if a title was
+   typed, it asks first. An add that fails says so in the dialog, or in a toast once the dialog is closed.
 
 ### Due
 

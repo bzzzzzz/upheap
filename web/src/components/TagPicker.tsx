@@ -2,6 +2,7 @@ import { useId, useState, type KeyboardEvent } from "react";
 
 import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags } from "../api/queries";
+import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 
 const MAX_SUGGESTIONS = 6;
 
@@ -15,6 +16,7 @@ export function TagPicker({
   onChange,
   disabled,
   inline = false,
+  layout = "stack",
 }: {
   heapRef: HeapRef;
   value: ItemTag[];
@@ -22,6 +24,7 @@ export function TagPicker({
   disabled?: boolean;
   /** The matches in the flow, under the field, rather than over what follows; for a phone's sheet, which grows. */
   inline?: boolean;
+  layout?: FieldLayout;
 }) {
   const tags = useTags(heapRef);
   const create = useCreateTag(heapRef);
@@ -94,8 +97,7 @@ export function TagPicker({
   const optionId = (index: number) => `${listId}-${index}`;
 
   return (
-    <div className="relative flex flex-col gap-1.5 text-xs">
-      <span className="font-medium text-ink-soft">Tags</span>
+    <FieldFrame layout={layout} label={<span className="text-xs font-medium text-ink-soft">Tags</span>}>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((tag) => (
           <span
@@ -177,12 +179,12 @@ export function TagPicker({
         </ul>
       )}
       {create.error && (
-        <p role="alert" className="text-overdue-ink">
+        <p role="alert" className="text-xs text-overdue-ink">
           {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
             ? "A tag with that name already exists."
             : create.error.message}
         </p>
       )}
-    </div>
+    </FieldFrame>
   );
 }

@@ -281,10 +281,14 @@ with P-due)*, E-conflict (server).
 
 M-add-item, with P-due and P-tag-picker as in M-item.
 
-- **Browser:** a centred dialog near the top: title (focused), description, effort, impact, due, tags; Add
-  another; Cancel and Add.
-- **Phone:** a bottom sheet above the keyboard with the same fields; the title first and Add reachable without
-  closing the keyboard.
+- **Browser:** a centred dialog near the top, 600 px wide: "Add to \<heap\> ▾" and ✕; the "Added at #4" line with
+  Open it; title (focused), description; then labels beside their fields: need, effort, impact, due (starting at
+  None), tags, and the parameters the tags ask for, each saying which tag asked; Add another; Cancel and Add. The
+  tablet uses it too.
+- **Phone:** a bottom sheet above the keyboard: "Add to \<heap\> ▾" with the "added at #4" note beside it; the
+  title first; chips that scroll sideways for need, effort and impact (each opening a sheet of S M L XL), tags and
+  due; More fields for the description and parameters; Add another, More fields and Add in the last row, reachable
+  without closing the keyboard.
 
 ### S-closed: Closed items
 
@@ -734,7 +738,7 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
 | ID | Purpose | Trigger | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
 | --- | --- | --- | --- | :---: | :---: | :---: | --- |
 | P-blocker | Pick the item this one waits for (Req Items §8) | State is Blocked | "Waiting for" select: Nothing picked, then the heap's other non-closed items; a closed blocker still shows, as "(done)". Errors `blocking_cycle` ("That item already waits for this one…"), `blocker_closed` | 3 | 3 | 3 | Native select in the pane; a searchable list would suit long heaps (Gaps) |
-| P-due | Pick a due time (app-ux.md Due) | Always shown | The server's rough choices as pills (In a few days, Next week, In a few weeks, Next month, In a few months), then Exact date, which opens a date field and "An exact date can become overdue." Pressing the picked pill clears it. Beside the label, how the saved one reads now ("Overdue · 12 Mar") | 4 | 5 | 5 | Inline pills; the date field is native |
+| P-due | Pick a due time (app-ux.md Due) | Always shown | The server's rough choices as pills (In a few days, Next week, In a few weeks, Next month, In a few months), then Exact date, which opens a date field and "An exact date can become overdue." Pressing the picked pill clears it. In the Add dialog on a tablet or wide screen, a picked "None" comes first; the phone's Add chips have none. Beside the label, how the saved one reads now ("Overdue · 12 Mar") | 4 | 5 | 5 | Inline pills; the date field is native |
 | P-tag-picker | Add and remove tags | Always shown | Chips with ×; a combobox "Type to add or create" with up to 6 matches and "Create tag “x”"; Enter picks, Backspace removes the last. Errors `tag_name_taken` | 4 | 2 | 3 | Inline, with a dropdown list under the field |
 | P-param-picker | Set a parameter value | Each parameter in use | Up to 4 short options (12 chars) as buttons, like effort; more as a menu with "Not set". Violet label | 3 | 2 | 2 | Buttons, or a native select |
 | P-item-history | What changed and who | Always at the bottom | Entries newest first: "You edited item" or "{name} …", a time label, and each change as "Field: ~~before~~ → after"; Load more; "No history you can see." | 3 | 1 | 2 | Inline section |
@@ -753,15 +757,24 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### M-add-item: Add an item
 
-- **Trigger:** "Add an item" above the list, or `N`. **Who:** members of an unarchived heap.
+- **Trigger:** "Add an item" above the list, or `N`; + in the phone's tabs. **Who:** members of an unarchived heap.
 - **Purpose:** the fastest path in the app (Req Views: Add item).
-- **Contents:** title (focused, "What needs doing?"), Description, Need (required; Add stays off until it's picked),
-  Effort, Impact, P-due, P-tag-picker, and the
-  parameters linked to the chosen tags, which appear as tags are added (Req Custom parameters §3). Footer: Add
-  another (checkbox, remembered while the page is open), Cancel, Add.
-- **Actions:** Add (or Enter in the title, or `⌘↵`); with Add another, the dialog clears and stays.
-- **Presentation:** a centred modal near the top on tablet and wide; a bottom sheet above the keyboard on a phone.
-- **Not shown:** where the new item landed. The CLI prints "now 4th of 31"; the web app could too (Gaps).
+- **Contents:** "Add to \<heap\> ▾", which chooses among the unarchived heaps (tags and parameter values clear);
+  the "Added “X” at #4 in Up next" line with Open it, after an add with Add another; title (focused, "What needs
+  doing?"), Description ("Optional"), Need (required; Add stays off until it's picked), Effort, Impact, P-due
+  (starting at None), P-tag-picker, and the parameters linked to the chosen tags, which appear as tags are added,
+  each with "Asked because of the tag x" (Req Custom parameters §3). It starts from the list's filters: their tags,
+  and effort, impact or a parameter's option where they pick one value. Footer: Add another (checkbox, remembered
+  on the device), Cancel, Add.
+- **Actions:** Add (or Enter in the title, or `⌘↵`): without Add another the dialog closes and the toast says where
+  the item landed, with Open it; with it, the dialog says so and goes back to its starting point, keeping anything
+  changed while it was being added. The position is the one in the list on screen, fetched again after the add; an
+  item the list doesn't show (another heap, or hidden by the view or the search) gets "Added “X” to \<heap\>". A
+  failed add says "“X” wasn't added: …" in the dialog, or in a toast once the dialog is closed.
+- **Presentation:** a centred modal near the top, 600 px wide, labels beside the fields, on tablet and wide. On a
+  phone a bottom sheet above the keyboard: the heap and the "added at #4" note on one line, the title, then chips
+  that scroll sideways for need, effort and impact (each a sheet of S M L XL), tags (+ Tag opens the picker in a
+  sheet) and due (no None: a second tap clears); More fields shows the description and parameters.
 - **Freq 5.** **Source:** app-ux.md Adding an item; `AddItem.tsx`. Built.
 - **Must:** local 5, server 5. The only way to get work into a heap.
 
