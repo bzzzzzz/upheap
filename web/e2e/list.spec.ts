@@ -86,6 +86,12 @@ test("filters show as chips with what they leave out, and a changed view is save
   await expect(on).toContainText("1 of 2");
   await expect(row(page, "Slog")).toHaveCount(0);
 
+  // A search narrows the rows but not the count, which says what the filters leave out.
+  await page.getByLabel("Search items").fill("no such item");
+  await expect(row(page, "Quick win")).toHaveCount(0);
+  await expect(on).toContainText("1 of 2");
+  await page.getByLabel("Search items").fill("");
+
   // The changed view's chip offers to undo the change.
   await page.getByRole("button", { name: "Default (changed)" }).click();
   await page.getByRole("menuitem", { name: "Undo changes" }).click();

@@ -294,6 +294,12 @@ mod tests {
         expect_that!(describe_ago(day(-21), day(0), &utc()), eq("3 weeks ago"));
         expect_that!(describe_ago(day(-150), day(0), &utc()), eq("5 months ago"));
         expect_that!(describe_ago(day(-800), day(0), &utc()), eq("2 years ago"));
+        // The band edges.
+        expect_that!(describe_ago(day(-14), day(0), &utc()), eq("2 weeks ago"));
+        expect_that!(describe_ago(day(-60), day(0), &utc()), eq("8 weeks ago"));
+        expect_that!(describe_ago(day(-61), day(0), &utc()), eq("2 months ago"));
+        expect_that!(describe_ago(day(-729), day(0), &utc()), eq("24 months ago"));
+        expect_that!(describe_ago(day(-730), day(0), &utc()), eq("2 years ago"));
     }
 
     #[gtest]

@@ -296,7 +296,8 @@ function ListPage({
           heapRef={heapRef}
           view={view}
           onChange={onViewChange}
-          shown={shown}
+          // What the filters leave, before the search narrows it further, so both counts mean the same thing.
+          shown={listed}
           // Not while the previous view stands in for this one, so a count from it never shows ("5 of 3").
           total={list.isPlaceholderData ? undefined : unfiltered_count}
         />

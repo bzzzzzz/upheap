@@ -126,6 +126,7 @@ The score is a deterministic function of item data and time. A stable session th
 5. Whenever positions change between two responses, the web app animates the items to their new positions. It uses layout animations (FLIP) keyed by item ID. New items fade in, and items that leave the list fade out.
 6. A "refresh" action, or reloading the page, drops `as_of`. The server then ranks at the current time.
 7. A client must not use an `as_of` more than about 24 hours old. Past that, the server ignores it and uses the current time.
+8. Every label in the list (due, created, closed) is worked out at `as_of` too, so the list reads as one moment. Responses for a single item use the current time, so an item's labels there can be a day ahead of the list's.
 
 ### Search
 
@@ -168,7 +169,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 5. Responses carry presentation-ready derived data, so clients don't compute anything:
    - `due`: `{ at, firm, label, overdue }`, where `label` is the fuzzy text ("in a few weeks") for loose dates or a formatted date for exact ones, in the timezone from the request's `Time-Zone` header.
    - `contributors`: a list of labelled factors.
-   - `created_by` and `created_label` on items: who added it (`{ id, display_name }`, the `UserRef` audit entries use for their actor) and how long ago ("4 days ago"), in the request's timezone.
+   - `created_by` and `created_label` on items: who added it (`{ id, display_name }`, the `UserRef` audit entries use for their actor) and how long ago ("4 days ago"), in the request's timezone. `UserRef` was called `AuditActor` until items used it too. The JSON didn't change, and the schema was renamed in place because the API has no outside clients yet.
    - `allowed_actions`: for example `["edit", "reopen", "set_blocked"]`.
    - `unset` markers for parameters with no value.
 
