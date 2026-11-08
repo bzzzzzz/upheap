@@ -1,6 +1,7 @@
 import { expect, test, type Route } from "@playwright/test";
 
 import {
+  addDialog,
   addItem,
   closeItem,
   HEAP_URL,
@@ -153,6 +154,28 @@ test("a session that ends mid-use returns to the page, with nothing left of the 
   await page.waitForLoadState("networkidle");
   // B isn't in A's team, so once the answers land the page still has nothing of A's to show.
   expect(await showsA()).toBe(false);
+});
+
+test("a write after the session ends goes to sign-in and back", async ({ page }) => {
+  const { email } = await registerThroughApi(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(HEAP_URL);
+  const heapPath = new URL(page.url()).pathname;
+
+  await page.getByRole("button", { name: "Add an item" }).click();
+  await addDialog(page).getByLabel("Title").fill("Written too late");
+  await addDialog(page).getByRole("radiogroup", { name: "Need" }).getByRole("radio", { name: "Expected" }).click();
+  // Reads wait meanwhile, so the write is what finds the session gone, not a refetch.
+  await page.route("**/api/v1/**", (route) => (route.request().method() === "GET" ? undefined : route.fallback()));
+  await page.context().clearCookies();
+  await addDialog(page).getByLabel("Title").press("Enter");
+  await expect(page).toHaveURL(`/login?redirect=${encodeURIComponent(heapPath)}`);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(heapPath);
 });
 
 test("a link's notice names an item only by a key's shape", async ({ page }) => {

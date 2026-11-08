@@ -21,7 +21,7 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
  */
 export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: () => void }) {
   const [mode, setMode] = useState<Mode>("sign_in");
-  // Kept across the switch, so an email typed under Sign in stays for Create account.
+  // Kept across the switch, so an email typed under Sign in stays for Create account; the password isn't.
   const [values, setValues] = useState<Values>({ display_name: "", username: "", email: "", password: "" });
   // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
   const signIn = useSignIn();
@@ -56,7 +56,8 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
           isDisabled={pending}
           onSelectionChange={(key) => {
             setMode(key === "register" ? "register" : "sign_in");
-            // Each form starts clean.
+            // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
+            setValues((current) => ({ ...current, password: "" }));
             signIn.reset();
             register.reset();
           }}

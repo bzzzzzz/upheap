@@ -12,11 +12,14 @@ import "./index.css";
 /**
  * Sends a user whose session has ended to sign-in, which returns to the page, as the guard (`appRoute`) does. While a
  * navigation is pending, `location` is already where it's going, so the two send the user to the same place. It
- * replaces the page, so Back doesn't return to it signed out. Nothing happens on sign-in itself, where a wrong
- * password is a `401` too.
+ * replaces the page, so Back doesn't return to it signed out. The cache goes first, so neither Back nor a sign-in
+ * from another tab lets the guard pass on the last user's `me`, or shows their rows. Sign-in has no queries and its
+ * wrong password is `invalid_credentials`, so nothing there gets here and it can't loop; but another request of the
+ * page that fails after the first has moved to sign-in mustn't replace its `redirect` with one to sign-in.
  */
 function onUnauthenticated(error: Error) {
   if (!isUnauthenticated(error)) return;
+  queryClient.removeQueries();
   const { location } = router.state;
   if (isSignInPath(router, location.pathname)) return;
   void router.navigate({ to: "/login", search: signInSearch(location.href), replace: true });

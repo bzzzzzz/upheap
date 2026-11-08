@@ -53,7 +53,8 @@ const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
 /**
  * `redirect` as a page of the app to return to after sign-in, with the router's matches for it, or nothing when it
  * isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to another site, and
- * sign-in itself, or a path no page answers, isn't worth returning to.
+ * sign-in itself, or any other path outside the signed-in app, isn't worth returning to. A path inside it that no
+ * page answers, such as `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless.
  */
 function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
@@ -61,7 +62,7 @@ function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | unde
   // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
   const url = new URL(redirect, window.location.origin);
   if (url.origin !== window.location.origin || url.pathname.startsWith("//")) return undefined;
-  // Only the signed-in pages send users here; sign-in is outside them, whatever the case of `/LOGIN`.
+  // Only the signed-in app sends users here; sign-in is outside it, whatever the case of `/LOGIN`.
   const matches = router.matchRoutes(url.pathname, {});
   if (!matches.some((match) => match.routeId === appRoute.id)) return undefined;
   return { href: url.pathname + url.search + url.hash, matches };
