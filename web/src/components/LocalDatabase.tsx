@@ -9,7 +9,7 @@ import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import { formatAgo, formatDay, isDownloadStale, recordDownload, useLastDownloadAt, useNow } from "./lastDownload";
 import { PHONE, useMedia } from "./media";
-import { borderedClass, buttonClass, compactButtonClass } from "./buttons";
+import { borderedClass, buttonClass, compactButtonClass, unborderedClass } from "./buttons";
 import { problemMessage } from "./ProblemText";
 import { Sheet } from "./Sheet";
 
@@ -73,7 +73,7 @@ function Note({ database, className }: { database: LocalDatabase; className: str
 
 /** The Your data card's buttons, sized as in the WideAccount mockup. */
 const cardButtonClass = `${buttonClass} rounded-[10px] px-3.5 py-[9px] max-sm:min-h-11`;
-const downloadClass = `${cardButtonClass} bg-ink font-semibold text-surface`;
+const downloadClass = `${cardButtonClass} ${unborderedClass} bg-ink font-semibold text-surface`;
 const openClass = `${cardButtonClass} ${borderedClass}`;
 
 /** The phone sheet's buttons: full width and 44 px tall. */
@@ -81,7 +81,7 @@ const sheetButtonClass =
   "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] px-4 text-sm font-medium disabled:opacity-40";
 const sheetClass = {
   quiet: `${sheetButtonClass} text-ink-soft hover:bg-sunken`,
-  bordered: `${sheetButtonClass} border border-line bg-surface text-ink hover:bg-sunken`,
+  bordered: `${sheetButtonClass} ${borderedClass}`,
   danger: `${sheetButtonClass} bg-overdue-ink font-semibold text-surface`,
 };
 

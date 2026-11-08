@@ -952,8 +952,8 @@ Why the 4s and 5s:
 ### S-account: Account
 
 - **Route:** `/account`. **Who:** everyone signed in, and the local user.
-- **Shows:** a Profile card with P-display-name and Email (read-only). In the local build, the "Your data" card (P-local-export,
-  P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that removes it,
+- **Shows:** a Profile card with P-display-name and Email (read-only). In the local build, the "Your data" card
+  (P-local-export, P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that removes it,
   loses it. Download a copy now and then, and open it here or in another browser to carry on." Download a copy
   (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
   downloaded").
@@ -1113,7 +1113,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    confirmation may read better; app-ux.md doesn't say.
 3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity, S-tags,
    S-parameters, S-team, S-teams, S-sign-in. They still use the older stone palette rather than the design tokens.
-   S-account is fitted: its Profile and Your data cards use the tokens.
+   S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.
 6. **Slug changes.** Old links stop working with no redirect (readable-ids.md Format). The slug field should warn.

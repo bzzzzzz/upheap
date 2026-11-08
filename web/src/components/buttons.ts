@@ -3,12 +3,17 @@
 export const buttonClass =
   "inline-flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-40 pointer-coarse:min-h-11";
 export const borderedClass = "border border-line-strong bg-surface text-ink hover:bg-sunken";
+/** For buttons without a visible border, so they stand as tall as bordered ones beside them. */
+export const unborderedClass = "border border-transparent";
 
-/** Buttons that sit beside a 36 px input or in a dialog: the wide replace confirm, and Save and Cancel on Account. */
+/**
+ * Buttons 38 px tall, as tall as a 38 px input beside them, or in a dialog: the wide replace confirm, and Save and
+ * Cancel on Account.
+ */
 const compactClass = `${buttonClass} rounded-[9px] py-2`;
 export const compactButtonClass = {
-  primary: `${compactClass} bg-ink px-3.5 font-semibold text-surface`,
-  quiet: `${compactClass} px-3 text-ink-soft hover:text-ink`,
+  primary: `${compactClass} ${unborderedClass} bg-ink px-3.5 font-semibold text-surface`,
+  quiet: `${compactClass} ${unborderedClass} px-3 text-ink-soft hover:text-ink`,
   bordered: `${compactClass} px-3 ${borderedClass}`,
-  danger: `${compactClass} bg-overdue-ink px-3.5 font-semibold text-surface`,
+  danger: `${compactClass} ${unborderedClass} bg-overdue-ink px-3.5 font-semibold text-surface`,
 };

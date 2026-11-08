@@ -5,8 +5,7 @@ import { NameForm, type NameFormClasses } from "../components/NameForm";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
 const nameFormClasses: NameFormClasses = {
-  input:
-    "rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-muted disabled:opacity-60 pointer-coarse:min-h-11",
+  input: "rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink pointer-coarse:min-h-11",
   save: compactButtonClass.primary,
   cancel: compactButtonClass.quiet,
   problem: "text-overdue-ink",
