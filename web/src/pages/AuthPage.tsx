@@ -1,80 +1,237 @@
-import { useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
+import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 
+import { ApiProblem } from "../api/client";
 import { useRegister, useSignIn } from "../api/queries";
-import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 
-export function AuthPage() {
-  const [mode, setMode] = useState<"sign_in" | "register">("sign_in");
+type Mode = "sign_in" | "register";
+/** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
+type FieldName = "display_name" | "username" | "email" | "password";
+type Values = Record<FieldName, string>;
+
+const FIELDS: Record<Mode, readonly FieldName[]> = {
+  sign_in: ["email", "password"],
+  register: ["display_name", "username", "email", "password"],
+};
+
+/**
+ * Sign in, or create an account (S-sign-in, S-register): a card on a wide screen (WideSignIn), the bare form on a
+ * phone (PhoneSignIn). `notice` says where a link the user followed while signed out leads.
+ */
+export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: () => void }) {
+  const [mode, setMode] = useState<Mode>("sign_in");
+  // Kept across the switch, so an email typed under Sign in stays for Create account.
+  const [values, setValues] = useState<Values>({ display_name: "", username: "", email: "", password: "" });
+  const form = (formMode: Mode) => (
+    <AuthForm
+      mode={formMode}
+      values={values}
+      onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
+      onSignedIn={onSignedIn}
+    />
+  );
+
+  return (
+    <main className="min-h-dvh bg-surface px-5 pt-[72px] pb-4 sm:bg-canvas sm:px-4 sm:pt-16">
+      <div className="flex flex-col gap-4 sm:mx-auto sm:w-[380px] sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:p-7">
+        <h1 className="flex items-center gap-2 text-lg font-semibold sm:text-base">
+          <UpheapMark />
+          Upheap
+        </h1>
+        {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
+        {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
+        <Tabs selectedKey={mode} onSelectionChange={(key) => setMode(key === "register" ? "register" : "sign_in")}>
+          <TabList
+            aria-label="Sign in or create account"
+            className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
+          >
+            <Tab id="sign_in" className={tabClass}>
+              Sign in
+            </Tab>
+            <Tab id="register" className={tabClass}>
+              Create account
+            </Tab>
+          </TabList>
+          <TabPanel id="sign_in" className="mt-4">
+            {form("sign_in")}
+          </TabPanel>
+          <TabPanel id="register" className="mt-4">
+            {form("register")}
+          </TabPanel>
+        </Tabs>
+      </div>
+    </main>
+  );
+}
+
+const tabClass =
+  "flex h-10 flex-1 cursor-default items-center justify-center rounded-[10px] text-sm text-ink-soft sm:h-auto sm:rounded-lg sm:p-[7px] data-selected:bg-surface data-selected:font-semibold data-selected:text-ink data-selected:shadow-[0_1px_2px_rgba(0,0,0,0.08)]";
+
+/** The Upheap mark: a heap of lines, narrowing to the top. */
+function UpheapMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-6 text-accent sm:size-[22px]"
+    >
+      <path d="M4 18h16M6 13h12M9 8h6M11 4h2" />
+    </svg>
+  );
+}
+
+function AuthForm({
+  mode,
+  values,
+  onChange,
+  onSignedIn,
+}: {
+  mode: Mode;
+  values: Values;
+  onChange: (name: FieldName, value: string) => void;
+  onSignedIn: () => void;
+}) {
   const signIn = useSignIn();
   const register = useRegister();
-  const navigate = useNavigate();
-  const pending = signIn.isPending || register.isPending;
-  const error = mode === "sign_in" ? signIn.error : register.error;
+  const mutation = mode === "sign_in" ? signIn : register;
+  const { error } = mutation;
+  // A problem about one of this form's inputs shows under it; any other, above the button.
+  const errorField = error instanceof ApiProblem ? FIELDS[mode].find((name) => name === error.field) : undefined;
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // After a failed submit, focus goes to the input the problem is about, once it shows the error.
+  useEffect(() => {
+    const input = errorField && formRef.current?.elements.namedItem(errorField);
+    if (input instanceof HTMLInputElement) input.focus();
+  }, [error, errorField]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") ?? "");
-    const password = String(form.get("password") ?? "");
-    const done = { onSuccess: () => void navigate({ to: "/" }) };
+    const done = { onSuccess: onSignedIn };
     if (mode === "sign_in") {
-      signIn.mutate({ email, password }, done);
+      signIn.mutate({ email: values.email, password: values.password }, done);
     } else {
-      const username = String(form.get("username") ?? "");
-      register.mutate({ email, username, password, display_name: String(form.get("display_name") ?? "") }, done);
+      register.mutate(values, done);
     }
   };
 
+  const field = (name: FieldName) => ({
+    name,
+    value: values[name],
+    error: errorField === name && error ? sentence(problemMessage(error)) : undefined,
+    onChange: (value: string) => {
+      onChange(name, value);
+      // Editing the input clears its own error.
+      if (errorField === name) mutation.reset();
+    },
+  });
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Upheap</h1>
-      <p className="mb-8 text-sm text-stone-500">Add what comes up. The list keeps itself in order.</p>
-      <form onSubmit={submit} className="flex flex-col gap-4" aria-describedby={error ? "auth-error" : undefined}>
-        {mode === "register" && <Field label="Name" name="display_name" autoComplete="name" required />}
-        {mode === "register" && (
-          <Field
-            label="Username"
-            name="username"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            minLength={2}
-            maxLength={39}
-            hint="Lowercase letters, digits and dashes. It's in your links, and can't be changed later."
-            required
-          />
-        )}
-        <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field
-          label="Password"
-          name="password"
-          type="password"
-          autoComplete={mode === "register" ? "new-password" : "current-password"}
-          minLength={mode === "register" ? 10 : undefined}
+    // The server checks every input and says which one is wrong, so the browser's own bubbles stay out of the way.
+    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+      {mode === "register" && (
+        <AuthField label="Name" {...field("display_name")} autoComplete="name" autoCapitalize="words" required />
+      )}
+      {mode === "register" && (
+        <AuthField
+          label="Username"
+          {...field("username")}
+          hint="Lowercase letters, digits and dashes. It's in your links, and can't be changed later."
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={39}
           required
         />
-        {error && (
-          <p id="auth-error" role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {problemMessage(error)}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-stone-900 px-4 py-2 font-medium text-white hover:bg-stone-700 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
-        >
-          {mode === "sign_in" ? "Sign in" : "Create account"}
-        </button>
-      </form>
+      )}
+      <AuthField
+        label="Email"
+        {...field("email")}
+        type="email"
+        autoComplete="email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        required
+      />
+      <AuthField
+        label="Password"
+        {...field("password")}
+        hint={mode === "register" ? "At least 10 characters" : undefined}
+        type="password"
+        autoComplete={mode === "register" ? "new-password" : "current-password"}
+        enterKeyHint="go"
+        required
+      />
+      {error && !errorField && (
+        <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+          {sentence(problemMessage(error))}
+        </p>
+      )}
       <button
-        type="button"
-        onClick={() => setMode(mode === "sign_in" ? "register" : "sign_in")}
-        className="mt-4 text-sm text-stone-600 underline-offset-2 hover:underline dark:text-stone-400"
+        type="submit"
+        disabled={mutation.isPending}
+        className="h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm"
       >
-        {mode === "sign_in" ? "New here? Create an account" : "Have an account? Sign in"}
+        {mode === "sign_in" ? "Sign in" : "Create account"}
       </button>
-    </main>
+      {mode === "register" && (
+        <p className="text-center text-xs text-muted">You'll start in your own heap. Teams come next.</p>
+      )}
+    </form>
   );
+}
+
+/**
+ * A labelled input with a hint or an error under it, in the first-set sizes. The shared `Field` keeps today's look on
+ * the pages not yet fitted to the design tokens.
+ */
+function AuthField({
+  label,
+  hint,
+  error,
+  onChange,
+  ...input
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  onChange: (value: string) => void;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "onChange">) {
+  const id = useId();
+  const noteId = useId();
+  const note = error ?? hint;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-medium text-ink-soft sm:text-[13px]">
+        {label}
+      </label>
+      <input
+        id={id}
+        {...input}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={note ? noteId : undefined}
+        className="h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink aria-invalid:border-overdue-ink aria-invalid:ring-[3px] aria-invalid:ring-overdue-soft aria-invalid:outline-overdue-ink sm:h-auto sm:rounded-[9px] sm:py-[9px]"
+      />
+      {note && (
+        <p id={noteId} className={error ? "text-xs font-medium text-overdue-ink" : "text-xs text-muted"}>
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The server's titles start in lower case ("password must be at least 10 characters"); a line on its own doesn't. */
+function sentence(text: string): string {
+  const capitalised = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
 }

@@ -19,6 +19,9 @@ const MESSAGES: Record<string, string> = {
   handle_taken: "That's taken. Pick another.",
   invalid_handle: "Use lowercase letters, digits and single dashes, starting with a letter.",
   personal_team: "A personal team is yours alone, so nobody can join it and its link stays the same.",
+  email_taken: "There's already an account with this email. Sign in instead.",
+  invalid_credentials: "That email and password don't match an account.",
+  registration_closed: "This server doesn't take new accounts. Ask whoever runs it to make you one.",
 };
 
 export function problemMessage(error: Error): string {

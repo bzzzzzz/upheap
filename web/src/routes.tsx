@@ -9,6 +9,7 @@ import {
   Outlet,
   redirect,
   useParams,
+  useRouter,
 } from "@tanstack/react-router";
 
 import { isUnauthenticated } from "./api/client";
@@ -29,17 +30,58 @@ const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: AuthPage });
+/**
+ * Sign-in's search for a user sent there from `href`, a path in the app with its search and hash, so signing in
+ * returns there. Nothing for `/`, where signing in lands anyway.
+ */
+export function signInSearch(href: string): { redirect?: string } {
+  return href === "/" ? {} : { redirect: href };
+}
+
+/**
+ * `redirect` as a path in this app, or nothing when it isn't one: a crafted link such as `?redirect=//evil.example`
+ * mustn't send a user who signs in to another site. Sign-in itself doesn't count, so it can't loop.
+ */
+function toInAppPath(redirect: string | undefined): string | undefined {
+  if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
+  // The URL parser drops tabs and newlines, so `/\t/evil.example` is another origin too.
+  const url = new URL(redirect, window.location.origin);
+  if (url.origin !== window.location.origin || url.pathname.replace(/\/+$/, "") === "/login") return undefined;
+  return url.pathname + url.search + url.hash;
+}
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
+    typeof search.redirect === "string" ? { redirect: search.redirect } : {},
+  component: function LoginRoute() {
+    const target = toInAppPath(loginRoute.useSearch().redirect);
+    const router = useRouter();
+    let notice: string | undefined;
+    if (target) {
+      // The router's own matching says whether the link is to an item, and which.
+      const [, params, route] = router.getMatchedRoutes(new URL(target, window.location.origin).pathname);
+      const isItem = route?.id === itemRoute.id || route?.id === shortItemRoute.id;
+      notice = isItem && params.item ? `Sign in to open the link to ${params.item}.` : "Sign in to open that page.";
+    }
+    // With `href`, the router takes the whole location from it; without, it goes to `to`.
+    return (
+      <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: target, replace: true })} />
+    );
+  },
+});
 
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
-  beforeLoad: async ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     try {
       await context.queryClient.ensureQueryData(meQuery);
     } catch (error) {
       if (isUnauthenticated(error)) {
-        throw redirect({ to: "/login" });
+        // `href` is the router's, without the base path, as `redirect` wants it.
+        throw redirect({ to: "/login", search: signInSearch(location.href) });
       }
       throw error;
     }

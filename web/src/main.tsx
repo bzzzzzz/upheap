@@ -19,7 +19,9 @@ const queryClient = new QueryClient({
   }),
   queryCache: new QueryCache({
     onError: (error) => {
-      if (isUnauthenticated(error)) {
+      // While the router loads a page, its guard (`appRoute`) sends a signed-out user to sign-in itself, with the way
+      // back to that page; navigating here as well would race it and lose the way back.
+      if (isUnauthenticated(error) && router.state.status !== "pending") {
         void router.navigate({ to: "/login" });
       }
     },
