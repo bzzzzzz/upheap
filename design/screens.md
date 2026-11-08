@@ -456,13 +456,14 @@ overlays are the same components.
 
 ### G-session-expired: Session expired
 
-- **Behaviour:** any `401`, from a query or a write (`main.tsx`, the query and mutation caches), sends the user to
-  S-sign-in with the page they were on as `redirect`, as the route guard does for a signed-out visit, so after
-  signing in they're back there. It replaces the page in history, so Back doesn't return to it signed out. During a
-  pending navigation the page is the one being opened, so the guard and the handler agree. Nothing happens on
-  S-sign-in itself, where a wrong password is a `401` too. Signing in drops the query cache, so whoever signs in
-  sees nothing cached for the last user. The notice reads "Sign in to open that page." or names the item; there's
-  no "your session ended" line.
+- **Behaviour:** any `unauthenticated` problem, from a query or a write (`main.tsx`, the query and mutation caches),
+  drops the query cache and sends the user to S-sign-in with the page they were on as `redirect`, as the route
+  guard does for a signed-out visit, so after signing in they're back there. It replaces the page in history, so
+  Back doesn't return to it signed out, and the dropped cache means neither Back nor a sign-in in another tab shows
+  the last user's data. During a pending navigation the page is the one being opened, so the guard and the handler
+  agree. The handler goes by `code`, so a wrong password on S-sign-in (`401` `invalid_credentials`) isn't one, and a
+  later failure of the old page doesn't replace sign-in's `redirect`. Signing in drops the query cache too. The
+  notice reads "Sign in to open that page." or names the item; there's no "your session ended" line.
 - **Freq 2:** sessions last 30 days (`SESSION_TTL_DAYS`). Built.
 - **Must:** local n/a, server 4. Without it a `401` leaves every page failing, with no way back to sign-in.
 
@@ -505,8 +506,9 @@ order §4–5). See Gaps.
   whose segment has an item key's shape (five lowercase Crockford base32 characters, one a digit), so a crafted
   link can't put its own words there, and "Sign in to open that page." otherwise.
 - **Exits:** to `redirect` when, as the URL parser normalises it, it's a same-origin path that the router matches
-  to one of the signed-in pages; otherwise (`//evil.example`, `/.//evil.example`, `javascript:…`, `/LOGIN`, a path
-  no page answers) to `/`, which redirects to the first unarchived heap.
+  into the signed-in app; otherwise (`//evil.example`, `/.//evil.example`, `javascript:…`, `/LOGIN`, any path
+  outside the signed-in app) to `/`, which redirects to the first unarchived heap. A path inside the app that no
+  page answers, such as `/teams/a/zzz`, is kept and opens the app's not-found.
 - **Empty inputs:** an empty email or password gets `field_empty` with that field before the server counts the
   attempt, so a form sent before a password manager fills it doesn't use one up.
 - **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, TD Auth §3.
