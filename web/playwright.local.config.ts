@@ -13,8 +13,8 @@ const baseURL = `http://127.0.0.1:${port}${base}`;
 
 export default defineConfig<LocalBuildOptions>({
   testDir: "e2e",
-  // Signing up and in is the server's.
-  testIgnore: ["accounts.spec.ts"],
+  // Signing up and in, and connecting the CLI, are the server's.
+  testIgnore: ["accounts.spec.ts", "oauth.spec.ts"],
   outputDir: "test-results/local",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

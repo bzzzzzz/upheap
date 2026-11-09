@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
@@ -58,52 +58,62 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
   );
 
   return (
+    <AuthCard>
+      {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
+      {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
+      {/* Held while a submit is pending, so its result lands on the form that sent it. */}
+      <Tabs
+        selectedKey={mode}
+        isDisabled={pending}
+        onSelectionChange={(key) => {
+          setMode(key === "register" ? "register" : "sign_in");
+          // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
+          // An email address carries over between Sign in's "Email or username" and Create account's Email.
+          setValues((current) => ({
+            ...current,
+            password: "",
+            ...(key === "register" && current.email === "" && current.login.includes("@") && { email: current.login }),
+            ...(key === "sign_in" && current.login === "" && { login: current.email }),
+          }));
+          signIn.reset();
+          register.reset();
+        }}
+      >
+        <TabList
+          aria-label="Sign in or create account"
+          className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
+        >
+          <Tab id="sign_in" className={tabClass}>
+            Sign in
+          </Tab>
+          <Tab id="register" className={tabClass}>
+            Create account
+          </Tab>
+        </TabList>
+        <TabPanel id="sign_in" className="mt-4">
+          {form("sign_in")}
+        </TabPanel>
+        <TabPanel id="register" className="mt-4">
+          {form("register")}
+        </TabPanel>
+      </Tabs>
+    </AuthCard>
+  );
+}
+
+/**
+ * The page sign-in and its neighbours (connecting the CLI) sit on: a 380 px card under the Upheap mark on a wide
+ * screen, the bare page on a phone.
+ */
+export function AuthCard({ children }: { children: ReactNode }) {
+  return (
     <main className="min-h-dvh bg-surface px-5 pt-[72px] pb-4 sm:bg-canvas sm:px-4 sm:pt-16">
       <div className="flex flex-col gap-4 sm:mx-auto sm:w-[380px] sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:p-7">
         <h1 className="flex items-center gap-2 text-lg font-semibold sm:text-base">
           <Logo className="size-6 text-accent sm:size-[22px]" />
           Upheap
         </h1>
-        {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
-        {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
-        {/* Held while a submit is pending, so its result lands on the form that sent it. */}
-        <Tabs
-          selectedKey={mode}
-          isDisabled={pending}
-          onSelectionChange={(key) => {
-            setMode(key === "register" ? "register" : "sign_in");
-            // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
-            // An email address carries over between Sign in's "Email or username" and Create account's Email.
-            setValues((current) => ({
-              ...current,
-              password: "",
-              ...(key === "register" &&
-                current.email === "" &&
-                current.login.includes("@") && { email: current.login }),
-              ...(key === "sign_in" && current.login === "" && { login: current.email }),
-            }));
-            signIn.reset();
-            register.reset();
-          }}
-        >
-          <TabList
-            aria-label="Sign in or create account"
-            className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
-          >
-            <Tab id="sign_in" className={tabClass}>
-              Sign in
-            </Tab>
-            <Tab id="register" className={tabClass}>
-              Create account
-            </Tab>
-          </TabList>
-          <TabPanel id="sign_in" className="mt-4">
-            {form("sign_in")}
-          </TabPanel>
-          <TabPanel id="register" className="mt-4">
-            {form("register")}
-          </TabPanel>
-        </Tabs>
+        {children}
       </div>
     </main>
   );

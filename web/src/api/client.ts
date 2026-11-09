@@ -43,6 +43,8 @@ export type AuditAction = Schemas["AuditAction"];
 export type AuditEntityType = Schemas["AuditEntityType"];
 export type DueInput = Schemas["DueInput"];
 export type DueChoice = Schemas["DueChoice"];
+/** An OAuth authorization request, as a client such as the CLI puts it in the consent page's address. */
+export type AuthorizationRequest = Schemas["OAuthAuthorizationRequest"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/teams/{team}/heaps/{heap}/items"]["get"]["parameters"]["query"]>,

@@ -12,12 +12,13 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 
-import { isUnauthenticated } from "./api/client";
-import { meQuery, soleTeam, useMe } from "./api/queries";
+import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
+import { meQuery, soleTeam, useAuthorizationCheck, useMe } from "./api/queries";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
+import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
@@ -51,10 +52,11 @@ export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: str
 const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
 
 /**
- * `redirect` as a page of the app to return to after sign-in, with the router's matches for it, or nothing when it
- * isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to another site, and
- * sign-in itself, or any other path outside the signed-in app, isn't worth returning to. A path inside it that no
- * page answers, such as `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless.
+ * `redirect` as a page of the app to return to after sign-in, with the router's matches for it and its query, or
+ * nothing when it isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to
+ * another site, and sign-in itself, or any other path outside the signed-in app, isn't worth returning to; the one
+ * page outside it that is, is connecting a client such as the CLI. A path inside it that no page answers, such as
+ * `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless.
  */
 function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
@@ -62,10 +64,29 @@ function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | unde
   // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
   const url = new URL(redirect, window.location.origin);
   if (url.origin !== window.location.origin || url.pathname.startsWith("//")) return undefined;
-  // Only the signed-in app sends users here; sign-in is outside it, whatever the case of `/LOGIN`.
+  // Only the signed-in app and connecting a client send users here; sign-in is outside both, whatever the case of
+  // `/LOGIN`.
   const matches = router.matchRoutes(url.pathname, {});
-  if (!matches.some((match) => match.routeId === appRoute.id)) return undefined;
-  return { href: url.pathname + url.search + url.hash, matches };
+  if (!matches.some((match) => match.routeId === appRoute.id || match.routeId === authorizeRoute.id)) return undefined;
+  return { href: url.pathname + url.search + url.hash, matches, search: url.searchParams };
+}
+
+/** The OAuth authorization request in a query, its values as they came. The server checks every one. */
+function toAuthorizationRequest(search: Record<string, unknown>): AuthorizationRequest {
+  const keys = [
+    "response_type",
+    "client_id",
+    "redirect_uri",
+    "code_challenge",
+    "code_challenge_method",
+    "state",
+  ] as const;
+  const request: AuthorizationRequest = {};
+  for (const key of keys) {
+    const value = search[key];
+    if (typeof value === "string") request[key] = value;
+  }
+  return request;
 }
 
 const loginRoute = createRoute({
@@ -80,12 +101,39 @@ const loginRoute = createRoute({
     const item = page?.matches.find((match) => match.routeId === itemRoute.id);
     const segment = item && "item" in item.params ? String(item.params.item) : undefined;
     const itemKey = segment && ITEM_KEY.test(segment) ? segment : undefined;
+    // Connecting a client names it as the server does, once the server has checked the request.
+    const connecting = page?.matches.some((match) => match.routeId === authorizeRoute.id) ?? false;
+    const client = useAuthorizationCheck(toAuthorizationRequest(Object.fromEntries(page?.search ?? [])), {
+      enabled: connecting,
+    }).data;
     let notice: string | undefined;
-    if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
+    if (connecting) notice = `Sign in to connect ${client?.display_name ?? "the app"}.`;
+    else if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
     // With `href`, the router takes the whole location from it; without, it goes to `to`.
     return (
       <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: page?.href, replace: true })} />
     );
+  },
+});
+
+/**
+ * Connecting a client such as the CLI to the user's account (OAuth's consent page), outside the app's shell like
+ * sign-in. A signed-out visit signs in first and comes back.
+ */
+const authorizeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/authorize",
+  validateSearch: toAuthorizationRequest,
+  beforeLoad: async ({ context, location }) => {
+    try {
+      await context.queryClient.ensureQueryData(meQuery);
+    } catch (error) {
+      if (isUnauthenticated(error)) throw redirect({ to: "/login", search: signInSearch(location.href) });
+      throw error;
+    }
+  },
+  component: function AuthorizeRoute() {
+    return <AuthorizePage request={authorizeRoute.useSearch()} />;
   },
 });
 
@@ -268,6 +316,7 @@ const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/accou
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  authorizeRoute,
   shortTeamRoute,
   shortHeapRoute,
   shortItemRoute,
