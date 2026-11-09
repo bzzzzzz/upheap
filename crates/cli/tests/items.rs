@@ -3,59 +3,9 @@
 mod common;
 
 use anyhow::{Context, Result};
-use common::{TestCli, TestServer, TestUser};
+use common::{HEAP, TestCli, TestServer, ada_with_items, cli_in_heap, key};
 use googletest::prelude::*;
 use serde_json::{Value, json};
-
-const HEAP: &str = "ada/personal";
-
-/// Ada's personal heap with three open items, keyed in the order they were added: a small tagged one with a
-/// description, a large one, and one without sizes.
-async fn ada_with_items(server: &TestServer) -> Result<(TestUser, Vec<Value>)> {
-    let ada = server.register("ada", "Ada").await?;
-    let tag = server
-        .send(
-            &ada,
-            "POST",
-            "/teams/ada/heaps/personal/tags",
-            Some(json!({ "name": "Infra" })),
-        )
-        .await?;
-    let items = vec![
-        server
-            .add_item(
-                &ada,
-                HEAP,
-                json!({
-                    "title": "Rotate the staging certs", "description": "Before they expire",
-                    "effort": "s", "impact": "l", "need": "critical", "tag_ids": [tag["id"]],
-                }),
-            )
-            .await?,
-        server
-            .add_item(
-                &ada,
-                HEAP,
-                json!({ "title": "Write the migration guide", "effort": "l", "impact": "m" }),
-            )
-            .await?,
-        server
-            .add_item(&ada, HEAP, json!({ "title": "Tidy the wiki", "need": "idea" }))
-            .await?,
-    ];
-    Ok((ada, items))
-}
-
-fn key(item: &Value) -> Result<&str> {
-    item["key"].as_str().context("item has a key")
-}
-
-/// The CLI signed in as `user`, working in Ada's personal heap through `UPHEAP_HEAP`.
-async fn cli_in_heap(server: &TestServer, user: &TestUser) -> Result<TestCli> {
-    let mut cli = TestCli::signed_in(server, user).await?;
-    cli.env.heap = Some(HEAP.to_owned());
-    Ok(cli)
-}
 
 #[gtest]
 #[tokio::test]

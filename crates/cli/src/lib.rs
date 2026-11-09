@@ -1,4 +1,5 @@
-//! `upheap`, the command-line client of Upheap: list a heap's ranked items, pick a default heap, and sign in.
+//! `upheap`, the command-line client of Upheap: add, show, edit, move and list a heap's items, pick a default heap,
+//! and sign in.
 //!
 //! It is a thin client of the HTTP API, like the web app: it never ranks, checks permissions or works out labels,
 //! and it reads and writes the API's own types from `api_types`. See design/cli.md.
@@ -15,27 +16,29 @@ mod lookup;
 mod output;
 
 use std::ffi::OsString;
-use std::io::{IsTerminal, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use clap::{Parser, Subcommand};
 use reqwest::Url;
 
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 use crate::client::{ApiClient, ClientError};
-use crate::commands::SharedArgs;
+use crate::commands::{SharedArgs, UsageError};
 use crate::config::{ConfigError, ConfigFile, SettingError};
 pub use crate::error::CliError;
 use crate::output::{Mode, Output};
 
-/// Everything a run of the CLI takes from outside: the environment, where tokens are kept, the browser, and the two
-/// output streams.
+/// Everything a run of the CLI takes from outside: the environment, where tokens are kept, the browser, stdin, and
+/// the two output streams.
 pub struct Deps {
     pub env: Environment,
     pub tokens: Arc<dyn TokenStore>,
     pub browser: Box<dyn Browser>,
+    /// Read only by `--description -`.
+    pub stdin: Box<dyn Read + Send>,
     pub stdout: Box<dyn Write + Send>,
     pub stderr: Box<dyn Write + Send>,
 }
@@ -92,12 +95,13 @@ impl Environment {
 }
 
 impl Deps {
-    /// The real thing: the process's environment, the OS keychain, the default browser, stdout and stderr.
+    /// The real thing: the process's environment, the OS keychain, the default browser, stdin, stdout and stderr.
     pub fn system() -> Self {
         Self {
             env: Environment::read(),
             tokens: Arc::new(KeychainStore),
             browser: Box::new(SystemBrowser),
+            stdin: Box::new(std::io::stdin()),
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
         }
@@ -108,7 +112,7 @@ impl Deps {
 #[command(
     name = "upheap",
     version,
-    about = "Upheap from the terminal: a heap's ranked items, heaps, and signing in."
+    about = "Upheap from the terminal: a heap's items, heaps, and signing in."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -130,8 +134,24 @@ enum Command {
 
 #[derive(Subcommand)]
 enum ItemCommand {
+    /// Add an item
+    Add(commands::item::add::AddArgs),
     /// The ranked list, or closed items with --closed
     List(commands::item::list::ListArgs),
+    /// One item in full, and with --history what happened to it
+    Show(commands::item::show::ShowArgs),
+    /// Change an item's fields
+    Edit(commands::item::edit::EditArgs),
+    /// Move an item to in progress
+    Start(commands::item::state::StateArgs),
+    /// Move an item to blocked, optionally naming what it waits for
+    Block(commands::item::state::BlockArgs),
+    /// Close an item as done
+    Done(commands::item::state::StateArgs),
+    /// Close an item as won't do
+    Wontdo(commands::item::state::StateArgs),
+    /// Move an item back to open, from any state
+    Reopen(commands::item::state::StateArgs),
 }
 
 #[derive(Subcommand)]
@@ -153,7 +173,17 @@ enum AuthCommand {
 impl Command {
     fn shared(&self) -> &SharedArgs {
         match self {
+            Self::Item(ItemCommand::Add(args)) => &args.shared,
             Self::Item(ItemCommand::List(args)) => &args.shared,
+            Self::Item(ItemCommand::Show(args)) => &args.shared,
+            Self::Item(ItemCommand::Edit(args)) => &args.shared,
+            Self::Item(
+                ItemCommand::Start(args)
+                | ItemCommand::Done(args)
+                | ItemCommand::Wontdo(args)
+                | ItemCommand::Reopen(args),
+            ) => &args.shared,
+            Self::Item(ItemCommand::Block(args)) => &args.state.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Use(args)) => &args.shared,
             Self::Auth(AuthCommand::Login(args)) => &args.shared,
@@ -172,6 +202,7 @@ where
         env,
         tokens,
         browser,
+        stdin,
         mut stdout,
         mut stderr,
     } = deps;
@@ -199,7 +230,7 @@ where
         Mode::Human
     };
     let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
-    let result = match load_app(env, tokens, browser) {
+    let result = match load_app(env, tokens, browser, stdin) {
         Ok(app) => dispatch(cli.command, &app, &mut out).await,
         Err(err) => Err(err.into()),
     };
@@ -214,7 +245,12 @@ where
     }
 }
 
-fn load_app(env: Environment, tokens: Arc<dyn TokenStore>, browser: Box<dyn Browser>) -> Result<App, ConfigError> {
+fn load_app(
+    env: Environment,
+    tokens: Arc<dyn TokenStore>,
+    browser: Box<dyn Browser>,
+    stdin: Box<dyn Read + Send>,
+) -> Result<App, ConfigError> {
     let config = match &env.config_dir {
         Some(dir) => config::load_config(dir)?,
         None => ConfigFile::default(),
@@ -223,13 +259,23 @@ fn load_app(env: Environment, tokens: Arc<dyn TokenStore>, browser: Box<dyn Brow
         env,
         tokens,
         browser,
+        stdin: Arc::new(Mutex::new(stdin)),
         config,
     })
 }
 
 async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), CliError> {
+    use commands::item::state::{StateVerb, run_block, run_verb};
     match command {
+        Command::Item(ItemCommand::Add(args)) => commands::item::add::run(args, app, out).await,
         Command::Item(ItemCommand::List(args)) => commands::item::list::run(args, app, out).await,
+        Command::Item(ItemCommand::Show(args)) => commands::item::show::run(args, app, out).await,
+        Command::Item(ItemCommand::Edit(args)) => commands::item::edit::run(args, app, out).await,
+        Command::Item(ItemCommand::Start(args)) => run_verb(StateVerb::Start, args, app, out).await,
+        Command::Item(ItemCommand::Block(args)) => run_block(args, app, out).await,
+        Command::Item(ItemCommand::Done(args)) => run_verb(StateVerb::Done, args, app, out).await,
+        Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
+        Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Use(args)) => commands::heap::use_heap::run(args, app, out).await,
         Command::Auth(AuthCommand::Login(args)) => commands::auth::login::run(args, app, out).await,
@@ -251,16 +297,32 @@ fn report(err: &CliError, out: &mut Output) {
     }
 }
 
-/// What every command works with: the environment, the config file as it was at startup, the token store and the
-/// browser.
+/// What every command works with: the environment, the config file as it was at startup, the token store, the
+/// browser and stdin.
 pub(crate) struct App {
     pub env: Environment,
     pub tokens: Arc<dyn TokenStore>,
     pub browser: Box<dyn Browser>,
+    /// Shared so a read can run on a blocking thread, as stdin may be a terminal that never ends.
+    stdin: Arc<Mutex<Box<dyn Read + Send>>>,
     pub config: ConfigFile,
 }
 
 impl App {
+    /// All of stdin, read to its end as UTF-8.
+    pub async fn read_stdin(&self) -> Result<String, UsageError> {
+        let stdin = Arc::clone(&self.stdin);
+        tokio::task::spawn_blocking(move || {
+            let mut text = String::new();
+            let mut reader = stdin.lock().unwrap_or_else(PoisonError::into_inner);
+            reader.read_to_string(&mut text).map(|_| text)
+        })
+        .await
+        .map_err(std::io::Error::other)
+        .and_then(|read| read)
+        .map_err(UsageError::UnreadableStdin)
+    }
+
     pub fn config_dir(&self) -> Result<&Path, ConfigError> {
         self.env.config_dir.as_deref().ok_or(ConfigError::NoConfigDir)
     }

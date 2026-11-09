@@ -161,3 +161,100 @@ fn text_matches_title_or_description_ignoring_case() -> googletest::Result<()> {
     verify_that!(matches_text(&item, "march"), eq(true))?;
     verify_that!(matches_text(&item, "prod"), eq(false))
 }
+
+fn item_in(team: &str, heap: &str, key: &str) -> ItemName {
+    ItemName::Full {
+        heap: HeapHandle {
+            team: team.to_owned(),
+            heap: heap.to_owned(),
+        },
+        key: key.to_owned(),
+    }
+}
+
+#[gtest]
+fn an_item_is_named_by_its_key_a_path_or_a_link() -> googletest::Result<()> {
+    verify_that!(ItemName::parse("k3x9a")?, eq(&ItemName::Key("k3x9a".to_owned())))?;
+    verify_that!(
+        ItemName::parse("team/heap/k3x9a")?,
+        eq(&item_in("team", "heap", "k3x9a"))
+    )?;
+    for link in [
+        "https://x.test/h/team/heap/k3x9a",
+        "http://localhost:8080/h/team/heap/k3x9a/",
+        "https://x.test/h/team/heap/k3x9a?x=1",
+        "https://x.test/h/team/heap/k3x9a#top",
+        "https://x.test/prefix/h/team/heap/k3x9a",
+    ] {
+        expect_that!(ItemName::parse(link)?, eq(&item_in("team", "heap", "k3x9a")), "{link}");
+    }
+    Ok(())
+}
+
+#[gtest]
+fn anything_else_names_no_item() -> googletest::Result<()> {
+    for bad in [
+        "",
+        "a/b",
+        "a/b/c/d",
+        "a//k",
+        "/a/b/k",
+        "https://x.test/team/heap/k3x9a",
+        "https://x.test/h/team/heap",
+        "https://x.test/h/team//k3x9a",
+        "https://",
+    ] {
+        expect_that!(
+            ItemName::parse(bad),
+            err(matches_pattern!(LookupError::MalformedItem { .. })),
+            "{bad:?}"
+        );
+    }
+    Ok(())
+}
+
+fn due_choices() -> googletest::Result<DueChoicesDto> {
+    Ok(serde_json::from_value(json!({ "choices": [
+        { "label": "today", "date": "2027-01-01" },
+        { "label": "next week", "date": "2027-01-08" },
+        { "label": "in a few weeks", "date": "2027-01-22" },
+    ] }))?)
+}
+
+#[gtest]
+fn a_date_written_out_is_a_firm_deadline_and_anything_else_is_rough() -> googletest::Result<()> {
+    verify_that!(
+        DueWhen::parse("2027-03-12"),
+        eq(&DueWhen::Date("2027-03-12".to_owned()))
+    )?;
+    for rough in ["next-week", "2027-13-40", "2027-3-12", "2027-03-12T10:00:00"] {
+        expect_that!(DueWhen::parse(rough), eq(&DueWhen::Rough(rough.to_owned())), "{rough}");
+    }
+    let due = due_on("2027-03-12");
+    verify_that!((due.date.as_str(), due.firm), eq(("2027-03-12", true)))
+}
+
+#[gtest]
+fn a_rough_choice_matches_ignoring_case_dashes_and_spacing() -> googletest::Result<()> {
+    let choices = due_choices()?;
+    for typed in ["next-week", "Next Week", " NEXT--week "] {
+        let due = match_due_choice(typed, &choices)?;
+        expect_that!((due.date.as_str(), due.firm), eq(("2027-01-08", false)), "{typed}");
+    }
+    let due = match_due_choice("in a few  weeks", &choices)?;
+    verify_that!(due.date, eq("2027-01-22"))
+}
+
+#[gtest]
+fn an_unknown_due_time_lists_the_choices_in_the_servers_order() -> googletest::Result<()> {
+    verify_that!(
+        match_due_choice("someday", &due_choices()?),
+        err(displays_as(eq(
+            "`someday` isn't a due time: give a date, YYYY-MM-DD, or one of: today, next week, in a few weeks"
+        )))
+    )?;
+    verify_that!(
+        match_due_choice("2027-13-40", &due_choices()?),
+        err(matches_pattern!(LookupError::UnknownDueChoice { .. }))
+    )
+}
