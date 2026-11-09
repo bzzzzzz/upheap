@@ -29,7 +29,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Audit log | Product Audit log | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
 | Getting in | Product Invite links, Accounts §2, 5–10, Teams §6, [getting-in.md](getting-in.md) | ⬜ | Invite links, password change, and reset by an operator's link. Designed, nothing built. Stage 1 is the invite path |
-| CLI | [cli.md](cli.md) | ✅ | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Released from a `v*` tag: static binaries for Apple silicon macOS and x86_64 and aarch64 Linux, and the `bzzzzzz/tap/upheap` cask |
+| CLI | Arch CLI, Non-web client tokens | ✅ | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Released from a `v*` tag: static binaries for Apple silicon macOS and x86_64 and aarch64 Linux, and the `bzzzzzz/tap/upheap` cask |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
@@ -40,8 +40,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 
 In rough order.
 
-1. **Retire cli.md**: the CLI is built, so its mechanisms move into architecture.md and its choices into decisions.md (docs rule 3).
-2. **Getting in, stage 1** ([getting-in.md](getting-in.md#6-stages)): the invite path end to end, one pull
+1. **Getting in, stage 1** ([getting-in.md](getting-in.md#6-stages)): the invite path end to end, one pull
    request per piece.
    1. Invite links on the server: make, list and revoke, with their states, permissions and audit entries.
    2. Opening a link and joining, with a removed person refused.
@@ -50,23 +49,23 @@ In rough order.
    5. The invite page, and a Playwright run of the whole path on a server with registration closed.
 
    Stage 2, in the doc, is past links, password change, password reset and account history.
-3. **Need in the list.** Sort by need (Product List items §5), and show it in the row so a critical item stands
+2. **Need in the list.** Sort by need (Product List items §5), and show it in the row so a critical item stands
    out without opening it.
-4. **What holds an item back.** The contributors are the two largest things lifting an item, so they answer "why is
+3. **What holds an item back.** The contributors are the two largest things lifting an item, so they answer "why is
    this here?" but not "why isn't this higher?" (Product Priority §9). Say what's missing or low too: no due time,
    unset sizes, a low need.
-5. **Blocked items whose blocker has closed.** They stay blocked and hidden, so the work just unblocked drops out
+4. **Blocked items whose blocker has closed.** They stay blocked and hidden, so the work just unblocked drops out
    of the list (Product List items §2, Priority §2). Bring them back to the user's attention when the blocker
    closes.
-6. **"Start next" in a shared heap.** The offer after Done shows only when nothing in the heap is in progress, which
+5. **"Start next" in a shared heap.** The offer after Done shows only when nothing in the heap is in progress, which
    with teammates is almost never. Decide what "what's next after I finish this?" means when others have work in
    progress.
-7. **A view across heaps.** "My plate" is every heap I belong to (Product Heaps §4), and each heap ranks alone.
+6. **A view across heaps.** "My plate" is every heap I belong to (Product Heaps §4), and each heap ranks alone.
    Each user orders their own heaps by priority, and that order is how items from different heaps compare in one
    list. Needs a design in `work/` and commitments in product.md first.
-8. **Phone width** for Activity, in the design tokens.
-9. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
-10. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
+7. **Phone width** for Activity, in the design tokens.
+8. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
+9. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
 
 ## Later
 
@@ -110,3 +109,7 @@ Ideas, not commitments. product.md holds the commitments.
    offers `rename` on it. Should the domain stop offering it, or the label give way to a renamed team?
 6. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.
+7. **Creating tags from the CLI's `--tag`.** It refuses an unknown name. If people find that annoying, a
+   `--create-tags` flag is the cheap fix; creating them silently, as the web app's picker does, is not.
+8. **Several servers in the CLI.** One `server` setting covers self-hosting. Profiles (`--profile work`) can come
+   later without changing any command.
