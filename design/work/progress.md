@@ -40,10 +40,23 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 In rough order.
 
 1. **Retire cli.md**: the CLI is built, so its mechanisms move into architecture.md and its choices into decisions.md (docs rule 3).
-2. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
-3. **Phone width** for Activity, in the design tokens.
-4. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
-5. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
+2. **Need in the list.** Sort by need (Product List items §5), and show it in the row so a critical item stands
+   out without opening it.
+3. **What holds an item back.** The contributors are the two largest things lifting an item, so they answer "why is
+   this here?" but not "why isn't this higher?" (Product Priority §9). Say what's missing or low too: no due time,
+   unset sizes, a low need.
+4. **Blocked items whose blocker has closed.** They stay blocked and hidden, so the work just unblocked drops out
+   of the list (Product List items §2, Priority §2). Bring them back to the user's attention when the blocker
+   closes.
+5. **"Start next" in a shared heap.** The offer after Done shows only when nothing in the heap is in progress, which
+   with teammates is almost never. Decide what "what's next after I finish this?" means when others have work in
+   progress.
+6. **A view across heaps.** "My plate" is every heap I belong to (Product Heaps §4), and each heap ranks alone.
+   Each user orders their own heaps by priority, and that order is how items from different heaps compare in one
+   list. Needs a design in `work/` and commitments in product.md first.
+7. **Phone width** for Activity, in the design tokens.
+8. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
+9. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
 
 ## Later
 
@@ -64,8 +77,7 @@ Ideas, not commitments. product.md holds the commitments.
 - **Not yet designed.** Onboarding beyond the empty heap's one line (how ranking works, what effort, impact and
   loose due times mean, that nothing is deleted); a page for a `404` and one for when the local backend can't open
   its storage; an offline banner, where today each page shows its own error; the `500` request ID shown for a bug
-  report; a searchable blocker picker for long heaps; a link from "parameter in use" to the items holding a value; a
-  nudge on a blocked item whose blocker has closed; bulk actions, which `GridList` was chosen with in mind;
+  report; a searchable blocker picker for long heaps; a link from "parameter in use" to the items holding a value; bulk actions, which `GridList` was chosen with in mind;
   notifications and due reminders; a countdown on a throttled sign-in; hiding Create account when registration is
   closed, which needs the server to say so before sign-in.
 - **Password and account.** No password change, reset, email change or "sign out everywhere". The server sends no
