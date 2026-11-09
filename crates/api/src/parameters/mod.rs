@@ -53,7 +53,7 @@ struct OptionPathId {
     option_id: Uuid,
 }
 
-fn to_parameter_dto(entry: ParameterEntry) -> ParameterDto {
+pub(crate) fn to_parameter_dto(entry: ParameterEntry) -> ParameterDto {
     let Parameter {
         id,
         heap_id,

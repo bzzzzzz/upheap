@@ -94,6 +94,18 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# Request handling and storage aren't hot loops, so they are built for size: the static web build ships them as
+# WebAssembly, under a size budget (architecture.md, Local build, Build and publish). The server's release build takes
+# the same setting, which costs it little. Ranking in `domain` stays at full speed.
+[profile.release.package.api]
+opt-level = "s"
+[profile.release.package.api-types]
+opt-level = "s"
+[profile.release.package.service]
+opt-level = "s"
+[profile.release.package.store]
+opt-level = "s"
+
 # argon2 is unusably slow unoptimised; sign-in in debug builds would take seconds.
 [profile.dev.package.argon2]
 opt-level = 3

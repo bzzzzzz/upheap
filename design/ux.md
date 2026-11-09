@@ -116,8 +116,8 @@ the block when it opens.
 
 ### Heap settings
 
-**Settings** is one page for a heap's configuration, with a tab each for **General**, **Tags** and **Parameters**.
-Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`), so Back steps between
+**Settings** is one page for a heap's configuration, with a tab each for **General**, **Tags**, **Parameters** and **Ranking**.
+Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`, `/settings/ranking`), so Back steps between
 them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name
 and the link name, edited in place, a note that a new link name breaks old links, the heap's history, and Archive
 heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New link:
@@ -132,6 +132,17 @@ card: the name with Rename, the weight, the options as a numbered list (↑ ↓ 
 row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
 and Archive parameter. Archived parameters are listed last. On a phone everything stacks in one column, main
 buttons span the width, and every control is 44 px to a finger.
+
+**Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
+card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
+parameters in use, has one per parameter, with its options as the description. A row shows the factor's name, its
+share of the total as a bar and a percentage (plain arithmetic on the weights on screen; "–" when all are 0), and for
+editors a slider and a number input that move together. One Save weights writes every changed weight at once; a "was
+{n}" chip and an "{n} unsaved" count mark what changed, Cancel (or Escape) puts the weights back, and Reset all to 10
+sets every draft to the default without saving. Others read "Weight {n}" and a note that only admins can change it. A
+**Top of the list** card, for everyone, shows the first five items as the draft weights would rank them, each with how
+far it moves (↑2, ↓1, New), so the effect shows before saving. Wide: a sticky save bar under the cards and the preview
+beside them. Phone: one column, the preview under the cards, the save bar fixed above the bottom tabs.
 
 ### Tablet
 

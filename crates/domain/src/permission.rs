@@ -294,6 +294,8 @@ pub enum HeapAction {
     Archive,
     /// Make an archived heap writable again.
     Unarchive,
+    /// Change the heap's ranking weights, and its parameters' weights, together. Not offered while it is archived.
+    EditWeights,
     /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
     /// [`audit_permission`]).
     ViewHistory,
@@ -307,7 +309,12 @@ pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
     if heap.is_archived() {
         return vec![HeapAction::Unarchive, HeapAction::ViewHistory];
     }
-    vec![HeapAction::Rename, HeapAction::Archive, HeapAction::ViewHistory]
+    let mut actions = vec![HeapAction::Rename, HeapAction::Archive];
+    if can_configure(heap, role) {
+        actions.push(HeapAction::EditWeights);
+    }
+    actions.push(HeapAction::ViewHistory);
+    actions
 }
 
 #[cfg(test)]
@@ -340,6 +347,36 @@ mod tests {
             role,
             joined_at: Timestamp::EPOCH,
         }
+    }
+
+    fn heap(archived: bool) -> Heap {
+        Heap {
+            id: crate::HeapId::from_uuid(Uuid::from_u128(2)),
+            team_id: TeamId::from_uuid(Uuid::from_u128(1)),
+            slug: Handle::parse("ops", Field::Slug).expect("valid"),
+            name: Name::parse("Ops").expect("valid"),
+            policy: crate::heap::HeapPolicy::default(),
+            archived_at: archived.then_some(Timestamp::EPOCH),
+            version: Version::INITIAL,
+        }
+    }
+
+    #[gtest]
+    fn admins_edit_weights_on_an_active_heap_only() {
+        expect_that!(
+            allowed_heap_actions(&heap(false), Role::Admin),
+            elements_are![
+                eq(&HeapAction::Rename),
+                eq(&HeapAction::Archive),
+                eq(&HeapAction::EditWeights),
+                eq(&HeapAction::ViewHistory)
+            ]
+        );
+        expect_that!(allowed_heap_actions(&heap(false), Role::Member), is_empty());
+        expect_that!(
+            allowed_heap_actions(&heap(true), Role::Admin),
+            elements_are![eq(&HeapAction::Unarchive), eq(&HeapAction::ViewHistory)]
+        );
     }
 
     #[gtest]

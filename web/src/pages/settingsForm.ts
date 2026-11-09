@@ -19,3 +19,6 @@ export const cardTitleClass = "text-base font-semibold";
 /** A small heading inside a card: "Options, highest priority first", "Suggested by tags". */
 export const labelClass = "text-xs font-medium tracking-[0.04em] text-muted uppercase";
 export const introClass = "max-w-[600px] text-sm/normal text-ink-soft";
+
+/** A weight from a field's text: a whole number from 0 to 100, with anything that isn't a number counting as 0. */
+export const clampWeight = (raw: string | number): number => Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));

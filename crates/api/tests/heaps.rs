@@ -56,7 +56,7 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
     expect_that!(created.body["archived_at"], eq(&json!(null)));
     expect_that!(
         created.body["allowed_actions"],
-        eq(&json!(["rename", "archive", "view_history"]))
+        eq(&json!(["rename", "archive", "edit_weights", "view_history"]))
     );
     let names: Vec<&str> = me.body["teams"][0]["heaps"]
         .as_array()

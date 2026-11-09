@@ -1,5 +1,6 @@
 //! Building audit entries and diffs.
 
+use domain::heap::HeapPolicy;
 use domain::item::{Due, Item};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
@@ -53,6 +54,11 @@ pub(crate) fn describe_new_parameter(parameter: &Parameter) -> Value {
 /// Changed fields between two versions of a parameter. Changed options and tag links are recorded whole.
 pub(crate) fn diff_parameters(before: &Parameter, after: &Parameter) -> Value {
     diff_fields(parameter_fields(before), parameter_fields(after))
+}
+
+/// Changed weights between two policies of a heap, named like the heap's columns.
+pub(crate) fn diff_policies(before: &HeapPolicy, after: &HeapPolicy) -> Value {
+    diff_fields(policy_fields(before), policy_fields(after))
 }
 
 fn diff_fields(before: Map<String, Value>, after: Map<String, Value>) -> Value {
@@ -114,6 +120,15 @@ fn parameter_fields(parameter: &Parameter) -> Map<String, Value> {
         "archived_at".into(),
         json!(parameter.archived_at.map(domain::Timestamp::as_millis)),
     );
+    fields
+}
+
+fn policy_fields(policy: &HeapPolicy) -> Map<String, Value> {
+    let mut fields = Map::new();
+    fields.insert("need_weight".into(), json!(policy.need_weight.get()));
+    fields.insert("age_weight".into(), json!(policy.age_weight.get()));
+    fields.insert("deadline_weight".into(), json!(policy.deadline_weight.get()));
+    fields.insert("value_weight".into(), json!(policy.value_weight.get()));
     fields
 }
 

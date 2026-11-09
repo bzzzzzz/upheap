@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use domain::parameter::{ArchivedOption, OptionLabel, Parameter, ParameterName, ParameterOption, Weight};
+use domain::parameter::{ArchivedOption, OptionLabel, Parameter, ParameterName, ParameterOption};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
 use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Select};
@@ -425,9 +425,7 @@ fn to_parameter(
         .iter()
         .map(|link| read.uuid(&link.tag_id).map(TagId::from_uuid))
         .collect::<Result<BTreeSet<_>, _>>()?;
-    let weight = Weight::parse(row.weight.into())
-        .ok()
-        .ok_or_else(|| read.corrupt(format!("weight {} out of range", row.weight)))?;
+    let weight = read.weight(row.weight)?;
     Ok(Parameter {
         id: ParameterId::from_uuid(read.uuid(&row.id)?),
         heap_id: HeapId::from_uuid(read.uuid(&row.heap_id)?),

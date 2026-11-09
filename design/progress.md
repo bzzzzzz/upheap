@@ -16,7 +16,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Personal team and heap | Product Teams §3 | ✅ | Made on registration and named by the username. Private, so it takes no members |
 | Readable IDs | Arch Handles | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
 | Items | Product Items §1–4, 6–7 | ✅ | Loose and exact due times with fuzzy labels. Need is required on every item and never cleared. Reopen within 7 × 24 h |
-| Ranking | Product Priority | 🟡 | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. The heap's own weights can't be edited yet |
+| Ranking | Product Priority | ✅ | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. Admins edit every weight, the heap's and its parameters', on Settings › Ranking, with a preview of the top of the list |
 | List view | Product List items | ✅ | Each state pinned, shown or hidden. Sort by priority, due, effort, impact or a parameter. One Filters panel for tags, need, effort, impact and parameter options. Client text search (`/`). The view lives in the URL |
 | Closed items | Product Closed items | ✅ | Sections Today, This week and Earlier. Reopen while allowed. Cursor paging |
 | Add item | Product Add item | ✅ | A dialog (`N`, or + on a phone) with every field, prefilled from the list's filters. Says where the item landed. Add another is remembered per device |
@@ -32,21 +32,19 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [ux.md](ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
+| Web app at every width | [ux.md](ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings (General, Tags, Parameters, Ranking) fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next
 
 In rough order.
 
-1. **Heap weights.** Admins edit the heap's need, age, deadline and value weights: an API field and a place on the
-   heap's pages (Product Priority §1).
-2. **The rest of the CLI** ([cli.md](cli.md)): `/me/tokens` on the server and its
+1. **The rest of the CLI** ([cli.md](cli.md)): `/me/tokens` on the server and its
    Account card. Release packaging for the binary too.
-3. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
-4. **Phone width** for Activity, in the design tokens.
-5. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
-6. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
+2. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
+3. **Phone width** for Activity, in the design tokens.
+4. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
+5. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
 
 ## Later
 

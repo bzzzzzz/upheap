@@ -272,7 +272,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         // Only the member themselves leaves.
         (AuditAction::MemberLeft, _) => ("left the team", false),
         (AuditAction::HeapCreated, _) => ("created heap", true),
-        (AuditAction::HeapUpdated, _) => ("renamed heap", true),
+        (AuditAction::HeapUpdated, _) => ("changed heap", true),
         (AuditAction::HeapArchived, _) => ("archived heap", true),
         (AuditAction::HeapUnarchived, _) => ("unarchived heap", true),
         (AuditAction::ItemCreated, _) => ("added item", true),
@@ -328,7 +328,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 18] = [
+const FIELD_ORDER: [&str; 22] = [
     "title",
     "name",
     "display_name",
@@ -343,6 +343,10 @@ const FIELD_ORDER: [&str; 18] = [
     "parameters",
     "role",
     "weight",
+    "need_weight",
+    "age_weight",
+    "deadline_weight",
+    "value_weight",
     "options",
     "archived_options",
     "items_switched",
@@ -449,6 +453,10 @@ fn describe_field(field: &str) -> &str {
         "tags" => "Tags",
         "role" => "Role",
         "weight" => "Weight",
+        "need_weight" => "Need weight",
+        "age_weight" => "Age weight",
+        "deadline_weight" => "Deadline weight",
+        "value_weight" => "Value per effort weight",
         "options" => "Options",
         "archived_options" => "Archived options",
         "items_switched" => "Items switched",
@@ -665,6 +673,33 @@ mod tests {
             elements_are![
                 eq(&change("options", "Options", Some("Low, High"), Some("High"))),
                 eq(&change("items_switched", "Items switched", None, Some("2 items"))),
+            ]
+        );
+    }
+
+    #[gtest]
+    fn a_weights_save_labels_the_heap_weights_that_changed() {
+        let diff = json!({
+            "value_weight": { "before": 10, "after": 0 },
+            "need_weight": { "before": 10, "after": 30 },
+        });
+
+        let changes = describe_changes(
+            &entry(AuditAction::HeapUpdated, EntityType::Heap, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![
+                eq(&change("need_weight", "Need weight", Some("10"), Some("30"))),
+                eq(&change(
+                    "value_weight",
+                    "Value per effort weight",
+                    Some("10"),
+                    Some("0")
+                )),
             ]
         );
     }
