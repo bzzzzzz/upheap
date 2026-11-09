@@ -117,6 +117,9 @@ test("the theme picked on Account holds over a reload and in other tabs, and Sys
   await page.route("**/assets/*.js", (route) => route.abort());
   await page.reload();
   await expect(html).toHaveAttribute("data-theme", "dark");
+  // On <html> itself too, so the browser's own canvas is dark before the CSS loads.
+  await expect(html).toHaveCSS("color-scheme", "dark");
+  expect(await page.evaluate(() => document.documentElement.style.colorScheme)).toBe("dark");
   expect(await canvasOf()).toBe(dark);
   await page.unrouteAll();
   await page.reload();
@@ -129,6 +132,7 @@ test("the theme picked on Account holds over a reload and in other tabs, and Sys
   expect(await canvasOf()).toBe(light);
   await theme.getByRole("radio", { name: "System" }).click();
   await expect(html).not.toHaveAttribute("data-theme");
+  await expect(html).not.toHaveAttribute("style", /color-scheme/);
   expect(await canvasOf()).toBe(dark);
   await page.emulateMedia({ colorScheme: "light" });
   expect(await canvasOf()).toBe(light);

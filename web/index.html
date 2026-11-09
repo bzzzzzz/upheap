@@ -14,7 +14,10 @@
     <script>
       try {
         const theme = localStorage.getItem("upheap.theme");
-        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+        }
       } catch {
         // Storage is blocked or unavailable: System, which index.css follows on its own.
       }
