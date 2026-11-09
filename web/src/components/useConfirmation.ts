@@ -37,5 +37,7 @@ export function useConfirmation() {
       returnFocus();
       setConfirming(false);
     },
+    /** Closes without moving focus, for a confirm whose action no longer applies while focus is elsewhere. */
+    dismiss: () => setConfirming(false),
   };
 }

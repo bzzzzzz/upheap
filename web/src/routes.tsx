@@ -14,7 +14,8 @@ import {
 } from "@tanstack/react-router";
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
-import { meQuery, soleTeam, useAuthorizationCheck, useMe, useSignOut } from "./api/queries";
+import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
+import { BASE } from "./basePath";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -23,6 +24,7 @@ import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
+import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -39,9 +41,6 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ c
 export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
 }
-
-/** The app's base path without its trailing slash: empty on the server, `/upheap` for the local build on Pages. */
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /**
  * `href`, the router's address of the page the browser shows, as the browser has it, when the browser does show
@@ -260,9 +259,41 @@ const closedRoute = createRoute({
   },
 });
 
-const tagsRoute = createRoute({
+/** The heap's settings, a tab per child route (app-ux.md, Heap settings). */
+const heapSettingsRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/teams/$team/heaps/$heap/tags",
+  path: "/teams/$team/heaps/$heap/settings",
+  component: function HeapSettingsRoute() {
+    const { team, heap } = heapSettingsRoute.useParams();
+    const record = useHeap({ team, heap });
+    // Another heap starts afresh, but a new link name for this one keeps the page as it is, with focus where it was.
+    // So it's keyed by the heap's ID, and waits for it rather than rendering once under another key. A new link
+    // name's heap is already cached under it, so it doesn't load again.
+    // A failed refetch keeps the heap it had, so the page stays; the error shows only when there's no heap to show.
+    if (record.data) return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
+    if (record.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {record.error.message}
+        </p>
+      );
+    }
+    return <p className="py-16 text-center text-muted">Loading…</p>;
+  },
+});
+
+const heapGeneralSettingsRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "/",
+  component: function HeapGeneralSettingsRoute() {
+    const { team, heap } = heapGeneralSettingsRoute.useParams();
+    return <HeapGeneralSettings heap={{ team, heap }} />;
+  },
+});
+
+const tagsRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "tags",
   component: function TagsRoute() {
     const { team, heap } = tagsRoute.useParams();
     return <TagsPage heap={{ team, heap }} />;
@@ -270,11 +301,28 @@ const tagsRoute = createRoute({
 });
 
 const parametersRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/teams/$team/heaps/$heap/parameters",
+  getParentRoute: () => heapSettingsRoute,
+  path: "parameters",
   component: function ParametersRoute() {
     const { team, heap } = parametersRoute.useParams();
     return <ParametersPage heap={{ team, heap }} />;
+  },
+});
+
+// Tags and Parameters were the heap's own pages before they became tabs of its settings; links to them still work.
+const oldTagsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$team/heaps/$heap/tags",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap/settings/tags", params, replace: true });
+  },
+});
+
+const oldParametersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$team/heaps/$heap/parameters",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap/settings/parameters", params, replace: true });
   },
 });
 
@@ -356,8 +404,9 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     heapRoute.addChildren([itemRoute]),
     closedRoute,
-    tagsRoute,
-    parametersRoute,
+    heapSettingsRoute.addChildren([heapGeneralSettingsRoute, tagsRoute, parametersRoute]),
+    oldTagsRoute,
+    oldParametersRoute,
     heapActivityRoute,
     teamsRoute,
     teamRoute,

@@ -50,14 +50,36 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width | Navigation | List | Item |
 | --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, + (Add), Activity, More | Full width, compact rows | Bottom sheet over the list |
+| Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, + (Add), Settings, More | Full width, compact rows | Bottom sheet over the list |
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Team, Teams, Tags, Parameters and Account (with Your data in the local build), as a card
-of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account
+**More** on a phone holds Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
+rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account
 page, under its cards. The **+** in the middle of the tabs opens the Add dialog from any of the
 heap's pages, so the Add field above the list shows only from a tablet up.
+
+The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
+Teams and Account. A phone's tabs have room for four: Settings sits right of the +, and Activity goes into More with
+the account pages.
+
+### Heap settings
+
+**Settings** is one page for a heap's configuration, with a tab each for **General**, **Tags** and **Parameters**.
+Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`), so Back steps between
+them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name and
+the link name, edited in place, a note that a new link name breaks old links, the heap's history, and Archive heap or
+Unarchive heap. While the link name is being changed, the new path shows under it ("New link: /teams/{team}/heaps/{slug}").
+Each control shows only where `allowed_actions` allows it; everyone else reads the values.
+
+The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
+Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
+(or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
+highlighted in the accent. **Parameters** opens its add form from a New parameter button, and gives each parameter a
+card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the row
+into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History and
+Archive parameter. Archived parameters are listed last. On a phone everything stacks in one column, main buttons span
+the width, and every control is 44 px to a finger.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
 wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
@@ -68,8 +90,8 @@ the block when it opens.
 A tablet gets its own layout rather than a stretched phone or a squeezed wide screen:
 
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
-   list as a popover; below it are the heap's views (Open, Closed, Activity, Tags, Parameters) as icons with short
-   labels; the account sits at the bottom.
+   list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels;
+   the account sits at the bottom.
 2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows,
    including the effort and impact sizes, at touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another

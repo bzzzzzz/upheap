@@ -225,7 +225,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | S-oauth-done           | Back to the terminal                   | —                                    | 1    | n/a          | 1             | implied               |
 | P-display-name         | Display name                           | S-account                            | 1    | 1            | 1             | built                 |
 | P-theme                | Theme (System / Light / Dark)          | S-account                            | 1    | 1            | 1             | built                 |
-| S-heap-settings        | Heap settings                          | —                                    | 1    | 1            | 1             | designed              |
+| S-heap-settings        | Heap settings                          | —                                    | 1    | 1            | 1             | built                 |
 | M-pwa-install          | Install the app                        | shell (local build)                  | 1    | 1            | n/a           | designed (later)      |
 | P-param-tags           | Linked tags                            | P-param-card                         | 1    | 1            | 1             | built                 |
 | P-tag-new              | New tag                                | S-tags                               | 1    | 1            | 1             | built                 |
@@ -247,10 +247,11 @@ scope for now; "browser" is 1024 px and up, "phone" under 640 px.
 G-shell-wide, G-shell-phone, M-more, M-heap-switcher, G-storage-note (local), G-session-expired (server), and
 E-loading _(frequency: every screen shows it, and a blank page reads as broken)_.
 
-- **Browser:** the sidebar with every heap (grouped by team when there are several), the open heap's Open and
-  Closed, then Team (server), Account and the storage note (local). The sidebar is the heap switcher. Loading keeps the previous view, dimmed.
-- **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed and More;
-  the More sheet with Team (server) and Account; the storage note under the content (local).
+- **Browser:** the sidebar with the heap button (it opens the switcher), the open heap's Open, Closed, Activity and
+  Settings, then Teams, Account and the storage note (local). Loading keeps the previous view, dimmed.
+- **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed, +,
+  Settings and More; the More sheet with Activity, Team (server), Teams and Account; the storage note under the
+  content (local).
 - **Both:** a `401` goes to S-sign-in (server).
 
 ### S-heap: Heap list
@@ -359,8 +360,7 @@ overlays are the same components.
 
 - **Purpose:** navigation on a wide screen. Everyone signed in.
 - **Shows:** the Upheap mark; every heap grouped by team (team names only when there are several teams; archived
-  heaps say "(archived)"); the open heap's views: Open, Closed, Activity, Tags, Parameters, Team (the heap's team;
-  left out in the local build, where the bottom link already goes there); at the bottom Teams (or the one team's name in the local build), Account and the
+  heaps say "(archived)"); the open heap's views: Open, Closed, Activity, Settings (S-heap-settings); at the bottom Teams (or the one team's name in the local build), Account and the
   local build's storage note.
 - **Actions:** open a heap, open a heap view, open Teams, Account.
 - **Layout:** the sidebar and content are one centred block (sidebar 15 rem plus a 48 rem column); the sidebar's
@@ -373,7 +373,7 @@ overlays are the same components.
 
 - **Purpose:** the sidebar folded into an 80 px rail.
 - **Shows:** a square button with the heap's initial (opens M-heap-switcher as a popover), then Open, Closed,
-  Activity, Tags, Parameters, Team as icons over short labels, then Teams and Account at the bottom. 44 px
+  Activity, Settings as icons over short labels, then Teams and Account at the bottom. 44 px
   targets.
 - **Freq 5.** **Source:** app-ux.md Tablet §1; `Sidebar` at `sm`. Built.
 - **Must:** local 4, server 4. The same role as G-shell-wide at tablet width. Tablet is out of scope for now, so it's
@@ -383,18 +383,18 @@ overlays are the same components.
 
 - **Purpose:** phone navigation.
 - **Shows:** the heap name with a chevron at the top (opens M-heap-switcher as a sheet; also serves as the page
-  title); bottom tabs Open, Closed, + (opens M-add-item), Activity, More. Respects safe-area insets.
+  title); bottom tabs Open, Closed, + (opens M-add-item), Settings, More. Respects safe-area insets.
 - **Freq 5.** **Source:** app-ux.md Layout, Phone details; `PhoneTopBar`, `PhoneTabs`. Built.
 - **Must:** local 4, server 4. The phone's only route to Closed and More. One role with G-shell-wide.
 - Note: on pages outside a heap (Teams, Account) the tabs aren't shown and the top bar says "Upheap".
 
 #### M-more: More menu (phone)
 
-- **Purpose:** the heap views and account pages that don't fit in the tabs.
-- **Trigger:** More tab. **Contents:** Team (not in the local build) with the team's name, Teams with their count
-  or the team's name, Tags, Parameters, Account with the username, as 52 px rows.
+- **Purpose:** the heap view and account pages that don't fit in the tabs.
+- **Trigger:** More tab. **Contents:** Activity, Team (not in the local build) with the team's name, Teams with their
+  count or the team's name, Account with the username, as 52 px rows. More shows as active on Activity.
 - **Phone:** a card over a dimmed page, sitting above the tabs. It opens on release, like any button.
-- **Freq 3:** Tags and Parameters are occasional. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
+- **Freq 3:** Activity is occasional on a phone. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
 - **Must:** local 4, server 4. On a phone, the only route to Account (export, local build; Sign out, server build) and
   Team. Part of the phone shell's role.
 
@@ -845,13 +845,18 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### S-heap-settings: Heap settings
 
-- **Route:** `/teams/{team}/heaps/{heap}/settings` (readable-ids.md URLs). **Who:** admins (`rename`, `archive`,
-  `unarchive`, `view_history` on the heap).
-- **Purpose:** one place for a heap's configuration. Today rename and archive live in P-heap-row on S-team.
-- **Would show:** name; slug (designed: "slug fields on team and heap settings"; a slug change breaks old links,
-  which deserves a warning); P-heap-weights; Archive (M-heap-archive) or Unarchive; history.
-- **Freq 1.** Designed (route and slug), contents implied. See Gaps for the overlap with S-parameters.
-- **Must:** local 1, server 1. Rename and archive live on P-heap-row today.
+- **Route:** `/teams/{team}/heaps/{heap}/settings`, with tabs General (`/settings`), Tags (`/settings/tags`, S-tags)
+  and Parameters (`/settings/parameters`, S-parameters). The old `/tags` and `/parameters` paths redirect. **Who:**
+  every member; General's controls follow `rename`, `archive`, `unarchive` and `view_history` on the heap.
+- **Purpose:** one place for a heap's configuration. P-heap-row on S-team keeps its rename and archive too.
+- **Shows (General):** Details with the name and the link name (`/heaps/` before it), edited in place, and "Changing
+  it changes the heap's links; old links stop working." (only to those who may rename), preceded by "New link: /teams/{team}/heaps/{slug}." while a
+  new link name is typed; the heap's history; Archive heap, or Unarchive heap on an
+  archived heap. Not yet: P-heap-weights.
+- On an archived heap, G-archived-banner's Unarchive and General's Unarchive heap both show. Accepted: the banner
+  is on every page of the heap, and General is where the archive state lives.
+- **Freq 1.** **Source:** app-ux.md Heap settings; `HeapSettingsPage.tsx`. Built.
+- **Must:** local 1, server 1.
 
 #### P-heap-weights: Ranking weights
 
@@ -874,40 +879,40 @@ where they live.
 
 ### S-tags: Tags
 
-- **Route:** `/heaps/$heapId/tags`. **Who:** every member can add, rename and describe tags (`create` on the list,
+- **Route:** `/teams/{team}/heaps/{heap}/settings/tags`, the Tags tab of S-heap-settings. **Who:** every member can add, rename and describe tags (`create` on the list,
   `edit` on each); read-only in an archived heap.
 - **Purpose:** manage the heap's tags (Req Views: Manage tags). Tags can't be deleted.
-- **Shows:** "Tags group similar items in {heap}. They can be renamed but not deleted.", P-tag-new, then a row per
-  tag. Empty: "No tags yet."
+- **Shows:** "Tags group similar items in {heap}. They can be renamed but not deleted.", P-tag-new as a card, then a
+  card headed "{n} tags" with a row per tag. Empty: "No tags yet."
 - **Gaps:** no item count per tag, no link to the list filtered by the tag.
 - **Freq 2:** most tags are made from P-tag-picker. **Source:** `TagsPage.tsx`. Built.
 - **Must:** local 1, server 2. Tags are made in P-tag-picker; this page renames and describes them.
 
 | ID            | Purpose     | Contents and actions                                                                                                                             | Freq | Must (local) | Must (server) | Presentation |
 | ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | :--: | :----------: | :-----------: | ------------ |
-| P-tag-new     | Add a tag   | Name (50 chars), Description (optional, 1,000 chars), Add tag. Error `tag_name_taken`                                                            |  1   |      1       |       1       | Inline form  |
-| P-tag-row     | Edit a tag  | Name and description inputs; Save and Cancel appear once changed. Errors `tag_name_taken`, `version_conflict` ("Someone else changed this tag…") |  2   |      1       |       2       | Inline row   |
-| P-tag-history | Tag history | Collapsed "History"                                                                                                                              |  1   |      1       |       1       | Disclosure   |
+| P-tag-new     | Add a tag   | Name (50 chars), Description (optional, 1,000 chars), Add tag. Error `tag_name_taken`                                                            |  1   |      1       |       1       | Card         |
+| P-tag-row     | Edit a tag  | Name chip, description or "No description", "Edit {name}" icon button; it opens name and description inputs, Save, Cancel (Escape), History. Errors `tag_name_taken`, `version_conflict` |  2   |      1       |       2       | Row that turns into a form |
+| P-tag-history | Tag history | Collapsed "History": in the edit form for editors, in the row for everyone else                                                                 |  1   |      1       |       1       | Disclosure   |
 
 ### S-parameters: Parameters
 
-- **Route:** `/heaps/$heapId/parameters`. **Who:** every member sees them (they set values on items); only admins get
+- **Route:** `/teams/{team}/heaps/{heap}/settings/parameters`, the Parameters tab of S-heap-settings. **Who:** every member sees them (they set values on items); only admins get
   controls (`create` on the list; `edit`, `archive`, `view_history` on each).
 - **Purpose:** custom parameters and their ranking weight (Req Views: Manage parameters).
-- **Shows:** an explanation ("Parameters rank the items of {heap} next to age, deadline and value…"), P-param-new,
-  a card per parameter in use, then P-param-archived. Empty: "No parameters yet."
+- **Shows:** an explanation ("Parameters rank the items of {heap} next to need, age, deadline and value…") with a
+  New parameter button that opens P-param-new, a card per parameter in use, then P-param-archived. Empty: "No parameters yet."
 - **Freq 2** for admins, 1 for members. **Source:** `ParametersPage.tsx`. Built.
 - **Must:** local 2, server 2. Custom parameters are optional; effort, impact and due rank without them.
 
 | ID               | Purpose                                         | Contents and actions                                                                                                                                                                                                                                  | Freq | Must (local) | Must (server) | Presentation                     |
 | ---------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | -------------------------------- |
-| P-param-new      | Add a parameter                                 | Name (50 chars), Weight (0–100, default 10), Options one per line, highest priority first (up to 50); Add parameter. Error `parameter_name_taken`                                                                                                     |  1   |      2       |       2       | Inline card                      |
-| P-param-card     | Edit a parameter                                | Name (Save/Cancel), Weight (Save); options in priority order, each with a label input and ↑ ↓; Save options / Cancel once changed; New option + Add option. Errors `option_label_taken`, `options_mismatch`, `too_many_options`, `parameter_archived` |  1   |      2       |       2       | Card                             |
-| P-option-archive | Archive an option with a replacement            | "Open items with {option} switch to [select]" Archive, Cancel. Offered when the parameter has another option and no unsaved changes                                                                                                                   |  1   |      1       |       1       | Inline confirm in the option row |
-| P-param-tags     | Link tags, so adding one suggests the parameter | P-tag-picker; "Adding one of these tags to an item suggests this parameter." Members see "Suggested for items tagged …"                                                                                                                               |  1   |      1       |       1       | Inline                           |
+| P-param-new      | Add a parameter                                 | Name (50 chars), Weight (0–100, default 10), Options one per line, highest priority first (up to 50); Add parameter, Cancel (Escape). Error `parameter_name_taken`                                                                                                     |  1   |      2       |       2       | Card opened by New parameter     |
+| P-param-card     | Edit a parameter                                | Name with Rename (inline Save/Cancel), Weight (Save/Cancel); options in priority order, numbered, each with a label input that reads as text and ↑ ↓; Save options / Cancel once changed; New option + Add option. Errors `option_label_taken`, `options_mismatch`, `too_many_options`, `parameter_archived` |  1   |      2       |       2       | Card                             |
+| P-option-archive | Archive an option with a replacement            | "Archive {option}?" "Open items with {option} switch to [select]" Archive, Cancel. Offered when the parameter has another option and no unsaved changes                                                                                                                   |  1   |      1       |       1       | Inline confirm in the option row |
+| P-param-tags     | Link tags, so adding one suggests the parameter | "Suggested by tags": P-tag-picker; "Adding one of these tags to an item suggests {name}." or "No tags suggest {name} yet." Members see the tags as chips                                                                                                                               |  1   |      1       |       1       | Inline                           |
 | P-param-archive  | Archive a parameter                             | "Archive {name}? It stops counting in the ranking; closed items keep their values." Archive, Cancel. Error `parameter_in_use` when an open item has a value                                                                                           |  1   |      1       |       1       | Inline confirm                   |
 | P-param-history  | Parameter history (admins)                      | Collapsed "History"                                                                                                                                                                                                                                   |  1   |      1       |       1       | Disclosure                       |
-| P-param-archived | Archived parameters                             | "{name}: option, option", history. No unarchive                                                                                                                                                                                                       |  1   |      1       |       1       | List at the bottom               |
+| P-param-archived | Archived parameters                             | {name}, then "option, option", history. No unarchive                                                                                                                                                                                                  |  1   |      1       |       1       | List at the bottom               |
 
 `parameter_in_use` leaves the admin with no way to find which open items hold a value; see Gaps.
 
@@ -1093,9 +1098,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 1. **Heap weights.** Admins should edit age, deadline and value weights (Req Custom parameters §2, Off Roles).
    Neither the API nor the UI has them, and no doc says whether they belong on S-parameters (beside the parameter
    weights they compete with) or on S-heap-settings.
-2. **Heap settings page.** readable-ids.md gives heaps a `settings` route and slugs, while heap rename and archive
-   live on S-team today. The list "(tags, parameters, activity, closed…)" in its URL table reads as either sub-pages
-   of the heap or the contents of one settings page. Decide which.
+2. ~~**Heap settings page.**~~ Settled: one Settings page, S-heap-settings, with General, Tags and Parameters as
+   tabs under `/settings`; activity and closed stay pages of the heap. P-heap-row on S-team keeps rename and archive.
 3. **Password and account.** No password change, reset ("forgot password"), email change, or "sign out everywhere".
    The server has no email sending, so reset needs an admin path or a design.
 4. **CLI tokens.** `/me/tokens` and P-tokens are designed but have no layout, and the OAuth consent step is
@@ -1133,7 +1137,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    makes it private (no members, no leaving, fixed slug). readable-ids.md lists this as a doc fix to make.
 5. **Local build names.** local-build.md: user "Me", team "My heaps", heap "My heap". readable-ids.md and
    `service/src/personal.rs`: team slug `me`, first heap "Personal". local-build.md is stale.
-6. ~~**More menu.**~~ Settled: app-ux.md lists Team, Teams, Tags, Parameters and Account, as the code does; Sign out
+6. ~~**More menu.**~~ Settled: app-ux.md lists Activity, Team, Teams and Account, as the code does; Sign out
    is on S-account.
 7. ~~**Sign-up on this branch.**~~ Settled: S-register sends the username.
 8. **"Removable from items in the list"** (progress.md Tags) predates the compact rows; tags are now removed in
@@ -1146,8 +1150,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    affects the whole team or the user's own access; undo for the rest).
 2. **Inline confirms vs dialogs.** Every confirmation today replaces its button in place. On a phone a bottom-sheet
    confirmation may read better; app-ux.md doesn't say.
-3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity, S-tags,
-   S-parameters. They still use the older stone palette rather than the design tokens.
+3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity. It still uses the older stone
+   palette rather than the design tokens (so does the history list inside P-tag-history, P-param-history and General's heap history).
    S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.

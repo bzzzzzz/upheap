@@ -1,16 +1,23 @@
-import { addItem, closeItem, expect, expectOrder, goTo, itemPane, openItem, pick, row, test } from "./fixtures";
+import {
+  addItem,
+  addParameter,
+  closeItem,
+  expect,
+  expectOrder,
+  goTo,
+  itemPane,
+  openItem,
+  pick,
+  row,
+  test,
+} from "./fixtures";
 
 test("an admin manages a parameter, and its options rank the items", async ({ page }) => {
   await addItem(page, "Free user's request");
   await addItem(page, "Enterprise request");
 
   // Define the parameter, highest priority option first.
-  await goTo(page, "Parameters");
-  await page.getByLabel("New parameter name").fill("Customer");
-  await page.getByLabel("Weight of the new parameter").fill("50");
-  await page.getByLabel(/^Options of the new parameter/).fill("Enterprise\nFree");
-  await page.getByRole("button", { name: "Add parameter" }).click();
-  await expect(page.getByLabel("Name of parameter Customer")).toBeVisible();
+  await addParameter(page, "Customer", 50, ["Enterprise", "Free"]);
 
   // Give each item its customer.
   for (const [title, customer] of [
@@ -50,9 +57,92 @@ test("an admin manages a parameter, and its options rank the items", async ({ pa
     // The parameter's card is a list item too.
     .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
   await enterprise.getByRole("button", { name: "Archive" }).click();
-  await enterprise.getByLabel("Open items with Enterprise switch to").selectOption("Free");
-  await enterprise.getByRole("button", { name: "Archive" }).click();
+  // The row turns into the confirm.
+  const confirm = page
+    .getByRole("listitem")
+    .filter({ hasText: "Archive Enterprise?" })
+    .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
+  await confirm.getByLabel("Open items with Enterprise switch to").selectOption("Free");
+  await confirm.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByLabel("Label of option 2")).toHaveCount(0);
   await goTo(page, "Open");
   await expect(row(page, "Enterprise request")).toContainText("Customer: Free");
+});
+
+test("New parameter opens a form that Cancel closes, and Rename renames the parameter", async ({ page }) => {
+  await goTo(page, "Parameters");
+  const newParameter = page.getByRole("button", { name: "New parameter" });
+  await newParameter.click();
+  await expect(page.getByLabel("New parameter name")).toBeFocused();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByLabel("New parameter name")).toHaveCount(0);
+  await expect(newParameter).toBeFocused();
+
+  await addParameter(page, "Customer", 20, ["Enterprise", "Team", "Free"]);
+  await expect(page.getByLabel("New parameter name")).toHaveCount(0);
+  await expect(page.getByLabel("Label of option 3")).toHaveValue("Free");
+  await expect(page.getByRole("button", { name: "Move Enterprise up" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Move Free down" })).toBeDisabled();
+
+  await page.getByRole("button", { name: "Rename Customer" }).click();
+  const name = page.getByLabel("Name of parameter Customer");
+  await expect(name).toBeFocused();
+  await name.fill("Plan");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Name of parameter Plan")).toHaveCount(0);
+  await expect(
+    page
+      .getByText("Adding one of these tags to an item suggests Plan.")
+      .or(page.getByText("No tags suggest Plan yet.")),
+  ).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Tags that suggest Plan" })).toBeVisible();
+});
+
+test("an option added after the first can replace it when the first is archived", async ({ page }) => {
+  await addParameter(page, "Region", 10, ["North"]);
+  await page.getByLabel("New option of Region").fill("South");
+  await page.getByRole("button", { name: "Add option" }).click();
+  await expect(page.getByLabel("Label of option 2")).toHaveValue("South");
+
+  const north = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("button", { name: "Move North up" }) })
+    .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
+  await north.getByRole("button", { name: "Archive" }).click();
+  const confirm = page
+    .getByRole("listitem")
+    .filter({ hasText: "Archive North?" })
+    .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
+  await expect(confirm.getByLabel("Open items with North switch to")).toHaveValue(/.+/);
+  await confirm.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("South");
+  await expect(page.getByLabel("Label of option 2")).toHaveCount(0);
+});
+
+test("an arrangement or weight not yet saved survives the parameter's other saves", async ({ page }) => {
+  await addParameter(page, "Customer", 10, ["Enterprise", "Team", "Free"]);
+
+  // Saving the weight keeps the options moved but not yet saved.
+  await page.getByRole("button", { name: "Move Enterprise down" }).click();
+  const weight = page.getByLabel("Weight of parameter Customer");
+  await weight.fill("30");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await expect(weight).toHaveValue("30");
+  await expect(page.getByRole("button", { name: "Save options" })).toBeVisible();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("Team");
+  await expect(page.getByLabel("Label of option 2")).toHaveValue("Enterprise");
+  await expect(page.getByLabel("Label of option 3")).toHaveValue("Free");
+
+  // Renaming keeps a weight typed but not yet saved.
+  await weight.fill("45");
+  await page.getByRole("button", { name: "Rename Customer" }).click();
+  const name = page.getByLabel("Name of parameter Customer");
+  await name.fill("Plan");
+  await name.press("Enter");
+  await expect(page.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Weight of parameter Plan")).toHaveValue("45");
+  await expect(page.getByRole("button", { name: "Save options" })).toBeVisible();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("Team");
 });

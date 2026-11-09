@@ -192,14 +192,20 @@ export async function addItem(
   if (listed) await expect(row(page, title)).toBeVisible();
 }
 
-/** A page the app's navigation leads to. */
-export type AppPage = "Open" | "Closed" | "Activity" | "Tags" | "Parameters" | "Account";
+/** A page the app's navigation leads to. Tags and Parameters are tabs of the heap's Settings. */
+export type AppPage = "Open" | "Closed" | "Activity" | "Settings" | "Tags" | "Parameters" | "Account";
 
 /**
  * Goes to one of the app's pages through its navigation, wherever the layout puts it: the sidebar on a wide screen,
- * the rail on a tablet, and on a phone the bottom tabs or their More menu.
+ * the rail on a tablet, and on a phone the bottom tabs or their More menu. Tags and Parameters go through Settings.
  */
 export async function goTo(page: Page, name: AppPage) {
+  if (name === "Tags" || name === "Parameters") {
+    const tab = page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name, exact: true });
+    if (!(await tab.isVisible())) await goTo(page, "Settings");
+    await tab.click();
+    return;
+  }
   const link = page.getByRole("link", { name, exact: true });
   if (await link.isVisible()) {
     await link.click();
@@ -211,6 +217,20 @@ export async function goTo(page: Page, name: AppPage) {
       .getByRole("link", { name: new RegExp(`^${name}( |$)`) })
       .click();
   }
+}
+
+/**
+ * Adds a parameter on the Parameters tab, through its New parameter form, with `options` highest priority first, and
+ * waits for its card.
+ */
+export async function addParameter(page: Page, name: string, weight: number, options: string[]) {
+  await goTo(page, "Parameters");
+  await page.getByRole("button", { name: "New parameter" }).click();
+  await page.getByLabel("New parameter name").fill(name);
+  await page.getByLabel("Weight of the new parameter").fill(String(weight));
+  await page.getByLabel(/^Options of the new parameter/).fill(options.join("\n"));
+  await page.getByRole("button", { name: "Add parameter" }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
 /** Opens More from the phone's tabs. */

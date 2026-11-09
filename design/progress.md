@@ -22,19 +22,19 @@ and architecture.md.
 | Closed items | Req Views: Closed items | ✅ | Sections Today, This week and Earlier. Reopen while allowed. Cursor paging |
 | Add item | Req Views: Add item | ✅ | A dialog (`N`, or + on a phone) with every field, prefilled from the list's filters. Says where the item landed. Add another is remembered per device |
 | Item pane | Req Views: Edit item | ✅ | Over the list: a pane beside it, a panel on a tablet, a sheet on a phone. Every field, the state and the blocker, each change saved as it's made |
-| Tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case, never deleted. Created from the picker. Manage tags page |
+| Tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case, never deleted. Created from the picker. Renamed and described in the heap's Settings |
 | Blockers | Req Items §8, Priority §5 | ✅ | Cycle check in the write transaction. "Blocks …" contributor |
 | Custom parameters | Req Custom parameters, Manage parameters | ✅ | Admins add, weigh, reorder and archive parameters and options (open items switch to the replacement) and link tags. Values count in ranking, contributors, filters and sort |
 | Saved views | Req Heaps §4 | 🟡 | API done, shared by the team. Hidden in the web app until they have a place in the Filters panel |
 | Teams and members | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found by `GET /users`, promote, demote, remove, leave. A team always keeps an admin |
-| Heaps | Off Teams §4, 9 | ✅ | Create, rename, archive and unarchive from the Team page. An archived heap is read-only, with an Unarchive banner for admins |
+| Heaps | Off Teams §4, 9 | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Off Audit | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI | [cli.md](cli.md) | 🟡 | Server half done: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. Not started: `crates/api-types`, `crates/cli`, `/me/tokens` |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [cloud-run-postgres.md](cloud-run-postgres.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | [local-build.md](local-build.md) | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams and Team fitted to phones and wide screens in the design tokens. Left: Activity, Tags and Parameters at phone width. The tablet keeps app-ux.md's layout, unreviewed |
+| Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps app-ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next
@@ -47,7 +47,7 @@ In rough order.
    `crates/cli` with `auth login` and `logout`, `heap list` and `use`, and `item list`; then `item add`, `show`,
    `edit` and the state verbs; `tag list`, `add` and `edit`; last `/me/tokens` on the server and its Account card.
 3. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
-4. **Phone width** for Activity, Tags and Parameters, in the design tokens.
+4. **Phone width** for Activity, in the design tokens.
 5. **Saved views** back in the web app, inside the Filters panel.
 6. **OIDC sign-in**, with a username step on first sign-in ([readable-ids.md](readable-ids.md), Sign-up).
 7. **Invitations** by email or link (Off Teams §6).
