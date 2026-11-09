@@ -51,8 +51,9 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Team, Teams, Tags, Parameters, Account (with Your data in the local build) and Sign out,
-as a card of 52 px rows above the tabs. The **+** in the middle of the tabs opens the Add dialog from any of the
+**More** on a phone holds Team, Teams, Tags, Parameters and Account (with Your data in the local build), as a card
+of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account
+page, under its cards. The **+** in the middle of the tabs opens the Add dialog from any of the
 heap's pages, so the Add field above the list shows only from a tablet up.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column

@@ -218,15 +218,10 @@ async function openMore(page: Page) {
   await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
 }
 
-/** Signs out, from the sidebar or rail, or on a phone from More. */
+/** Signs out from the Account page, reached through the navigation at any width. */
 export async function signOut(page: Page) {
-  const button = page.getByRole("button", { name: "Sign out", exact: true });
-  if (await button.isVisible()) {
-    await button.click();
-  } else {
-    await openMore(page);
-    await page.getByRole("navigation", { name: "More" }).getByRole("button", { name: "Sign out" }).click();
-  }
+  await goTo(page, "Account");
+  await page.getByRole("main").getByRole("button", { name: "Sign out", exact: true }).click();
 }
 
 /** The calendar day `days` from today, in the browser's timezone (UTC, as the config sets it). */

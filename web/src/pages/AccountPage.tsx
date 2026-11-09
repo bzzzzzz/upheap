@@ -1,7 +1,10 @@
-import { useMe, useUpdateMe } from "../api/queries";
+import { useNavigate } from "@tanstack/react-router";
+
+import { useMe, useSignOut, useUpdateMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { ProblemText } from "../components/ProblemText";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
 const nameFormClasses: NameFormClasses = {
@@ -11,10 +14,15 @@ const nameFormClasses: NameFormClasses = {
   problem: "text-overdue-ink",
 };
 
-/** The signed-in user's display name, which teammates see, and in the local build their data. */
+/**
+ * The signed-in user's display name, which teammates see, and in the local build their data. Sign out is here rather
+ * than in the navigation, at the bottom, where the server allows it.
+ */
 export function AccountPage() {
   const { data: me } = useMe();
   const update = useUpdateMe();
+  const signOut = useSignOut();
+  const navigate = useNavigate();
   if (!me) return null;
 
   const { user } = me;
@@ -48,6 +56,19 @@ export function AccountPage() {
           </dl>
         </section>
         <LocalDataSection />
+        {me.allowed_actions.includes("sign_out") && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={signOut.isPending}
+              onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
+              className={compactButtonClass.borderedDanger}
+            >
+              Sign out
+            </button>
+            <ProblemText error={signOut.error} className="text-overdue-ink" />
+          </div>
+        )}
       </div>
     </main>
   );

@@ -93,3 +93,20 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await goTo(page, "Open");
   await expect(row(page, "Water the plants")).toBeVisible();
 });
+
+test("Sign out is on the Account page, not in the navigation, and only on the server", async ({ page, localBuild }) => {
+  const signOut = page.getByRole("button", { name: "Sign out", exact: true });
+  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
+  await expect(signOut).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    const more = page.getByRole("navigation", { name: "More" });
+    await expect(more.getByRole("link").last()).toHaveText(/^Account/);
+    await expect(signOut).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
+
+  await goTo(page, "Account");
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(signOut).toHaveCount(localBuild ? 0 : 1);
+});

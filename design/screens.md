@@ -247,10 +247,9 @@ G-shell-wide, G-shell-phone, M-more, M-heap-switcher, G-storage-note (local), G-
 E-loading *(frequency: every screen shows it, and a blank page reads as broken)*.
 
 - **Browser:** the sidebar with every heap (grouped by team when there are several), the open heap's Open and
-  Closed, then Team (server), Account, Sign out (server) and the storage note (local). The sidebar is the heap
-  switcher. Loading keeps the previous view, dimmed.
+  Closed, then Team (server), Account and the storage note (local). The sidebar is the heap switcher. Loading keeps the previous view, dimmed.
 - **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed and More;
-  the More sheet with Team (server), Account and Sign out (server); the storage note under the content (local).
+  the More sheet with Team (server) and Account; the storage note under the content (local).
 - **Both:** a `401` goes to S-sign-in (server).
 
 ### S-heap: Heap list
@@ -360,9 +359,9 @@ overlays are the same components.
 - **Purpose:** navigation on a wide screen. Everyone signed in.
 - **Shows:** the Upheap mark; every heap grouped by team (team names only when there are several teams; archived
   heaps say "(archived)"); the open heap's views: Open, Closed, Activity, Tags, Parameters, Team (the heap's team;
-  left out in the local build, where the bottom link already goes there); at the bottom Teams (or the one team's name in the local build), Account, Sign out
-  (only with `sign_out` in `GET /me` `allowed_actions`), and the local build's storage note.
-- **Actions:** open a heap, open a heap view, open Teams, Account, sign out.
+  left out in the local build, where the bottom link already goes there); at the bottom Teams (or the one team's name in the local build), Account and the
+  local build's storage note.
+- **Actions:** open a heap, open a heap view, open Teams, Account.
 - **Layout:** the sidebar and content are one centred block (sidebar 15 rem plus a 48 rem column); the sidebar's
   colour runs to the left edge. An open item pane widens the block.
 - **Freq 5:** always on screen. **Source:** app-ux.md Layout; `AppLayout.tsx` `Sidebar`. Built.
@@ -373,7 +372,7 @@ overlays are the same components.
 
 - **Purpose:** the sidebar folded into an 80 px rail.
 - **Shows:** a square button with the heap's initial (opens M-heap-switcher as a popover), then Open, Closed,
-  Activity, Tags, Parameters, Team as icons over short labels, then Teams, Account, Sign out at the bottom. 44 px
+  Activity, Tags, Parameters, Team as icons over short labels, then Teams and Account at the bottom. 44 px
   targets.
 - **Freq 5.** **Source:** app-ux.md Tablet §1; `Sidebar` at `sm`. Built.
 - **Must:** local 4, server 4. The same role as G-shell-wide at tablet width. Tablet is out of scope for now, so it's
@@ -392,11 +391,11 @@ overlays are the same components.
 
 - **Purpose:** the heap views and account pages that don't fit in the tabs.
 - **Trigger:** More tab. **Contents:** Team (not in the local build) with the team's name, Teams with their count
-  or the team's name, Tags, Parameters, Account with the username, Sign out (server build only), as 52 px rows.
+  or the team's name, Tags, Parameters, Account with the username, as 52 px rows.
 - **Phone:** a card over a dimmed page, sitting above the tabs. It opens on release, like any button.
 - **Freq 3:** Tags and Parameters are occasional. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
-- **Must:** local 4, server 4. On a phone, the only route to Account (export, local build), Team and Sign out (server
-  build). Part of the phone shell's role.
+- **Must:** local 4, server 4. On a phone, the only route to Account (export, local build; Sign out, server build) and
+  Team. Part of the phone shell's role.
 
 ### M-heap-switcher: Heap switcher
 
@@ -988,7 +987,8 @@ Why the 4s and 5s:
   (P-local-export, P-local-import): "Everything is kept in this browser only. Clearing site data, or a browser that
   removes it, loses it. Download a copy now and then, and open it here or in another browser to carry on." Download
   a copy (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
-  downloaded").
+  downloaded"). At the bottom, Sign out (only with `sign_out` in `GET /me` `allowed_actions`, so not in the local
+  build).
 - **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
 - **Freq 1.** **Source:** TD API Me; `AccountPage.tsx`. Built.
 - **Must:** local 4, server 1. Local: it holds export and import, the local build's only data safety. Server: display

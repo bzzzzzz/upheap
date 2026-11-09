@@ -8,7 +8,7 @@ export const unborderedClass = "border border-transparent";
 
 /**
  * Buttons 38 px tall, as tall as a 38 px input beside them, or in a dialog: the wide replace confirm, and Save and
- * Cancel on Account.
+ * Cancel on Account, and Sign out there.
  */
 const compactClass = `${buttonClass} rounded-[9px] py-2`;
 export const compactButtonClass = {
@@ -16,4 +16,6 @@ export const compactButtonClass = {
   quiet: `${compactClass} ${unborderedClass} px-3 text-ink-soft hover:text-ink`,
   bordered: `${compactClass} px-3 ${borderedClass}`,
   danger: `${compactClass} ${unborderedClass} bg-overdue-ink px-3.5 font-semibold text-surface`,
+  /** Bordered, in red: an action that ends something but needs no confirm, such as Sign out. */
+  borderedDanger: `${compactClass} px-3 border border-line-strong bg-surface text-overdue-ink hover:bg-sunken`,
 };
