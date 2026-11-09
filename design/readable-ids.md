@@ -2,7 +2,7 @@
 
 Built. UUIDs are good keys but bad names: nobody can read `/heaps/0196f3a2-…/items/0196f3b8-…` or type it into a
 terminal. This change gives every team, user, heap and item a short handle, so a link reads
-`/teams/my-team/heaps/backlog/items/k3x9a` and the CLI takes `upheap done k3x9a`.
+`/teams/my-team/heaps/backlog/items/k3x9a` and the CLI takes `upheap item done k3x9a`.
 
 UUIDs stay as the database keys, and every foreign key keeps pointing at them. Handles are extra columns with unique
 indexes, used in URLs, API paths and the CLI.

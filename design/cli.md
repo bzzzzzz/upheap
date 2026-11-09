@@ -17,8 +17,8 @@ side we took.
 
 Goals:
 
-1. Adding an item is one short line: `upheap add "Rotate the staging certs" --effort s --due next-week`.
-2. `upheap list` answers "what should I work on?" the way the web app's list does, with the same order and the same
+1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --effort s --due next-week`.
+2. `upheap item list` answers "what should I work on?" the way the web app's list does, with the same order and the same
    reasons.
 3. Every command works in scripts: stable exit codes, `--json` with the server's own response, and IDs on stdout
    with `--quiet`.
@@ -38,47 +38,47 @@ The binary is `upheap`, since it's the one people type. The server binary, which
 Commands read as a short sentence, as the guideline asks:
 
 ```
-upheap [<category>] <verb> [<required-input>...] [--<option> ...]
+upheap <category> <verb> [<required-input>...] [--<option> ...]
 ```
 
-Items are almost everything people do, so item commands have no category: `upheap add`, not `upheap item add`. Tags, heaps
-and auth each get one. This bends the guideline's "keep the tree consistent" default on purpose: `upheap item add` would
-be typed dozens of times a day for no gain in clarity, and the same verb still means the same thing everywhere
-(`upheap list` and `upheap tag list` both list).
+Every command is a category and a verb: `item`, `tag`, `heap` or `auth`, then what to do. The same verb means the
+same thing in every category, so `upheap item list` and `upheap tag list` both list. It's more typing than top-level
+item commands, but the tree stays the same everywhere. Shorter forms or aliases can come later, once usage shows which
+are worth it; until then, a shell alias (`uh`) already helps.
 
 | Command | What it does | API |
 | --- | --- | --- |
-| `upheap add <title>` | Add an item | `POST /teams/{team}/heaps/{heap}/items` |
-| `upheap list [<text>]` | The ranked list, optionally narrowed by text | `GET /teams/{team}/heaps/{heap}/items` |
-| `upheap list --closed` | Closed items, most recent first | `GET /teams/{team}/heaps/{heap}/items/closed` |
-| `upheap show <item>` | One item in full | `GET …/items/{item}` |
-| `upheap edit <item>` | Change fields | `PATCH …/items/{item}` |
-| `upheap start <item>` | Move to in progress | `PATCH …/items/{item}` |
-| `upheap block <item> [--by <item>]` | Move to blocked, optionally naming the blocker | `PATCH …/items/{item}` |
-| `upheap done <item>` | Close as done | `PATCH …/items/{item}` |
-| `upheap wontdo <item>` | Close as won't do | `PATCH …/items/{item}` |
-| `upheap reopen <item>` | Move back to open, from any state | `PATCH …/items/{item}` |
+| `upheap item add <title>` | Add an item | `POST /teams/{team}/heaps/{heap}/items` |
+| `upheap item list [<text>]` | The ranked list, optionally narrowed by text | `GET /teams/{team}/heaps/{heap}/items` |
+| `upheap item list --closed` | Closed items, most recent first | `GET /teams/{team}/heaps/{heap}/items/closed` |
+| `upheap item show <item>` | One item in full | `GET …/items/{item}` |
+| `upheap item edit <item>` | Change fields | `PATCH …/items/{item}` |
+| `upheap item start <item>` | Move to in progress | `PATCH …/items/{item}` |
+| `upheap item block <item> [--by <item>]` | Move to blocked, optionally naming the blocker | `PATCH …/items/{item}` |
+| `upheap item done <item>` | Close as done | `PATCH …/items/{item}` |
+| `upheap item wontdo <item>` | Close as won't do | `PATCH …/items/{item}` |
+| `upheap item reopen <item>` | Move back to open, from any state | `PATCH …/items/{item}` |
 | `upheap tag list` | Tags in the heap | `GET /teams/{team}/heaps/{heap}/tags` |
 | `upheap tag add <name>` | Add a tag | `POST /teams/{team}/heaps/{heap}/tags` |
 | `upheap tag edit <tag>` | Rename a tag or change its description | `PATCH …/tags/{id}` |
 | `upheap heap list` | Every heap the caller can see, by team | `GET /me` |
 | `upheap heap use <heap>` | Make a heap the default | none (writes config) |
-| `upheap login` / `upheap logout` | Sign in through the browser; sign out | OAuth, see [Signing in](#signing-in) |
+| `upheap auth login` / `upheap auth logout` | Sign in through the browser; sign out | OAuth, see [Signing in](#signing-in) |
 
 ### Items
 
-**`upheap add <title>`** needs `--need` (`idea`, `nice-to-have`, `expected`, `critical`), and takes `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
+**`upheap item add <title>`** needs `--need` (`idea`, `nice-to-have`, `expected`, `critical`), and takes `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
 `--due <when>` and `--tag <name>` (repeatable). It prints the new item and where it landed: "Added *Rotate the staging
 certs*, now 4th of 31". The position comes from one read of the ranked list after the add, so it's the server's
 number.
 
-**`upheap edit <item>`** takes the same flags, plus `--title`, `--untag <name>`, and `--no-due`, `--no-effort`,
+**`upheap item edit <item>`** takes the same flags, plus `--title`, `--untag <name>`, and `--no-due`, `--no-effort`,
 `--no-impact`, `--no-description` to clear a field. `--tag` and `--untag` add and take off single tags; the CLI reads
 the item and sends the full `tag_ids` list the API expects. Nothing given means nothing to do: the command says so and
 exits 0.
 
-**State verbs.** `start`, `block`, `done`, `wontdo` and `reopen` each send one `state` in a `PATCH`. One verb per
-state reads better than `upheap edit --state done`, and there's only one way to change a state. The server owns every rule:
+**State verbs.** `item start`, `item block`, `item done`, `item wontdo` and `item reopen` each send one `state` in a `PATCH`. One verb per
+state reads better than `upheap item edit --state done`, and there's only one way to change a state. The server owns every rule:
 
 - Moving to the state an item is already in changes nothing, so repeating a command is safe. The CLI reports "already
   done" and exits 0.
@@ -88,7 +88,7 @@ state reads better than `upheap edit --state done`, and there's only one way to 
 - `block --by <item>` sets `blocked_by_item_id` in the same request. Cycles and blockers from other heaps are refused
   by the server, as in the web app.
 
-**`upheap list`** shows pinned items, then the ranked ones, then grouped blocked items when shown, each row with its position,
+**`upheap item list`** shows pinned items, then the ranked ones, then grouped blocked items when shown, each row with its position,
 key, title, state, effort and impact, due label, tags, and the top contributor. It takes the list query parameters as
 flags with the same names and values: `--tag`, `--effort`, `--impact`, `--sort`, `--sort-parameter`,
 `--open/--in-progress/--blocked <pinned|shown|hidden>` and `--blocked-layout`. `--view <name>` loads a saved view of
@@ -96,18 +96,18 @@ the heap and sends its settings, so team views work in the terminal without bein
 narrows the result by title and description on the client, which is the one kind of filtering the thin-client rules
 allow. When `hidden_count` isn't zero, the footer says how many items are hidden and which flag shows them.
 
-**`upheap show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
+**`upheap item show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
 entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`.
 
 ### Naming an item
 
 `<item>` is the item's key, the five characters the server gives every item and the web app shows in its links
-([readable-ids.md](readable-ids.md#item-keys)): `upheap done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
+([readable-ids.md](readable-ids.md#item-keys)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
 item in another heap; it's a short link without its `/h/`, so a pasted link works too. A key names the same item for good, in any shell
-and on any machine, so the CLI keeps no cache of the last list. `upheap list` prints each row's key beside its
+and on any machine, so the CLI keeps no cache of the last list. `upheap item list` prints each row's key beside its
 position, and `--json` and `--quiet` print keys too.
 
-A key that isn't in the heap is the server's `404`. The CLI says so and suggests `upheap list`.
+A key that isn't in the heap is the server's `404`. The CLI says so and suggests `upheap item list`.
 
 ### Due times
 
@@ -128,7 +128,7 @@ would see in the browser.
 `<tag>` is the tag's name (compared ignoring case, as the server compares them) or its ID. Tags can't be deleted, so
 there's no `upheap tag delete`.
 
-`--tag <name>` on `add` and `edit` refers to existing tags only. The web app creates a tag when you type a new name,
+`--tag <name>` on `item add` and `item edit` refers to existing tags only. The web app creates a tag when you type a new name,
 but in a terminal a typo would leave a tag nobody can delete. An unknown name fails with the closest existing names
 and the `upheap tag add` command that would create it.
 
@@ -146,9 +146,9 @@ heap slug alone works when only one of the caller's teams has a heap by that slu
 1. **Human output** by default: aligned columns, colour when stdout is a terminal and `NO_COLOR` isn't set. Labels
    (due, contributors, audit phrases) are printed as the server wrote them.
 2. **`--json`** prints the server's response body unchanged, so scripts get the documented OpenAPI types and the CLI
-   adds no second schema to keep in sync. For `add`, that's the created item.
-3. **`--quiet`** prints only what a script needs next: the item ID for `add`, nothing for a state change, IDs one per
-   line for `list`.
+   adds no second schema to keep in sync. For `item add`, that's the created item.
+3. **`--quiet`** prints only what a script needs next: the item ID for `item add`, nothing for a state change, IDs one
+   per line for `item list`.
 4. Results go to stdout; warnings and errors go to stderr.
 5. Only the command's flow function writes output, through one `Output` value that `main` builds from these flags and
    passes down. API calls and lookups return values and errors; they don't print.
@@ -178,11 +178,11 @@ not found together because the server deliberately doesn't tell them apart.
 
 ## Signing in
 
-`upheap login [--server <url>]` runs the OAuth authorization code flow with PKCE that
+`upheap auth login [--server <url>]` runs the OAuth authorization code flow with PKCE that
 [technical-design.md](technical-design.md#authentication-and-authorization) already describes for the CLI: it opens the
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
-file. `upheap logout` revokes the token on the server and removes it from the keychain.
+file. `upheap auth logout` revokes the token on the server and removes it from the keychain.
 
 None of this exists on the server yet ([progress.md](progress.md): "CLI sign-in: OAuth with PKCE" is not started), so
 it's the first piece of work. See [Server changes](#server-changes).
@@ -190,7 +190,7 @@ it's the first piece of work. See [Server changes](#server-changes).
 ## Configuration
 
 One TOML file, `~/.config/upheap/config.toml` (the platform's config dir), with two settings: `server` (the base URL)
-and `heap` (the default heap). `upheap login --server` and `upheap heap use` write them. Flags beat environment variables
+and `heap` (the default heap). `upheap auth login --server` and `upheap heap use` write them. Flags beat environment variables
 (`UPHEAP_SERVER`, `UPHEAP_HEAP`), which beat the file.
 
 ## Code layout
@@ -203,11 +203,12 @@ crates/cli/src/
   main.rs          parse args, build Output and the API client, dispatch, map errors to exit codes
   config.rs        config file and environment, read once at startup
   client/          the HTTP client: base URL, bearer token, Time-Zone header, problem+json errors
-  auth/            login, logout, keychain, token refresh
+  auth/            the OAuth flow, keychain, token refresh
   lookup/          resolving <heap>, <tag> and due choices to handles, IDs and values
   commands/
-    add.rs  list.rs  show.rs  edit.rs  state.rs
-    tag/    heap/
+    item/          add.rs  list.rs  show.rs  edit.rs  state.rs
+    tag/  heap/
+    auth/          login.rs  logout.rs
   output/          human and JSON rendering
 ```
 
@@ -258,9 +259,9 @@ The guideline lists eight conflicts between its sources. These are the ones that
 1. **Printing:** a single `Output` passed down, not `println!` scattered through commands.
 2. **Errors:** typed `thiserror` errors per layer, `anyhow` only in `main`, as the engineering principles already say.
 3. **Exit codes:** categories with their own codes, as above, rather than `1` for every failure.
-4. **Command shape:** `[<category>] <verb>`, with positional required inputs. The "named flags only" rule is for tools
+4. **Command shape:** `<category> <verb>`, with positional required inputs. The "named flags only" rule is for tools
    called by build actions, which `upheap` isn't.
-5. **Layout:** `commands/<command>.rs` in a source tree, not `endpoints/`.
+5. **Layout:** `commands/<category>/<verb>.rs` in a source tree, not `endpoints/`.
 
 The rest (string interning, Bazel, support contacts in errors) don't apply to this repo.
 
