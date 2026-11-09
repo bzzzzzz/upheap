@@ -406,3 +406,34 @@ consent page doesn't show it.
 **Consequences.** Anything can claim any name, so the consent page, where a familiar name could make a phishing
 request look legitimate, never shows it, and nothing decides by it. A client that sends a name the server refuses
 is refused before its code is used; the CLI cleans the name first, so it never is.
+
+## 30. The CLI ships as a Homebrew cask from its own tap, built by a hand-written workflow
+
+**Context.** The only way to get the CLI was `cargo build` from a checkout. People need `brew install` on a Mac and a
+download on Linux, and the release has to be repeatable from a tag.
+
+**Decision.** A tag `vX.Y.Z` on main, equal to the workspace version, runs
+[`release.yml`](../.github/workflows/release.yml): three native builds (Apple silicon macOS, and x86_64 and aarch64
+Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
+
+- **A cask, not a formula.** Homebrew expects formulas to build from source and prebuilt binaries to ship as casks.
+  GoReleaser moved to casks for that reason.
+- **A hand-written workflow, not cargo-dist or GoReleaser.** cargo-dist writes formulas, not casks. GoReleaser brings
+  Go and zig into a Rust repo. Three native builds are a short workflow, and each binary is smoke-tested where it was
+  built.
+- **The targets** are the owner's call: Intel macOS, Windows and 32-bit ARM are left out. Intel Macs are on their last
+  macOS.
+- **Static musl on Linux,** so one file runs on every distribution. The CLI uses rustls and a pure-Rust Secret Service
+  client, so nothing needs a system library, and the build fails if the binary stops being static.
+- **Unsigned for now.** The cask clears the quarantine flag in its postflight, because Gatekeeper would refuse an
+  un-notarized binary, and macOS may ask once after each upgrade to let the new binary use its keychain entry.
+  Notarizing later needs an Apple Developer ID and changes neither the cask's name nor the tap.
+- **Version-free asset names,** so `releases/latest/download/<name>` stays stable and the README's Linux commands
+  never change. The version is in the tag and in the URL path the cask uses.
+
+**Instead of.** A formula built from source, which makes every install compile; a release per binary target with
+versioned names; shipping the server binary too, which stays Docker-only.
+
+**Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
+The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli)). Release builds
+use no cache, so they take a few minutes longer.
