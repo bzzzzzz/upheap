@@ -111,9 +111,10 @@ impl Services {
     /// Exchanges an authorization code for the first token pair of a new family.
     ///
     /// Fails with [`GrantError`] for a code that is unknown, used, expired, or issued for another client or redirect
-    /// URI, and for a verifier that doesn't meet its challenge. A code presented a second time also revokes the
-    /// tokens the first exchange issued, as RFC 6749 §4.1.2 asks: one of the two parties presenting it isn't the
-    /// client.
+    /// URI, and for a verifier that doesn't meet its challenge. A code presented a second time within its lifetime
+    /// also revokes the tokens the first exchange issued, as RFC 6749 §4.1.2 asks: one of the two parties presenting
+    /// it isn't the client. Past its lifetime it's only refused, so a code left in a browser's history can't end the
+    /// sign-in it started at any later time.
     pub async fn exchange_authorization_code(&self, exchange: CodeExchange<'_>) -> Result<TokenPair, ServiceError> {
         require_client(exchange.client_id)?;
         let now = self.now();
@@ -123,7 +124,8 @@ impl Services {
             .await?
             .ok_or(GrantError::CodeUnknown)?;
         if let Some((_, family_id)) = code.used {
-            return revoke_after_reuse(txn, family_id, now, GrantError::CodeUsed).await;
+            txn.rollback().await.map_err(StoreError::from)?;
+            return self.refuse_reused_code(family_id, code.expires_at, now).await;
         }
         if code.expires_at <= now {
             return Err(GrantError::CodeExpired.into());
@@ -141,12 +143,14 @@ impl Services {
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));
         if !store::oauth::use_auth_code(&txn, &code_hash, now, family_id).await? {
-            // Another exchange of this code got there first.
-            let other = store::oauth::find_auth_code(&txn, &code_hash)
+            // Another exchange of this code got there first. It's read again outside this transaction: on MySQL a
+            // read inside it would still see the snapshot from before the other exchange committed.
+            txn.rollback().await.map_err(StoreError::from)?;
+            let winner = store::oauth::find_auth_code(&self.db, &code_hash)
                 .await?
                 .and_then(|c| c.used);
-            return match other {
-                Some((_, family_id)) => revoke_after_reuse(txn, family_id, now, GrantError::CodeUsed).await,
+            return match winner {
+                Some((_, family_id)) => self.refuse_reused_code(family_id, code.expires_at, now).await,
                 None => Err(GrantError::CodeUsed.into()),
             };
         }
@@ -224,13 +228,30 @@ impl Services {
     }
 }
 
+impl Services {
+    /// Refuses a code presented again, and revokes the family its first exchange issued while the code is within its
+    /// lifetime.
+    async fn refuse_reused_code(
+        &self,
+        family_id: TokenFamilyId,
+        expires_at: Timestamp,
+        now: Timestamp,
+    ) -> Result<TokenPair, ServiceError> {
+        if expires_at > now {
+            let revoked = store::oauth::revoke_token_family(&self.db, family_id, now).await?;
+            tracing::warn!(%family_id, revoked, "reused authorization code revoked its token family");
+        }
+        Err(GrantError::CodeUsed.into())
+    }
+}
+
 fn require_client(client_id: &str) -> Result<(), ServiceError> {
     find_client(client_id)
         .map(|_| ())
         .ok_or(AuthorizationError::ClientUnknown.into())
 }
 
-/// Revokes the family a reused code or refresh token belongs to, commits that, and fails with `error`.
+/// Revokes the family a reused refresh token belongs to, commits that, and fails with `error`.
 async fn revoke_after_reuse(
     txn: DatabaseTransaction,
     family_id: TokenFamilyId,

@@ -35,7 +35,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ends the current session. Succeeds when there is none. */
+        /**
+         * Ends the current session. Succeeds when there is none.
+         * @description Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out
+         *     with `POST /oauth/revoke`.
+         */
         post: operations["sign_out"];
         delete?: never;
         options?: never;
@@ -155,7 +159,7 @@ export interface paths {
         /**
          * Exchanges an authorization code, or a refresh token, for an access token and a new refresh token.
          * @description A refresh token is good once. Presenting one that was used already revokes every token of the sign-in it came
-         *     from, as someone else must hold a copy; so does presenting a code a second time.
+         *     from, as someone else must hold a copy; so does presenting a code a second time within its ten minutes.
          */
         post: operations["issue_token"];
         delete?: never;

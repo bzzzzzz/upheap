@@ -182,7 +182,9 @@ not found together because the server deliberately doesn't tell them apart.
 [technical-design.md](technical-design.md#authentication-and-authorization) already describes for the CLI: it opens the
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
-file. `upheap auth logout` revokes the token on the server and removes it from the keychain.
+file. `upheap auth logout` revokes the token on the server with `POST /oauth/revoke`, which ends the whole sign-in,
+and removes it from the keychain. `POST /auth/logout` is the web app's: it ends only a session cookie, and answers `204`
+for a bearer token without revoking it.
 
 The server's half is built ([cli-tracker.md](cli-tracker.md), step 1): the client is `upheap-cli`, its redirect URI is
 `http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in

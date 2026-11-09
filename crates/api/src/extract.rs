@@ -2,10 +2,10 @@
 //! body/query/path wrappers whose rejections are problem responses.
 
 use axum::extract::{FromRequest, FromRequestParts, Request};
-use axum::http::request::Parts;
 #[cfg(feature = "accounts")]
-use axum::http::{HeaderMap, HeaderValue};
-use axum::http::{Method, header};
+use axum::http::HeaderValue;
+use axum::http::request::Parts;
+use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use domain::Version;
@@ -45,10 +45,12 @@ pub(crate) struct ApiPath<T>(pub T);
 /// The caller, from a bearer token, the session cookie or the local user (see [`Authentication`]). Records
 /// `user_id` on the request span.
 ///
-/// A request with an `Authorization` header is authenticated by it alone, and any cookie is ignored. That is what
-/// lets such requests skip the CSRF check ([`require_csrf_header`]): a forged cross-site request can carry the
-/// victim's cookie but can't set this header, so it either has no header and needs the CSRF one, or has one and
-/// gets nothing from the cookie.
+/// A request whose `Authorization` header uses the `Bearer` scheme is authenticated by it alone, and any cookie is
+/// ignored, even when the token is malformed or empty. That is what lets such requests skip the CSRF check
+/// ([`require_csrf_header`]): a forged cross-site request can carry the victim's cookie but can't set this header, so
+/// it either has no bearer header and needs the CSRF one, or has one and gets nothing from the cookie. Other schemes,
+/// such as the `Basic` credentials a browser sends to a proxy with `auth_basic`, are ignored: the browser adds those
+/// to cross-site requests too, so they prove nothing, and the cookie and the CSRF check apply as usual.
 pub(crate) struct CurrentUser(pub Principal);
 
 impl FromRequestParts<AppState> for CurrentUser {
@@ -59,7 +61,7 @@ impl FromRequestParts<AppState> for CurrentUser {
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
         let principal = match &state.authentication {
             #[cfg(feature = "accounts")]
-            Authentication::Sessions(_) if parts.headers.contains_key(header::AUTHORIZATION) => {
+            Authentication::Sessions(_) if has_bearer_scheme(&parts.headers) => {
                 let token = bearer_token(&parts.headers).ok_or(ApiError::BearerRejected)?;
                 state
                     .services
@@ -80,8 +82,8 @@ impl FromRequestParts<AppState> for CurrentUser {
 }
 
 /// The caller from the session cookie alone, for what only the user in their browser may do: approving a client's
-/// access. A request with an `Authorization` header is refused, so a client holding a token can't approve more
-/// access for itself, and so the request can't have skipped the CSRF check.
+/// access. A request with a bearer token is refused, so a client holding a token can't approve more access for
+/// itself, and so the request can't have skipped the CSRF check.
 #[cfg(feature = "accounts")]
 pub(crate) struct SessionUser(pub Principal);
 
@@ -91,7 +93,7 @@ impl FromRequestParts<AppState> for SessionUser {
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
         let principal = match &state.authentication {
-            Authentication::Sessions(_) if parts.headers.contains_key(header::AUTHORIZATION) => {
+            Authentication::Sessions(_) if has_bearer_scheme(&parts.headers) => {
                 return Err(ServiceError::Unauthenticated.into());
             }
             Authentication::Sessions(_) => session_principal(parts, state).await?,
@@ -109,13 +111,27 @@ async fn session_principal(parts: &Parts, state: &AppState) -> Result<Principal,
     Ok(state.services.authenticate_session(&token).await?)
 }
 
-/// The token from an `Authorization: Bearer <token>` header (RFC 6750 §2.1), if that's what the header holds.
+/// Whether the `Authorization` header uses the `Bearer` scheme (RFC 6750 §2.1), compared ignoring case, whatever
+/// follows it. The one test of "is this a bearer request", for authentication and the CSRF check alike.
+fn has_bearer_scheme(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(' ').next())
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("bearer"))
+}
+
+/// The token from an `Authorization: Bearer <token>` header, or nothing when the header doesn't hold one: another
+/// scheme, or `Bearer` with no token or a malformed one.
 #[cfg(feature = "accounts")]
 fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
+    if !has_bearer_scheme(headers) {
+        return None;
+    }
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let (scheme, token) = value.split_once(' ')?;
+    let (_, token) = value.split_once(' ')?;
     let token = token.trim();
-    let valid = scheme.eq_ignore_ascii_case("bearer") && !token.is_empty() && !token.contains(' ');
+    let valid = !token.is_empty() && !token.contains(' ');
     valid.then(|| OAuthSecret::from_client(token.to_owned()))
 }
 
@@ -214,11 +230,12 @@ impl<S: Send + Sync> FromRequestParts<S> for IfMatch {
 /// this server never approves), so the header proves the request came from the app. Together with
 /// `SameSite=Lax` cookies this blocks cross-site request forgery, including on sign-in.
 ///
-/// Requests with an `Authorization` header don't need it: they are authenticated by that header and never by a
-/// cookie ([`CurrentUser`]), and a cross-site page can't set it either. CSRF is a cookie problem.
+/// Requests with a bearer token don't need it: they are authenticated by the token and never by a cookie
+/// ([`CurrentUser`]), and a cross-site page can't set that header either. CSRF is a cookie problem. Other
+/// `Authorization` schemes don't exempt a request, as a browser may add them to cross-site requests itself.
 pub(crate) async fn require_csrf_header(request: Request, next: Next) -> Response {
     let safe = matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
-    let exempt = safe || request.headers().contains_key(header::AUTHORIZATION);
+    let exempt = safe || has_bearer_scheme(request.headers());
     if !exempt && !request.headers().contains_key(CSRF_HEADER) {
         return ApiError::CsrfHeaderMissing.into_response();
     }

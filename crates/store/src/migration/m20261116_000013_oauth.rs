@@ -4,7 +4,7 @@
 //! Every token belongs to a family: the access and refresh tokens of one sign-in and all the pairs refreshed from it.
 //! Revoking a token, or presenting a refresh token that was already used, revokes the whole family, which
 //! `idx_oauth_tokens_family` finds. A code records the family it was exchanged for, so a code presented twice revokes
-//! what the first exchange issued (RFC 6749 §4.1.2).
+//! what the first exchange issued while the code is within its lifetime (RFC 6749 §4.1.2).
 //!
 //! `client_id` names a client of the registry in code (`domain::oauth`), so it has no foreign key.
 

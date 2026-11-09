@@ -308,7 +308,7 @@ impl IntoResponse for TokenFailure {
 /// Exchanges an authorization code, or a refresh token, for an access token and a new refresh token.
 ///
 /// A refresh token is good once. Presenting one that was used already revokes every token of the sign-in it came
-/// from, as someone else must hold a copy; so does presenting a code a second time.
+/// from, as someone else must hold a copy; so does presenting a code a second time within its ten minutes.
 #[utoipa::path(post, path = "/oauth/token", tag = "oauth",
     request_body(content = TokenRequestForm, content_type = "application/x-www-form-urlencoded"),
     responses(

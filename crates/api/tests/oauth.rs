@@ -272,6 +272,31 @@ async fn a_code_works_once_and_a_second_try_revokes_what_the_first_got() -> Resu
 
 #[gtest]
 #[tokio::test]
+async fn a_code_reused_after_its_lifetime_is_refused_and_revokes_nothing() -> Result<()> {
+    // Arrange: the code stays in the browser's history after the CLI exchanged it.
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let code = app.approve_cli(&session).await?;
+    let first = app.exchange_code(&code).await?;
+    app.clock.advance(Duration::from_minutes(11));
+
+    // Act
+    let again = app.exchange_code(&code).await?;
+    let me = app
+        .send_bearer(Method::GET, "/api/v1/me", &text(&first.body["access_token"]), None)
+        .await?;
+    let refreshed = refresh(&app, &text(&first.body["refresh_token"])).await?;
+
+    // Assert
+    expect_that!(again.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(again.body["error"], eq(&json!("invalid_grant")));
+    expect_that!(me.status, eq(StatusCode::OK));
+    expect_that!(refreshed.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn codes_and_access_tokens_expire() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
@@ -486,31 +511,26 @@ async fn a_bearer_token_writes_without_the_csrf_header_and_a_cookie_still_needs_
 
 #[gtest]
 #[tokio::test]
-async fn an_authorization_header_is_all_that_counts() -> Result<()> {
+async fn a_bearer_header_is_all_that_counts_however_bad() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, _) = app.register("ada@example.test").await?;
     let (access, _) = app.sign_in_cli(&session).await?;
+    let mut refused = Vec::new();
 
-    // Act: a good cookie doesn't rescue a bad header, and a token can't approve more access for itself.
-    let junk_with_cookie = app
-        .send_with(
-            Method::GET,
-            "/api/v1/me",
-            Some(&session),
-            None,
-            &[("authorization", "Bearer not-a-token")],
-        )
-        .await?;
-    let other_scheme = app
-        .send_with(
-            Method::GET,
-            "/api/v1/me",
-            None,
-            None,
-            &[("authorization", "Basic YTpi")],
-        )
-        .await?;
+    // Act: a good cookie doesn't rescue a bad bearer header, and a token can't approve more access for itself.
+    for bad in ["Bearer not-a-token", "Bearer", "bearer ", "BEARER two words"] {
+        let response = app
+            .send_with(
+                Method::GET,
+                "/api/v1/me",
+                Some(&session),
+                None,
+                &[("authorization", bad)],
+            )
+            .await?;
+        refused.push((bad, response));
+    }
     let authorization = format!("Bearer {access}");
     let approve_with_token = app
         .send_with(
@@ -521,16 +541,88 @@ async fn an_authorization_header_is_all_that_counts() -> Result<()> {
             &[CSRF, ("authorization", &authorization)],
         )
         .await?;
+    let lowercase = format!("bearer {access}");
+    let lowercase_scheme = app
+        .send_with(Method::GET, "/api/v1/me", None, None, &[("authorization", &lowercase)])
+        .await?;
 
     // Assert
-    for refused in [&junk_with_cookie, &other_scheme, &approve_with_token] {
-        expect_that!(refused.status, eq(StatusCode::UNAUTHORIZED));
-        expect_that!(refused.body["code"], eq(&json!("unauthenticated")));
+    for (bad, response) in &refused {
+        expect_that!(response.status, eq(StatusCode::UNAUTHORIZED), "{bad:?}");
+        expect_that!(
+            header_of(response, header::WWW_AUTHENTICATE),
+            some(eq(r#"Bearer error="invalid_token""#)),
+            "{bad:?}"
+        );
     }
-    expect_that!(
-        header_of(&junk_with_cookie, header::WWW_AUTHENTICATE),
-        some(eq(r#"Bearer error="invalid_token""#))
-    );
+    expect_that!(approve_with_token.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(approve_with_token.body["code"], eq(&json!("unauthenticated")));
+    expect_that!(lowercase_scheme.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn other_authorization_schemes_leave_the_cookie_and_the_csrf_check_as_they_are() -> Result<()> {
+    // Arrange: a browser behind a proxy with `auth_basic` sends Basic credentials with every request, cross-site
+    // ones included.
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let basic = ("authorization", "Basic YTpi");
+
+    // Act
+    let me = app
+        .send_with(Method::GET, "/api/v1/me", Some(&session), None, &[basic])
+        .await?;
+    let write_without_csrf = app
+        .send_with(
+            Method::POST,
+            "/api/v1/teams",
+            Some(&session),
+            Some(json!({ "name": "Forged" })),
+            &[basic],
+        )
+        .await?;
+    let logout_without_csrf = app
+        .send_with(Method::POST, "/api/v1/auth/logout", Some(&session), None, &[basic])
+        .await?;
+    let write_with_csrf = app
+        .send_with(
+            Method::POST,
+            "/api/v1/teams",
+            Some(&session),
+            Some(json!({ "name": "Real" })),
+            &[basic, CSRF],
+        )
+        .await?;
+
+    // Assert
+    expect_that!(me.status, eq(StatusCode::OK));
+    for forged in [&write_without_csrf, &logout_without_csrf] {
+        expect_that!(forged.status, eq(StatusCode::FORBIDDEN));
+        expect_that!(forged.body["code"], eq(&json!("csrf_header_missing")));
+    }
+    expect_that!(write_with_csrf.status, eq(StatusCode::CREATED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn signing_out_of_the_web_app_leaves_a_bearer_token_alone() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (access, _) = app.sign_in_cli(&session).await?;
+
+    // Act
+    let logout = app
+        .send_bearer(Method::POST, "/api/v1/auth/logout", &access, None)
+        .await?;
+    let me = app.send_bearer(Method::GET, "/api/v1/me", &access, None).await?;
+
+    // Assert
+    expect_that!(logout.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(me.status, eq(StatusCode::OK));
     Ok(())
 }
 
