@@ -428,7 +428,7 @@ overlays are the same components.
 - **Purpose:** say a heap is read-only. **Who:** everyone in the heap; Unarchive for admins (`unarchive` in the
   heap's `allowed_actions`).
 - **Shows:** "This heap is archived and read-only." with Unarchive, above every heap page.
-- **Freq 1.** **Source:** Off Teams §9, TD Archived heaps; `ArchivedNotice`. Built.
+- **Freq 1.** **Source:** Off Teams §9, architecture.md Archived heaps; `ArchivedNotice`. Built.
 - **Must:** local 2, server 2. Explains disabled controls; Unarchive is also on P-heap-row.
 
 ### G-storage-note: Storage note (local build)
@@ -470,7 +470,7 @@ overlays are the same components.
 
 - **Purpose:** say requests are failing because the server is down (`503` `unavailable`) or the network is gone.
 - Today queries retry twice, then each page shows its own error text (E-load-error). There's no shell-level banner.
-- **Freq 1.** Implied by engineering-principles.md Errors §4 (dependency category) and TD Configuration §5.
+- **Freq 1.** Implied by engineering-principles.md Errors §4 (dependency category) and architecture.md Configuration §5.
 - **Must:** local n/a, server 3. Per-page errors already say something failed; a banner says why.
 
 ### M-shortcuts: Keyboard shortcuts help
@@ -487,8 +487,8 @@ overlays are the same components.
 ### Not in the docs
 
 There is no command palette, global search across heaps, or notifications (in-app or email) in any doc. Teammates'
-changes arrive by refetch on focus and on an interval, and items animate to their new positions (TD Session-stable
-order §4–5). See Gaps.
+changes arrive by refetch on focus and on an interval, and items animate to their new positions (architecture.md Session-stable
+order §2). See Gaps.
 
 ## Auth and onboarding
 
@@ -510,7 +510,7 @@ order §4–5). See Gaps.
   page answers, such as `/teams/a/zzz`, is kept and opens the app's not-found.
 - **Empty inputs:** an empty email or password gets `field_empty` with that field before the server counts the
   attempt, so a form sent before a password manager fills it doesn't use one up.
-- **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, TD Auth §3.
+- **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, architecture.md Auth §3.
   Sign in takes "Email or username", as on the phone board.
 - **Phone:** the bare form at full width (PhoneSignIn): 48 px inputs with 16 px text, a 52 px button, and the
   keyboard each input wants (`type=email`, no autocapitalise or autocorrect for email and username).
@@ -522,7 +522,7 @@ order §4–5). See Gaps.
 - `429` `too_many_attempts` after five attempts in 15 minutes per address, with `Retry-After`. The server's message
   says how long to wait; the page shows it in the line above Sign in. A countdown, or disabling Sign in until then,
   isn't designed.
-- **Freq 1.** **Source:** TD Auth §4. Built (message only).
+- **Freq 1.** **Source:** architecture.md Auth §4. Built (message only).
 - **Must:** local n/a, server 2.
 
 ### S-register: Create account
@@ -558,7 +558,7 @@ order §4–5). See Gaps.
 ### S-oauth-authorize: Sign in the CLI
 
 - **Route:** `/oauth/authorize` (server). **Purpose:** the CLI opens the browser, the user signs in with the normal
-  web flow, and the server hands a token back to the CLI's loopback address (Off Auth §4, TD Auth §2).
+  web flow, and the server hands a token back to the CLI's loopback address (Off Auth §4, architecture.md Auth §2).
 - **Shows:** S-sign-in if signed out, with context ("Sign in to use the Upheap CLI"). Whether a consent step ("Allow
   `upheap` on this computer?") follows isn't decided; only registered first-party clients are allowed.
 - **Freq 1.** Designed (flow), screen implied.
@@ -614,7 +614,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 - **Widths:** wide shows effort and impact sizes ("M · L") at each row's right edge and parameter chips on the first
   line; phone and tablet put parameter chips on their own line. While another view loads, the previous one stays,
   dimmed.
-- **Freq 5.** **Source:** Req Views: List items; app-ux.md The list; TD Ranking, Search; `HeapPage.tsx`. Built.
+- **Freq 5.** **Source:** Req Views: List items; app-ux.md The list; architecture.md Ranking, Search; `HeapPage.tsx`. Built.
 - **Must:** local 5, server 5. The ranked list is the answer to “what next?”; nothing else shows the order.
 
 #### P-row: List row
@@ -636,7 +636,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 - "Search titles and descriptions /". Filters on the client as the user types, keeping the ranked order. Not in the
   URL. Escape clears.
-- **Freq 4.** **Source:** TD Search §2; `ListControls.tsx`. Built.
+- **Freq 4.** **Source:** architecture.md Search §2; `ListControls.tsx`. Built.
 - **Must:** local 4, server 4. The only practical way to find one item in a long heap, above all on a phone, where
   browser find is awkward.
 
@@ -644,7 +644,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 - Priority (default), Due soonest, Smallest effort, Largest impact, and "By {parameter}" for each parameter in use.
   A saved sort by an archived parameter shows "By {name} (archived, priority order)".
-- **Freq 3.** **Source:** Req List items §5, TD Search §3; `ListControls.tsx`. Built.
+- **Freq 3.** **Source:** Req List items §5, architecture.md Search §3; `ListControls.tsx`. Built.
 - **Must:** local 2, server 2.
 
 #### M-filters: Filters
@@ -666,7 +666,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 #### M-view-settings: View settings
 
 - Replaced: its settings are M-filters' Show section, and there is no View button.
-- **Freq 2.** **Source:** Req List items §2–3, TD Search §3. Replaced by M-filters.
+- **Freq 2.** **Source:** Req List items §2–3, architecture.md Search §3. Replaced by M-filters.
 - **Must:** local 2, server 2. The way to show blocked items is also P-hidden-count's job; pinning and mixing are
   rarely changed.
 
@@ -683,7 +683,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 - Removed: reloading the page re-ranks at the current time (drops `as_of`), for everyone, so no button is needed.
   The list otherwise keeps its order for the session, apart from edited items, which move at once.
-- **Freq 2.** **Source:** Req Priority §6, TD Session-stable order §6. Removed.
+- **Freq 2.** **Source:** Req Priority §6, architecture.md Session-stable order §3. Removed.
 
 #### P-saved-views: Saved views bar (hidden for now)
 
@@ -694,7 +694,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
     (P-view-history).
   - Changed (P-view-changed): the dot's menu, with Save to {name}, Save as a new view… and Undo changes.
 - **Who:** every member sees and edits views (`create` on the list; `edit`, `archive` on each).
-- **Freq 4.** **Source:** Req Heaps §4, TD API saved views. Hidden for now: the web app doesn't show saved views,
+- **Freq 4.** **Source:** Req Heaps §4, architecture.md API saved views. Hidden for now: the web app doesn't show saved views,
   which the API keeps; they need a place in M-filters.
 - **Must:** local 2, server 2. Filters and search rebuild any view by hand.
 
@@ -715,7 +715,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 | E-no-match   | A filter, search or view leaves nothing                                                    | "No items match."                                                                      | 2    | 2            | 2             | built  |
 | E-bad-view   | The server refuses the URL's view (`400`/`422`, such as a tag from a bookmark that's gone) | The toolbar stays; "This view can't be shown: {message}" and Reset to the default view | 1    | 2            | 2             | built  |
 
-While saved views are hidden, the web app ignores `view` in the URL, as any unknown parameter (TD API saved views).
+While saved views are hidden, the web app ignores `view` in the URL, as any unknown parameter (architecture.md API saved views).
 
 ### M-item: Item pane, panel or sheet
 
@@ -840,7 +840,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 - **Shows:** "What changed in {heap}, as far as you can see." and entries like P-item-history, each naming its
   entity ("You edited item **Rotate the certs**"). Load more.
 - **Gaps:** entries don't link to the item; no filters by actor, entity or date.
-- **Freq 2.** **Source:** TD Audit log §4–6; `ActivityPage.tsx`. Built.
+- **Freq 2.** **Source:** architecture.md Audit log §4–6; `ActivityPage.tsx`. Built.
 - **Must:** local 1, server 2.
 
 ### S-heap-settings: Heap settings
@@ -976,7 +976,7 @@ Why the 4s and 5s:
 - **Route:** `/teams/$teamId/activity`. **Purpose:** changes to the team, its members and its heaps as wholes
   (created, renamed, archived), not what happens inside heaps. Members see display name changes only; admins see
   everything.
-- **Freq 1.** **Source:** TD Audit log §4; `ActivityPage.tsx`. Built.
+- **Freq 1.** **Source:** architecture.md Audit log §4; `ActivityPage.tsx`. Built.
 - **Must:** local 1, server 1.
 
 ## Personal settings and account
@@ -991,7 +991,7 @@ Why the 4s and 5s:
   downloaded"). At the bottom, Sign out (only with `sign_out` in `GET /me` `allowed_actions`, so not in the local
   build).
 - **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
-- **Freq 1.** **Source:** TD API Me; `AccountPage.tsx`. Built.
+- **Freq 1.** **Source:** architecture.md API §7; `AccountPage.tsx`. Built.
 - **Must:** local 4, server 1. Local: it holds export and import, the local build's only data safety. Server: display
   name and the theme.
 
@@ -1007,7 +1007,7 @@ account (nothing is deleted, but a user may want to leave). See Gaps.
 ## Admin and server settings
 
 There are none. The server is configured by environment variables (`DATABASE_URL`, `BASE_URL`,
-`ALLOW_REGISTRATION`, `SESSION_TTL_DAYS`, OIDC providers; TD Configuration §1) and has no instance-admin role. Every
+`ALLOW_REGISTRATION`, `SESSION_TTL_DAYS`, OIDC providers; architecture.md Configuration §1) and has no instance-admin role. Every
 "admin" in the app is a team admin, and their screens are S-team, S-parameters and S-heap-settings. `/healthz` and
 `/readyz` aren't pages.
 
@@ -1116,8 +1116,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
     (SSE) is mentioned as a later replacement for polling.
 14. **Archived saved views** have no place of their own; their history is only on S-heap-activity. There's no
     unarchive, by design.
-15. **Blocked on a closed blocker.** "Closing a blocker later doesn't unblock what waits for it" (TD Cycle
-    detection §3). Nothing nudges the user to move the blocked item on.
+15. **Blocked on a closed blocker.** "Closing a blocker later doesn't unblock what waits for it" (architecture.md Cycle
+    detection and locking §2). Nothing nudges the user to move the blocked item on.
 16. ~~**Return to page after sign-in.**~~ Settled: a signed-out visit and an expired session both return to their
     page after sign-in (S-sign-in, From a link; G-session-expired).
 

@@ -179,7 +179,7 @@ not found together because the server deliberately doesn't tell them apart.
 ## Signing in
 
 `upheap auth login [--server <url>]` runs the OAuth authorization code flow with PKCE that
-[technical-design.md](technical-design.md#authentication-and-authorization) already describes for the CLI: it opens the
+[architecture.md](architecture.md#authentication-and-authorization) already describes for the CLI: it opens the
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
 file. `upheap auth logout` revokes the token on the server with `POST /oauth/revoke`, which ends the whole sign-in,
@@ -188,7 +188,7 @@ for a bearer token without revoking it.
 
 The server's half is built ([progress.md](progress.md)): the client is `upheap-cli`, its redirect URI is
 `http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in
-[technical-design.md](technical-design.md#authentication-and-authorization). See [Server changes](#server-changes).
+[architecture.md](architecture.md#authentication-and-authorization). See [Server changes](#server-changes).
 
 ## Configuration
 

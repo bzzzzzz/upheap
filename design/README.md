@@ -6,7 +6,8 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | --- | --- | --- |
 | [engineering-principles.md](engineering-principles.md) | How we write code. Must follow | A rule changes, or code and a rule disagree and the rule was the wrong one |
 | [requirements.md](requirements.md), [offering.md](offering.md) | What the product does and why: heaps, items, ranking, views; distribution, teams, roles, the audit log | The product changes, not when the code catches up with it |
-| [technical-design.md](technical-design.md) | The architecture: principles, stack, data model conventions, ranking, API conventions, authentication, access control, audit, deployment, testing, decisions | A mechanism or a reason changes |
+| [architecture.md](architecture.md) | How it's built and why: principles, stack, data model conventions, ranking, API conventions, authentication, access control, the audit log, deployment, testing. Mechanisms and reasons, never lists of what the code holds | A mechanism or a reason changes |
+| [decisions.md](decisions.md) | Choices that could have gone another way: context, decision, what it replaced, consequences | A choice is made or superseded. Append; don't rewrite |
 | [progress.md](progress.md) | Status by area, what's next, open questions | Any change that moves an area's status. One line |
 | [local-build.md](local-build.md) | The static, single-user build: the backend in WebAssembly on SQLite-wasm, single-user mode, keeping the data | The local build's mechanisms change |
 | [readable-ids.md](readable-ids.md) | Handles: usernames, slugs, item keys and short links, and why they're shaped as they are | The handle rules change |
