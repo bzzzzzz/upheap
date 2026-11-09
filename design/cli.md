@@ -18,7 +18,7 @@ Goals:
 1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --effort s --due next-week`.
 2. `upheap item list` answers "what should I work on?" the way the web app's list does, with the same order and the same
    reasons.
-3. Every command works in scripts: stable exit codes, `--json` with the server's own response, and IDs on stdout
+3. Every command works in scripts: stable exit codes, `--json` with the server's own response, and keys on stdout
    with `--quiet`.
 
 Not now:
@@ -111,8 +111,9 @@ pointing to the web app when there are more. With `--json --history` the output 
 
 `<item>` is the item's key, the five characters the server gives every item and the web app shows in its links
 ([architecture.md](architecture.md#handles)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
-item in another heap; it's a short link without its `/h/`, so a pasted link works too (any `http` or `https` URL
-ending in `/h/team/heap/key`; its host is ignored and requests go to the configured server). The path beats
+item in another heap; it's a short link without its `/h/`, so a pasted link works too: any `http` or `https` URL
+ending in `/h/team/heap/key`, or in the long form the browser's address bar shows after the web app redirects,
+`/teams/team/heaps/heap/items/key`. The host is ignored and requests go to the configured server. The path beats
 `UPHEAP_HEAP` and the default, but `--heap` naming another heap than the path is exit 2, before any request. A key names the same item for good, in any shell
 and on any machine, so the CLI keeps no cache of the last list. `upheap item list` prints each row's key beside its
 position, and `--json` and `--quiet` print keys too.
@@ -282,7 +283,7 @@ crates/cli/src/
 
 Each command file holds its args struct (`item::AddArgs`) and its `run`. The crate is a library
 with a thin binary: `main` gathers the environment (`Deps::system`) and calls `cli::run(args, deps)`, which returns the
-exit code. `Deps` holds the environment, the token store, the browser and the two output streams, so tests pass an
+exit code. `Deps` holds the environment, the token store, the browser, stdin and the two output streams, so tests pass an
 in-memory store, a browser that answers the consent page itself, and buffers. Shared flags (`--json`, `--quiet`,
 `--server`) are one struct flattened into every command; `--heap` is a second one, flattened only into the commands
 that work in a heap (every item command), so it doesn't show where it would mean nothing.

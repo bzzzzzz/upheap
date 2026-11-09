@@ -122,8 +122,9 @@ impl<'a> HeapName<'a> {
 
 impl ItemName {
     /// Reads a key, `team/heap/key`, or a link to an item (`http://` or `https://`, whose path ends in
-    /// `/h/<team>/<heap>/<key>`; its host, query and fragment are ignored, and so is one trailing slash). Anything
-    /// else, or an empty part, names no item.
+    /// `/h/<team>/<heap>/<key>`, the short link, or `/teams/<team>/heaps/<heap>/items/<key>`, which the web app's
+    /// address bar shows after redirecting the short one; its host, query and fragment are ignored, and so is one
+    /// trailing slash). Anything else, or an empty part, names no item.
     pub fn parse(raw: &str) -> Result<Self, LookupError> {
         let malformed = || LookupError::MalformedItem { name: raw.to_owned() };
         if raw.starts_with("http://") || raw.starts_with("https://") {
@@ -133,7 +134,9 @@ impl ItemName {
                 segments.pop();
             }
             return match segments.as_slice() {
-                [.., "h", team, heap, key] => Self::from_parts(&[*team, *heap, *key]).ok_or_else(malformed),
+                [.., "h", team, heap, key] | [.., "teams", team, "heaps", heap, "items", key] => {
+                    Self::from_parts(&[*team, *heap, *key]).ok_or_else(malformed)
+                }
                 _ => Err(malformed()),
             };
         }

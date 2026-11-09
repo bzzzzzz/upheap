@@ -185,6 +185,11 @@ fn an_item_is_named_by_its_key_a_path_or_a_link() -> googletest::Result<()> {
         "https://x.test/h/team/heap/k3x9a?x=1",
         "https://x.test/h/team/heap/k3x9a#top",
         "https://x.test/prefix/h/team/heap/k3x9a",
+        "https://x.test/teams/team/heaps/heap/items/k3x9a",
+        "http://localhost:8080/teams/team/heaps/heap/items/k3x9a/",
+        "https://x.test/teams/team/heaps/heap/items/k3x9a?x=1",
+        "https://x.test/teams/team/heaps/heap/items/k3x9a#top",
+        "https://x.test/prefix/teams/team/heaps/heap/items/k3x9a",
     ] {
         expect_that!(ItemName::parse(link)?, eq(&item_in("team", "heap", "k3x9a")), "{link}");
     }
@@ -202,6 +207,8 @@ fn anything_else_names_no_item() -> googletest::Result<()> {
         "https://x.test/team/heap/k3x9a",
         "https://x.test/h/team/heap",
         "https://x.test/h/team//k3x9a",
+        "https://x.test/teams/team/heaps/heap/items",
+        "https://x.test/teams/team/heaps//items/k3x9a",
         "https://",
     ] {
         expect_that!(
