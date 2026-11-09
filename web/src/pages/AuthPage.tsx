@@ -4,6 +4,7 @@ import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { ApiProblem } from "../api/client";
 import { useRegister, useSignIn } from "../api/queries";
 import { Field } from "../components/Field";
+import { Logo } from "../components/Logo";
 import { problemMessage } from "../components/ProblemText";
 
 type Mode = "sign_in" | "register";
@@ -60,7 +61,7 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
     <main className="min-h-dvh bg-surface px-5 pt-[72px] pb-4 sm:bg-canvas sm:px-4 sm:pt-16">
       <div className="flex flex-col gap-4 sm:mx-auto sm:w-[380px] sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:p-7">
         <h1 className="flex items-center gap-2 text-lg font-semibold sm:text-base">
-          <UpheapMark />
+          <Logo className="size-6 text-accent sm:size-[22px]" />
           Upheap
         </h1>
         {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
@@ -110,24 +111,6 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
 
 const tabClass =
   "flex h-10 flex-1 cursor-default items-center justify-center rounded-[10px] text-sm text-ink-soft sm:h-auto sm:rounded-lg sm:p-[7px] data-selected:bg-surface data-selected:font-semibold data-selected:text-ink data-selected:shadow-[0_1px_2px_rgba(0,0,0,0.08)]";
-
-/** The Upheap mark: a heap of lines, narrowing to the top. */
-function UpheapMark() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-6 text-accent sm:size-[22px]"
-    >
-      <path d="M4 18h16M6 13h12M9 8h6M11 4h2" />
-    </svg>
-  );
-}
 
 function AuthForm({
   mode,
