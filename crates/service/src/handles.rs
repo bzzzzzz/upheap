@@ -1,4 +1,4 @@
-//! Finding teams, heaps, items and users by their handles (design/readable-ids.md), and picking free handles.
+//! Finding teams, heaps, items and users by their handles (design/architecture.md, Handles), and picking free handles.
 //!
 //! Each lookup checks the caller is a member of the team first, and answers [`ServiceError::NotFound`] otherwise, as
 //! for a handle nobody has, so handles can't be probed. The use case the caller then runs by ID checks its own

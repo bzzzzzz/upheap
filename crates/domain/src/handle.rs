@@ -1,4 +1,4 @@
-//! Readable names for URLs and the CLI (design/readable-ids.md): usernames, team and heap slugs, and item keys.
+//! Readable names for URLs and the CLI (design/architecture.md, Handles): usernames, team and heap slugs, and item keys.
 //! UUIDs stay the keys everywhere else.
 
 use std::fmt;

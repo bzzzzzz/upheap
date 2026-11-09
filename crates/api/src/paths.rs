@@ -1,4 +1,4 @@
-//! The handles in a path (`/teams/{team}/heaps/{heap}/items/{item}`), found for the caller (design/readable-ids.md).
+//! The handles in a path (`/teams/{team}/heaps/{heap}/items/{item}`), found for the caller (design/architecture.md, Handles).
 //!
 //! Each extractor authenticates first, so a caller who isn't signed in gets `401` before anything else. A handle
 //! that isn't well formed names nothing, so it is `404` like one nobody has.

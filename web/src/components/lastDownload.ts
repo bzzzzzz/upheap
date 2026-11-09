@@ -1,4 +1,4 @@
-// When this browser last downloaded a copy of the local build's database (design/local-build.md, Keeping the data),
+// When this browser last downloaded a copy of the local build's database (design/architecture.md, Local build),
 // for the storage note and the Your data card.
 //
 // An exception to thin clients (engineering-principles.md): the date and its wording are worked out here, not by the

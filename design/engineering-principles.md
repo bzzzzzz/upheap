@@ -20,7 +20,7 @@ Companion to [architecture.md](architecture.md). These are the rules we follow w
 1. Clients render what the server returns. Ranking, permissions, contributors, fuzzy due-date labels and validation all live on the server.
 2. Client-side logic is limited to text search, local UI state and animation. Anything else is a bug.
 3. Clients never infer permissions. They show or hide actions only from `allowed_actions`.
-4. The one exception: the local build counts and words facts about its own browser-held database and last download date in the client ([local-build.md](local-build.md), Keeping the data), since no server is involved.
+4. The one exception: the local build counts and words facts about its own browser-held database and last download date in the client ([architecture.md](architecture.md#local-build), Keeping the data), since no server is involved.
 
 ### Domain and ranking
 
@@ -116,7 +116,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 
 ### Async
 
-1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous. The local build runs on `wasm-bindgen-futures` in one worker thread instead, so code shared with it uses only tokio's task-locals, which need no runtime. The rest of tokio stays behind features the local build leaves out, such as `accounts` (see [local-build.md](local-build.md)).
+1. `tokio` is the runtime. Keep async at the edges: `domain` is synchronous. The local build runs on `wasm-bindgen-futures` in one worker thread instead, so code shared with it uses only tokio's task-locals, which need no runtime. The rest of tokio stays behind features the local build leaves out, such as `accounts` (see [architecture.md](architecture.md#local-build)).
 2. Never block inside async code; move CPU-heavy or blocking work to `spawn_blocking`.
 3. Borrow, don't clone, in hot paths such as ranking. Elsewhere, clarity beats micro-optimisation.
 

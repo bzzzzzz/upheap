@@ -22,7 +22,7 @@ const pagesFallback: Plugin = {
   },
 };
 
-// `--mode local-build` builds the local build (design/local-build.md): the backend runs in a worker in the page, so the
+// `--mode local-build` builds the local build (design/architecture.md, Local build): the backend runs in a worker in the page, so the
 // `local-build` condition points `#api-fetch` at it (package.json `imports`). It needs the backend built into
 // src/local/backend first (`npm run build:backend`). GitHub Pages serves it under the repository's name, which
 // UPHEAP_BASE gives, such as `/upheap/`.

@@ -6,7 +6,7 @@ The mockups are in the "Upheap layouts" canvas linked from the pull request that
 ## Goal
 
 Make the web app work well at every width, from a phone to a wide screen, in both builds (the server's and the
-[local build](local-build.md)). It stays a website: one React app whose layout changes with the width.
+[local build](architecture.md#local-build)). It stays a website: one React app whose layout changes with the width.
 
 Making it an installable app comes after this and is out of scope for now ([Later](#later-an-installable-app)).
 

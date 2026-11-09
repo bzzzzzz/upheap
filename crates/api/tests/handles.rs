@@ -1,4 +1,4 @@
-//! Readable handles (design/readable-ids.md): usernames, team and heap slugs in paths, item keys, and personal
+//! Readable handles (design/architecture.md, Handles): usernames, team and heap slugs in paths, item keys, and personal
 //! teams that stay their owner's alone.
 
 mod common;

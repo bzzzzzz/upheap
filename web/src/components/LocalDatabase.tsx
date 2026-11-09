@@ -1,4 +1,4 @@
-// What the local build shows about its database, which lives in this browser (design/local-build.md). In the server
+// What the local build shows about its database, which lives in this browser (design/architecture.md, Local build). In the server
 // build `localDatabase` is null and these render their children or nothing.
 import { localDatabase, type DatabaseCounts, type LocalDatabase } from "#local-database";
 import { useMutation, useQuery } from "@tanstack/react-query";
