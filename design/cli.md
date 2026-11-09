@@ -65,17 +65,20 @@ are worth it.
 
 ### Items
 
-**`upheap item add <title>`** takes `--need` (`idea`, `nice-to-have`, `expected`, `critical`; `nice-to-have` when left out), `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
-`--due <when>` and `--tag <name>` (repeatable). It prints the new item and where it landed: "Added *Rotate the staging
-certs*, now 4th of 31". The position comes from one read of the ranked list after the add, so it's the server's
-number.
+**`upheap item add <title>`** takes `--need` (`idea`, `nice_to_have`, `expected`, `critical`, the API's spellings as
+everywhere in the CLI; `nice_to_have` when left out), `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
+`--due <when>` and `--tag <name>` (repeatable). It prints the new item and where it landed: `Added "Rotate the staging
+certs" (k3x9a), now 4th of 31`. The position comes from one read of the list after the add, so it's the server's
+number; it is "of 2 pinned" or "of 2 blocked" when the item lands in one of those groups, and the read is skipped
+with `--quiet` and `--json`. If the read fails the add still succeeded: the line comes without a position and a
+warning follows.
 
 **`upheap item edit <item>`** takes the same flags, plus `--title`, `--untag <name>`, and `--no-due`, `--no-effort`,
 `--no-impact`, `--no-description` to clear a field. `--tag` and `--untag` add and take off single tags; the CLI reads
 the item and sends the full `tag_ids` list the API expects. Nothing given means nothing to do: the command says so and
 exits 0.
 
-**State verbs.** `item start`, `item block`, `item done`, `item wontdo` and `item reopen` each send one `state` in a `PATCH`. One verb per
+**State verbs.** `item start`, `item block`, `item done`, `item wontdo` and `item reopen` each send one `state` in a `PATCH` (`reopen` too, as `state: open`, not the reopen endpoint, so all five share one path). One verb per
 state reads better than `upheap item edit --state done`, and there's only one way to change a state. The server owns every rule:
 
 - Moving to the state an item is already in changes nothing, so repeating a command is safe. The CLI reports "already
@@ -100,13 +103,17 @@ are the API's own spellings (`nice_to_have`, `in_progress`), and `--tag` and `--
 parameter` needs the parameter, from `--sort-parameter` or the view's own, or it's exit 2 too.
 
 **`upheap item show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
-entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`.
+entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`: the first page, with a footer
+pointing to the web app when there are more. With `--json --history` the output is one object, `{"item": …,
+"history": …}`, each holding the server's body unchanged.
 
 ### Naming an item
 
 `<item>` is the item's key, the five characters the server gives every item and the web app shows in its links
 ([architecture.md](architecture.md#handles)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
-item in another heap; it's a short link without its `/h/`, so a pasted link works too. A key names the same item for good, in any shell
+item in another heap; it's a short link without its `/h/`, so a pasted link works too (any `http` or `https` URL
+ending in `/h/team/heap/key`; its host is ignored and requests go to the configured server). The path beats
+`UPHEAP_HEAP` and the default, but `--heap` naming another heap than the path is exit 2, before any request. A key names the same item for good, in any shell
 and on any machine, so the CLI keeps no cache of the last list. `upheap item list` prints each row's key beside its
 position, and `--json` and `--quiet` print keys too.
 
@@ -157,8 +164,8 @@ heap slug alone works when only one of the caller's teams has a heap by that slu
    came. On a terminal, DEL and the C1 controls (U+007F to U+009F), which JSON doesn't escape and a terminal may run,
    are written as `\u007f` to `\u009f`: the same JSON value, nothing for the terminal to interpret. The same goes for
    a problem body on stderr.
-3. **`--quiet`** prints only what a script needs next: the item ID for `item add`, nothing for a state change, IDs one
-   per line for `item list`.
+3. **`--quiet`** prints only what a script needs next: the item's key for `item add`, nothing for a state change, keys
+   one per line for `item list`.
 4. Results go to stdout; warnings and errors go to stderr. A reader that stops early (`upheap item list -q | head -1`)
    isn't an error: the command exits 0 without a message.
 5. Only the command's flow function writes output, through one `Output` value that `main` builds from these flags and
@@ -278,7 +285,7 @@ with a thin binary: `main` gathers the environment (`Deps::system`) and calls `c
 exit code. `Deps` holds the environment, the token store, the browser and the two output streams, so tests pass an
 in-memory store, a browser that answers the consent page itself, and buffers. Shared flags (`--json`, `--quiet`,
 `--server`) are one struct flattened into every command; `--heap` is a second one, flattened only into the commands
-that work in a heap (`item list` for now), so it doesn't show where it would mean nothing.
+that work in a heap (every item command), so it doesn't show where it would mean nothing.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
 truth](engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO

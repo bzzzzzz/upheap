@@ -38,10 +38,10 @@ The design docs are indexed in [design/README.md](design/README.md).
 - Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the
   `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
-- The `upheap` CLI's first commands: sign in through the browser, list your heaps and pick a default, and list a
-  heap's ranked or closed items with the web app's filters and saved views.
+- The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
+  items with the web app's filters and saved views, and add, show, edit and move items between states.
 
-Not yet: editing the heap's own weights, OIDC sign-in, adding and editing items from the CLI, and invitations.
+Not yet: editing the heap's own weights, OIDC sign-in, tag commands in the CLI, and invitations.
 
 ## Run it
 
@@ -87,6 +87,9 @@ cargo run -p cli -- heap list
 cargo run -p cli -- heap use personal                           # or team/heap
 cargo run -p cli -- item list --effort s,m --tag infra
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
+cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
+cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
+cargo run -p cli -- item done k3x9a
 cargo run -p cli -- auth logout
 ```
 
