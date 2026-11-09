@@ -394,7 +394,7 @@ function HeapItem({
     <MenuItem
       id={id}
       textValue={heap.name}
-      href={`/teams/${encodeURIComponent(entry.team.slug)}/heaps/${encodeURIComponent(heap.slug)}`}
+      href={{ to: "/teams/$team/heaps/$heap", params: { team: entry.team.slug, heap: heap.slug } }}
       onAction={onOpen}
       className={`${rowClass} ${current ? currentRowClass : ""} ${extraClass}`}
     >
