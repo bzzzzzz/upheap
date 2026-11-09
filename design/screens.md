@@ -249,8 +249,9 @@ E-loading _(frequency: every screen shows it, and a blank page reads as broken)_
 
 - **Browser:** the sidebar with every heap (grouped by team when there are several), the open heap's Open and
   Closed, then Team (server), Account and the storage note (local). The sidebar is the heap switcher. Loading keeps the previous view, dimmed.
-- **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed and More;
-  the More sheet with Team (server) and Account; the storage note under the content (local).
+- **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed, +,
+  Settings and More; the More sheet with Activity, Team (server), Teams and Account; the storage note under the
+  content (local).
 - **Both:** a `401` goes to S-sign-in (server).
 
 ### S-heap: Heap list
@@ -852,6 +853,8 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
   it changes the heap's links; old links stop working.", preceded by "New link: /teams/{team}/heaps/{slug}." while a
   new link name is typed; the heap's history; Archive heap, or Unarchive heap on an
   archived heap. Not yet: P-heap-weights.
+- On an archived heap, G-archived-banner's Unarchive and General's Unarchive heap both show. Accepted: the banner
+  is on every page of the heap, and General is where the archive state lives.
 - **Freq 1.** **Source:** app-ux.md Heap settings; `HeapSettingsPage.tsx`. Built.
 - **Must:** local 1, server 1.
 
@@ -1095,9 +1098,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 1. **Heap weights.** Admins should edit age, deadline and value weights (Req Custom parameters §2, Off Roles).
    Neither the API nor the UI has them, and no doc says whether they belong on S-parameters (beside the parameter
    weights they compete with) or on S-heap-settings.
-2. **Heap settings page.** readable-ids.md gives heaps a `settings` route and slugs, while heap rename and archive
-   live on S-team today. The list "(tags, parameters, activity, closed…)" in its URL table reads as either sub-pages
-   of the heap or the contents of one settings page. Decide which.
+2. ~~**Heap settings page.**~~ Settled: one Settings page, S-heap-settings, with General, Tags and Parameters as
+   tabs under `/settings`; activity and closed stay pages of the heap. P-heap-row on S-team keeps rename and archive.
 3. **Password and account.** No password change, reset ("forgot password"), email change, or "sign out everywhere".
    The server has no email sending, so reset needs an admin path or a design.
 4. **CLI tokens.** `/me/tokens` and P-tokens are designed but have no layout, and the OAuth consent step is
@@ -1135,7 +1137,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    makes it private (no members, no leaving, fixed slug). readable-ids.md lists this as a doc fix to make.
 5. **Local build names.** local-build.md: user "Me", team "My heaps", heap "My heap". readable-ids.md and
    `service/src/personal.rs`: team slug `me`, first heap "Personal". local-build.md is stale.
-6. ~~**More menu.**~~ Settled: app-ux.md lists Team, Teams, Tags, Parameters and Account, as the code does; Sign out
+6. ~~**More menu.**~~ Settled: app-ux.md lists Activity, Team, Teams and Account, as the code does; Sign out
    is on S-account.
 7. ~~**Sign-up on this branch.**~~ Settled: S-register sends the username.
 8. **"Removable from items in the list"** (progress.md Tags) predates the compact rows; tags are now removed in

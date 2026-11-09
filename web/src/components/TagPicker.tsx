@@ -103,9 +103,12 @@ export function TagPicker({
     <FieldFrame layout={layout} label={label}>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((tag) => (
+          // To a finger, Remove is 44 px square around its 20 px circle. It stays inside the chip, which widens for it
+          // and with its margins takes a 44 px line, so the target never covers the tag's name, the next chip or the
+          // input.
           <span
             key={tag.id}
-            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft"
+            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft pointer-coarse:my-2 pointer-coarse:pr-0"
           >
             {tag.name}
             <button
@@ -113,10 +116,9 @@ export function TagPicker({
               disabled={disabled || busy}
               onClick={() => onChange(value.filter((t) => t.id !== tag.id))}
               aria-label={`Remove tag ${tag.name}`}
-              // A finger gets a 44 px target around the 20 px circle.
-              className="relative flex size-5 items-center justify-center rounded-full text-muted after:absolute after:-inset-3 hover:bg-line hover:text-ink pointer-fine:after:hidden"
+              className="group flex size-5 shrink-0 items-center justify-center rounded-full text-muted hover:text-ink pointer-coarse:size-11"
             >
-              ×
+              <span className="flex size-5 items-center justify-center rounded-full group-hover:bg-line">×</span>
             </button>
           </span>
         ))}

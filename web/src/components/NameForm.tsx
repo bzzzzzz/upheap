@@ -2,16 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ProblemText } from "./ProblemText";
 
-export const inputClass =
-  "rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100";
-export const primaryButtonClass =
-  "rounded-md bg-stone-900 px-3 py-1 text-sm font-medium text-white disabled:opacity-40 dark:bg-stone-100 dark:text-stone-900";
-export const quietButtonClass =
-  "rounded px-1.5 py-1 text-sm text-stone-500 hover:text-stone-900 disabled:opacity-40 dark:hover:text-stone-100";
-
 export type NameFormClasses = { input: string; save: string; cancel: string; problem?: string };
-
-const defaultClasses: NameFormClasses = { input: inputClass, save: primaryButtonClass, cancel: quietButtonClass };
 
 /**
  * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
@@ -27,7 +18,7 @@ export function NameForm({
   error,
   onSave,
   className = "",
-  classes = defaultClasses,
+  classes,
   onCancel,
   autoFocus = false,
   onDraftChange,
@@ -40,8 +31,8 @@ export function NameForm({
   error: Error | null;
   onSave: (name: string) => void;
   className?: string;
-  /** The input's, buttons' and error's look, for a page in the design tokens; other pages keep the defaults. */
-  classes?: NameFormClasses;
+  /** The input's, buttons' and error's look, which each page sets. */
+  classes: NameFormClasses;
   onCancel?: () => void;
   autoFocus?: boolean;
   /** Told the text in the input whenever it changes, for a note about it beside the form, such as a new link. */
@@ -73,7 +64,10 @@ export function NameForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (changed && name.trim() !== "") onSave(name);
+    if (!changed || name.trim() === "") return;
+    // Save goes once the name is saved, so focus waits in the input rather than falling to the page.
+    input.current?.focus();
+    onSave(name);
   };
 
   return (

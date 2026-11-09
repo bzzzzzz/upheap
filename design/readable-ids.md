@@ -81,7 +81,7 @@ Every handle comes after a word saying what it is, and every page of a thing sit
 /teams/my-team                              the team
 /teams/my-team/activity                     a team page
 /teams/my-team/heaps/backlog                the heap's list
-/teams/my-team/heaps/backlog/tags           a heap page (also parameters, activity, closed)
+/teams/my-team/heaps/backlog/settings/tags  a heap page (also settings, settings/parameters, activity, closed)
 /teams/my-team/heaps/backlog/items/k3x9a    an item, in the pane over the list
 ```
 

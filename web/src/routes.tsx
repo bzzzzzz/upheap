@@ -14,7 +14,7 @@ import {
 } from "@tanstack/react-router";
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
-import { meQuery, soleTeam, useAuthorizationCheck, useMe, useSignOut } from "./api/queries";
+import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -267,7 +267,10 @@ const heapSettingsRoute = createRoute({
   path: "/teams/$team/heaps/$heap/settings",
   component: function HeapSettingsRoute() {
     const { team, heap } = heapSettingsRoute.useParams();
-    return <HeapSettingsLayout key={`${team}/${heap}`} heap={{ team, heap }} />;
+    const { data } = useHeap({ team, heap });
+    // Another heap starts afresh, but a new link name for this one keeps the page as it is, with focus where it was.
+    // So it's keyed by the heap's ID, once it's known.
+    return <HeapSettingsLayout key={data?.id ?? `${team}/${heap}`} heap={{ team, heap }} />;
   },
 });
 

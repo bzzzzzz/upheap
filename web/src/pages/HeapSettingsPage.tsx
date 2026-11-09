@@ -9,6 +9,9 @@ import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
 
+/** The app's base path without its trailing slash, which the heap's links start with: `/upheap` in the local build. */
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
 const tabClass =
@@ -129,7 +132,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
                 <>
                   New link:{" "}
                   <span className="font-mono break-all text-ink-soft">
-                    /teams/{heapRef.team}/heaps/{newSlug}
+                    {BASE}/teams/{heapRef.team}/heaps/{newSlug}
                   </span>
                   .{" "}
                 </>

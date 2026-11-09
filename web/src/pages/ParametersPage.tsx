@@ -212,6 +212,8 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
   const stopRenaming = () => {
     returnFocus();
     setRenaming(false);
+    // Opened again, the form starts without the last attempt's error.
+    rename.reset();
   };
   const headingId = `parameter-${parameter.id}`;
   const canArchive = parameter.allowed_actions.includes("archive");
@@ -220,6 +222,7 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
   return (
     <li aria-labelledby={headingId} className={cardClass}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {/* The weight stays put while the name is being changed, so a weight not yet saved isn't lost. */}
         {renaming && canEdit ? (
           <>
             <h3 id={headingId} className="sr-only">
@@ -242,23 +245,25 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
             />
           </>
         ) : (
+          <h3 id={headingId} className="min-w-0 text-[17px] font-semibold break-words max-sm:flex-1 sm:text-base">
+            {parameter.name}
+          </h3>
+        )}
+        <div className="max-sm:order-last max-sm:basis-full">
+          {canEdit ? (
+            <WeightForm
+              parameter={parameter}
+              pending={weigh.isPending}
+              onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
+            />
+          ) : (
+            <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
+              Weight {parameter.weight}
+            </span>
+          )}
+        </div>
+        {!renaming && (
           <>
-            <h3 id={headingId} className="min-w-0 text-[17px] font-semibold break-words max-sm:flex-1 sm:text-base">
-              {parameter.name}
-            </h3>
-            <div className="max-sm:order-last max-sm:basis-full">
-              {canEdit ? (
-                <WeightForm
-                  parameter={parameter}
-                  pending={weigh.isPending}
-                  onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
-                />
-              ) : (
-                <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
-                  Weight {parameter.weight}
-                </span>
-              )}
-            </div>
             <span className="flex-1 max-sm:hidden" />
             {canEdit && (
               <button
@@ -303,9 +308,10 @@ function WeightForm({
   onSave: (weight: number) => void;
 }) {
   const [weight, setWeight] = useState(parameter.weight);
-  const [shownVersion, setShownVersion] = useState(parameter.version);
-  if (shownVersion !== parameter.version) {
-    setShownVersion(parameter.version);
+  // Reseeded when the saved weight changes, not on every new version, so a rename doesn't drop a weight being typed.
+  const [shownWeight, setShownWeight] = useState(parameter.weight);
+  if (shownWeight !== parameter.weight) {
+    setShownWeight(parameter.weight);
     setWeight(parameter.weight);
   }
   return (

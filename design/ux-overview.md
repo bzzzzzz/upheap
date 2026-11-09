@@ -110,7 +110,7 @@ no shortcut hints.
 
 The one-step-ahead ideas above apply to the first set as follows:
 
-1. **The phone's Add button sits in the middle of the tabs** (Open, Closed, +, Activity, More), under the thumb, on
+1. **The phone's Add button sits in the middle of the tabs** (Open, Closed, +, Settings, More), under the thumb, on
    every page that shows the tabs.
 2. **The phone item sheet keeps its state buttons in a bar at its bottom** (Start, Block and Done for an open item,
    named as in the browser). The fields scroll above it.

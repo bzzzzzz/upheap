@@ -654,6 +654,8 @@ export function useUpdateHeap(team: string) {
         }),
       ),
     onSuccess: async (saved, { heap }) => {
+      // Cached under its new slug too, so the page at the new path shows it at once rather than loading it.
+      queryClient.setQueryData(heapKey({ team, heap: saved.slug }), saved);
       if (saved.slug === heap.slug) return;
       const prefix = `/teams/${team}/heaps/${heap.slug}`;
       const path = window.location.pathname;

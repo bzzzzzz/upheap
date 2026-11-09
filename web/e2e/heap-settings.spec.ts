@@ -11,11 +11,16 @@ test("General renames the heap, changes its link name and archives it", async ({
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: /^Switch heap: Allotment/ }).first()).toBeAttached();
 
-  // A new link name moves the page to the heap's new path.
-  await page.getByLabel("Heap link name").fill("allotment");
-  await expect(page.getByText(/^New link: \/teams\/[^/]+\/heaps\/allotment\./)).toBeVisible();
+  // A new link name moves the page to the heap's new path (under the local build's base path too), with the heap
+  // shown at once and focus still in the field.
+  const linkName = page.getByLabel("Heap link name");
+  await linkName.fill("allotment");
+  await expect(page.getByText(`New link: ${heapPath.replace(/[^/]+$/, "allotment")}.`)).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/heaps\/allotment\/settings$/);
+  await expect(linkName).toBeFocused();
+  await expect(linkName).toHaveValue("allotment");
+  await expect(page.getByText("Loading…")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Archive heap" }).click();
   await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
@@ -34,6 +39,8 @@ test("Tags and Parameters are tabs of Settings, and their old paths lead there",
   // `heapPath` holds the local build's base path too.
   await page.goto(`${heapPath}/tags`);
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/tags$`));
+  await page.goto(`${heapPath}/parameters`);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/parameters$`));
 });
 
 test("a tag reads as a row, and its edit button turns it into a form", async ({ page }) => {
