@@ -121,6 +121,146 @@ Each of these is in Later, not in the commitments.
 
 ## 3. Workflows
 
+None of these is a loop flow: nobody does them daily. Each is **setup** (once, or rarely) or **recovery** (after a
+mistake or a failure). Signing in, the one loop flow nearby, is built and unchanged
+([ux.md](../ux.md#a-team-the-server-build)).
+
+### Team admin
+
+**A1. Invite the team** (setup: once per team, and again when people join later)
+
+1. Opens the team's page and makes an invite link.
+2. Copies it and sends it to the team, outside Upheap.
+3. Sees people appear in the member list as they join.
+4. When the link has ended and more people are to come, makes a new one.
+
+**A2. Add someone already on the server** (setup). Built, unchanged: finds the user by name and adds them
+([ux.md](../ux.md#teams-and-team)).
+
+**A3. Shut a link that went where it shouldn't** (recovery)
+
+1. Looks at the team's links: who made each, when it ends.
+2. Revokes the link.
+3. Looks at who joined through it.
+4. Removes anyone who shouldn't be in the team, the way members are removed today.
+5. Makes a new link if the team still needs one.
+
+### Newcomer, without an account
+
+**N1. Join with a new account** (setup: once)
+
+1. Opens the link and sees which team it's for and who made it.
+2. Chooses to create an account and gives a name, a username, an email address and a password.
+3. Confirms joining the team.
+4. Is in the team, and has a personal heap of their own beside it.
+
+**N2. The link has ended or was revoked** (recovery)
+
+1. Opens the link and is told which happened.
+2. Asks the team for a new one.
+
+**N3. They have an account after all** (recovery)
+
+1. Tries to create an account and is told the email address or the username is taken.
+2. Signs in from the same page and carries on from M1 step 3, or, with the password forgotten, goes to P3 and
+   opens the link again afterwards.
+
+**N4. Stopped halfway** (recovery)
+
+1. Created the account but closed the page before confirming. They have an account and aren't in the team.
+2. Opens the link again, signed in or after signing in, and confirms.
+
+### Member, with an account
+
+**M1. Join another team** (setup: once per team)
+
+1. Opens the link.
+2. Signs in if they aren't, and comes back to the link's page.
+3. Sees the team, who made the link, and which account they're signed in as, and confirms.
+4. Is in the team, and finds it among their teams.
+
+**M2. Signed in as the wrong account** (recovery)
+
+1. Sees on the link's page that the account isn't the one they want.
+2. Signs out, signs in as the other, and is back on the link's page.
+3. If they had already joined with the wrong one, leaves the team from it, the way members leave today.
+
+**M3. Already in the team** (recovery). Opens the link and is taken to the team.
+
+### Any user
+
+**P1. Change the password** (setup: rarely)
+
+1. Opens Account and gives the current password and a new one.
+2. Is told it changed and that their other sign-ins have ended.
+3. On another device or in the command-line client, the next use asks them to sign in again.
+
+**P2. Shut out someone who may know the password** (recovery)
+
+1. Changes the password as in P1, which ends every other sign-in.
+2. Looks at the account's history for password changes that weren't theirs.
+
+**P3. Forgotten password** (recovery)
+
+1. On the sign-in page, reads that a reset comes from whoever runs the server.
+2. Asks them, outside Upheap.
+3. Receives a link and opens it within the hour.
+4. Sets a new password and is signed in. Every other sign-in has ended.
+
+**P4. The reset link has ended or was used** (recovery). Opens it, is told which, and asks again.
+
+**P5. Doesn't know the current password while signed in** (recovery). Can't change it in Account; goes to P3.
+
+### Operator
+
+**O1. Give someone a reset link** (recovery: rarely)
+
+1. Hears from the user and makes sure it's them, outside Upheap.
+2. Runs the server's command with the user's username or email address.
+3. Gets the link and when it ends, or is told there is no such user.
+4. Sends the link to the user.
+
+**O2. Run a closed server** (setup: once)
+
+1. Closes registration in the server's configuration.
+2. From then on, new accounts come only through team admins' invite links.
+
+### User stories
+
+One per step that asks something new of the product. Steps that use what's built have none.
+
+1. An admin makes an invite link on the team's page and gets the link and when it ends. (A1.1)
+2. An admin copies a link they made earlier while it still works. (A1.2)
+3. An admin sees the team's links, each with who made it, when it ends, and whether it works. (A3.1)
+4. An admin revokes a link and it stops working at once. (A3.2)
+5. An admin sees who joined through a link. (A3.3)
+6. Anyone opening a working link sees the team's name and who made the link. (N1.1, M1.1)
+7. A newcomer creates an account from the link's page, with registration open or closed. (N1.2)
+8. Someone opening an ended or revoked link is told which. (N2.1)
+9. Someone told their email address or username is taken can sign in from the same page and stay on the link.
+   (N3.2)
+10. Someone who signs in, or signs out and in again, from the link's page comes back to it. (M1.2, M2.2, N4.2)
+11. A signed-in user sees which account they're joining as, and joins by confirming. (M1.3, N1.3)
+12. A user who is already in the team is taken to it. (M3)
+13. A user changes their password in Account with the current one and a new one, and is told their other
+    sign-ins ended. (P1.1, P1.2)
+14. A client whose sign-in was ended by a password change is asked to sign in again, and says why it can. (P1.3)
+15. A user sees their password changes and resets in Account's history. (P2.2)
+16. The sign-in page says how a forgotten password is reset. (P3.1)
+17. Someone opening a working reset link sets a new password and is signed in. (P3.4)
+18. Someone opening an ended or used reset link is told which. (P4)
+19. The operator runs a command with a username or an email address and gets a reset link and when it ends, or
+    is told there is no such user. (O1.2, O1.3)
+
+### Not core
+
+1. Getting rid of an account that came in through a link and shouldn't exist. The admin removes the person from
+   the team; the account stays, with its empty personal team. Deactivating one is in Later.
+2. Telling a person they were added directly, or asking them first.
+3. Turning down an invitation. Not opening the link is the answer.
+4. The first account on a closed server (Out §4).
+5. Changing a username or an email address.
+
 ## 4. Behaviours
 
 ## 5. Interface
@@ -134,6 +274,9 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - A member who was removed opens a link that still works: a scenario for step 4.
 - Who the audit log names as the actor of an operator's reset: step 4.
 - Which page a new member lands on when the team has several heaps: step 5.
+- How the sign-in page knows who runs the server, for example a contact line the operator sets: step 5.
+- Whether "this email address is taken" on the link's page tells a stranger who has an account: step 4.
+- Wrong current password, and how many tries, in the change form: step 4.
 
 ## Later
 
