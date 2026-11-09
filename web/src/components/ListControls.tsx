@@ -149,7 +149,7 @@ export function ListControls({
             <button
               type="button"
               onClick={() => onChange(withoutFiltersOrViewChanges(view))}
-              className="rounded-md px-1.5 py-1 text-sm font-medium text-accent-ink hover:bg-accent-soft"
+              className="rounded-md px-1.5 py-1 text-sm font-medium text-accent-ink hover:bg-accent-soft pointer-coarse:min-h-11 pointer-coarse:px-3"
             >
               Reset all
             </button>

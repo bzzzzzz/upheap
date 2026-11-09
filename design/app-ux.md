@@ -102,7 +102,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    `N` and `/` stay.
 5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
 6. Saved views are hidden in the web app for now; the API keeps them, so a client can bring them back.
-7. One Filters panel holds what the list shows and its filters: Show (In progress, Open, Blocked as Pinned, Shown or
+7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in), then Narrow down (tags, need,
    effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
