@@ -3,7 +3,7 @@
 How a person gets an account, gets into a team, and keeps being able to sign in: invite links, password change and
 password reset. In progress, by the steps of the maintainer's design method. Scale: a feature area, so Value is
 short and [product.md](../product.md), [ux.md](../ux.md) and [architecture.md](../architecture.md) are given.
-Step agreed: 2.
+Step agreed: 3.
 
 ## Constraints
 
@@ -46,12 +46,11 @@ Step agreed: 2.
    working.
 2. The admin sends the link to the team, by whatever they use to talk. Upheap takes no part in this.
 3. A newcomer opens the link. They see which team it's for and who made it, and can create an account or sign in.
-4. They create an account, though registration is closed on this server. They get their own personal team and heap
-   like any new user.
-5. They confirm joining, and are in the team as a member, with its heaps in reach.
-6. The admin sees them in the member list, and the team's activity says they joined and through which link.
-7. A second teammate, who already has an account, opens the same link, signs in, confirms, and is in.
-8. A week later the link stops working. Whoever opens it is told so and to ask the team for a new one.
+4. They create an account, though registration is closed on this server. That puts them in the team as a member,
+   with its heaps in reach, and they get their own personal team and heap like any new user.
+5. The admin sees them in the member list, and the team's activity says they joined and through which link.
+6. A second teammate, who already has an account, opens the same link, signs in, confirms, and is in.
+7. A week later the link stops working. Whoever opens it is told so and to ask the team for a new one.
 
 ### Commitments
 
@@ -66,7 +65,8 @@ These go into product.md when the design is agreed. Where one changes an existin
    stay.
 5. A team can have several working links at a time. Admins see each one with who made it and when it ends.
 6. Opening a working link shows the team's name and who made the link, to anyone, signed in or not.
-7. A signed-in user joins by confirming on that page. They join as a member, never as an admin.
+7. A signed-in user joins by confirming on that page. A person who creates an account from the link joins with
+   it, with no second confirm. Either way they join as a member, never as an admin.
 8. A user who is already in the team is taken to it, and nothing changes.
 9. A link that has ended or been revoked lets no one in and says which happened.
 10. Links are never deleted. Ended and revoked links stay in the team's history.
@@ -151,8 +151,7 @@ mistake or a failure). Signing in, the one loop flow nearby, is built and unchan
 
 1. Opens the link and sees which team it's for and who made it.
 2. Chooses to create an account and gives a name, a username, an email address and a password.
-3. Confirms joining the team.
-4. Is in the team, and has a personal heap of their own beside it.
+3. Is in the team, and has a personal heap of their own beside it.
 
 **N2. The link has ended or was revoked** (recovery)
 
@@ -164,11 +163,6 @@ mistake or a failure). Signing in, the one loop flow nearby, is built and unchan
 1. Tries to create an account and is told the email address or the username is taken.
 2. Signs in from the same page and carries on from M1 step 3, or, with the password forgotten, goes to P3 and
    opens the link again afterwards.
-
-**N4. Stopped halfway** (recovery)
-
-1. Created the account but closed the page before confirming. They have an account and aren't in the team.
-2. Opens the link again, signed in or after signing in, and confirms.
 
 ### Member, with an account
 
@@ -235,12 +229,13 @@ One per step that asks something new of the product. Steps that use what's built
 4. An admin revokes a link and it stops working at once. (A3.2)
 5. An admin sees who joined through a link. (A3.3)
 6. Anyone opening a working link sees the team's name and who made the link. (N1.1, M1.1)
-7. A newcomer creates an account from the link's page, with registration open or closed. (N1.2)
+7. A newcomer creates an account from the link's page, with registration open or closed, and is in the team.
+   (N1.2)
 8. Someone opening an ended or revoked link is told which. (N2.1)
 9. Someone told their email address or username is taken can sign in from the same page and stay on the link.
    (N3.2)
-10. Someone who signs in, or signs out and in again, from the link's page comes back to it. (M1.2, M2.2, N4.2)
-11. A signed-in user sees which account they're joining as, and joins by confirming. (M1.3, N1.3)
+10. Someone who signs in, or signs out and in again, from the link's page comes back to it. (M1.2, M2.2)
+11. A signed-in user sees which account they're joining as, and joins by confirming. (M1.3)
 12. A user who is already in the team is taken to it. (M3)
 13. A user changes their password in Account with the current one and a new one, and is told their other
     sign-ins ended. (P1.1, P1.2)
