@@ -12,6 +12,7 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [ux.md](ux.md) | The web app's UX: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, what comes later | A principle, a layout or a behaviour changes |
 | [work/progress.md](work/progress.md) | Status by area, what's next, open questions | Any change that moves an area's status. One line |
 | [work/cli.md](work/cli.md) | The `upheap` command-line client: commands, output, errors, sign-in, layout. Built; to be folded into the permanent docs | The design changes, until it's built |
+| [work/getting-in.md](work/getting-in.md) | The design of getting in: invite links, password change and reset. Not built yet; being designed step by step | The design changes, until it's built |
 
 `work/` holds what's in flight: the status, and a doc per piece of unbuilt work, deleted once it's built. Everything
 beside it is permanent.

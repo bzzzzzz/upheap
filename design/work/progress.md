@@ -28,6 +28,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Heaps | Product Teams §4, 9, Heaps | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Product Audit log | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
+| Getting in | [getting-in.md](getting-in.md) | ⬜ | Invite links, password change, and reset by an operator's link. Being designed; the doc says which step is agreed |
 | CLI | [cli.md](cli.md) | ✅ | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Released from a `v*` tag: static binaries for Apple silicon macOS and x86_64 and aarch64 Linux, and the `bzzzzzz/tap/upheap` cask |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
@@ -65,8 +66,8 @@ Ideas, not commitments. product.md holds the commitments.
 - **Saved views.** Named views of a heap, defined by its filters and shared by the team, so "ready to pick up" or
   "blocked work" is one click without becoming a separate backlog. The API is built; the web app hides them until
   they have a place in the Filters panel ([decisions.md](../decisions.md), decision 27).
-- **Invitations** by email or link, and membership from identity-provider groups. Today an admin adds an existing
-  user.
+- **Invitations by email,** and membership from identity-provider groups. Invite links are being designed
+  ([getting-in.md](getting-in.md)).
 - **Keyboard.** Shortcut hints on controls, a hint bar, `?` for help, and ⌘K across heaps, which needs a server
   search endpoint ([ux.md](../ux.md#later-keyboard)).
 - **Tablet.** Its own design pass. Today it keeps ux.md's layout.
@@ -80,8 +81,8 @@ Ideas, not commitments. product.md holds the commitments.
   report; a searchable blocker picker for long heaps; a link from "parameter in use" to the items holding a value; bulk actions, which `GridList` was chosen with in mind;
   notifications and due reminders; a countdown on a throttled sign-in; hiding Create account when registration is
   closed, which needs the server to say so before sign-in.
-- **Password and account.** No password change, reset, email change or "sign out everywhere". The server sends no
-  email, so a reset needs an admin path or a design.
+- **Email.** The server sends none, so there is no reset by mail, no address verification and no email change.
+  Password change and an operator's reset link are being designed ([getting-in.md](getting-in.md)).
 - **Installable app.** A PWA for the local build, then store builds with Tauri ([ux.md](../ux.md#later-an-installable-app)).
 - **Playwright against Postgres.** Optional; the config starts the server on in-memory SQLite.
 
