@@ -65,6 +65,8 @@ enum Target {
     FreshTeam,
     /// The caller's own user, with its version for `If-Match`.
     Me,
+    /// A sign-in of the CLI as the caller, in `{id}`.
+    SignIn,
     /// A lookup text in the query string.
     UserQuery,
     /// The CLI's authorization request in the query string.
@@ -227,6 +229,22 @@ fn endpoints() -> Vec<Endpoint> {
             Target::Me,
             RequestBody::DisplayName,
             StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/me/sign-ins",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::DELETE,
+            "/me/sign-ins/{id}",
+            SignedIn,
+            Target::SignIn,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
         ),
         row(
             Method::GET,
@@ -945,6 +963,22 @@ impl World {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
                     if_match = Some(me.body["user"]["version"].to_string());
                 }
+            }
+            Target::SignIn => {
+                // Anonymous callers get a sign-in's shape and no sign-in, and are refused before it matters.
+                let mut id = "7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40".to_owned();
+                if let Some(session) = &session {
+                    self.app.sign_in_cli(session).await?;
+                    let listed = self
+                        .app
+                        .send(Method::GET, "/api/v1/me/sign-ins", Some(session), None)
+                        .await?;
+                    id = listed.body["sign_ins"][0]["id"]
+                        .as_str()
+                        .context("no sign-in listed")?
+                        .to_owned();
+                }
+                path = path.replace("{id}", &id);
             }
             Target::UserQuery => path.push_str("?query=example"),
             Target::AuthorizationQuery => path.push_str(&format!(
