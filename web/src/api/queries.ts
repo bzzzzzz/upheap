@@ -15,6 +15,7 @@ import {
   api,
   ensureOk,
   unwrap,
+  type AuthorizationRequest,
   type Heap,
   type HeapRef,
   type Item,
@@ -426,6 +427,27 @@ export function useRegister() {
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
     onSuccess: () => queryClient.removeQueries(),
+  });
+}
+
+/**
+ * The client an OAuth authorization request is from, once the server has checked the request; until then the
+ * consent page shows no choice and sends the browser nowhere. Not retried: a bad request stays bad.
+ */
+export function useAuthorizationCheck(request: AuthorizationRequest, { enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ["oauth-authorization", request],
+    queryFn: async () => unwrap(await api.GET("/api/v1/oauth/authorize", { params: { query: request } })),
+    enabled,
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+/** Approves an authorization request for the signed-in user; the answer says where to send the browser. */
+export function useApproveAuthorization() {
+  return useMutation({
+    mutationFn: async (body: AuthorizationRequest) => unwrap(await api.POST("/api/v1/oauth/authorize", { body })),
   });
 }
 

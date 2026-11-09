@@ -11,6 +11,7 @@ mod error;
 pub mod heaps;
 pub mod items;
 mod migration;
+pub mod oauth;
 pub mod parameters;
 #[cfg(feature = "proxy")]
 pub mod proxy;

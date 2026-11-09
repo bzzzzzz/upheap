@@ -87,6 +87,7 @@
           "auth"
         ],
         "summary": "Ends the current session. Succeeds when there is none.",
+        "description": "Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out\nwith `POST /oauth/revoke`.",
         "operationId": "sign_out",
         "responses": {
           "204": {
@@ -192,6 +193,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -228,6 +232,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -313,8 +320,251 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
+      }
+    },
+    "/api/v1/oauth/authorize": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Checks an authorization request without approving it.",
+        "description": "The consent page calls this before it shows anything, so it never asks about, or sends the browser to, a request\nthe server would refuse. Once this succeeds, the client and the redirect URI are good, so a user who declines is\nsent to the redirect URI with `error=access_denied` and the `state`, which the page adds itself.",
+        "operationId": "check_authorization",
+        "parameters": [
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "Must be `code`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "A registered client: `upheap-cli`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "`http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`, with no query or fragment.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "The S256 challenge of the client's PKCE code verifier.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "Must be `S256`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "The client's value, sent back to the redirect URI with the code.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request can be approved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClient"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`client_unknown` (`field` `client_id`), `redirect_uri_invalid`, `response_type_unsupported`, `code_challenge_invalid`, `code_challenge_method_unsupported` or `state_missing`, each naming its `field`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Approves an authorization request for the signed-in user, from the consent page.",
+        "description": "Takes the session cookie only, never a bearer token: approving is the user's decision in their browser, not\nsomething a client holding a token can do for itself. The code in `redirect_to` is good once, for ten minutes.",
+        "operationId": "approve_authorization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Approved; send the browser to `redirect_to`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthApproval"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: no session cookie, or the request carried a bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "As for `GET /oauth/authorize`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/oauth/revoke": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Revokes a token, and with it every token of the sign-in it came from.",
+        "description": "Answers `200` for a token the server doesn't know too, as RFC 7009 asks, so the answer says nothing about which\ntokens exist and revoking twice is fine.",
+        "operationId": "revoke_token",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Revoked, or nothing to revoke"
+          },
+          "400": {
+            "description": "`invalid_request`: no `token`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_client`: no client with this `client_id`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/token": {
+      "post": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Exchanges an authorization code, or a refresh token, for an access token and a new refresh token.",
+        "description": "A refresh token is good once. Presenting one that was used already revokes every token of the sign-in it came\nfrom, as someone else must hold a copy; so does presenting a code a second time within its ten minutes.",
+        "operationId": "issue_token",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Issued; `Cache-Control: no-store`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`, `invalid_grant` or `unsupported_grant_type`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_client`: no client with this `client_id`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/teams": {
@@ -369,6 +619,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -417,6 +670,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -522,6 +778,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -622,6 +881,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -710,6 +972,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -767,6 +1032,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -882,6 +1150,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -950,6 +1221,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1060,6 +1334,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1287,6 +1564,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -1385,6 +1665,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1475,6 +1758,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1554,6 +1840,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -1681,6 +1970,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1780,6 +2072,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1887,6 +2182,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -1945,6 +2243,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -2041,6 +2342,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2167,6 +2471,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2254,6 +2561,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2380,6 +2690,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -2504,6 +2817,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2630,6 +2946,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2688,6 +3007,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -2774,6 +3096,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2890,6 +3215,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -2958,6 +3286,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3016,6 +3347,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -3102,6 +3436,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3218,6 +3555,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3295,6 +3635,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3346,6 +3689,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3444,6 +3790,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3515,6 +3864,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       },
@@ -3601,6 +3953,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -3658,6 +4013,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -5058,6 +5416,188 @@
           "critical"
         ]
       },
+      "OAuthApproval": {
+        "type": "object",
+        "description": "Where to send the browser now that the user allowed the request.",
+        "required": [
+          "redirect_to"
+        ],
+        "properties": {
+          "redirect_to": {
+            "type": "string",
+            "description": "The request's redirect URI with `code` and `state` added."
+          }
+        }
+      },
+      "OAuthAuthorizationRequest": {
+        "type": "object",
+        "description": "An authorization request, as the client put it in the consent page's address (RFC 6749 §4.1.1, RFC 7636 §4.3).\nEvery value is checked on the server; a missing one is refused with the problem for that value.",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "A registered client: `upheap-cli`."
+          },
+          "code_challenge": {
+            "type": "string",
+            "description": "The S256 challenge of the client's PKCE code verifier."
+          },
+          "code_challenge_method": {
+            "type": "string",
+            "description": "Must be `S256`."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "description": "`http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`, with no query or fragment."
+          },
+          "response_type": {
+            "type": "string",
+            "description": "Must be `code`."
+          },
+          "state": {
+            "type": "string",
+            "description": "The client's value, sent back to the redirect URI with the code."
+          }
+        }
+      },
+      "OAuthClient": {
+        "type": "object",
+        "description": "The client an authorization request is from, once the request is known to be good.",
+        "required": [
+          "client_id",
+          "display_name"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "What to call the client when asking the user, such as \"Upheap CLI\"."
+          }
+        }
+      },
+      "OAuthError": {
+        "type": "object",
+        "description": "A refused token or revocation request (RFC 6749 §5.2). The token endpoints answer with this, not a `Problem`.",
+        "required": [
+          "error",
+          "error_description"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "`invalid_request`, `invalid_client`, `invalid_grant` or `unsupported_grant_type`."
+          },
+          "error_description": {
+            "type": "string",
+            "description": "What was wrong, for people. May change; branch on `error`."
+          }
+        }
+      },
+      "OAuthRevokeRequest": {
+        "type": "object",
+        "description": "A token revocation request (RFC 7009 §2.1), form-encoded.",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When given, a token of another client is left alone."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An access or refresh token. Either ends the client's sign-in."
+          },
+          "token_type_hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`access_token` or `refresh_token`. Accepted and not needed: the server finds the token either way."
+          }
+        }
+      },
+      "OAuthTokenRequest": {
+        "type": "object",
+        "description": "A token request (RFC 6749 §4.1.3 and §6), form-encoded.",
+        "required": [
+          "grant_type"
+        ],
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A registered client: `upheap-cli`. Required with either grant, as the client is public."
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: the code the redirect URI received."
+          },
+          "code_verifier": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: the PKCE code verifier the challenge was made from."
+          },
+          "grant_type": {
+            "type": "string",
+            "description": "`authorization_code` or `refresh_token`."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: the redirect URI the code was issued for, exactly."
+          },
+          "refresh_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `refresh_token`: the refresh token, which this request uses up."
+          }
+        }
+      },
+      "OAuthTokens": {
+        "type": "object",
+        "description": "A successful token response (RFC 6749 §5.1).",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Send as `Authorization: Bearer <access_token>`."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds until the access token expires."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Good for one refresh, within 30 days."
+          },
+          "token_type": {
+            "type": "string",
+            "description": "Always `Bearer`."
+          }
+        }
+      },
       "OptionArrangement": {
         "type": "object",
         "description": "One option of a new arrangement.",
@@ -5933,6 +6473,10 @@
       }
     },
     "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
       "session": {
         "type": "apiKey",
         "in": "cookie",
@@ -5944,6 +6488,10 @@
     {
       "name": "auth",
       "description": "Registration and sign-in"
+    },
+    {
+      "name": "oauth",
+      "description": "Signing in non-web clients, such as the CLI: OAuth 2.0 with PKCE"
     },
     {
       "name": "me",
