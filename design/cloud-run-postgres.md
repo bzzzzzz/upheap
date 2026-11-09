@@ -98,26 +98,6 @@ gh variable set BASE_URL --body https://upheap-$PROJECT_NUMBER.us-west1.run.app
 To roll back, send traffic to an earlier revision:
 `gcloud run services update-traffic upheap --region us-west1 --to-revisions=<revision>=100`.
 
-## Progress
-
-Status: ✅ done · 🟡 partial · ⬜ not started.
-
-| Step | Status | Notes |
-| --- | :---: | --- |
-| `postgres` feature in `crates/store` (`sqlx-postgres` for SeaORM and migrations) | ✅ | On by default, alongside `sqlite` and `mysql` |
-| Server accepts `postgres://` in `DATABASE_URL` | ✅ | `postgresql://` too |
-| Migrations run on Postgres | ✅ | The handles migration makes its columns `NOT NULL` there, as on MySQL |
-| Store and API suites pass on Postgres (`TEST_DATABASE_URL`) | ✅ | On `postgres:17`; see the findings below |
-| Postgres job in the CI matrix | ✅ | Service container, as for MySQL |
-| Playwright golden paths against Postgres | ⬜ | Optional; the config starts the server on in-memory SQLite |
-| Connection pool size set from config | ✅ | `DATABASE_MAX_CONNECTIONS`, default 5 |
-| Migrations safe when several instances start at once | ✅ | Advisory lock around the run; `crates/store/tests/postgres_migrations.rs` |
-| Docs updated: Postgres supported for production | ✅ | [offering.md](offering.md) §4, [technical-design.md](technical-design.md), README |
-| Neon project and Cloud Run service set up | ✅ | See [Production setup](#production-setup) |
-| Deploy from CI on merge to `main` | ✅ | `.github/workflows/deploy.yml`, Workload Identity Federation |
-| First production deploy | ✅ | By hand on 2026-11-08, through Neon's pooled endpoint |
-| Backups checked | ⬜ | Neon's point-in-time restore window on the chosen plan |
-
 ## What running the suites on Postgres found
 
 - **Ambiguous names in upserts.** In `ON CONFLICT DO UPDATE`, a bare column name could mean the existing row or

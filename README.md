@@ -4,8 +4,7 @@ A todo list for people with more work than they can keep track of. Add items as 
 they're needed and a rough size, impact and due date; the app ranks everything and keeps the ranking current as
 time passes.
 
-Design docs: [requirements](design/requirements.md), [offering](design/offering.md),
-[technical design](design/technical-design.md), [engineering principles](design/engineering-principles.md).
+The design docs are indexed in [design/README.md](design/README.md).
 
 ## What works today
 

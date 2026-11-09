@@ -342,3 +342,4 @@ These checks run in the same transaction as the write, after the permission chec
 3. **Search:** text matching runs on the client for now (Ranking → Search).
 4. **Size:** at most a few thousand open items per heap. Ranking runs in memory, and the list endpoint returns the whole heap.
 5. **Formula:** designed separately. It plugs in behind `rank`.
+6. **Need is required** on `POST …/items`. Making it so broke API §3 (breaking changes are additive or versioned) on purpose: defaulting it would guess a value the user didn't pick, and there were no outside clients yet. Release notes call it out.
