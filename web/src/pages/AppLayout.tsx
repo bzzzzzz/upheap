@@ -166,13 +166,15 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
             <button
               type="button"
               {...props}
-              aria-label={links.heap && `Switch heap: ${links.heap.name}, ${heapTeam?.name ?? ""}`}
               className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-line-strong bg-surface px-3 text-left text-sm outline-offset-2 hover:border-muted focus-visible:outline-2 focus-visible:outline-accent"
             >
+              {/* The name is what the button shows, after what it does. */}
               <span className="min-w-0 flex-1 truncate">
+                <span className="sr-only">Switch heap: </span>
                 {links.heap ? (
                   <>
                     <span className="font-semibold text-ink">{links.heap.name}</span>
+                    {links.heap.archived && <span className="text-muted"> (archived)</span>}
                     {heapTeam && <span className="text-muted"> · {heapTeam.name}</span>}
                   </>
                 ) : (
@@ -367,6 +369,7 @@ function HeapSwitcher({
     ref: RefObject<HTMLButtonElement | null>;
     onClick: () => void;
     "aria-expanded": boolean;
+    "aria-haspopup": "dialog";
   }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -376,7 +379,7 @@ function HeapSwitcher({
 
   return (
     <>
-      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open })}
+      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open, "aria-haspopup": "dialog" })}
       <PopoverSheet title="Heaps" triggerRef={trigger} isOpen={open} onClose={close} placement={placement}>
         <nav aria-label="Heaps" className="-mx-1 flex flex-col">
           {me.teams.map((t) => (

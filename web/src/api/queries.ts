@@ -177,9 +177,15 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: ["item"] }),
-    // The heaps' open counts, which the sidebar shows.
-    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
   ]);
+}
+
+/**
+ * The heaps' open counts in `/me`, which the sidebar shows. Only adding an item or changing its state changes them,
+ * so only those refetch `/me`, and nothing waits for it.
+ */
+function invalidateOpenCounts(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
 }
 
 /**
@@ -212,7 +218,10 @@ export function useCreateItem() {
     mutationFn: async ({ heap, body }: { heap: HeapRef; body: NewItem }) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Not returned: the mutation is done once the server has the item, and the lists catch up after.
-    onSettled: (_item, _error, { heap }) => void invalidateHeap(queryClient, heap),
+    onSettled: (_item, _error, { heap }) => {
+      invalidateOpenCounts(queryClient);
+      void invalidateHeap(queryClient, heap);
+    },
   });
 }
 
@@ -236,7 +245,10 @@ export function useUpdateItem(heap: HeapRef) {
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: (_saved, _error, { patch }) => {
+      if (patch.state !== undefined) invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
   });
 }
 
@@ -249,7 +261,10 @@ export function useReopenItem(heap: HeapRef) {
           params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
         }),
       ),
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
   });
 }
 
