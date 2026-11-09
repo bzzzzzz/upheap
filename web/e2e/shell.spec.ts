@@ -2,7 +2,7 @@
 // than the screen.
 import type { Locator, Page } from "@playwright/test";
 
-import { addItem, createTeam, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
+import { addHeaps, addItem, createTeam, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
 const pages: AppPage[] = ["Closed", "Activity", "Settings", "Tags", "Parameters", "Open", "Account"];
@@ -55,25 +55,173 @@ test("the sidebar's Open count follows adding an item and closing one", async ({
   await expect(open).toHaveText(/^Open\s*1$/);
 });
 
-test("the heap switcher opens another heap", async ({ page }) => {
+/** Opens the heap switcher from whichever button the width shows, and returns its panel. */
+async function openSwitcher(page: Page) {
   await page.getByRole("button", { name: /^Switch heap/ }).click();
   const heaps = page.getByRole("dialog", { name: "Heaps" });
+  await expect(heaps).toBeVisible();
+  return heaps;
+}
+
+/** Heaps that, with the one the test starts on, make the list long enough (8) for search and Recent. */
+const MORE_HEAPS = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"];
+
+const isNarrow = (page: Page) => (page.viewportSize()?.width ?? 0) < 640;
+
+test("the heap switcher opens another heap", async ({ page, localBuild }) => {
+  await addHeaps(page, ["Garden"], localBuild);
+  const startUrl = page.url();
+  const heaps = await openSwitcher(page);
   // The heap on screen is checked.
-  await expect(heaps.locator("a[aria-current=page]")).toHaveCount(1);
-  await heaps.getByRole("link").first().click();
-  await expect(page).toHaveURL(HEAP_URL);
+  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveCount(1);
+  await heaps.getByRole("menuitem", { name: "Garden" }).click();
+  await expect(page).toHaveURL(/\/heaps\/garden$/);
+  await expect(page).not.toHaveURL(startUrl);
   await expect(heaps).toHaveCount(0);
 });
 
 test("the heap switcher starts a new heap in the heap's team", async ({ page }) => {
-  await page.getByRole("button", { name: /^Switch heap/ }).click();
-  const heaps = page.getByRole("dialog", { name: "Heaps" });
+  const heaps = await openSwitcher(page);
   await heaps.getByRole("button", { name: /^New heap in / }).click();
   await heaps.getByLabel(/^Name of the new heap in /).fill("Garden");
   await heaps.getByRole("button", { name: "Add heap" }).click();
   await expect(heaps).toHaveCount(0);
   await expect(page).toHaveURL(/\/heaps\/garden$/);
   await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
+});
+
+test("a short list of heaps has no search and no Recent", async ({ page, localBuild }) => {
+  await addHeaps(page, MORE_HEAPS.slice(0, 5), localBuild);
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
+  await expect(heaps.getByLabel("Find a heap")).toHaveCount(0);
+  await expect(heaps.getByText("Recent", { exact: true })).toHaveCount(0);
+});
+
+test("a long list of heaps is searched as you type, and Enter opens the first match", async ({ page, localBuild }) => {
+  await addHeaps(page, ["Q4 planning", "Meal planning", ...MORE_HEAPS.slice(0, 5)], localBuild);
+  const heaps = await openSwitcher(page);
+  const field = heaps.getByLabel("Find a heap");
+  await expect(field).toBeVisible();
+  await field.fill("plan");
+  await expect(heaps.getByRole("menuitem")).toHaveText([/Meal planning/, /Q4 planning/, /^New heap “plan” in /]);
+  await expect(heaps.getByRole("status")).toHaveText("2 heaps");
+  await expect(heaps.locator("mark").first()).toHaveText("plan");
+  await field.press("Enter");
+  await expect(page).toHaveURL(/\/heaps\/meal-planning$/);
+  await expect(heaps).toHaveCount(0);
+});
+
+test("searching for a heap that isn't there offers to make it, named as typed", async ({ page, localBuild }) => {
+  await addHeaps(page, MORE_HEAPS, localBuild);
+  const heaps = await openSwitcher(page);
+  await heaps.getByLabel("Find a heap").fill("Roadmap");
+  await expect(heaps.getByText("No heap matches “Roadmap”")).toBeVisible();
+  await expect(heaps.getByText(/^Searched all 8 heaps/)).toBeVisible();
+  await heaps.getByRole("menuitem", { name: /^New heap “Roadmap” in / }).click();
+  const name = heaps.getByLabel(/^Name of the new heap in /);
+  await expect(name).toHaveValue("Roadmap");
+  await expect(name).toBeFocused();
+  await heaps.getByRole("button", { name: "Add heap" }).click();
+  await expect(page).toHaveURL(/\/heaps\/roadmap$/);
+  await expect(heaps).toHaveCount(0);
+});
+
+test("the arrow keys move through the heaps from the search field", async ({ page, localBuild }) => {
+  test.skip(isNarrow(page), "A phone has no keyboard.");
+  await addHeaps(page, MORE_HEAPS, localBuild);
+  const start = page.url();
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByLabel("Find a heap")).toBeFocused();
+  // The first row is the first heap by name, the one to start on is somewhere after it.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(heaps).toHaveCount(0);
+  await expect(page).toHaveURL(HEAP_URL);
+  expect(page.url()).not.toBe(start);
+});
+
+test("Escape clears the search first and then closes the switcher, with focus back on its button", async ({
+  page,
+  localBuild,
+}) => {
+  test.skip(isNarrow(page), "A phone has no keyboard.");
+  await addHeaps(page, MORE_HEAPS, localBuild);
+  const opener = page.getByRole("button", { name: /^Switch heap/ });
+  const heaps = await openSwitcher(page);
+  const field = heaps.getByLabel("Find a heap");
+  await field.fill("alp");
+  await page.keyboard.press("Escape");
+  await expect(heaps).toBeVisible();
+  await expect(field).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(heaps).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
+test("archived heaps are folded away, and found by search", async ({ page, localBuild }) => {
+  await addHeaps(page, ["Old news"], localBuild);
+  const start = new URL(page.url()).pathname;
+  await page.goto(start.replace(/[^/]+$/, "old-news"));
+  await expect(page.getByRole("button", { name: /^Switch heap: Old news/ })).toBeVisible();
+  await goTo(page, "Settings");
+  await page.getByRole("button", { name: "Archive heap" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
+  await page.goto(start);
+
+  let heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: "Old news" })).toHaveCount(0);
+  await heaps.getByRole("menuitem", { name: "1 archived" }).click();
+  await expect(heaps.getByRole("menuitem", { name: "Old news (archived)" })).toBeVisible();
+  await expect(heaps.getByRole("menuitem", { name: "1 archived" })).toHaveCount(0);
+
+  // Searching finds it, tagged, once the list is long.
+  await page.keyboard.press("Escape");
+  await addHeaps(page, MORE_HEAPS, localBuild);
+  heaps = await openSwitcher(page);
+  await heaps.getByLabel("Find a heap").fill("old");
+  const found = heaps.getByRole("menuitem", { name: /Old news/ });
+  await expect(found).toContainText("archived");
+  await expect(heaps.getByRole("status")).toHaveText("1 heap");
+});
+
+test("Recent lists the heaps opened last, without the one on screen", async ({ page, localBuild }) => {
+  await addHeaps(page, MORE_HEAPS, localBuild);
+  const start = new URL(page.url()).pathname;
+  await page.goto(start.replace(/[^/]+$/, "alpha"));
+  await expect(page.getByRole("button", { name: /^Switch heap: Alpha/ })).toBeVisible();
+  await page.goto(start.replace(/[^/]+$/, "bravo"));
+  await expect(page.getByRole("button", { name: /^Switch heap: Bravo/ })).toBeVisible();
+
+  const heaps = await openSwitcher(page);
+  const recent = heaps.getByRole("group", { name: "Recent" });
+  await expect(recent.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
+  await expect(recent.getByRole("menuitem", { name: "Bravo" })).toHaveCount(0);
+  if (isNarrow(page)) {
+    // Chips at least 44 px tall.
+    const box = await recent.getByRole("menuitem", { name: "Alpha" }).boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("a team folds in the switcher, and stays folded", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build has one team, so there is nothing to fold.");
+  await addHeaps(page, MORE_HEAPS);
+  await createTeam(page, "Acme");
+
+  let heaps = await openSwitcher(page);
+  const personal = heaps.getByRole("menuitem", { name: /^Tester's team/ });
+  await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
+  await personal.click();
+  await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(heaps).toHaveCount(0);
+  heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toHaveCount(0);
+  await heaps.getByRole("menuitem", { name: /^Tester's team/ }).click();
+  await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
 });
 
 test("on a phone, More opens above the tabs, and + adds an item from any of the heap's pages", async ({ page }) => {

@@ -170,8 +170,12 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
-The heap switcher groups heaps by team, shows their open counts and ends with "New heap in \<team\>" when the team
-allows it; on a tablet it is a popover beside the rail.
+The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". From 8 unarchived
+heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
+opened in this browser, not the one on screen, as chips on a phone. Search gives a flat list with the team and an
+"archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
+clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
+it. On a tablet it is a popover beside the rail.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
