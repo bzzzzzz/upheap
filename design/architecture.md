@@ -380,8 +380,14 @@ the remaining admins.
    SQLite, which has no row locks, the loser of such a race may fail with a server error rather than be refused as
    reuse; tokens are never issued twice either way.
 5. Revoking either token of a family (`POST /oauth/revoke`) revokes the family, and answers `200` for unknown tokens
-   too (RFC 7009). `POST /auth/logout` ends only a session cookie. Listing and revoking one's own client tokens
-   (`/me/tokens`) is designed, not built.
+   too (RFC 7009). `POST /auth/logout` ends only a session cookie.
+6. A user sees and ends their own sign-ins at `/me/sign-ins`, with a session cookie or a bearer token. The list is
+   the user's live families: not revoked, and holding a refresh token that is unused and unexpired. Each carries
+   `last_used_at`, the creation time of the family's newest token (the sign-in or its latest refresh), and
+   `device_name`, which the client sent with the code exchange. `DELETE /me/sign-ins/{id}` revokes the family as
+   `/oauth/revoke` does, answers `204` again for one already ended, and `404` for an unknown id or another user's,
+   which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
+   it is validated as text (`domain::oauth::DeviceName`), not trusted.
 
 ## Audit log
 

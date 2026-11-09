@@ -99,6 +99,46 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/me/sign-ins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's live sign-ins by clients such as the CLI, the most recently used first. A sign-in is live while its
+         *     refresh token can still be used; ended and expired ones aren't listed.
+         */
+        get: operations["list_sign_ins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/sign-ins/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it was
+         *     ended already. A bearer token may end its own sign-in; its next request is then refused as signed out.
+         */
+        delete: operations["end_sign_in"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/authorize": {
         parameters: {
             query?: never;
@@ -811,6 +851,37 @@ export interface components {
          * @enum {string}
          */
         BlockedLayout: "grouped" | "mixed";
+        /** @description One live sign-in of a client such as the CLI: the tokens it holds can still be used. */
+        ClientSignIn: {
+            /** @description The client: `upheap-cli`. */
+            client_id: string;
+            /** @description What to call the client, such as "Upheap CLI". */
+            client_name: string;
+            /**
+             * @description What the client called the machine, such as its hostname. The client's claim and only a label. `null` for a
+             *     sign-in that sent none.
+             */
+            device_name?: string | null;
+            /**
+             * Format: uuid
+             * @description Names the sign-in in `DELETE /me/sign-ins/{id}`.
+             */
+            id: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the sign-in last got new tokens.
+             */
+            last_used_at: number;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            signed_in_at: number;
+        };
+        /** @description The caller's live sign-ins, the most recently used first. */
+        ClientSignInList: {
+            sign_ins: components["schemas"]["ClientSignIn"][];
+        };
         /**
          * @description Which part of the closed list a closed item belongs in, in the request's timezone: `today` for the same calendar
          *     day, `this_week` for 1 to 6 days before, and `earlier` for anything older.
@@ -1236,7 +1307,7 @@ export interface components {
          * @description An action the caller can take on their account.
          * @enum {string}
          */
-        MeAction: "sign_out" | "create_team";
+        MeAction: "sign_out" | "create_team" | "manage_sign_ins";
         MePatchRequest: {
             /** @description 1 to 100 characters. */
             display_name: string;
@@ -1312,6 +1383,11 @@ export interface components {
             code?: string | null;
             /** @description With `authorization_code`: the PKCE code verifier the challenge was made from. */
             code_verifier?: string | null;
+            /**
+             * @description With `authorization_code`: a name for the machine, shown in the user's list of sign-ins. Trimmed; at most 64
+             *     characters, no control characters. A client's claim, only a label. Ignored with `refresh_token`.
+             */
+            device_name?: string | null;
             /** @description `authorization_code` or `refresh_token`. */
             grant_type: string;
             /** @description With `authorization_code`: the redirect URI the code was issued for, exactly. */
@@ -1986,6 +2062,73 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_sign_ins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientSignInList"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    end_sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The sign-in's `id`, from the list. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ended, or ended already */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such sign-in, or it isn't the caller's */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

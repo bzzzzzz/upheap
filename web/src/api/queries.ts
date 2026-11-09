@@ -16,6 +16,7 @@ import {
   ensureOk,
   unwrap,
   type AuthorizationRequest,
+  type ClientSignIn,
   type Heap,
   type HeapRef,
   type Item,
@@ -451,6 +452,34 @@ export function useAuthorizationCheck(request: AuthorizationRequest, { enabled =
 export function useApproveAuthorization() {
   return useMutation({
     mutationFn: async (body: AuthorizationRequest) => unwrap(await api.POST("/api/v1/oauth/authorize", { body })),
+  });
+}
+
+const signInsKey = ["sign-ins"] as const;
+
+/**
+ * The sign-ins of clients such as the CLI, most recently used first. Asked for only when `enabled`: the server says
+ * with `manage_sign_ins` whether there are any to manage.
+ */
+export function useSignIns(enabled: boolean) {
+  return useQuery({
+    queryKey: signInsKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/sign-ins")).sign_ins,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Ends a client's sign-in on the server. Ending one that's gone already succeeds, so it's fine to repeat. */
+export function useEndSignIn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (signIn: ClientSignIn) =>
+      ensureOk(await api.DELETE("/api/v1/me/sign-ins/{id}", { params: { path: { id: signIn.id } } })),
+    onSuccess: (_, signIn) =>
+      queryClient.setQueryData<ClientSignIn[]>(signInsKey, (list) => list?.filter((other) => other.id !== signIn.id)),
+    // A 404 means the list is out of date, so it is read again either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: signInsKey }),
   });
 }
 

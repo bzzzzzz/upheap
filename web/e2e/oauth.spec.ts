@@ -3,7 +3,7 @@
 // opened.
 import { createHash, randomBytes } from "node:crypto";
 
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Request } from "@playwright/test";
 
 import { PASSWORD as password, registerThroughApi } from "./fixtures";
 
@@ -152,4 +152,93 @@ test("Use another account signs out and comes back as the other user", async ({ 
 
   await expect(page.getByText(`Signed in as Tester · @${other.username}`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
+});
+
+/**
+ * Signs the CLI in as the account the page is signed in to, naming its machine as `upheap auth login` does, and returns
+ * its refresh token. `request` carries no cookie, as the CLI doesn't.
+ */
+async function signInCli(page: Page, request: APIRequestContext, deviceName: string) {
+  const { verifier, challenge, state } = pkce();
+  const approved = await page.request.post("/api/v1/oauth/authorize", {
+    headers: { "x-csrf-protection": "1" },
+    data: {
+      response_type: "code",
+      client_id: "upheap-cli",
+      redirect_uri: REDIRECT_URI,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      state,
+    },
+  });
+  const { redirect_to } = (await approved.json()) as { redirect_to: string };
+  const tokens = await request.post("/api/v1/oauth/token", {
+    form: {
+      grant_type: "authorization_code",
+      code: new URL(redirect_to).searchParams.get("code") ?? "",
+      redirect_uri: REDIRECT_URI,
+      client_id: "upheap-cli",
+      code_verifier: verifier,
+      device_name: deviceName,
+    },
+  });
+  expect(tokens.status()).toBe(200);
+  return ((await tokens.json()) as { refresh_token: string }).refresh_token;
+}
+
+test("Account lists where the CLI is signed in and signs one out after a confirm", async ({ page, request }) => {
+  await registerThroughApi(page);
+  const refreshToken = await signInCli(page, request, "ada-laptop");
+
+  await page.goto("account");
+  const card = page.getByRole("region", { name: "Command line" });
+  await expect(card).toContainText("ada-laptop");
+  await expect(card).toContainText(/Signed in \d{1,2} \w{3} · last used today/);
+
+  // Cancel closes the confirm and puts focus back on the row's button.
+  const signOut = card.getByRole("button", { name: "Sign out ada-laptop" });
+  await signOut.click();
+  const confirm = card.getByRole("group", { name: "Confirm sign-out" });
+  await expect(confirm).toContainText("Sign out ada-laptop? The CLI there stops working until someone runs");
+  await expect(confirm.getByRole("button", { name: "Sign out" })).toBeFocused();
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(signOut).toBeFocused();
+
+  await signOut.click();
+  await confirm.getByRole("button", { name: "Sign out" }).click();
+  await expect(card.getByRole("status")).toHaveText("Signed out ada-laptop.");
+  await expect(card.getByRole("heading", { name: "Command line" })).toBeFocused();
+  await expect(card.getByRole("list")).toHaveCount(0);
+  await expect(card).toContainText(
+    "The CLI isn't signed in anywhere. To use it, install upheap and run upheap auth login --server http",
+  );
+
+  // The server ended it: the refresh token is refused.
+  const refreshed = await request.post("/api/v1/oauth/token", {
+    form: { grant_type: "refresh_token", refresh_token: refreshToken, client_id: "upheap-cli" },
+  });
+  expect(refreshed.status()).toBe(400);
+  expect(((await refreshed.json()) as { error: string }).error).toBe("invalid_grant");
+});
+
+test("only one sign-in asks to be confirmed at a time, and an account with none says how to start", async ({
+  page,
+  request,
+}) => {
+  await registerThroughApi(page);
+  await page.goto("account");
+  await expect(page.getByRole("region", { name: "Command line" })).toContainText("The CLI isn't signed in anywhere.");
+  await signInCli(page, request, "ada-laptop");
+  await signInCli(page, request, "build-box");
+  await page.reload();
+  const card = page.getByRole("region", { name: "Command line" });
+  await expect(card.getByRole("listitem")).toHaveCount(2);
+
+  await card.getByRole("button", { name: "Sign out ada-laptop" }).click();
+  await card.getByRole("button", { name: "Sign out build-box" }).click();
+
+  await expect(card.getByRole("group", { name: "Confirm sign-out" })).toHaveCount(1);
+  await expect(card.getByRole("group", { name: "Confirm sign-out" })).toContainText("Sign out build-box?");
+  await expect(card.getByRole("button", { name: "Sign out ada-laptop" })).toBeVisible();
 });

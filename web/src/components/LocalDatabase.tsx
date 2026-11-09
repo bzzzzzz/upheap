@@ -7,7 +7,8 @@ import { Check, Download } from "lucide-react";
 import { useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
-import { formatAgo, formatDay, isDownloadStale, recordDownload, useLastDownloadAt, useNow } from "./lastDownload";
+import { isDownloadStale, recordDownload, useLastDownloadAt } from "./lastDownload";
+import { formatAgo, formatDay, useNow } from "./time";
 import { PHONE, useMedia } from "./media";
 import { borderedClass, buttonClass, compactButtonClass, unborderedClass } from "./buttons";
 import { problemMessage } from "./ProblemText";

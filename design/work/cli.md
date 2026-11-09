@@ -225,6 +225,10 @@ later try still ends it, and the error suggests `upheap auth logout --local`, wh
 says it may stay open on the server until its tokens expire. `POST /auth/logout` is the web app's: it ends only a session cookie, and answers `204`
 for a bearer token without revoking it.
 
+Login sends the machine's hostname as `device_name`, with control characters removed and cut to 64 characters, so
+the user can tell their sign-ins apart on Account. It is a label the client claims; the server only validates it as
+text, and a hostname that can't be read means a sign-in without a name.
+
 The server's half is built ([progress.md](progress.md)): the client is `upheap-cli`, its redirect URI is
 `http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in
 [architecture.md](../architecture.md#authentication-and-authorization). See [Server changes](#server-changes).
@@ -337,7 +341,8 @@ The CLI needs little from the server beyond what the web app uses; which of it i
    first-party public client, and the web app's consent page at `/oauth/authorize`.
 3. **Bearer tokens resolve to a `Principal`**, like session cookies do, and requests with a bearer token don't need
    the `X-CSRF-Protection` header, since CSRF is a cookie problem.
-4. **`/me/tokens`**, so a user can see and revoke the CLI's tokens.
+4. **`/me/sign-ins`**, so a user can see the CLI's sign-ins, each with the machine's name, and end them; built. Each
+   entry is a sign-in (a token family), not a token, hence the name.
 
 Everything else uses endpoints the web app uses today.
 

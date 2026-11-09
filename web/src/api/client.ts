@@ -10,6 +10,7 @@ export type RankedItem = Schemas["RankedItem"];
 export type RankedList = Schemas["RankedList"];
 export type ClosedItems = Schemas["ClosedItems"];
 export type Me = Schemas["Me"];
+export type ClientSignIn = Schemas["ClientSignIn"];
 export type Size = Schemas["Size"];
 export type Need = Schemas["Need"];
 export type ItemState = Schemas["ItemState"];

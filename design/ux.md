@@ -103,7 +103,7 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 **More** on a phone holds Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
 rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb,
+its cards, which are Profile, Appearance, Command line (server build) and Your data (local build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb,
 so the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
@@ -303,6 +303,17 @@ or username". Create account takes name, username, email and password; the usern
 it's permanent and part of every link. A problem about an input shows under it, with focus on it; any other (wrong
 password, too many attempts, registration closed) shows above the button. A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
+
+## Command line
+
+In the server build, Account's Command line card lists where the `upheap` CLI is signed in as the user. A row has a
+terminal icon, the machine's name (the client's name when it sent none), "Signed in 3 Nov · last used today", and a
+**Sign out** button named for the machine. The button turns the row into an inline confirm that names it and says the
+CLI there stops working until someone runs `upheap auth login` again; one row confirms at a time, and Cancel gives
+focus back to the row's button. After a sign-out the card says so in a status line and focus moves to its heading,
+since the row it was on is gone. With none signed in, the card says so and shows the command to start with, with
+this server's address. The card is there when the server's `manage_sign_ins` action is, so never in the local build,
+which has no accounts and nothing to sign in to. Ending a sign-in never touches the browser's own session.
 
 ## Your data
 
