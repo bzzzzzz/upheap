@@ -437,3 +437,20 @@ versioned names; shipping the server binary too, which stays Docker-only.
 **Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
 The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli)). Release builds
 use no cache, so they take a few minutes longer.
+
+## 31. The personal team's name is a label in the web app, not a stored name
+
+**Context.** A personal team is stored under its owner's display name, so in the heap switcher, the Teams list and
+the sidebar it read as a person ("Alex Rivera") among teams ("Acme").
+
+**Decision.** Wherever the web app names a team, a personal team among others shows as "\<display name\>'s team"
+([`teamName.ts`](../web/src/components/teamName.ts)). The stored name is unchanged, and Rename is hidden on it.
+Alone, as in the local build (no Teams list), it keeps its stored name ("My heaps"), since its user is "Me" and
+there is nothing to tell it from.
+
+**Instead of.** Storing "\<name\>'s team" as the name at sign-up, with a migration for existing teams, which would
+have kept Rename working. The owner chose the label.
+
+**Consequences.** A personal team someone renamed before this shows the label again, and its stored name is
+hidden. The label follows a display-name change. The server still offers `rename` on a personal team
+([progress.md](work/progress.md#open-questions)).

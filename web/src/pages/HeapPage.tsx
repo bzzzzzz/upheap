@@ -11,7 +11,7 @@ import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
-import { teamName } from "../components/teamName";
+import { titleTeam } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
@@ -191,9 +191,7 @@ function ListPage({
   onChangeState: ChangeState;
 }) {
   const { data: me } = useMe();
-  // The title names a shared team, not a personal one (the heap switcher and the team page name that).
-  const heapTeam = me?.teams.find((t) => t.slug === heapRef.team);
-  const team = me && heapTeam && !heapTeam.personal ? teamName(heapTeam, me) : undefined;
+  const team = titleTeam(me, heapRef);
   const filters = filterCount(view);
   const changed = filters > 0 || viewChanges(view).length > 0;
   if (list.isPending) {

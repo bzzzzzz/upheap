@@ -1,5 +1,6 @@
-import { useHeap, useTeam } from "../api/queries";
+import { useHeap, useMe, useTeam } from "../api/queries";
 import { AuditHistory } from "../components/AuditHistory";
+import { teamName } from "../components/teamName";
 import type { HeapRef } from "../api/client";
 
 /** Everything that happened in a heap that the caller may see, newest first. */
@@ -18,10 +19,14 @@ export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
 /** What happened to a team itself, its members and its heaps as wholes, newest first. */
 export function TeamActivityPage({ team: slug }: { team: string }) {
   const team = useTeam(slug);
+  const { data: me } = useMe();
   return (
     <ActivityLayout
       title="Team activity"
-      subtitle={team.data && `Changes to ${team.data.name}, its members and its heaps, as far as you can see.`}
+      subtitle={
+        team.data &&
+        `Changes to ${me ? teamName(team.data, me) : team.data.name}, its members and its heaps, as far as you can see.`
+      }
     >
       <AuditHistory scope={{ team: slug }} showEntity />
     </ActivityLayout>

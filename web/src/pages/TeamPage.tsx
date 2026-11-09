@@ -28,7 +28,7 @@ import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
-import { useTeamName } from "../components/teamName";
+import { namedForOwner, useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 
 /** Name and link name forms in the design tokens, as on Account. */
@@ -149,8 +149,8 @@ function TeamHeader({ team }: { team: Team }) {
             </Button>
             <MenuPopover placement="bottom start">
               <Menu aria-label={`More for ${label}`} className="outline-none" onAction={act}>
-                {/* The personal team shows as "<name>'s team" whatever it is stored as: renaming it would change nothing. */}
-                {can("rename") && !team.personal ? <MenuEntry id="rename">Rename</MenuEntry> : null}
+                {/* A team shown as "<name>'s team" whatever it is stored as: renaming it would change nothing. */}
+                {can("rename") && !(me && namedForOwner(team, me)) ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
                 <MenuEntry id="activity">Activity</MenuEntry>
               </Menu>

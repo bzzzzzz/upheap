@@ -291,8 +291,9 @@ and + Create team, which opens a form with Name and an optional Link name; the s
 they name. After sign-up, the empty heap offers the next two steps, Add your first item and Create a team; once a
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.
 
-The personal team shows everywhere as "<name>'s team", by the user's display name whatever it is stored as, so it
-has no Rename.
+Among other teams, the personal team shows everywhere as "<name>'s team", by the user's display name whatever it is
+stored as, so it has no Rename. Alone, as in the local build, it keeps its own name ("My heaps")
+([decisions.md](decisions.md), 31).
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
 Activity) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,

@@ -28,7 +28,7 @@ import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
-import { teamName } from "../components/teamName";
+import { teamName, titleTeam } from "../components/teamName";
 import { ToastProvider } from "../components/UndoToast";
 
 export function AppLayout() {
@@ -139,6 +139,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
   const { item: itemKey } = useParams({ strict: false });
   const views = heapRef && heapViews(heapRef, itemKey !== undefined);
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
+  const railTeam = titleTeam(me, heapRef);
 
   return (
     <aside
@@ -156,7 +157,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
             <button
               type="button"
               {...props}
-              aria-label={`Switch heap${links.heap ? `: ${links.heap.name}` : ""}`}
+              aria-label={`Switch heap${links.heap ? `: ${links.heap.name}${railTeam ? ` · ${railTeam}` : ""}` : ""}`}
               className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink text-lg font-semibold text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
             >
               {(links.heap?.name ?? "Upheap").charAt(0).toUpperCase()}
@@ -225,9 +226,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
 /** The heap name on a phone, which switches heap. */
 function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
   const { heap } = useShellLinks(me, heapRef);
-  const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
-  // A shared team's heap names its team, as the sidebar's button does; a personal heap is the heap name alone.
-  const team = heapTeam && !heapTeam.personal ? teamName(heapTeam, me) : undefined;
+  const team = titleTeam(me, heapRef);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
       <HeapSwitcher me={me} heapRef={heapRef}>

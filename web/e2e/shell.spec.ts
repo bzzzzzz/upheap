@@ -266,3 +266,18 @@ test("the personal team reads as the user's team, and its heap's title is the he
   await page.goto("/teams");
   await expect(page.getByRole("link", { name: "Open Tester's team" })).toBeVisible();
 });
+
+test("alone, as in the local build, the personal team keeps its own name", async ({ page, localBuild }) => {
+  test.skip(!localBuild, "Only the local build has one team and no Teams list.");
+  // There is no list of teams to tell it from, so "<name>'s team" would only read as "Me's team".
+  if (isPhone(page)) {
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("link", { name: "My heaps" }).click();
+  } else {
+    await page
+      .getByRole("complementary", { name: "Heaps and views" })
+      .getByRole("link", { name: "My heaps", exact: true })
+      .click();
+  }
+  await expect(page.getByRole("heading", { name: "My heaps", level: 1 })).toBeVisible();
+});
