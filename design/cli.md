@@ -17,7 +17,7 @@ side we took.
 
 Goals:
 
-1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --need expected --effort s --due next-week`.
+1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --effort s --due next-week`.
 2. `upheap item list` answers "what should I work on?" the way the web app's list does, with the same order and the same
    reasons.
 3. Every command works in scripts: stable exit codes, `--json` with the server's own response, and IDs on stdout
@@ -67,7 +67,7 @@ are worth it.
 
 ### Items
 
-**`upheap item add <title>`** needs `--need` (`idea`, `nice-to-have`, `expected`, `critical`), and takes `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
+**`upheap item add <title>`** takes `--need` (`idea`, `nice-to-have`, `expected`, `critical`; `nice-to-have` when left out), `--description <text>` (`-` reads stdin), `--effort` and `--impact` (`s`, `m`, `l`, `xl`),
 `--due <when>` and `--tag <name>` (repeatable). It prints the new item and where it landed: "Added *Rotate the staging
 certs*, now 4th of 31". The position comes from one read of the ranked list after the add, so it's the server's
 number.
