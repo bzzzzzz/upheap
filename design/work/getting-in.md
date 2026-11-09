@@ -258,6 +258,142 @@ One per step that asks something new of the product. Steps that use what's built
 
 ## 4. Behaviours
 
+### Concepts
+
+1. **Invite link.** Belongs to one team that isn't a personal team. It has who made it, when it was made and when
+   it ends, and, once revoked, who revoked it and when. Holding the link is all it takes to open it. States:
+   - **working**, from the moment it's made;
+   - **ended**, a week after it was made, with nobody acting;
+   - **revoked**, when an admin revokes a working link.
+
+   Ended and revoked are final: nothing moves a link out of them.
+2. **Join.** A person becoming a member of a team: by an admin's direct add, as today, or through an invite link.
+   A join through a link remembers the link.
+3. **Removal.** An admin taking a member out of a team. It differs from leaving, which the member does. The team
+   remembers when each person was last removed.
+4. **Reset link.** Belongs to one user. Made by the operator's command and shown once, there. States:
+   - **working**, from the moment it's made;
+   - **used**, once a password has been set with it;
+   - **ended**, an hour after it was made;
+   - **cancelled**, when a newer reset link is made for the same user, or the user changes their password.
+
+   Used, ended and cancelled are final.
+5. **Sign-in.** One browser session or one command-line client's sign-in, as today. "Ending a user's sign-ins"
+   means all of both kinds.
+6. **Account history.** The record of what happened to one user's account. It belongs to the user, not to a team.
+
+### Rules
+
+**Invite links**
+
+1. Only an admin of the team makes, sees and revokes its links, checked when they act.
+2. A link belongs to the team, not to its maker. It keeps working when its maker is demoted, leaves or is removed,
+   and any admin of the team can revoke it.
+3. A link is working when it hasn't been revoked and was made less than 7 × 24 hours ago. Only a working link can
+   be revoked.
+4. Admins can see a working link again and copy it, for as long as it works. An ended or revoked link is listed
+   without it.
+5. Anyone holding a link, signed in or not, sees the team's name and the maker's name, and nothing else of the
+   team. This is the one place a person outside a team sees its name. For an ended or revoked link they see the
+   same and which of the two happened.
+6. A join through a link needs the link to be working at the moment of the join, not when the page was opened.
+7. A person joins as a member. A person who is already in the team, member or admin, is left as they are, and
+   nothing is recorded.
+8. A person who was removed from the team can't join through a link made before the removal. A link made after it
+   lets them in, and so does a direct add. A person who left by their own choice can join through any working link.
+9. Any number of people can join through one link, and a team can have any number of working links.
+
+**Creating an account from a link**
+
+10. It is one act: the account, its personal team and heap, and the membership are all made, or none is.
+11. It passes the same checks as registration (the username and the email address are free, the password is
+    acceptable) and answers them the same way, plus rule 6. When the link has stopped working in the meantime,
+    no account is made, whether registration is open or closed.
+12. With registration closed, this is the only way an account is made.
+
+**Passwords**
+
+13. Changing a password needs a browser session and the current password. A command-line sign-in can't change it.
+14. A wrong current password counts as a failed sign-in attempt for the account, under the same limit.
+15. A change ends every other sign-in of the user in the same act, leaves the session it was made from, and
+    cancels the user's working reset link.
+16. The operator's command makes a reset link for one existing user, named by username or by email address. It
+    works for 60 minutes. Making it cancels the user's earlier working one. The link is shown once, by the command.
+17. Anyone holding a working reset link sees whose account it's for and can set a new password. Doing so uses the
+    link up, ends all of the user's sign-ins, starts a session in that browser, and clears the account's count of
+    failed sign-in attempts.
+18. A used, ended or cancelled reset link sets nothing and says which happened.
+
+**What is kept and who sees it**
+
+19. Invite links are never deleted. Making and revoking one are recorded for the team, with the admin as the
+    actor, and seen by its admins. A link ending by time is not an act and has no entry.
+20. A join through a link is recorded as a membership change, with the person who joined as the actor and the
+    link named. A direct add is recorded as today.
+21. Account history records a password change (actor: the user), a reset link being made (actor: the operator, who
+    has no account) and a password being set with one (actor: the user, by reset link). No entry holds a password
+    or a link.
+22. Only the user sees their account history. Team admins don't, and the operator has no pages.
+23. None of this exists in the local build.
+
+### Scenarios
+
+Each is walked through the rules by hand, and kept as a test case.
+
+1. **The link ends while the form is open.** Made Monday 10:00. A newcomer opens it the next Monday at 09:59 and
+   submits the account form at 10:01. Rules 3, 6 and 11: no account is made, and they're told the link has ended.
+2. **The maker loses admin rights.** Ana makes a link on Monday and is demoted on Tuesday. Rule 2: the link keeps
+   working. Rule 1: Ana no longer sees it and can't revoke it; the other admin can.
+3. **A removed member with an old link.** Sam is removed on Wednesday and still has Monday's link. Rule 8: it
+   doesn't let Sam in, and the page says to ask an admin. A link made on Thursday does.
+4. **A member who left, with the same link.** Sam left on Wednesday by choice. Rule 8: Monday's link lets Sam back
+   in.
+5. **A leaked link.** A stranger creates an account through it on a closed server. The admin revokes the link
+   (rule 3) and removes the stranger. Rule 8 keeps them out of older links, and there are none working. Their
+   account stays, with its personal team (Workflows, Not core §1).
+6. **An admin opens their own team's link.** Rule 7: they're taken to the team, stay an admin, nothing is recorded.
+7. **Someone else has a session.** A thief holds a session on Sam's account without knowing the password. Sam
+   changes the password: rule 15 ends the thief's session. The thief tries first: rule 13 asks for the current
+   password, and after five wrong tries rule 14 refuses more for the window. Sam's own session keeps working
+   through it, though a new sign-in by Sam waits out the same window.
+8. **Two reset links.** The operator makes one at 10:00 and, Sam having lost it, another at 10:20. Rule 16: the
+   first is cancelled. Sam opens the first and is told so (rule 18), then the second at 11:15, which works.
+9. **Password remembered after all.** Sam asks for a reset, then signs in and changes the password in Account.
+   Rule 15: the reset link is cancelled, so the copy sitting in a chat can't be used by someone else.
+10. **Locked out, then reset.** Sam has used up the sign-in attempts and gets a reset link. Rule 17: setting the
+    password signs Sam in at once and clears the count.
+
+### Choices
+
+Each goes to decisions.md when the design is agreed.
+
+1. **A working invite link can be seen again.** Context: one link is sent around for a week, to people who join on
+   different days. Instead of: showing it once, like a reset link, which would have admins make a new link each
+   time someone asks. Consequence: the link is kept readable, so a leaked database holds working links; each is
+   worth a membership for at most a week, and revoking ends it.
+2. **A link belongs to the team and outlives its maker's admin rights.** Instead of: ending a maker's links when
+   they're demoted or removed. Reason: the team sent that link out, and people still hold it; any admin can revoke
+   it. Consequence: demoting an admin for cause means looking at the links too.
+3. **A removed person can't come back through an older link.** Instead of: letting any working link admit them,
+   which makes removal mean nothing while a link is out; or revoking every link on a removal, which locks out
+   everyone still on their way in. Consequence: the team remembers removals, and leaving is told apart from being
+   removed.
+4. **An account made from a link joins at once; a signed-in user confirms.** Instead of: a confirm for both.
+   Reason: the newcomer opened the link to join, while a signed-in user may be in the wrong account. Consequence:
+   no accounts stranded outside every team on a closed server.
+5. **A password is changed only from a browser session, with the current password.** Instead of: letting a
+   command-line sign-in change it. Reason: the same as for consent, where a token can't widen its own access.
+6. **A reset comes from the operator's command, once, for an hour.** Instead of: email, which the server doesn't
+   send; or a link made by a team admin, who could then take over a member's account and with it their personal
+   team and other teams. Consequence: a reset waits for a person with access to the server.
+7. **Account history is the user's alone.** Instead of: showing password changes to team admins. Reason: an
+   account isn't a team's, and a person may be in several.
+
+### Unproven mechanisms
+
+None. Each rule is something the server already does in another form: single-use secrets with a lifetime, ending
+sign-ins, membership writes under the team lock, a subcommand of the server binary.
+
 ## 5. Interface
 
 ## 6. Stages
@@ -266,12 +402,11 @@ One per step that asks something new of the product. Steps that use what's built
 
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
 
-- A member who was removed opens a link that still works: a scenario for step 4.
-- Who the audit log names as the actor of an operator's reset: step 4.
 - Which page a new member lands on when the team has several heaps: step 5.
 - How the sign-in page knows who runs the server, for example a contact line the operator sets: step 5.
-- Whether "this email address is taken" on the link's page tells a stranger who has an account: step 4.
-- Wrong current password, and how many tries, in the change form: step 4.
+- Where a removal is remembered, since the membership row goes: for the implementation.
+- An invite link is kept readable while session and reset secrets are kept hashed: for the implementation.
+- Where Account shows its history, and where the team page lists its links: step 5.
 
 ## Later
 
