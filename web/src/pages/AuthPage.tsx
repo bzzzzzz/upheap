@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
 import { useRegister, useSignIn } from "../api/queries";
+import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 
 type Mode = "sign_in" | "register";
@@ -151,10 +152,10 @@ function AuthForm({
     // The server checks every input and says which one is wrong, so the browser's own bubbles stay out of the way.
     <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
       {mode === "register" && (
-        <AuthField label="Name" {...field("display_name")} autoComplete="name" autoCapitalize="words" required />
+        <Field label="Name" {...field("display_name")} autoComplete="name" autoCapitalize="words" required />
       )}
       {mode === "register" && (
-        <AuthField
+        <Field
           label="Username"
           {...field("username")}
           hint="Lowercase letters, digits and dashes. It's in your links, and can't be changed later."
@@ -166,7 +167,7 @@ function AuthForm({
           required
         />
       )}
-      <AuthField
+      <Field
         label="Email"
         {...field("email")}
         type="email"
@@ -176,7 +177,7 @@ function AuthForm({
         spellCheck={false}
         required
       />
-      <AuthField
+      <Field
         label="Password"
         {...field("password")}
         hint={mode === "register" ? "At least 10 characters" : undefined}
@@ -201,52 +202,5 @@ function AuthForm({
         <p className="text-center text-xs text-muted">You'll start in your own heap. Teams come next.</p>
       )}
     </form>
-  );
-}
-
-/**
- * A labelled input with a hint or an error under it, in the first-set sizes. The error is an alert, so it's announced
- * also when focus is already in the input, as after submitting with Enter.
- */
-function AuthField({
-  label,
-  hint,
-  error,
-  onChange,
-  ...input
-}: {
-  label: string;
-  hint?: string;
-  error?: string;
-  onChange: (value: string) => void;
-} & Omit<InputHTMLAttributes<HTMLInputElement>, "onChange">) {
-  const id = useId();
-  const noteId = useId();
-  const note = error ?? hint;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-ink-soft sm:text-[13px]">
-        {label}
-      </label>
-      <input
-        id={id}
-        {...input}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={note ? noteId : undefined}
-        className="h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink aria-invalid:border-overdue-ink aria-invalid:ring-[3px] aria-invalid:ring-overdue-soft aria-invalid:outline-overdue-ink sm:h-auto sm:rounded-[9px] sm:py-[9px]"
-      />
-      {error ? (
-        <p key="error" id={noteId} role="alert" className="text-xs font-medium text-overdue-ink">
-          {error}
-        </p>
-      ) : (
-        hint && (
-          <p key="hint" id={noteId} className="text-xs text-muted">
-            {hint}
-          </p>
-        )
-      )}
-    </div>
   );
 }

@@ -5,7 +5,7 @@ use axum::extract::State;
 use domain::user::{DisplayName, User};
 use serde::{Deserialize, Serialize};
 use service::ServiceError;
-use service::me::{MeView, TeamView};
+use service::me::{HeapOverview, MeView, TeamView};
 use utoipa::ToSchema;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -55,7 +55,30 @@ pub(crate) struct TeamDto {
     pub personal: bool,
     /// The caller's role in this team.
     pub role: RoleDto,
-    pub heaps: Vec<HeapSummaryDto>,
+    /// Everyone in the team, the caller included.
+    pub member_count: u32,
+    /// By name, archived ones included.
+    pub heaps: Vec<HeapOverviewDto>,
+}
+
+/// A heap of one of the caller's teams, with how many items it has open.
+#[derive(Serialize, ToSchema)]
+#[schema(as = HeapOverview)]
+pub(crate) struct HeapOverviewDto {
+    #[serde(flatten)]
+    pub heap: HeapSummaryDto,
+    /// Items the heap's list shows by default, before filters: open and in progress ones, as the list's
+    /// `unfiltered_count` with the default view.
+    pub open_count: u32,
+}
+
+impl From<&HeapOverview> for HeapOverviewDto {
+    fn from(overview: &HeapOverview) -> Self {
+        Self {
+            heap: HeapSummaryDto::from(&overview.heap),
+            open_count: overview.open_count,
+        }
+    }
 }
 
 /// An action the caller can take on their account.
@@ -91,7 +114,8 @@ impl MeDto {
             name: view.team.name.as_str().to_owned(),
             personal: view.team.is_personal(),
             role: view.role.into(),
-            heaps: view.heaps.iter().map(HeapSummaryDto::from).collect(),
+            member_count: view.member_count,
+            heaps: view.heaps.iter().map(HeapOverviewDto::from).collect(),
         };
         Self {
             user: UserDto::from(&me.user),

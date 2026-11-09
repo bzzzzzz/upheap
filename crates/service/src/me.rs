@@ -4,10 +4,11 @@ use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
 use domain::team::{Role, Team};
 use domain::user::{DisplayName, User};
-use domain::{TeamId, Version};
+use domain::{HeapId, TeamId, Version};
 use serde_json::json;
 use store::{StoreError, TransactionTrait};
 
+use crate::items::count_open_items;
 use crate::{Principal, ServiceError, Services};
 
 /// The caller, their teams and each team's heaps.
@@ -21,7 +22,18 @@ pub struct MeView {
 pub struct TeamView {
     pub team: Team,
     pub role: Role,
-    pub heaps: Vec<Heap>,
+    /// Everyone in the team, the caller included.
+    pub member_count: u32,
+    /// By name, archived ones included.
+    pub heaps: Vec<HeapOverview>,
+}
+
+/// A heap and how many items it has open.
+#[derive(Debug)]
+pub struct HeapOverview {
+    pub heap: Heap,
+    /// Items its list shows by default, before filters: open and in progress ones.
+    pub open_count: u32,
 }
 
 impl Services {
@@ -31,14 +43,29 @@ impl Services {
             .ok_or(ServiceError::Unauthenticated)?;
         let teams = store::teams::list_teams_for_user(&self.db, principal.user_id).await?;
         let team_ids: Vec<_> = teams.iter().map(|(team, _)| team.id).collect();
+        let member_counts = store::teams::count_members_by_team(&self.db, &team_ids).await?;
         let mut heaps = store::heaps::list_heaps_for_teams(&self.db, &team_ids).await?;
+        let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
+        let open_counts = count_open_items(&self.db, &heap_ids).await?;
 
         let teams = teams
             .into_iter()
             .map(|(team, role)| {
                 let (own, rest): (Vec<Heap>, Vec<Heap>) = heaps.drain(..).partition(|heap| heap.team_id == team.id);
                 heaps = rest;
-                TeamView { team, role, heaps: own }
+                let heaps = own
+                    .into_iter()
+                    .map(|heap| HeapOverview {
+                        open_count: open_counts.get(&heap.id).copied().unwrap_or(0),
+                        heap,
+                    })
+                    .collect();
+                TeamView {
+                    member_count: member_counts.get(&team.id).copied().unwrap_or(0),
+                    team,
+                    role,
+                    heaps,
+                }
             })
             .collect();
         Ok(MeView { user, teams })

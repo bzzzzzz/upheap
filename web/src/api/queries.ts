@@ -508,10 +508,11 @@ function invalidateTeam(queryClient: QueryClient, team: string) {
   ]);
 }
 
+/** Starts a team. Without a `slug`, the server makes one from the name. */
 export function useCreateTeam() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) => unwrap(await api.POST("/api/v1/teams", { body: { name } })),
+    mutationFn: async (body: { name: string; slug?: string }) => unwrap(await api.POST("/api/v1/teams", { body })),
     onSuccess: (team) => queryClient.setQueryData(teamKey(team.slug), team),
     onSettled: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
   });

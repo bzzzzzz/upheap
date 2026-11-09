@@ -4249,6 +4249,7 @@
           "team_id",
           "slug",
           "name",
+          "open_count",
           "version",
           "allowed_actions"
         ],
@@ -4273,6 +4274,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "open_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items the heap's list shows by default, before filters: open and in progress ones, as the list's\n`unfiltered_count` with the default view.",
+            "minimum": 0
           },
           "slug": {
             "type": "string",
@@ -4299,6 +4306,28 @@
           "unarchive",
           "view_history"
         ]
+      },
+      "HeapOverview": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "open_count"
+            ],
+            "properties": {
+              "open_count": {
+                "type": "integer",
+                "format": "int32",
+                "description": "Items the heap's list shows by default, before filters: open and in progress ones, as the list's\n`unfiltered_count` with the default view.",
+                "minimum": 0
+              }
+            }
+          }
+        ],
+        "description": "A heap of one of the caller's teams, with how many items it has open."
       },
       "HeapPatchRequest": {
         "type": "object",
@@ -5742,18 +5771,26 @@
           "name",
           "personal",
           "role",
+          "member_count",
           "heaps"
         ],
         "properties": {
           "heaps": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/HeapSummary"
-            }
+              "$ref": "#/components/schemas/HeapOverview"
+            },
+            "description": "By name, archived ones included."
           },
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Everyone in the team, the caller included.",
+            "minimum": 0
           },
           "name": {
             "type": "string"

@@ -11,7 +11,7 @@ use domain::permission::{
 };
 use domain::team::{Membership, Role, Team};
 use domain::user::User;
-use domain::{TeamId, Timestamp, UserId};
+use domain::{HeapId, TeamId, Timestamp, UserId};
 #[cfg(feature = "accounts")]
 pub use manage::{MemberAdded, TeamPatch};
 use store::audit::NewAuditEntry;
@@ -19,6 +19,7 @@ use store::{ConnectionTrait, StoreError};
 use uuid::Uuid;
 
 use crate::access::authorize_team;
+use crate::items::count_open_items;
 use crate::{Principal, ServiceError, Services};
 
 /// A team as one of its members sees it.
@@ -48,8 +49,55 @@ pub struct MemberView {
 #[derive(Debug)]
 pub struct HeapView {
     pub heap: Heap,
+    /// Items its list shows by default, before filters: open and in progress ones.
+    pub open_count: u32,
     /// Empty unless the caller is an admin of the heap's team.
     pub allowed_actions: Vec<HeapAction>,
+}
+
+/// `heap` as a member with `role` sees it, with its open items counted.
+pub(crate) async fn load_heap_view(
+    db: &impl ConnectionTrait,
+    heap: Heap,
+    role: Role,
+) -> Result<HeapView, ServiceError> {
+    let open_count = count_heap_open_items(db, heap.id).await?;
+    Ok(to_heap_view(heap, role, open_count))
+}
+
+/// How many open items `heap_id` has (see [`HeapView::open_count`]).
+pub(crate) async fn count_heap_open_items(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<u32, ServiceError> {
+    Ok(count_open_items(db, &[heap_id])
+        .await?
+        .get(&heap_id)
+        .copied()
+        .unwrap_or(0))
+}
+
+/// `heap` as a member with `role` sees it, with `open_count` already counted.
+pub(crate) fn to_heap_view(heap: Heap, role: Role, open_count: u32) -> HeapView {
+    HeapView {
+        open_count,
+        allowed_actions: allowed_heap_actions(&heap, role),
+        heap,
+    }
+}
+
+/// `heaps`, in the same order, as a member with `role` sees them, with their open items counted in one query.
+pub(crate) async fn load_heap_views(
+    db: &impl ConnectionTrait,
+    heaps: Vec<Heap>,
+    role: Role,
+) -> Result<Vec<HeapView>, ServiceError> {
+    let ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
+    let open_counts = count_open_items(db, &ids).await?;
+    Ok(heaps
+        .into_iter()
+        .map(|heap| {
+            let open_count = open_counts.get(&heap.id).copied().unwrap_or(0);
+            to_heap_view(heap, role, open_count)
+        })
+        .collect())
 }
 
 impl Services {
@@ -121,14 +169,8 @@ pub(super) async fn load_team_detail(
             })
         })
         .collect::<Result<Vec<_>, ServiceError>>()?;
-    let heaps = store::heaps::list_heaps_for_teams(db, &[team.id])
-        .await?
-        .into_iter()
-        .map(|heap| HeapView {
-            allowed_actions: allowed_heap_actions(&heap, caller.role),
-            heap,
-        })
-        .collect();
+    let heaps = store::heaps::list_heaps_for_teams(db, &[team.id]).await?;
+    let heaps = load_heap_views(db, heaps, caller.role).await?;
     Ok(TeamDetail {
         allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id),
         role: caller.role,

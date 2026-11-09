@@ -61,6 +61,9 @@ pub(crate) struct HeapDto {
     pub name: String,
     /// When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
     pub archived_at: Option<i64>,
+    /// Items the heap's list shows by default, before filters: open and in progress ones, as the list's
+    /// `unfiltered_count` with the default view.
+    pub open_count: u32,
     /// Send back in `If-Match` when renaming.
     pub version: u32,
     pub allowed_actions: Vec<HeapActionDto>,
@@ -75,6 +78,7 @@ impl From<HeapView> for HeapDto {
             slug: heap.slug.to_string(),
             name: heap.name.as_str().to_owned(),
             archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
+            open_count: view.open_count,
             version: heap.version.get(),
             allowed_actions: view.allowed_actions.into_iter().map(HeapActionDto::from).collect(),
         }

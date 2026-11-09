@@ -14,13 +14,10 @@ use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db, version_to_db};
+use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
 use crate::entities::{item_parameter_values, item_tags, items};
 
 const TABLE: &str = "items";
-
-/// Most IDs in one `IN (…)` list, well under every backend's limit on bound parameters.
-const IN_LIST_CHUNK: usize = 500;
 
 /// Position after which a page of closed items starts: the last item of the previous page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,6 +128,37 @@ pub async fn list_items_in_states(
     attach_tags(db, &mut items).await?;
     attach_values(db, &mut items).await?;
     Ok(items)
+}
+
+/// How many items each of `heap_ids` has in one of `states`, in one query per [`IN_LIST_CHUNK`] heaps. Heaps with
+/// none are left out.
+pub async fn count_items_by_heap(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    states: &[StateKind],
+) -> Result<HashMap<HeapId, u32>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut counts = HashMap::with_capacity(ids.len());
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = items::Entity::find()
+            .select_only()
+            .column_as(items::Column::HeapId, "group_key")
+            .column_as(items::Column::Id.count(), "count")
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::State.is_in(states.iter().map(|s| s.code())))
+            .group_by(items::Column::HeapId)
+            .into_model::<GroupCount>()
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.group_key,
+            };
+            counts.insert(HeapId::from_uuid(read.uuid(&row.group_key)?), row.count);
+        }
+    }
+    Ok(counts)
 }
 
 /// Up to `limit` closed items of `heap_id`, most recently closed first, starting after `after`.

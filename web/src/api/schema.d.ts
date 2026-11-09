@@ -816,6 +816,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * Format: int32
+             * @description Items the heap's list shows by default, before filters: open and in progress ones, as the list's
+             *     `unfiltered_count` with the default view.
+             */
+            open_count: number;
             /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
             slug: string;
             /** Format: uuid */
@@ -831,6 +837,15 @@ export interface components {
          * @enum {string}
          */
         HeapAction: "rename" | "archive" | "unarchive" | "view_history";
+        /** @description A heap of one of the caller's teams, with how many items it has open. */
+        HeapOverview: components["schemas"]["HeapSummary"] & {
+            /**
+             * Format: int32
+             * @description Items the heap's list shows by default, before filters: open and in progress ones, as the list's
+             *     `unfiltered_count` with the default view.
+             */
+            open_count: number;
+        };
         /** @description A change to a heap. Leave a field out to keep it. */
         HeapPatchRequest: {
             /** @description 1 to 100 characters. */
@@ -1349,9 +1364,15 @@ export interface components {
             slug?: string | null;
         };
         TeamSummary: {
-            heaps: components["schemas"]["HeapSummary"][];
+            /** @description By name, archived ones included. */
+            heaps: components["schemas"]["HeapOverview"][];
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Everyone in the team, the caller included.
+             */
+            member_count: number;
             name: string;
             /** @description Whether this is the caller's personal team, which is theirs alone. */
             personal: boolean;

@@ -342,8 +342,8 @@ above.
 - **Tags and parameters:** S-tags, P-tag-new, P-tag-row, P-tag-history, S-parameters, P-param-new, P-param-card,
   P-option-archive, P-param-tags, P-param-archive, P-param-history, P-param-archived.
 - **Heap settings:** S-heap-settings, P-heap-weights, P-heap-row, M-heap-archive, G-archived-banner, S-no-heaps.
-- **Team extras:** M-member-remove beyond today's inline confirm, M-self-demote, P-leave, P-last-admin,
-  P-team-name, P-personal-team, S-invite.
+- **Team extras:** M-self-demote, P-leave, P-last-admin, P-team-name, P-personal-team, S-invite. (M-member-remove
+  was built with the first set, ux-tracker.md step 7.)
 - **Account and sign-in extras:** S-account in the server build, P-display-name, P-tokens, S-oauth-authorize,
   S-oauth-done, S-oidc-username, E-throttled, E-registration-closed.
 - **Errors and system states:** E-load-error, E-forbidden, S-not-found, G-offline, S-backend-failed, the `500`
@@ -916,10 +916,14 @@ where they live.
 
 - **Route:** `/teams`. **Who:** server build; redirects to the one team when the user can't create teams and has one
   (the local build).
-- **Shows:** "A team shares its heaps. Admins add members, manage heaps and make others admins.", the user's teams
-  with heap count and role, and New team name + Create team, which opens the new team.
-- **Designed:** an optional slug on create; derived from the name ("My Team" → `my-team`, `-2` on clashes) when left
-  out (readable-ids.md Format §2).
+- **Shows:** "A team shares its heaps with everyone in it.", the user's teams ("Admin · 4 members · 2 heaps",
+  "Only you · 1 heap" for the personal team, from `member_count` and the heaps on `GET /me`) with Open, and + Create
+  team, which opens a form: Name, Link name, "/teams/{link name} · you'll be its admin" (just "You'll be its admin."
+  while no link name is typed), Create. Escape or Cancel closes it; Create opens the new team. Problems show under
+  the field they name (`handle_taken`, `invalid_handle` with its hint, `field_empty`).
+- **Link name:** optional; the server derives it from the name ("My Team" → `my-team`, `-2` on clashes) when left
+  out (readable-ids.md Format §2). The client never guesses it.
+- **Phone:** one column, 44 px rows and buttons.
 - **Freq 1.** **Source:** Off Teams §1–2; `TeamsPage.tsx`. Built.
 - **Must:** local n/a, server 5. Create team is the only way to make a team others can join; personal teams take no
   members.
@@ -929,25 +933,31 @@ where they live.
 - **Route:** `/teams/$teamId`; designed `/teams/{team}`, with `/teams/{team}/settings` as "a team page".
 - **Who:** every member; controls by `allowed_actions` (team: `rename`, `change_slug`, `add_member`, `create_heap`,
   `leave`; member: `promote`, `demote`, `remove`; heap: `rename`, `archive`, `unarchive`, `view_history`).
-- **Shows:** the name (P-team-name), "You are an admin of this team." and an Activity link (S-team-activity),
-  **Heaps** (P-heap-row each, P-heap-new), **Members** (P-member-row each, P-member-add), P-leave or P-last-admin.
-  Empty heaps: "This team has no heaps yet."
+- **Shows:** "Teams · you're an admin" (or "you're a member", "your personal team"; no Teams link in the local
+  build), the name with a ⋯ for Rename and Link name (P-team-name), Copy link and Activity (S-team-activity), and
+  "Everyone here can see and edit every heap in the team. Admins manage heaps and members." (for a personal team:
+  "It's yours alone, and its link uses your username."). Then **Heaps** with + New heap (P-heap-new, P-heap-row each),
+  **Members · N** (P-member-add above the list, P-member-row each, M-member-remove under it), and P-leave or
+  P-last-admin. Empty heaps: "This team has no heaps yet."
 - **Local build:** the place to create, rename, archive and unarchive heaps; members section shows the one user
   with nothing to do (local-build.md Single-user mode).
-- **Phone:** not yet fitted (app-ux.md Plan step 4).
+- **Phone (PhoneTeam):** one column under the shell's top bar. Heap rows 52 px that open the heap, "14 open ›", and a
+  44 px ⋯ opening a sheet with the heap's actions. The search at full width, 48 px. Member rows 56 px with name and
+  role, and a 44 px ⋯ "Actions for {name}" opening a sheet headed "{name} · @{username} · {role}" with Make admin or
+  Make member, History, and "Remove from {team}…", which asks in the sheet.
 - **Freq 2.** **Source:** Off Teams, Roles; `TeamPage.tsx`. Built.
 - **Must:** local 2, server 5. Server: the only place to add members and heaps, so without it nothing is shared.
   Local: it only holds New heap.
 
 | ID | Purpose | Contents and actions | Freq | Must (local) | Must (server) | Status | Presentation |
 | --- | --- | --- | :---: | :---: | :---: | --- | --- |
-| P-team-name | Rename the team; change its slug | Name input, Save/Cancel. Designed: slug field, not on a personal team; `invalid_handle`, `handle_taken` | 1 | n/a | 1 | built (slug designed) | Inline |
-| P-heap-row | Manage a heap | Name (inline rename), Archived badge, Open, Archive or Unarchive, History | 1 | 2 | 2 | built | Row |
-| P-heap-new | Add a heap | New heap name, Add heap. Designed: optional slug | 1 | 2 | 5 | built | Inline form |
-| P-member-row | Manage a member | Display name, email, Admin/Member; Make admin, Make member, Remove; History | 1 | n/a | 4 | built | Row |
-| M-member-remove | Confirm removal | "Remove {name}?" Remove, Cancel | 1 | n/a | 2 | built | Inline confirm |
+| P-team-name | Rename the team; change its link name | Rename or Link name under the ⋯ by the title turns it into an input with Save and Cancel; Escape cancels. No link name on a personal team; `invalid_handle`, `handle_taken` | 1 | n/a | 1 | built | Inline, from a menu |
+| P-heap-row | Manage a heap | Name, "14 open" (`open_count`), Archived badge, Open; ⋯ with Rename and Link name (edited in the row), Archive or Unarchive, History (shown under the row). On a phone the row opens the heap and the ⋯ opens a sheet | 1 | 2 | 2 | built | Row |
+| P-heap-new | Add a heap | + New heap opens a form: New heap name, Add heap, Cancel. Designed: optional slug | 1 | 2 | 5 | built | Inline form |
+| P-member-row | Manage a member | Initials avatar, display name with "(you)", @username, Admin or Member badge; Make admin or Make member, Remove; a quiet History button. No email. On a phone: name and role, and a ⋯ opening a sheet with the actions | 1 | n/a | 4 | built | Row |
+| M-member-remove | Confirm removal | "Remove {name} from {team}? They lose access to {heaps}. Their items stay." (the unarchived heaps by name, "to its N heaps" past three, no access sentence with none) Cancel, Remove. Focus moves to it; Escape or Cancel goes back to Remove. In the member sheet on a phone | 1 | n/a | 2 | built | Banner under the list (alertdialog) |
 | M-self-demote | Confirm demoting yourself | Make member on your own row drops your admin rights at once, with no prompt | 1 | n/a | 2 | implied | Inline confirm |
-| P-member-add | Add an existing user (Off Teams §6) | Search "name, or full email" (3+ characters; email shown only when typed in full); results with Add or "Already a member"; "No one matches." | 1 | n/a | 5 | built | Inline search with results list |
+| P-member-add | Add an existing user (Off Teams §6) | "Add a member by username, name or email" (3+ characters or a whole username; email found and shown only when typed in full), "They need an account first"; results under it with the first addable one highlighted, "↵ Add as member", arrows to move, Enter or a click to add; "Already a member"; "No one matches." | 1 | n/a | 5 | built | Combobox with a listbox under it |
 | P-leave | Leave the team | Leave team → "Leave {team}? You'll lose access to its heaps." Leave, Cancel. Goes to S-teams | 1 | n/a | 2 | built | Inline confirm |
 | P-last-admin | Explain why leave is missing | "You are the only admin, so you can't leave until someone else is one." | 1 | n/a | 2 | built | Text |
 | P-personal-team | A personal team's page | No member controls, no Leave, slug fixed, name editable (readable-ids.md Usernames §1–2; `personal_team` error). `personal` flag on `TeamDto` | 1 | n/a | 2 | designed | Variant of S-team |
@@ -1133,7 +1143,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 2. **Inline confirms vs dialogs.** Every confirmation today replaces its button in place. On a phone a bottom-sheet
    confirmation may read better; app-ux.md doesn't say.
 3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity, S-tags,
-   S-parameters, S-team, S-teams. They still use the older stone palette rather than the design tokens.
+   S-parameters. They still use the older stone palette rather than the design tokens.
    S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.
