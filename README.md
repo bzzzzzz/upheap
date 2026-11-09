@@ -39,9 +39,10 @@ The design docs are indexed in [design/README.md](design/README.md).
   `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
-  items with the web app's filters and saved views, and add, show, edit and move items between states.
+  items with the web app's filters and saved views, add, show, edit and move items between states, and list, add and edit
+  tags.
 
-Not yet: editing the heap's own weights, OIDC sign-in, tag commands in the CLI, and invitations.
+Not yet: OIDC sign-in and invitations.
 
 ## Run it
 
@@ -90,6 +91,7 @@ cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
 cargo run -p cli -- item done k3x9a
+cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- auth logout
 ```
 

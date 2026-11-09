@@ -1,38 +1,20 @@
-//! What the item commands share: the calls under one heap's path, finding the heap and the item a command names,
-//! due times and descriptions from flags, and the words and cells that show an item.
+//! What the item commands share: the calls on one item, finding the item a command names, due times from flags,
+//! and the words and cells that show an item.
 
 use api_types::common::DueInputDto;
 use api_types::common::{ItemDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
-use api_types::me::MeDto;
 use serde::Serialize;
-use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::UsageError;
-use crate::config::SettingError;
-use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, match_due_choice, resolve_heap};
+use crate::commands::heap_api::{HeapApi, is_not_found, named_heap, resolve_heap_handle};
+use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, match_due_choice};
 use crate::output::{Cell, Tone};
 use crate::{App, CliError};
 
-/// The calls under one heap's path, as one caller.
-pub(super) struct HeapApi<'a> {
-    pub client: &'a ApiClient,
-    pub token: &'a str,
-    pub heap: &'a HeapHandle,
-}
-
 impl HeapApi<'_> {
-    /// `GET` of `resource` under the heap, such as `["items"]`.
-    pub async fn get<T: DeserializeOwned>(
-        &self,
-        resource: &[&str],
-        query: &(impl Serialize + ?Sized),
-    ) -> Result<Fetched<T>, CliError> {
-        Ok(self.client.get(&self.path(resource), query, self.token).await?)
-    }
-
     /// The item with `key`, which the user typed as `typed`. A `404` is the item not being there, or the heap not
     /// being the caller's, which the server doesn't tell apart.
     pub async fn get_item(&self, typed: &str, key: &str) -> Result<Fetched<ItemDto>, CliError> {
@@ -45,15 +27,6 @@ impl HeapApi<'_> {
             }),
             Err(err) => Err(err.into()),
         }
-    }
-
-    /// `POST` of `body` to `resource` under the heap.
-    pub async fn post<T: DeserializeOwned>(
-        &self,
-        resource: &[&str],
-        body: &(impl Serialize + ?Sized),
-    ) -> Result<Fetched<T>, CliError> {
-        Ok(self.client.post(&self.path(resource), body, self.token).await?)
     }
 
     /// `PATCH` of `body` to the item with `key`, which is at `version`. A stale or closed item's refusal names the
@@ -77,39 +50,10 @@ impl HeapApi<'_> {
             Err(err) => Err(err.into()),
         }
     }
-
-    fn path<'p>(&'p self, resource: &[&'p str]) -> Vec<&'p str> {
-        let mut path = vec!["teams", self.heap.team.as_str(), "heaps", self.heap.heap.as_str()];
-        path.extend_from_slice(resource);
-        path
-    }
 }
 
 fn is_stale_or_closed(err: &ClientError) -> bool {
     matches!(err, ClientError::Problem { problem, .. } if matches!(problem.code.as_str(), "version_conflict" | "item_closed"))
-}
-
-fn is_not_found(err: &ClientError) -> bool {
-    matches!(err, ClientError::Problem { problem, .. } if problem.status == 404)
-}
-
-/// The handle of the heap `name` names: complete as typed, or looked up among the caller's heaps in `GET /me`.
-pub(super) async fn resolve_heap_handle(
-    name: HeapName<'_>,
-    client: &ApiClient,
-    token: &str,
-) -> Result<HeapHandle, CliError> {
-    if let Some(handle) = name.to_handle() {
-        return Ok(handle);
-    }
-    let me = client.get::<MeDto>(&["me"], NO_QUERY, token).await?;
-    Ok(resolve_heap(name, &me.value)?)
-}
-
-/// The heap a command works in, from `--heap`, the environment or the config file, as typed.
-pub(super) fn named_heap<'a>(flag: Option<&'a str>, app: &'a App) -> Result<HeapName<'a>, CliError> {
-    let typed = app.heap_name(flag).ok_or(SettingError::NoHeap)?;
-    Ok(HeapName::parse(typed)?)
 }
 
 /// Where an item is: the heap it named itself, or the heap to look up for its key.
@@ -185,16 +129,6 @@ pub(super) async fn resolve_due(raw: &str, client: &ApiClient, token: &str) -> R
     }
 }
 
-/// The description a flag gives: its text, or all of stdin for `-`, less the newline that ends it.
-pub(super) async fn read_description(raw: &str, app: &App) -> Result<String, CliError> {
-    if raw != "-" {
-        return Ok(raw.to_owned());
-    }
-    let text = app.read_stdin().await?;
-    let text = text.strip_suffix('\n').unwrap_or(&text);
-    Ok(text.strip_suffix('\r').unwrap_or(text).to_owned())
-}
-
 /// `ids` without repeats, in the order they first appear.
 pub(super) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
     let mut seen = Vec::with_capacity(ids.len());
@@ -244,27 +178,11 @@ pub(super) fn tags_text(item: &ItemDto) -> String {
         .join(", ")
 }
 
-/// `text` cut to `width` characters, the last one an ellipsis, when it's longer.
-pub(super) fn shorten(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let kept: String = text.chars().take(width.saturating_sub(1)).collect();
-    format!("{kept}…")
-}
-
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
 
     use super::*;
-
-    #[gtest]
-    fn long_titles_are_cut_with_an_ellipsis() {
-        expect_that!(shorten("short", 10), eq("short"));
-        expect_that!(shorten("exactly10!", 10), eq("exactly10!"));
-        expect_that!(shorten("a bit too long", 10), eq("a bit too…"));
-    }
 
     #[gtest]
     fn a_heap_flag_is_the_items_heap_when_it_names_it() {

@@ -4,7 +4,8 @@ use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{ItemDto, NeedDto};
 use clap::Args;
 
-use super::common::{HeapApi, locate_item, state_text};
+use super::common::{locate_item, state_text};
+use crate::commands::heap_api::HeapApi;
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
 use crate::output::{Cell, Mode, Output, Tone};
