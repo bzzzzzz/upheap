@@ -38,6 +38,16 @@ pub enum UsageError {
     SortWithSortParameter { sort: String },
     #[error("--sort parameter needs the parameter to sort by: add --sort-parameter <name>")]
     SortWithoutParameter,
+    #[error("`{item}` is in {item_heap}, but --heap says {flag_heap}; leave out one of them")]
+    ItemInOtherHeap {
+        item: String,
+        item_heap: String,
+        flag_heap: String,
+    },
+    #[error("--tag and --untag both name {name}")]
+    TagAndUntag { name: String },
+    #[error("can't read stdin as text for --description -")]
+    UnreadableStdin(#[source] std::io::Error),
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

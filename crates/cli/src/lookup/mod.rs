@@ -1,7 +1,8 @@
-//! Resolving what the user typed, a heap handle, tag names, a saved view's or a parameter's name, to the handles and
-//! IDs the API takes. Plain functions over what the server returned; they don't call it.
+//! Resolving what the user typed, a heap handle, an item, a due time, tag names, a saved view's or a parameter's name,
+//! to the handles, IDs and values the API takes. Plain functions over what the server returned; they don't call it.
 
-use api_types::common::ItemDto;
+use api_types::common::{DueInputDto, ItemDto};
+use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
@@ -28,10 +29,30 @@ impl std::fmt::Display for HeapHandle {
     }
 }
 
+/// An item as the user named it: its key in the current heap, or its heap and key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ItemName {
+    Key(String),
+    Full { heap: HeapHandle, key: String },
+}
+
+/// A due time as the user typed it for `--due`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DueWhen {
+    /// A calendar date, `YYYY-MM-DD`: an exact deadline.
+    Date(String),
+    /// Anything else: the label of one of the server's rough choices, such as `next week`.
+    Rough(String),
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LookupError {
     #[error("`{name}` isn't a heap: give `team/heap`, or a heap's slug")]
     MalformedHeap { name: String },
+    #[error("`{name}` isn't an item: give its key, team/heap/key, or a link to it")]
+    MalformedItem { name: String },
+    #[error("`{typed}` isn't a due time: give a date, YYYY-MM-DD, or one of: {}", known.join(", "))]
+    UnknownDueChoice { typed: String, known: Vec<String> },
     #[error("you have no heap `{name}`; `upheap heap list` lists yours")]
     UnknownHeap { name: String },
     #[error("more than one of your teams has a heap `{slug}`: say which with {}", candidates.join(" or "))]
@@ -97,6 +118,96 @@ impl<'a> HeapName<'a> {
             Self::Bare(_) => None,
         }
     }
+}
+
+impl ItemName {
+    /// Reads a key, `team/heap/key`, or a link to an item (`http://` or `https://`, whose path ends in
+    /// `/h/<team>/<heap>/<key>`, the short link, or `/teams/<team>/heaps/<heap>/items/<key>`, which the web app's
+    /// address bar shows after redirecting the short one; its host, query and fragment are ignored, and so is one
+    /// trailing slash). Anything else, or an empty part, names no item.
+    pub fn parse(raw: &str) -> Result<Self, LookupError> {
+        let malformed = || LookupError::MalformedItem { name: raw.to_owned() };
+        if raw.starts_with("http://") || raw.starts_with("https://") {
+            let url = reqwest::Url::parse(raw).map_err(|_| malformed())?;
+            let mut segments: Vec<&str> = url.path_segments().ok_or_else(malformed)?.collect();
+            if segments.last() == Some(&"") {
+                segments.pop();
+            }
+            return match segments.as_slice() {
+                [.., "h", team, heap, key] | [.., "teams", team, "heaps", heap, "items", key] => {
+                    Self::from_parts(&[*team, *heap, *key]).ok_or_else(malformed)
+                }
+                _ => Err(malformed()),
+            };
+        }
+        let parts: Vec<&str> = raw.split('/').collect();
+        Self::from_parts(&parts).ok_or_else(malformed)
+    }
+
+    /// `[key]` or `[team, heap, key]`, none of them empty.
+    fn from_parts(parts: &[&str]) -> Option<Self> {
+        if parts.contains(&"") {
+            return None;
+        }
+        match parts {
+            [key] => Some(Self::Key((*key).to_owned())),
+            [team, heap, key] => Some(Self::Full {
+                heap: HeapHandle {
+                    team: (*team).to_owned(),
+                    heap: (*heap).to_owned(),
+                },
+                key: (*key).to_owned(),
+            }),
+            _ => None,
+        }
+    }
+}
+
+impl DueWhen {
+    /// A calendar date as it's written back (`2027-03-12`, not `2027-3-12` or a date and time) is a date; anything
+    /// else is taken for a rough choice.
+    pub fn parse(raw: &str) -> Self {
+        match raw.parse::<jiff::civil::Date>() {
+            Ok(date) if date.to_string() == raw => Self::Date(raw.to_owned()),
+            _ => Self::Rough(raw.to_owned()),
+        }
+    }
+}
+
+/// The due time for a date: an exact deadline, so firm.
+pub fn due_on(date: &str) -> DueInputDto {
+    DueInputDto {
+        date: date.to_owned(),
+        firm: true,
+    }
+}
+
+/// The due time for the rough choice `typed` names, comparing labels ignoring case and treating `-` as a space.
+/// It carries the choice's date, loose, so the item reads back with the choice's label.
+pub fn match_due_choice(typed: &str, choices: &DueChoicesDto) -> Result<DueInputDto, LookupError> {
+    let wanted = normalize_label(typed);
+    choices
+        .choices
+        .iter()
+        .find(|choice| normalize_label(&choice.label) == wanted)
+        .map(|choice| DueInputDto {
+            date: choice.date.clone(),
+            firm: false,
+        })
+        .ok_or_else(|| LookupError::UnknownDueChoice {
+            typed: typed.to_owned(),
+            known: choices.choices.iter().map(|choice| choice.label.clone()).collect(),
+        })
+}
+
+/// Lower case, `-` as a space, runs of whitespace as one space, the ends trimmed.
+fn normalize_label(label: &str) -> String {
+    label
+        .to_lowercase()
+        .replace('-', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The caller's heap that `name` names, among the teams and heaps of `me`. A bare slug works when only one of the

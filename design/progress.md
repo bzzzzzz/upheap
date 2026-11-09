@@ -16,7 +16,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Personal team and heap | Product Teams §3 | ✅ | Made on registration and named by the username. Private, so it takes no members |
 | Readable IDs | Arch Handles | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
 | Items | Product Items §1–4, 6–7 | ✅ | Loose and exact due times with fuzzy labels. Need is required on every item and never cleared. Reopen within 7 × 24 h |
-| Ranking | Product Priority | 🟡 | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. Admins edit every weight, the heap's and its parameters', on Settings › Ranking, with a preview of the top of the list |
+| Ranking | Product Priority | ✅ | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. Admins edit every weight, the heap's and its parameters', on Settings › Ranking, with a preview of the top of the list |
 | List view | Product List items | ✅ | Each state pinned, shown or hidden. Sort by priority, due, effort, impact or a parameter. One Filters panel for tags, need, effort, impact and parameter options. Client text search (`/`). The view lives in the URL |
 | Closed items | Product Closed items | ✅ | Sections Today, This week and Earlier. Reopen while allowed. Cursor paging |
 | Add item | Product Add item | ✅ | A dialog (`N`, or + on a phone) with every field, prefilled from the list's filters. Says where the item landed. Add another is remembered per device |
@@ -28,7 +28,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Heaps | Product Teams §4, 9, Heaps | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Product Audit log | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
-| CLI | [cli.md](cli.md) | 🟡 | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`. Not started: `item add`, `show`, `edit` and the state verbs, tags, `/me/tokens` |
+| CLI | [cli.md](cli.md) | 🟡 | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`. Not started: tags, `/me/tokens`, release packaging |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
@@ -39,8 +39,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 
 In rough order.
 
-1. **The rest of the CLI** ([cli.md](cli.md)): `item add`, `show`, `edit` and the state verbs; `tag list`, `add` and
-   `edit`; last `/me/tokens` on the server and its Account card. Release packaging for the binary too.
+1. **The rest of the CLI** ([cli.md](cli.md)): `tag list`, `add` and `edit`; last `/me/tokens` on the server and its
+   Account card. Release packaging for the binary too.
 2. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
 3. **Phone width** for Activity, in the design tokens.
 4. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).

@@ -1,20 +1,20 @@
 //! `upheap item list [<text>]`: the heap's ranked list as the web app shows it, or its closed items with `--closed`.
 
-use api_types::common::{ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto, StateDto};
+use api_types::common::{ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto};
 use api_types::items::{ClosedItemsDto, ClosedQuery, RankedListDto, RankedQuery};
 use api_types::list_view::{BlockedLayoutDto, ListViewDto, SortDto, StateModeDto};
-use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
 use api_types::views::SavedViewListDto;
 use clap::Args;
 
-use crate::client::{ApiClient, NO_QUERY};
+use crate::client::NO_QUERY;
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::config::SettingError;
-use crate::lookup::{HeapHandle, HeapName, find_view, matches_text, resolve_heap, resolve_parameter, resolve_tags};
+use crate::lookup::{find_view, matches_text, resolve_parameter, resolve_tags};
 use crate::output::{Cell, Mode, Output, Tone};
 use crate::{App, CliError};
+
+use super::common::{HeapApi, due_cell, named_heap, resolve_heap_handle, shorten, sizes_text, state_text, tags_text};
 
 /// Titles longer than this are cut short in the table, so the columns after them stay on screen.
 const TITLE_WIDTH: usize = 60;
@@ -84,17 +84,10 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
     if args.sort == Some(SortDto::Parameter) && args.sort_parameter.is_none() && args.view.is_none() {
         return Err(UsageError::SortWithoutParameter.into());
     }
-    let typed = app.heap_name(args.heap.name.as_deref()).ok_or(SettingError::NoHeap)?;
-    let name = HeapName::parse(typed)?;
+    let name = named_heap(args.heap.name.as_deref(), app)?;
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
-    let heap = match name.to_handle() {
-        Some(handle) => handle,
-        None => {
-            let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
-            resolve_heap(name, &me.value)?
-        }
-    };
+    let heap = resolve_heap_handle(name, &client, &token).await?;
     let api = HeapApi {
         client: &client,
         token: &token,
@@ -120,25 +113,6 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
         Mode::Human => render_ranked(&list.value, &query, args.text.as_deref(), out)?,
     }
     Ok(())
-}
-
-/// The calls under one heap's path, as one caller.
-struct HeapApi<'a> {
-    client: &'a ApiClient,
-    token: &'a str,
-    heap: &'a HeapHandle,
-}
-
-impl HeapApi<'_> {
-    async fn get<T: serde::de::DeserializeOwned>(
-        &self,
-        resource: &[&str],
-        query: &(impl serde::Serialize + ?Sized),
-    ) -> Result<crate::client::Fetched<T>, CliError> {
-        let mut path = vec!["teams", self.heap.team.as_str(), "heaps", self.heap.heap.as_str()];
-        path.extend_from_slice(resource);
-        Ok(self.client.get(&path, query, self.token).await?)
-    }
 }
 
 /// The list query: the saved view's settings when `--view` names one, with the flags given on top. Tag and
@@ -379,53 +353,6 @@ fn closed_heading(group: Option<ClosedGroupDto>) -> &'static str {
     }
 }
 
-fn state_text(state: StateDto) -> &'static str {
-    match state {
-        StateDto::Open => "open",
-        StateDto::InProgress => "in progress",
-        StateDto::Blocked => "blocked",
-        StateDto::Done => "done",
-        StateDto::WontDo => "won't do",
-    }
-}
-
-/// Effort and impact as `s/m`, with `-` for one that's unset.
-fn sizes_text(effort: Option<SizeDto>, impact: Option<SizeDto>) -> String {
-    let size = |size: Option<SizeDto>| match size {
-        Some(SizeDto::S) => "s",
-        Some(SizeDto::M) => "m",
-        Some(SizeDto::L) => "l",
-        Some(SizeDto::Xl) => "xl",
-        None => "-",
-    };
-    format!("{}/{}", size(effort), size(impact))
-}
-
-fn due_cell(item: &ItemDto) -> Cell {
-    match &item.due {
-        Some(due) if due.overdue => Cell::toned(due.label.clone(), Tone::Alert),
-        Some(due) => Cell::new(due.label.clone()),
-        None => Cell::default(),
-    }
-}
-
-fn tags_text(item: &ItemDto) -> String {
-    item.tags
-        .iter()
-        .map(|tag| tag.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// `text` cut to `width` characters, the last one an ellipsis, when it's longer.
-fn shorten(text: &str, width: usize) -> String {
-    if text.chars().count() <= width {
-        return text.to_owned();
-    }
-    let kept: String = text.chars().take(width.saturating_sub(1)).collect();
-    format!("{kept}…")
-}
-
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
@@ -453,12 +380,5 @@ mod tests {
                 "3 items hidden by their state (open, blocked); show them with --open shown --blocked shown."
             ))
         );
-    }
-
-    #[gtest]
-    fn long_titles_are_cut_with_an_ellipsis() {
-        expect_that!(shorten("short", 10), eq("short"));
-        expect_that!(shorten("exactly10!", 10), eq("exactly10!"));
-        expect_that!(shorten("a bit too long", 10), eq("a bit too…"));
     }
 }
