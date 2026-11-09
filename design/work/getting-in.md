@@ -396,17 +396,184 @@ sign-ins, membership writes under the team lock, a subcommand of the server bina
 
 ## 5. Interface
 
+The web app's screens follow [ux.md](../ux.md): a card on a wide screen and the bare form on a phone, a problem
+with an input under it, the settings layout for the Team page, History collapsed where a thing is edited. The
+wording below shows what a line says, not its final copy.
+
+### Inventory
+
+One build, the server's, so necessity is rated once. Nothing here is used more than occasionally; the ratings
+differ in necessity.
+
+| # | Entry | Flow steps | Frequency | Necessity | Why (4 and 5) |
+| --- | --- | --- | :---: | :---: | --- |
+| 1 | Team page, Members: invite links (make, copy, revoke, past links, each link's history) | A1, A3 | 2 | 5 | The only way in on a closed server, and A3 can't shut a link without it |
+| 2 | Invite page, signed out: create account or sign in | N1, N3, M1.1–2 | 1 | 5 | Where every newcomer enters |
+| 3 | Invite page, signed in: confirm joining | M1.3, M2 | 1 | 5 | Where everyone with an account enters |
+| 4 | Invite page, link can't be used: ended, revoked, removed, not a link | N2, scenario 3 | 1 | 4 | The flow dead-ends without saying what to do |
+| 5 | Team activity: lines for a link made, revoked, and a join through one | A3.3 | 1 | 4 | How an admin learns who came in through a leaked link |
+| 6 | Sign-in page: how a forgotten password is reset | P3.1 | 1 | 4 | Without it a locked-out person has no next step |
+| 7 | Reset page: set a new password; link ended, used or cancelled | P3.3–4, P4 | 1 | 5 | The only way back into an account |
+| 8 | Account, Password: change it, with its history | P1, P2, P5 | 2 | 4 | Shutting out someone who knows the password has no other way short of the operator |
+| 9 | Operator command: make a reset link | O1 | 1 | 5 | The only source of reset links |
+| 10 | Sign-in page with registration closed: say that an account needs an invite link | O2 | 1 | 3 | |
+| 11 | Sign-in page: a contact line the operator sets, for "who runs this server" | P3.1 | 1 | 2 | |
+| 12 | Command-line client: say why a sign-in ended after a password change | P1.3 | 1 | 2 | |
+
+**The first set** is entries 1 to 9. Entries 10 to 12 are in Later: today's "registration is closed" error, a
+general "ask whoever runs this server", and the client's existing "sign in again" do the job.
+
+**Layout by frequency.** Nothing here is used several times a session, so nothing is added to the list, the
+sidebar or the tabs. Each entry sits one step inside the page that owns it: links in the Team page's Members,
+the password in Account, both closed until asked for.
+
+**Where a new member lands:** on the team's heap when it has exactly one that isn't archived, otherwise on the
+Team page, which lists the heaps. Either way a line says they joined.
+
+### Wireframes
+
+```
+WIDE · Team page, Members, for an admin          frequency 2 · necessity 5
+┌────────────────────────────────────────────────────────────┐
+│ Members                                                     │
+│ [Find someone on this server…]              [Invite link]   │
+│                                                             │
+│ Invite links          Anyone with a link joins as a member. │
+│  Made by Ana · ends Mon 16 Nov      [Copy] [Revoke] History │
+│  Made by Ben · ends Thu 12 Nov      [Copy] [Revoke] History │
+│  Past links (3) ▸                                           │
+│                                                             │
+│ member rows, as today                                       │
+└────────────────────────────────────────────────────────────┘
+States: no working link (the button and the one line only); just made (new row first,
+  marked, Copy as its main action); copied (a status line); revoking (the row turns
+  into an inline confirm: it stops working at once, people who joined stay);
+  failed (the server's message on the row).
+Past links, opened: "Made by Ana 2 Nov · ended 9 Nov · 4 joined", or "· revoked by Ben
+  5 Nov", each with History and no link.
+History on a row: made, revoked, and each person who joined through it.
+Members who aren't admins see none of this.
+Phone: one column, Invite link spans the width, a row's actions in its ⋯ sheet.
+Next likely action: Copy.
+```
+
+```
+Invite page, signed out                          frequency 1 · necessity 5
+┌──────────────────────────────────┐
+│ Join Acme                         │
+│ Ana Ruiz invited you.             │
+│ (Create account) (Sign in)        │   switch, Create account first
+│ name                              │
+│ username        checked as typed  │
+│ email                             │
+│ password                          │
+│ [Create account and join]         │
+└──────────────────────────────────┘
+Sign in side: email or username, password, [Sign in]; then the signed-in page below.
+States: checking the link; username taken (under it); email taken (under it, with
+  "Sign in instead", which switches side and keeps the address); too many attempts;
+  the link stopped working meanwhile (the page becomes "can't be used").
+After: where a new member lands, with "You joined Acme".
+Next likely action: Create account and join.
+```
+
+```
+Invite page, signed in                           frequency 1 · necessity 5
+┌──────────────────────────────────┐
+│ Join Acme?                        │
+│ Ana Ruiz invited you.             │
+│ You're signed in as Sam Ortiz (@sam).
+│ [Join Acme]                       │
+│ Not you? Sign out                 │   comes back here, signed out
+└──────────────────────────────────┘
+States: already in the team (no page: straight to the team, with a line saying so);
+  joining; the link stopped working meanwhile.
+Next likely action: Join.
+```
+
+```
+Invite page, link can't be used                  frequency 1 · necessity 4
+┌──────────────────────────────────┐
+│ This invite link has ended.       │   or: was revoked
+│ It was for Acme, from Ana Ruiz.   │
+│ Ask the team for a new one.       │
+│ [Open Upheap]                     │   the app when signed in, else sign-in
+└──────────────────────────────────┘
+Removed from the team (signed in, rule 8): says they were removed, that this link
+  can't add them back, and to ask one of the team's admins.
+Not an invite link: says so, names no team.
+```
+
+```
+Team activity, new lines                         frequency 1 · necessity 4
+  Ana made an invite link
+  Ben revoked Ana's invite link
+  Sam joined through Ana's invite link
+Worded by the server, shown to admins, like other membership lines.
+```
+
+```
+Sign-in page, addition                           frequency 1 · necessity 4
+│ password                          │
+│ Forgot your password? ▸           │   opens one line, no form:
+│   Whoever runs this Upheap server can send you a reset link.
+```
+
+```
+Reset page                                       frequency 1 · necessity 5
+┌──────────────────────────────────┐
+│ Set a new password                │
+│ for Sam Ortiz (@sam)              │
+│ new password                      │
+│ [Set password and sign in]        │
+│ This signs you out everywhere else.
+└──────────────────────────────────┘
+States: password not acceptable (under it); the link has ended, was already used, or
+  was replaced by a newer one (each says which, and to ask for a new one); not a
+  reset link.
+After: where signing in lands, with a line that the password changed.
+```
+
+```
+Account, Password card                           frequency 2 · necessity 4
+Between Profile and Appearance. Closed:
+│ Password                                    [Change password] │
+Open:
+│ current password                                              │
+│ new password                                                  │
+│ [Change password] [Cancel]                                    │
+│ This signs you out of your other browsers and the command line.
+│ History ▸                                                     │
+States: wrong current password (under it); too many attempts (above the button, with
+  how long to wait); new password not acceptable (under it); changed (the card
+  closes, a status line says so and how many other sign-ins ended).
+History, opened: password changed; reset link made by the operator; password set
+  with a reset link. Each with its time.
+Not in the local build.
+```
+
+```
+Operator command                                 frequency 1 · necessity 5
+$ upheap-server user reset-link sam              a username or an email address
+https://upheap.example/reset/…                                       (stdout)
+For Sam Ortiz (@sam). Works once, until 11:20 UTC.                   (stderr)
+An earlier reset link for them no longer works.                      (stderr, when so)
+
+The link alone is on stdout, so it can be piped. No prompts. It reads the server's own
+configuration, and needs the database and the server's address from it.
+Exit: 0 made; 2 no user given; 3 no such user; 5 the database can't be reached.
+```
+
 ## 6. Stages
 
 ## Parked
 
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
 
-- Which page a new member lands on when the team has several heaps: step 5.
-- How the sign-in page knows who runs the server, for example a contact line the operator sets: step 5.
 - Where a removal is remembered, since the membership row goes: for the implementation.
 - An invite link is kept readable while session and reset secrets are kept hashed: for the implementation.
-- Where Account shows its history, and where the team page lists its links: step 5.
+- The shape of the invite and reset addresses, under architecture.md's rule for handles in URLs: for the
+  implementation.
 
 ## Later
 
@@ -419,3 +586,6 @@ Ideas outside the scope. Not commitments.
 - Making the first account on a server whose registration starts closed.
 - Consent or a notice for a direct add.
 - Membership from an identity provider's groups, with OIDC.
+- The sign-in page saying, with registration closed, that an account needs an invite link (Interface 10).
+- A contact line the operator sets, shown where the sign-in page says who resets passwords (Interface 11).
+- The command-line client saying that a sign-in ended because the password changed (Interface 12).
