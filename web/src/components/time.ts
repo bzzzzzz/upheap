@@ -1,9 +1,8 @@
 // Wording for dates by the day, in English and the browser's time zone, like the server's labels. For the Your data
-// card and storage note (lastDownload.ts), and the Command line card's sign-ins.
+// card and storage note (lastDownload.ts).
 //
 // An exception to thin clients (engineering-principles.md) for the local build, whose dates are facts of this browser
-// that no server sees. The Command line card words the server's timestamps the same way, since the server sends
-// instants and the day depends on this browser's time zone.
+// that no server sees.
 import { useEffect, useState } from "react";
 
 export const DAY = 24 * 60 * 60 * 1000;

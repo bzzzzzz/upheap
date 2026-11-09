@@ -867,16 +867,22 @@ export interface components {
              * @description Names the sign-in in `DELETE /me/sign-ins/{id}`.
              */
             id: string;
+            /** @description What to call this sign-in: the device name, else the client's `client_name`. */
+            label: string;
             /**
              * Format: int64
              * @description UTC milliseconds: when the sign-in last got new tokens.
              */
             last_used_at: number;
+            /** @description How long ago it last got new tokens, in calendar days in the request's timezone: "today", "2 days ago". */
+            last_used_label: string;
             /**
              * Format: int64
              * @description UTC milliseconds.
              */
             signed_in_at: number;
+            /** @description The day it was signed in, in the request's timezone: "today", "yesterday", "3 Nov", or "3 Nov 2025". */
+            signed_in_label: string;
         };
         /** @description The caller's live sign-ins, the most recently used first. */
         ClientSignInList: {
@@ -2074,7 +2080,10 @@ export interface operations {
     list_sign_ins: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

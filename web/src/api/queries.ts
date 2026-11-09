@@ -458,14 +458,13 @@ export function useApproveAuthorization() {
 const signInsKey = ["sign-ins"] as const;
 
 /**
- * The sign-ins of clients such as the CLI, most recently used first. Asked for only when `enabled`: the server says
- * with `manage_sign_ins` whether there are any to manage.
+ * The sign-ins of clients such as the CLI, most recently used first. Only the Command line card asks, and it is shown
+ * only when the server says with `manage_sign_ins` that there are some to manage.
  */
-export function useSignIns(enabled: boolean) {
+export function useSignIns() {
   return useQuery({
     queryKey: signInsKey,
     queryFn: async () => unwrap(await api.GET("/api/v1/me/sign-ins")).sign_ins,
-    enabled,
     staleTime: 30_000,
   });
 }

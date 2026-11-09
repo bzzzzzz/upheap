@@ -307,13 +307,15 @@ password, too many attempts, registration closed) shows above the button. A sign
 ## Command line
 
 In the server build, Account's Command line card lists where the `upheap` CLI is signed in as the user. A row has a
-terminal icon, the machine's name (the client's name when it sent none), "Signed in 3 Nov · last used today", and a
-**Sign out** button named for the machine. The button turns the row into an inline confirm that names it and says the
-CLI there stops working until someone runs `upheap auth login` again; one row confirms at a time, and Cancel gives
-focus back to the row's button. After a sign-out the card says so in a status line and focus moves to its heading,
-since the row it was on is gone. With none signed in, the card says so and shows the command to start with, with
-this server's address. The card is there when the server's `manage_sign_ins` action is, so never in the local build,
-which has no accounts and nothing to sign in to. Ending a sign-in never touches the browser's own session.
+terminal icon, the machine's name (the client's name when it sent none), "Signed in 3 Nov · last used 2 days ago", and
+a **Sign out** button named for the machine. The server words the name and both dates, in the request's time zone. The
+button turns the row into an inline confirm that names it and says the CLI there stops working until someone runs
+`upheap auth login` again; one row confirms at a time, and Cancel gives focus back to the row's button. While a
+sign-out is pending, the other rows' buttons are disabled. After a sign-out the card says so in a status line and focus
+moves to its heading, since the row it was on is gone. With none signed in, the card says so and shows the command to
+start with, with this server's address. The card is there when the server's `manage_sign_ins` action is, so never in
+the local build, which has no accounts and nothing to sign in to. Ending a sign-in never touches the browser's own
+session.
 
 ## Your data
 

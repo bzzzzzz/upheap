@@ -4,7 +4,9 @@ use api_types::me::{ClientSignInDto, ClientSignInListDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use domain::TokenFamilyId;
+use domain::due::{describe_ago, describe_date};
+use domain::{Timestamp, TokenFamilyId};
+use jiff::tz::TimeZone;
 use serde::Deserialize;
 use service::oauth::ClientSignIn;
 use utoipa::IntoParams;
@@ -13,7 +15,7 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::error::Problem;
-use crate::extract::{ApiPath, CurrentUser};
+use crate::extract::{ApiPath, ClientTimeZone, CurrentUser, TimeZoneHeader};
 use crate::oauth::require_accounts;
 use crate::{ApiError, AppState};
 
@@ -29,8 +31,14 @@ struct SignInParams {
     id: Uuid,
 }
 
-fn to_sign_in_dto(sign_in: ClientSignIn) -> ClientSignInDto {
+fn to_sign_in_dto(sign_in: ClientSignIn, as_of: Timestamp, tz: &TimeZone) -> ClientSignInDto {
     ClientSignInDto {
+        label: sign_in
+            .device_name
+            .clone()
+            .unwrap_or_else(|| sign_in.client_name.to_owned()),
+        signed_in_label: describe_date(sign_in.signed_in_at, as_of, tz),
+        last_used_label: describe_ago(sign_in.last_used_at, as_of, tz),
         id: *sign_in.id.as_uuid(),
         client_id: sign_in.client_id.to_owned(),
         client_name: sign_in.client_name.to_owned(),
@@ -42,7 +50,7 @@ fn to_sign_in_dto(sign_in: ClientSignIn) -> ClientSignInDto {
 
 /// The caller's live sign-ins by clients such as the CLI, the most recently used first. A sign-in is live while its
 /// refresh token can still be used; ended and expired ones aren't listed.
-#[utoipa::path(get, path = "/me/sign-ins", tag = "me", security(("session" = [])),
+#[utoipa::path(get, path = "/me/sign-ins", tag = "me", security(("session" = [])), params(TimeZoneHeader),
     responses(
         (status = 200, body = ClientSignInListDto),
         (status = 401, description = "`unauthenticated`", body = Problem),
@@ -50,11 +58,16 @@ fn to_sign_in_dto(sign_in: ClientSignIn) -> ClientSignInDto {
 async fn list_sign_ins(
     State(state): State<AppState>,
     CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
 ) -> Result<Json<ClientSignInListDto>, ApiError> {
     require_accounts(&state)?;
     let sign_ins = state.services.list_sign_ins(principal).await?;
+    let as_of = state.services.now();
     Ok(Json(ClientSignInListDto {
-        sign_ins: sign_ins.into_iter().map(to_sign_in_dto).collect(),
+        sign_ins: sign_ins
+            .into_iter()
+            .map(|sign_in| to_sign_in_dto(sign_in, as_of, &tz))
+            .collect(),
     }))
 }
 

@@ -810,6 +810,9 @@ async fn a_sign_in_is_listed_with_the_name_its_client_gave() -> Result<()> {
     expect_that!(listed[0]["client_name"], eq(&json!("Upheap CLI")));
     expect_that!(listed[0]["signed_in_at"], eq(&json!(START)));
     expect_that!(listed[0]["last_used_at"], eq(&json!(START)));
+    expect_that!(listed[0]["label"], eq(&json!("ada-laptop")));
+    expect_that!(listed[0]["signed_in_label"], eq(&json!("today")));
+    expect_that!(listed[0]["last_used_label"], eq(&json!("today")));
     expect_that!(
         listed[0]["id"].as_str(),
         some(matches_regex(
@@ -832,6 +835,43 @@ async fn a_sign_in_without_a_name_or_with_a_blank_one_is_listed_unnamed() -> Res
     expect_that!(without.status, eq(StatusCode::OK));
     expect_that!(blank.status, eq(StatusCode::OK));
     expect_that!(device_names(&listed), elements_are![eq(&Value::Null), eq(&Value::Null)]);
+    expect_that!(
+        listed
+            .iter()
+            .map(|sign_in| sign_in["label"].clone())
+            .collect::<Vec<_>>(),
+        elements_are![eq(&json!("Upheap CLI")), eq(&json!("Upheap CLI"))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sign_in_labels_are_worded_in_the_requests_timezone() -> Result<()> {
+    // Arrange: START is 12:00 UTC on 1 Jan 2027. Three days on, a refresh moves last use.
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
+    app.clock.advance(Duration::from_hours(24 * 3));
+    let refreshed = app
+        .post_form(
+            "/api/v1/oauth/token",
+            &[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &text(&tokens.body["refresh_token"])),
+                ("client_id", CLI_CLIENT),
+            ],
+        )
+        .await?;
+    app.clock.advance(Duration::from_hours(24 * 3));
+
+    // Act
+    let listed = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(refreshed.status, eq(StatusCode::OK));
+    expect_that!(listed[0]["signed_in_label"], eq(&json!("1 Jan")));
+    expect_that!(listed[0]["last_used_label"], eq(&json!("3 days ago")));
     Ok(())
 }
 
@@ -892,6 +932,7 @@ async fn refreshing_moves_last_used_on_and_keeps_the_name() -> Result<()> {
     expect_that!(listed[0]["device_name"], eq(&json!("ada-laptop")));
     expect_that!(listed[0]["signed_in_at"], eq(&json!(START)));
     expect_that!(listed[0]["last_used_at"], eq(&json!(START + 20 * 60 * 1000)));
+    expect_that!(listed[0]["label"], eq(&json!("ada-laptop")));
     Ok(())
 }
 

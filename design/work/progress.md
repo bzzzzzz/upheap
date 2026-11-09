@@ -83,6 +83,6 @@ Ideas, not commitments. product.md holds the commitments.
    and a confirm for what affects others or can't be undone; the code doesn't follow it everywhere yet.
 4. **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. They are authentication
    plumbing, which may be deleted ([engineering principles](../engineering-principles.md#nothing-is-deleted)), so a small cleanup on
-   each exchange, as sign-in attempts have, can come with `/me/sign-ins`.
+   each exchange, as sign-in attempts have, is still to do.
 5. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.

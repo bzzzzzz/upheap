@@ -82,13 +82,19 @@ pub struct ClientSignInDto {
     pub client_id: String,
     /// What to call the client, such as "Upheap CLI".
     pub client_name: String,
+    /// What to call this sign-in: the device name, else the client's `client_name`.
+    pub label: String,
     /// What the client called the machine, such as its hostname. The client's claim and only a label. `null` for a
     /// sign-in that sent none.
     pub device_name: Option<String>,
     /// UTC milliseconds.
     pub signed_in_at: i64,
+    /// The day it was signed in, in the request's timezone: "today", "yesterday", "3 Nov", or "3 Nov 2025".
+    pub signed_in_label: String,
     /// UTC milliseconds: when the sign-in last got new tokens.
     pub last_used_at: i64,
+    /// How long ago it last got new tokens, in calendar days in the request's timezone: "today", "2 days ago".
+    pub last_used_label: String,
 }
 
 /// The caller's live sign-ins, the most recently used first.

@@ -334,6 +334,20 @@
         ],
         "summary": "The caller's live sign-ins by clients such as the CLI, the most recently used first. A sign-in is live while its\nrefresh token can still be used; ended and expired ones aren't listed.",
         "operationId": "list_sign_ins",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -4601,8 +4615,11 @@
           "id",
           "client_id",
           "client_name",
+          "label",
           "signed_in_at",
-          "last_used_at"
+          "signed_in_label",
+          "last_used_at",
+          "last_used_label"
         ],
         "properties": {
           "client_id": {
@@ -4625,15 +4642,27 @@
             "format": "uuid",
             "description": "Names the sign-in in `DELETE /me/sign-ins/{id}`."
           },
+          "label": {
+            "type": "string",
+            "description": "What to call this sign-in: the device name, else the client's `client_name`."
+          },
           "last_used_at": {
             "type": "integer",
             "format": "int64",
             "description": "UTC milliseconds: when the sign-in last got new tokens."
           },
+          "last_used_label": {
+            "type": "string",
+            "description": "How long ago it last got new tokens, in calendar days in the request's timezone: \"today\", \"2 days ago\"."
+          },
           "signed_in_at": {
             "type": "integer",
             "format": "int64",
             "description": "UTC milliseconds."
+          },
+          "signed_in_label": {
+            "type": "string",
+            "description": "The day it was signed in, in the request's timezone: \"today\", \"yesterday\", \"3 Nov\", or \"3 Nov 2025\"."
           }
         }
       },

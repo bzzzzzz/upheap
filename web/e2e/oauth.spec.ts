@@ -193,7 +193,7 @@ test("Account lists where the CLI is signed in and signs one out after a confirm
   await page.goto("account");
   const card = page.getByRole("region", { name: "Command line" });
   await expect(card).toContainText("ada-laptop");
-  await expect(card).toContainText(/Signed in \d{1,2} \w{3} · last used today/);
+  await expect(card).toContainText("Signed in today · last used today");
 
   // Cancel closes the confirm and puts focus back on the row's button.
   const signOut = card.getByRole("button", { name: "Sign out ada-laptop" });

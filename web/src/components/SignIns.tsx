@@ -8,18 +8,13 @@ import type { ClientSignIn } from "../api/client";
 import { BASE } from "../basePath";
 import { compactButtonClass } from "./buttons";
 import { ProblemText } from "./ProblemText";
-import { formatAgo, formatDay, useNow } from "./time";
 import { useReturnFocus } from "./useConfirmation";
 
 const code = (text: string) => <code className="font-mono text-[0.92em]">{text}</code>;
 
-/** What to call a sign-in: the machine it named, or else the client. */
-const signInName = (signIn: ClientSignIn) => signIn.device_name ?? signIn.client_name;
-
 export function SignInsSection() {
-  const signIns = useSignIns(true);
+  const signIns = useSignIns();
   const end = useEndSignIn();
-  const now = useNow();
   const heading = useRef<HTMLHeadingElement>(null);
   /** The sign-in whose Sign out is asking to be confirmed. One at a time. */
   const [asking, setAsking] = useState<string | null>(null);
@@ -35,7 +30,7 @@ export function SignInsSection() {
     end.mutate(signIn, {
       onSuccess: () => {
         setAsking(null);
-        setSignedOut(signInName(signIn));
+        setSignedOut(signIn.label);
         // The row, and the button that had focus, are gone.
         heading.current?.focus();
       },
@@ -63,7 +58,6 @@ export function SignInsSection() {
             <SignInRow
               key={signIn.id}
               signIn={signIn}
-              now={now}
               confirming={asking === signIn.id}
               pending={end.isPending}
               error={end.error}
@@ -86,7 +80,6 @@ export function SignInsSection() {
 
 function SignInRow({
   signIn,
-  now,
   confirming,
   pending,
   error,
@@ -95,7 +88,6 @@ function SignInRow({
   onConfirm,
 }: {
   signIn: ClientSignIn;
-  now: number;
   confirming: boolean;
   pending: boolean;
   error: Error | null;
@@ -104,7 +96,7 @@ function SignInRow({
   onConfirm: () => void;
 }) {
   const { ref: signOutButton, returnFocus } = useReturnFocus<HTMLButtonElement>(confirming);
-  const name = signInName(signIn);
+  const name = signIn.label;
   let content: ReactNode;
   if (confirming) {
     content = (
@@ -145,7 +137,7 @@ function SignInRow({
         <div className="min-w-0 flex-1 basis-48">
           <p className="text-sm font-medium break-words text-ink">{name}</p>
           <p className="text-xs text-muted">
-            Signed in {formatDay(signIn.signed_in_at, now)} · last used {formatAgo(signIn.last_used_at, now)}
+            Signed in {signIn.signed_in_label} · last used {signIn.last_used_label}
           </p>
         </div>
         <button
@@ -153,6 +145,7 @@ function SignInRow({
           type="button"
           aria-label={`Sign out ${name}`}
           onClick={onAsk}
+          disabled={pending}
           className={compactButtonClass.borderedDanger}
         >
           Sign out
