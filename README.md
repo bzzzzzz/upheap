@@ -42,7 +42,7 @@ The design docs are indexed in [design/README.md](design/README.md).
   items with the web app's filters and saved views, add, show, edit and move items between states, and list, add and edit
   tags.
 
-Not yet: editing the heap's own weights, OIDC sign-in, and invitations.
+Not yet: OIDC sign-in and invitations.
 
 ## Run it
 
