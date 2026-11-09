@@ -23,6 +23,7 @@ import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
+import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -260,9 +261,28 @@ const closedRoute = createRoute({
   },
 });
 
-const tagsRoute = createRoute({
+/** The heap's settings, a tab per child route (app-ux.md, Heap settings). */
+const heapSettingsRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/teams/$team/heaps/$heap/tags",
+  path: "/teams/$team/heaps/$heap/settings",
+  component: function HeapSettingsRoute() {
+    const { team, heap } = heapSettingsRoute.useParams();
+    return <HeapSettingsLayout key={`${team}/${heap}`} heap={{ team, heap }} />;
+  },
+});
+
+const heapGeneralSettingsRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "/",
+  component: function HeapGeneralSettingsRoute() {
+    const { team, heap } = heapGeneralSettingsRoute.useParams();
+    return <HeapGeneralSettings heap={{ team, heap }} />;
+  },
+});
+
+const tagsRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "tags",
   component: function TagsRoute() {
     const { team, heap } = tagsRoute.useParams();
     return <TagsPage heap={{ team, heap }} />;
@@ -270,11 +290,28 @@ const tagsRoute = createRoute({
 });
 
 const parametersRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/teams/$team/heaps/$heap/parameters",
+  getParentRoute: () => heapSettingsRoute,
+  path: "parameters",
   component: function ParametersRoute() {
     const { team, heap } = parametersRoute.useParams();
     return <ParametersPage heap={{ team, heap }} />;
+  },
+});
+
+// Tags and Parameters were the heap's own pages before they became tabs of its settings; links to them still work.
+const oldTagsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$team/heaps/$heap/tags",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap/settings/tags", params, replace: true });
+  },
+});
+
+const oldParametersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$team/heaps/$heap/parameters",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/teams/$team/heaps/$heap/settings/parameters", params, replace: true });
   },
 });
 
@@ -356,8 +393,9 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     heapRoute.addChildren([itemRoute]),
     closedRoute,
-    tagsRoute,
-    parametersRoute,
+    heapSettingsRoute.addChildren([heapGeneralSettingsRoute, tagsRoute, parametersRoute]),
+    oldTagsRoute,
+    oldParametersRoute,
     heapActivityRoute,
     teamsRoute,
     teamRoute,

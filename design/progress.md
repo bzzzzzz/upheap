@@ -35,7 +35,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Custom parameters and Manage parameters | Req Custom parameters, Manage parameters | ✅ | Admins add, rename and weigh parameters, add, relabel, reorder and archive options (open items switch to the replacement), link tags, archive unused parameters. Values on items, in ranking and contributors |
 | Saved views | Req Heaps §4 | 🟡 | The API is done: shared by the team; create, update, rename, archive; parameter filters and sort included. Views store `need` too. Hidden in the web app for now, so it has no UI; they need a place in the new Filters panel |
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
-| Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
+| Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins. The heap's Settings page gathers its name, link name and archive (General) with its Tags and Parameters as tabs |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
 | Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history in the item pane and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |

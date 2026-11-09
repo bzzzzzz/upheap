@@ -10,8 +10,7 @@ import {
   Ellipsis,
   List,
   Plus,
-  SlidersHorizontal,
-  Tag,
+  Settings,
   User,
   Users,
   type LucideIcon,
@@ -125,8 +124,8 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
     },
     closed: { to: "/teams/$team/heaps/$heap/closed", params: heapRef },
     activity: { to: "/teams/$team/heaps/$heap/activity", params: heapRef },
-    tags: { to: "/teams/$team/heaps/$heap/tags", params: heapRef },
-    parameters: { to: "/teams/$team/heaps/$heap/parameters", params: heapRef },
+    // Active on each of its tabs too.
+    settings: { to: "/teams/$team/heaps/$heap/settings", params: heapRef },
   } as const;
 }
 
@@ -194,8 +193,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
           <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
           <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
           <NavLink {...views.activity} icon={Activity} label="Activity" />
-          <NavLink {...views.tags} icon={Tag} label="Tags" />
-          <NavLink {...views.parameters} icon={SlidersHorizontal} label="Parameters" />
+          <NavLink {...views.settings} icon={Settings} label="Settings" />
         </nav>
       )}
 
@@ -233,8 +231,8 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
 }
 
 /**
- * The phone's tabs (ux-overview.md, What comes first §1): Open, Closed, Add in the middle under the thumb, Activity,
- * and More for the rest.
+ * The phone's tabs (app-ux.md, Layout): Open, Closed, Add in the middle under the thumb, Settings, and More for the
+ * rest.
  */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const links = useShellLinks(me, heapRef);
@@ -247,10 +245,8 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
-  // The heap's pages that only More leads to, so More shows as active on them. The tabs show only on a heap's pages.
-  const onTags = useMatch({ from: "/app/teams/$team/heaps/$heap/tags", shouldThrow: false }) !== undefined;
-  const onParameters = useMatch({ from: "/app/teams/$team/heaps/$heap/parameters", shouldThrow: false }) !== undefined;
-  const onMorePage = onTags || onParameters;
+  // The heap's page that only More leads to, so More shows as active on it. The tabs show only on a heap's pages.
+  const onMorePage = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
 
   return (
     <nav
@@ -269,7 +265,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       >
         <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
       </button>
-      <NavLink {...views.activity} icon={Activity} label="Activity" />
+      <NavLink {...views.settings} icon={Settings} label="Settings" />
       <button
         type="button"
         aria-expanded={more}
@@ -287,7 +283,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
 }
 
 /**
- * More on a phone: the heap's other views and the account pages, as a card of 52 px rows above the tabs. It opens on
+ * More on a phone: the heap's activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
  * release, as a button does, so lifting the finger never picks a row.
  */
 function MoreSheet({
@@ -313,6 +309,9 @@ function MoreSheet({
   return (
     <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
       <nav aria-label="More" className="flex flex-col">
+        <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
+          {row("Activity")}
+        </Link>
         {links.heapTeam && (
           <Link
             to="/teams/$team"
@@ -327,12 +326,6 @@ function MoreSheet({
         )}
         <Link {...links.teams} activeOptions={{ exact: true }} onClick={onClose} className={sheetRowClass}>
           {row(links.teams.label, links.teams.to === "/teams" ? String(me.teams.length) : undefined)}
-        </Link>
-        <Link {...views.tags} onClick={onClose} className={sheetRowClass}>
-          {row("Tags")}
-        </Link>
-        <Link {...views.parameters} onClick={onClose} className={sheetRowClass}>
-          {row("Parameters")}
         </Link>
         <Link to="/account" onClick={onClose} className={sheetRowClass}>
           {row("Account", `@${me.user.username}`)}

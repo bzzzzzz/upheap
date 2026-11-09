@@ -35,8 +35,8 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
 
   const { heap, allowed_actions, archived } = parameters.data;
   return (
-    <main>
-      <h1 className="mt-6 mb-1 text-xl font-semibold tracking-tight">Parameters</h1>
+    <section>
+      <h2 className="sr-only">Parameters</h2>
       <p className="mb-4 text-sm text-stone-500">
         Parameters rank the items of {heap.name} next to age, deadline and value. An item's option counts more the
         higher it is in the list, and the weight sets how much the parameter counts overall.
@@ -53,7 +53,7 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
       )}
       {archived.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-2 text-sm font-medium text-stone-500">Archived</h2>
+          <h3 className="mb-2 text-sm font-medium text-stone-500">Archived</h3>
           <ul className="text-sm text-stone-500">
             {archived.map((parameter) => (
               <li key={parameter.id}>
@@ -66,7 +66,7 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
           </ul>
         </section>
       )}
-    </main>
+    </section>
   );
 }
 

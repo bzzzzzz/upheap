@@ -225,7 +225,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | S-oauth-done           | Back to the terminal                   | —                                    | 1    | n/a          | 1             | implied               |
 | P-display-name         | Display name                           | S-account                            | 1    | 1            | 1             | built                 |
 | P-theme                | Theme (System / Light / Dark)          | S-account                            | 1    | 1            | 1             | built                 |
-| S-heap-settings        | Heap settings                          | —                                    | 1    | 1            | 1             | designed              |
+| S-heap-settings        | Heap settings                          | —                                    | 1    | 1            | 1             | built                 |
 | M-pwa-install          | Install the app                        | shell (local build)                  | 1    | 1            | n/a           | designed (later)      |
 | P-param-tags           | Linked tags                            | P-param-card                         | 1    | 1            | 1             | built                 |
 | P-tag-new              | New tag                                | S-tags                               | 1    | 1            | 1             | built                 |
@@ -359,8 +359,7 @@ overlays are the same components.
 
 - **Purpose:** navigation on a wide screen. Everyone signed in.
 - **Shows:** the Upheap mark; every heap grouped by team (team names only when there are several teams; archived
-  heaps say "(archived)"); the open heap's views: Open, Closed, Activity, Tags, Parameters, Team (the heap's team;
-  left out in the local build, where the bottom link already goes there); at the bottom Teams (or the one team's name in the local build), Account and the
+  heaps say "(archived)"); the open heap's views: Open, Closed, Activity, Settings (S-heap-settings); at the bottom Teams (or the one team's name in the local build), Account and the
   local build's storage note.
 - **Actions:** open a heap, open a heap view, open Teams, Account.
 - **Layout:** the sidebar and content are one centred block (sidebar 15 rem plus a 48 rem column); the sidebar's
@@ -373,7 +372,7 @@ overlays are the same components.
 
 - **Purpose:** the sidebar folded into an 80 px rail.
 - **Shows:** a square button with the heap's initial (opens M-heap-switcher as a popover), then Open, Closed,
-  Activity, Tags, Parameters, Team as icons over short labels, then Teams and Account at the bottom. 44 px
+  Activity, Settings as icons over short labels, then Teams and Account at the bottom. 44 px
   targets.
 - **Freq 5.** **Source:** app-ux.md Tablet §1; `Sidebar` at `sm`. Built.
 - **Must:** local 4, server 4. The same role as G-shell-wide at tablet width. Tablet is out of scope for now, so it's
@@ -383,18 +382,18 @@ overlays are the same components.
 
 - **Purpose:** phone navigation.
 - **Shows:** the heap name with a chevron at the top (opens M-heap-switcher as a sheet; also serves as the page
-  title); bottom tabs Open, Closed, + (opens M-add-item), Activity, More. Respects safe-area insets.
+  title); bottom tabs Open, Closed, + (opens M-add-item), Settings, More. Respects safe-area insets.
 - **Freq 5.** **Source:** app-ux.md Layout, Phone details; `PhoneTopBar`, `PhoneTabs`. Built.
 - **Must:** local 4, server 4. The phone's only route to Closed and More. One role with G-shell-wide.
 - Note: on pages outside a heap (Teams, Account) the tabs aren't shown and the top bar says "Upheap".
 
 #### M-more: More menu (phone)
 
-- **Purpose:** the heap views and account pages that don't fit in the tabs.
-- **Trigger:** More tab. **Contents:** Team (not in the local build) with the team's name, Teams with their count
-  or the team's name, Tags, Parameters, Account with the username, as 52 px rows.
+- **Purpose:** the heap view and account pages that don't fit in the tabs.
+- **Trigger:** More tab. **Contents:** Activity, Team (not in the local build) with the team's name, Teams with their
+  count or the team's name, Account with the username, as 52 px rows. More shows as active on Activity.
 - **Phone:** a card over a dimmed page, sitting above the tabs. It opens on release, like any button.
-- **Freq 3:** Tags and Parameters are occasional. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
+- **Freq 3:** Activity is occasional on a phone. **Source:** app-ux.md Layout, Phone details; `PhoneTabs`. Built.
 - **Must:** local 4, server 4. On a phone, the only route to Account (export, local build; Sign out, server build) and
   Team. Part of the phone shell's role.
 
@@ -845,13 +844,15 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### S-heap-settings: Heap settings
 
-- **Route:** `/teams/{team}/heaps/{heap}/settings` (readable-ids.md URLs). **Who:** admins (`rename`, `archive`,
-  `unarchive`, `view_history` on the heap).
-- **Purpose:** one place for a heap's configuration. Today rename and archive live in P-heap-row on S-team.
-- **Would show:** name; slug (designed: "slug fields on team and heap settings"; a slug change breaks old links,
-  which deserves a warning); P-heap-weights; Archive (M-heap-archive) or Unarchive; history.
-- **Freq 1.** Designed (route and slug), contents implied. See Gaps for the overlap with S-parameters.
-- **Must:** local 1, server 1. Rename and archive live on P-heap-row today.
+- **Route:** `/teams/{team}/heaps/{heap}/settings`, with tabs General (`/settings`), Tags (`/settings/tags`, S-tags)
+  and Parameters (`/settings/parameters`, S-parameters). The old `/tags` and `/parameters` paths redirect. **Who:**
+  every member; General's controls follow `rename`, `archive`, `unarchive` and `view_history` on the heap.
+- **Purpose:** one place for a heap's configuration. P-heap-row on S-team keeps its rename and archive too.
+- **Shows (General):** Details with the name and the link name (`/heaps/` before it), edited in place, and "Changing
+  it changes the heap's links; old links stop working."; the heap's history; Archive heap, or Unarchive heap on an
+  archived heap. Not yet: P-heap-weights.
+- **Freq 1.** **Source:** app-ux.md Heap settings; `HeapSettingsPage.tsx`. Built.
+- **Must:** local 1, server 1.
 
 #### P-heap-weights: Ranking weights
 
@@ -874,7 +875,7 @@ where they live.
 
 ### S-tags: Tags
 
-- **Route:** `/heaps/$heapId/tags`. **Who:** every member can add, rename and describe tags (`create` on the list,
+- **Route:** `/teams/{team}/heaps/{heap}/settings/tags`, the Tags tab of S-heap-settings. **Who:** every member can add, rename and describe tags (`create` on the list,
   `edit` on each); read-only in an archived heap.
 - **Purpose:** manage the heap's tags (Req Views: Manage tags). Tags can't be deleted.
 - **Shows:** "Tags group similar items in {heap}. They can be renamed but not deleted.", P-tag-new, then a row per
@@ -891,7 +892,7 @@ where they live.
 
 ### S-parameters: Parameters
 
-- **Route:** `/heaps/$heapId/parameters`. **Who:** every member sees them (they set values on items); only admins get
+- **Route:** `/teams/{team}/heaps/{heap}/settings/parameters`, the Parameters tab of S-heap-settings. **Who:** every member sees them (they set values on items); only admins get
   controls (`create` on the list; `edit`, `archive`, `view_history` on each).
 - **Purpose:** custom parameters and their ranking weight (Req Views: Manage parameters).
 - **Shows:** an explanation ("Parameters rank the items of {heap} next to age, deadline and value…"), P-param-new,

@@ -24,8 +24,8 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
 
   const { heap, allowed_actions } = tags.data;
   return (
-    <main>
-      <h1 className="mt-6 mb-1 text-xl font-semibold tracking-tight">Tags</h1>
+    <section>
+      <h2 className="sr-only">Tags</h2>
       <p className="mb-4 text-sm text-stone-500">
         Tags group similar items in {heap.name}. They can be renamed but not deleted.
       </p>
@@ -39,7 +39,7 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
           ))}
         </ul>
       )}
-    </main>
+    </section>
   );
 }
 
