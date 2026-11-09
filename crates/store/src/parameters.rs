@@ -12,13 +12,10 @@ use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Select};
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db, version_to_db};
+use crate::codes::{IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
 use crate::entities::{item_parameter_values, items, parameter_options, parameter_tags, parameters};
 
 const TABLE: &str = "parameters";
-
-/// Most IDs in one `IN (…)` list, well under every backend's limit on bound parameters.
-const IN_LIST_CHUNK: usize = 500;
 
 /// How a read locks the rows it reads.
 #[derive(Clone, Copy, PartialEq, Eq)]
