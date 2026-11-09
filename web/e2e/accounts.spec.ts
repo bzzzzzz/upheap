@@ -169,7 +169,7 @@ test("a write after the session ends goes to sign-in and back", async ({ page })
   await expect(page).toHaveURL(HEAP_URL);
   const heapPath = new URL(page.url()).pathname;
 
-  await page.getByRole("button", { name: "Add an item" }).click();
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
   await addDialog(page).getByLabel("Title").fill("Written too late");
   await addDialog(page).getByRole("radiogroup", { name: "Need" }).getByRole("radio", { name: "Expected" }).click();
   // Reads wait meanwhile, so the write is what finds the session gone, not a refetch.

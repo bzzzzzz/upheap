@@ -260,7 +260,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
       <button
         type="button"
-        aria-label="Add an item"
+        aria-label="Add item"
         disabled={links.heap?.archived ?? false}
         onClick={() => setAdding(true)}
         className="-mt-6 size-14 justify-self-center rounded-[18px] bg-ink text-canvas shadow-lg outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"

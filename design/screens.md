@@ -600,15 +600,15 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 - **Purpose:** "what should I work on?" The app opens here (Req Views: List items §1). **Who:** every team member;
   read-only in an archived heap.
 - **Shows, top to bottom:**
-  1. Heap name (hidden on a phone, where the top bar has it).
+  1. Heap name (hidden on a phone, where the top bar has it), with the Add item button (`N`) on its right: the way into
+     M-add-item, disabled in an archived heap. On a phone the + in the tabs takes its place.
   2. P-saved-views: hidden for now.
-  3. "Add an item" field with an `N` hint: the way into M-add-item. Disabled in an archived heap.
-  4. Toolbar: P-search, P-sort, Filters (with a count, M-filters); on a phone, search and Filters only, with the sort
+  3. Toolbar: P-search, P-sort, Filters (with a count, M-filters); on a phone, search and Filters only, with the sort
      in the Filters & sort sheet. Under it, a chip for each filter on and each changed view setting, with Reset all.
-  5. Groups: **Pinned** (titled "In progress" when every pinned item is in progress; compact rows without
+  4. Groups: **Pinned** (titled "In progress" when every pinned item is in progress; compact rows without
      contributors), **Up next** (the ranked items; untitled when nothing is pinned), **Blocked** (when blocked is
      shown and grouped). Each group numbers its rows from 1.
-  6. P-hidden-count.
+  5. P-hidden-count.
 - **Actions:** open an item, mark one done, change state by swipe, add, search, sort, filter, change view.
 - **Exits:** M-item (over the list), other heap views via the shell.
 - **Widths:** wide shows effort and impact sizes ("M · L") at each row's right edge and parameter chips on the first
@@ -781,7 +781,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### M-add-item: Add an item
 
-- **Trigger:** "Add an item" above the list, or `N`; + in the phone's tabs. **Who:** members of an unarchived heap.
+- **Trigger:** Add item beside the heap name, or `N`; + in the phone's tabs. **Who:** members of an unarchived heap.
 - **Purpose:** the fastest path in the app (Req Views: Add item).
 - **Contents:** "Add to \<heap\> ▾", which chooses among the unarchived heaps (tags and parameter values clear);
   the "Added “X” at #4 in Up next" line with Open it, after an add with Add another; title (focused, "What needs
