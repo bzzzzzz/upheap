@@ -1,7 +1,16 @@
 // The app shell at each width (design/app-ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useMatch,
+  useMatches,
+  useNavigate,
+  useParams,
+  useSearch,
+  type LinkProps,
+} from "@tanstack/react-router";
 import {
   Activity,
   Check,
@@ -86,9 +95,10 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
 // The shared look of a navigation entry: icon over a short label in the rail, icon beside the label in the sidebar,
 // and at least 44 px tall everywhere. Links get `data-status="active"` from the router. The active entry is an amber
 // pill, as the selected row of the list is amber: a surface-coloured fill vanished on the phone's tabs, which are the
-// surface, and barely showed on the dark sidebar. Hovering it keeps the pill, so hover and active stay apart.
+// surface, and barely showed on the dark sidebar. A tint of the accent rather than `accent-soft`, which is too close to
+// white to show on the tabs and the sidebar in light mode. Hovering it keeps the pill, so hover and active stay apart.
 const navItemClass =
-  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-accent-soft data-[status=active]:text-accent-ink data-[status=active]:hover:bg-accent-soft data-[status=active]:hover:text-accent-ink lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
+  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-accent/20 data-[status=active]:text-accent-ink data-[status=active]:hover:bg-accent/20 data-[status=active]:hover:text-accent-ink lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
 /** With `current`, the link shows as active also where the router wouldn't say so. */
 function NavLink({
@@ -243,6 +253,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
+  const onMorePage = useMatches({ select: (matches) => matches.some((match) => morePages.has(match.routeId)) });
 
   return (
     <nav
@@ -265,6 +276,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       <button
         type="button"
         aria-expanded={more}
+        {...(onMorePage && { "data-status": "active", "aria-current": "true" })}
         onClick={() => setMore(true)}
         className={`${navItemClass} outline-none focus-visible:outline-2 focus-visible:outline-accent aria-expanded:text-ink`}
       >
@@ -276,6 +288,19 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
     </nav>
   );
 }
+
+/**
+ * The pages More leads to, and the team's activity, reached from its Team page, so the tab that holds the page on
+ * screen shows as active also when it's in More.
+ */
+const morePages: ReadonlySet<string> = new Set([
+  "/app/teams/$team/heaps/$heap/tags",
+  "/app/teams/$team/heaps/$heap/parameters",
+  "/app/teams",
+  "/app/teams/$team",
+  "/app/teams/$team/activity",
+  "/app/account",
+]);
 
 /**
  * More on a phone: the heap's other views and the account pages, as a card of 52 px rows above the tabs. It opens on

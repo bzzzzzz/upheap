@@ -1,5 +1,7 @@
 // The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
+import type { Locator } from "@playwright/test";
+
 import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
@@ -136,4 +138,30 @@ test("the theme picked on Account holds over a reload and in other tabs, and Sys
   expect(await canvasOf()).toBe(dark);
   await page.emulateMedia({ colorScheme: "light" });
   expect(await canvasOf()).toBe(light);
+});
+
+test("the active navigation entry stands out from its bar in either theme, and More holds its pages", async ({
+  page,
+}) => {
+  const phone = (page.viewportSize()?.width ?? 0) < 640;
+  const bar = phone
+    ? page.getByRole("navigation", { name: "Heap views" })
+    : page.getByRole("complementary", { name: "Heaps and views" });
+  const backgroundOf = (target: Locator) => target.evaluate((element) => getComputedStyle(element).backgroundColor);
+  const expectToStandOut = async (entry: Locator) => {
+    await expect(entry).toHaveAttribute("data-status", "active");
+    expect(await backgroundOf(entry)).not.toBe(await backgroundOf(bar));
+  };
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expectToStandOut(bar.getByRole("link", { name: "Open", exact: true }));
+  }
+  test.skip(!phone, "Only the phone's tabs have More.");
+  await goTo(page, "Tags");
+  const more = bar.getByRole("button", { name: "More" });
+  await expect(more).toHaveAttribute("aria-current", "true");
+  await expectToStandOut(more);
+  await goTo(page, "Closed");
+  await expect(more).not.toHaveAttribute("data-status");
 });
