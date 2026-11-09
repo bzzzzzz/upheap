@@ -25,7 +25,7 @@ import { teamName } from "./teamName";
 type SwitcherTeam = Me["teams"][number];
 type Entry = { team: SwitcherTeam; heap: SwitcherTeam["heaps"][number] };
 
-/** From this many unarchived heaps the switcher gets a search field, Recent and folding teams (decisions.md, 32). */
+/** From this many unarchived heaps the switcher gets a search field, Recent and folding teams (decisions.md, 34). */
 const LONG_LIST = 8;
 /** How many recent heaps show. */
 const RECENT_SHOWN = 4;

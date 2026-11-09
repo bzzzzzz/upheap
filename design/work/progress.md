@@ -28,7 +28,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Heaps | Product Teams §4, 9, Heaps | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Product Audit log | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
-| CLI | [cli.md](cli.md) | ✅ | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Released from a `v*` tag: static binaries for Apple silicon macOS and x86_64 and aarch64 Linux, and the `bzzzzzz/tap/upheap` cask |
+| CLI | Arch CLI, Non-web client tokens | ✅ | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Released from a `v*` tag: static binaries for Apple silicon macOS and x86_64 and aarch64 Linux, and the `bzzzzzz/tap/upheap` cask |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
@@ -39,11 +39,10 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 
 In rough order.
 
-1. **Retire cli.md**: the CLI is built, so its mechanisms move into architecture.md and its choices into decisions.md (docs rule 3).
-2. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
-3. **Phone width** for Activity, in the design tokens.
-4. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
-5. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
+1. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
+2. **Phone width** for Activity, in the design tokens.
+3. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
+4. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
 
 ## Later
 
@@ -88,3 +87,7 @@ Ideas, not commitments. product.md holds the commitments.
    offers `rename` on it. Should the domain stop offering it, or the label give way to a renamed team?
 6. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.
+7. **Creating tags from the CLI's `--tag`.** It refuses an unknown name. If people find that annoying, a
+   `--create-tags` flag is the cheap fix; creating them silently, as the web app's picker does, is not.
+8. **Several servers in the CLI.** One `server` setting covers self-hosting. Profiles (`--profile work`) can come
+   later without changing any command.

@@ -456,7 +456,36 @@ hidden. The label follows a display-name change. Activity entries still name the
 the server writes them. The server still offers `rename` on a personal team
 ([progress.md](work/progress.md#open-questions)).
 
-## 32. Recent heaps and folded teams are kept in the browser
+## 32. The CLI is `upheap`, and the server binary is `upheap-server`
+
+**Context.** The server binary was `upheap`, and the CLI needed a name. The CLI is the one people type.
+
+**Decision.** The CLI's binary is `upheap`. The server's is `upheap-server`: it serves both the API and the web app,
+so `upheap-api` or `upheap-web` would each name half of it, and `upheap-web` is already the web app's npm package.
+The crate stays `server`.
+
+**Instead of.** A different name for the CLI (`uh`, `heap`), keeping the server's.
+
+**Consequences.** `cargo run -p server` in CI, Playwright and the README kept working. Anyone who wants fewer
+keystrokes aliases `upheap` themselves.
+
+## 33. The CLI shares the API's Rust types instead of generating a client
+
+**Context.** The CLI must not hand-write the request and response types (engineering principles, General: one
+source of truth).
+
+**Decision.** The types moved from `api` to `crates/api-types`, which has no IO and depends on nothing in the
+workspace but `domain`; both `api` and `cli` use it. It keeps the conversions from domain types, and the
+conversions from the service layer's views stay in `api` as plain functions. The move was its own commit, with no
+change in behaviour, before the CLI's.
+
+**Instead of.** Generating a Rust client from `openapi.json`. The common generators target OpenAPI 3.0 and utoipa
+writes 3.1, and sharing the types the spec is generated from is simpler anyway.
+
+**Consequences.** The CLI links `domain` but never the services, the store or the database drivers. A response type
+both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §7).
+
+## 34. Recent heaps and folded teams are kept in the browser
 
 **Context.** With dozens of heaps the switcher needs Recent and teams that fold, and both depend on what this person
 did on this device.
