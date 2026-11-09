@@ -148,7 +148,7 @@ async fn change_state(
         blocked_by_item_id: blocker_id.map(Some),
         ..ItemPatchDto::default()
     };
-    let moved = api.patch_item(&args.item, &at.key, item.value.version, &patch).await?;
+    let moved = api.patch_item(&at.key, item.value.version, &patch).await?;
     match out.mode() {
         Mode::Json => out.json(&moved.body)?,
         Mode::Quiet => {}

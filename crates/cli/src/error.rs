@@ -38,8 +38,8 @@ pub enum CliError {
         #[source]
         source: ClientError,
     },
-    /// The server refused a change to an item because it moved on or is closed. Carries the item as the user typed
-    /// it, for a hint they can paste.
+    /// The server refused a change to an item because it moved on or is closed. Carries the item as `team/heap/key`,
+    /// for a hint that can be pasted whatever heap is the default.
     #[error("{source}")]
     ItemRefused {
         name: String,

@@ -101,7 +101,9 @@ async fn closing_a_wont_do_item_as_done_says_to_reopen_it_first() -> Result<()> 
     expect_that!(done.stderr, contains_substring("(item_closed)"));
     expect_that!(
         done.stderr,
-        ends_with(format!("hint: reopen it first with `upheap item reopen {key}`\n"))
+        ends_with(format!(
+            "hint: reopen it first with `upheap item reopen ada/personal/{key}`\n"
+        ))
     );
     let problem: Value = serde_json::from_str(&as_json.stderr)?;
     expect_that!(problem["code"], eq("item_closed"));

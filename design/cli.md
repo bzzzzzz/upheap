@@ -86,8 +86,8 @@ state reads better than `upheap item edit --state done`, and there's only one wa
 - `item reopen` on a closed item is how a closed item comes back; the one-week window is the server's
   (`reopen_window_expired`).
 - `item done` on a won't-do item fails with `item_closed`. The CLI shows the server's message and the hint to reopen first.
-- `item block --by <item>` sets `blocked_by_item_id` in the same request. Cycles and blockers from other heaps are refused
-  by the server, as in the web app.
+- `item block --by <item>` sets `blocked_by_item_id` in the same request. A bare key there is in the blocked item's
+  heap, however that item was named. Cycles and blockers from other heaps are refused by the server, as in the web app.
 
 **`upheap item list`** shows pinned items, then the ranked ones, then grouped blocked items when shown, each row with its position,
 key, title, state, effort and impact, due label, tags, and the top contributor. It takes the list query parameters as
