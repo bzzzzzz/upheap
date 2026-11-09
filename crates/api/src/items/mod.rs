@@ -1,15 +1,19 @@
 //! The ranked list, closed items, and adding and editing items.
 
-use api_types::common::{HeapSummaryDto, ItemDto};
-use api_types::items::{ClosedItemsDto, ClosedQuery, CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery};
+use api_types::common::{HeapSummaryDto, ItemDto, ItemRefDto};
+use api_types::items::{
+    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery, RankingPreviewDto,
+    RankingPreviewItemDto, RankingPreviewRequestDto,
+};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use domain::heap::HeapPolicyPatch;
 use domain::item::{ItemPatch, StateKind};
-use domain::parameter::ParameterError;
-use domain::{ItemId, Timestamp, ValidationError};
+use domain::parameter::{ParameterError, Weight};
+use domain::{ItemId, ParameterId, Timestamp, ValidationError};
 use service::ServiceError;
-use service::items::ClosedCursor;
+use service::items::{ClosedCursor, ParameterWeightDraft, WeightsDraft, parse_preview_limit};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
@@ -23,6 +27,7 @@ use crate::{ApiError, AppState};
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(list_ranked, create_item))
+        .routes(routes!(preview_ranking))
         .routes(routes!(list_closed))
         .routes(routes!(get_item, update_item))
         .routes(routes!(reopen_item))
@@ -69,6 +74,65 @@ async fn list_ranked(
         unfiltered_count: list.unfiltered_count,
         in_progress_count: list.in_progress_count,
     }))
+}
+
+/// Ranks the heap's items with draft weights and returns the top of the ranked group, each with its position now.
+/// Nothing is saved and no audit entry is made; this is a `POST` only because it carries a body. Any member may ask,
+/// and an archived heap can be previewed. Weights left out keep their stored values.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/ranking/preview", tag = "items", security(("session" = [])),
+    params(HeapParams), request_body = RankingPreviewRequestDto,
+    responses(
+        (status = 200, body = RankingPreviewDto),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_archived`", body = Problem),
+        (status = 422, description = "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`", body = Problem),
+    ))]
+async fn preview_ranking(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiJson(body): ApiJson<RankingPreviewRequestDto>,
+) -> Result<Json<RankingPreviewDto>, ApiError> {
+    let limit = parse_preview_limit(body.limit).map_err(ServiceError::from)?;
+    let draft = to_weights_draft(&body).map_err(ServiceError::from)?;
+    let preview = state
+        .services
+        .preview_ranking(path.principal, path.heap.heap_id, draft, limit)
+        .await?;
+    Ok(Json(RankingPreviewDto {
+        as_of: preview.as_of.as_millis(),
+        items: preview
+            .items
+            .into_iter()
+            .map(|entry| RankingPreviewItemDto {
+                item: ItemRefDto::from(entry.item),
+                position: entry.position,
+                current_position: entry.current_position,
+            })
+            .collect(),
+    }))
+}
+
+fn to_weights_draft(body: &RankingPreviewRequestDto) -> Result<WeightsDraft, ValidationError> {
+    let weight = |raw: Option<i64>| raw.map(Weight::parse).transpose();
+    let parameters = body
+        .parameters
+        .iter()
+        .map(|draft| {
+            Ok(ParameterWeightDraft {
+                id: ParameterId::from_uuid(draft.id),
+                weight: Weight::parse(draft.weight)?,
+            })
+        })
+        .collect::<Result<_, ValidationError>>()?;
+    Ok(WeightsDraft {
+        heap: HeapPolicyPatch {
+            need: weight(body.need)?,
+            age: weight(body.age)?,
+            deadline: weight(body.deadline)?,
+            value: weight(body.value)?,
+        },
+        parameters,
+    })
 }
 
 /// Closed items, most recently closed first.

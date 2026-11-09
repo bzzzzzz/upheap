@@ -2953,6 +2953,97 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/ranking/preview": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Ranks the heap's items with draft weights and returns the top of the ranked group, each with its position now.\nNothing is saved and no audit entry is made; this is a `POST` only because it carries a body. Any member may ask,\nand an archived heap can be previewed. Weights left out keep their stored values.",
+        "operationId": "preview_ranking",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankingPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RankingPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/tags": {
       "get": {
         "tags": [
@@ -3623,6 +3714,126 @@
           },
           "409": {
             "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/weights": {
+      "patch": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Sets the heap's weights and its parameters' weights in one transaction. Admins only; send the heap's `version` in\n`If-Match`. The heap's version guards the whole save, even when only parameter weights change; each listed\nparameter's `version` is checked too. Weights equal to the stored ones are skipped, and a request that changes\nnothing succeeds. Any error saves nothing.",
+        "operationId": "update_weights",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeapWeightsPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeapWeightsResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `heap_archived` or `parameter_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `weight_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4622,6 +4833,7 @@
           "slug",
           "name",
           "open_count",
+          "weights",
           "version",
           "allowed_actions"
         ],
@@ -4664,8 +4876,12 @@
           "version": {
             "type": "integer",
             "format": "int32",
-            "description": "Send back in `If-Match` when renaming.",
+            "description": "Send back in `If-Match` when renaming or changing weights.",
             "minimum": 0
+          },
+          "weights": {
+            "$ref": "#/components/schemas/HeapWeights",
+            "description": "The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`."
           }
         }
       },
@@ -4676,6 +4892,7 @@
           "rename",
           "archive",
           "unarchive",
+          "edit_weights",
           "view_history"
         ]
       },
@@ -4748,6 +4965,116 @@
           "team_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "HeapWeights": {
+        "type": "object",
+        "description": "How much each of the heap's own ranking factors counts. A factor's share is its weight out of the total of all\nweights, parameters' included; `0` turns the factor off.",
+        "required": [
+          "need",
+          "age",
+          "deadline",
+          "value"
+        ],
+        "properties": {
+          "age": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 100. The weight of how long an item has waited.",
+            "minimum": 0
+          },
+          "deadline": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 100. The weight of the due date.",
+            "minimum": 0
+          },
+          "need": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 100. The weight of need.",
+            "minimum": 0
+          },
+          "value": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 100. The weight of value per effort: effort and impact count together as one factor.",
+            "minimum": 0
+          }
+        }
+      },
+      "HeapWeightsPatchRequest": {
+        "type": "object",
+        "description": "New weights for the heap and its parameters, saved together. Leave a weight out to keep it.",
+        "properties": {
+          "age": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "deadline": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "need": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterWeightChange"
+            },
+            "description": "Parameters of the heap in use whose weight changes, each listed once."
+          },
+          "value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100. Value per effort.",
+            "maximum": 100,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "HeapWeightsResult": {
+        "type": "object",
+        "description": "The heap and its parameters in use after a weights save.",
+        "required": [
+          "heap",
+          "parameters"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/Heap"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Parameter"
+            },
+            "description": "The heap's parameters in use, by name, with their new versions: what `GET …/parameters` lists as\n`parameters`."
           }
         }
       },
@@ -5781,6 +6108,57 @@
         },
         "additionalProperties": false
       },
+      "ParameterWeightChange": {
+        "type": "object",
+        "description": "A new weight for one parameter, if it is still at `version`.",
+        "required": [
+          "id",
+          "weight",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The parameter's `version` as the client last saw it.",
+            "minimum": 0
+          },
+          "weight": {
+            "type": "integer",
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ParameterWeightDraft": {
+        "type": "object",
+        "description": "A draft weight for one parameter.",
+        "required": [
+          "id",
+          "weight"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "weight": {
+            "type": "integer",
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Problem": {
         "type": "object",
         "description": "An error response body (RFC 9457 problem details).",
@@ -5913,6 +6291,118 @@
             "minimum": 0
           }
         }
+      },
+      "RankingPreview": {
+        "type": "object",
+        "description": "The top of the list under draft weights. Nothing is saved.",
+        "required": [
+          "as_of",
+          "items"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The time both rankings used (UTC milliseconds)."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RankingPreviewItem"
+            },
+            "description": "The first items of the ranked group (what `GET …/items` lists under `ranked` with the default view) under\nthe draft weights, in order."
+          }
+        }
+      },
+      "RankingPreviewItem": {
+        "type": "object",
+        "description": "An item near the top of the list under draft weights.",
+        "required": [
+          "item",
+          "position",
+          "current_position"
+        ],
+        "properties": {
+          "current_position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1-based position of the same item in the same group under the stored weights.",
+            "minimum": 0
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1-based position under the draft weights.",
+            "minimum": 0
+          }
+        }
+      },
+      "RankingPreviewRequest": {
+        "type": "object",
+        "description": "Weights to rank the heap with, without saving them. Leave a weight out to keep its stored value.",
+        "properties": {
+          "age": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "deadline": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How many items to list, 1 to 20. Defaults to 5.",
+            "maximum": 20,
+            "minimum": 1
+          },
+          "need": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterWeightDraft"
+            },
+            "description": "Parameters of the heap in use to give another weight, each listed once."
+          },
+          "value": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100. Value per effort.",
+            "maximum": 100,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
       },
       "RegisterRequest": {
         "type": "object",

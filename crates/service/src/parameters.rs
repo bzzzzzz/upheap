@@ -9,7 +9,9 @@ use std::collections::BTreeSet;
 
 use domain::audit::{AuditAction, EntityType};
 use domain::heap::Heap;
-use domain::parameter::{NewParameter, OptionLabel, Parameter, ParameterName, ParameterOption, ParameterPatch, Weight};
+use domain::parameter::{
+    NewParameter, OptionLabel, Parameter, ParameterError, ParameterName, ParameterOption, ParameterPatch, Weight,
+};
 use domain::permission::{
     ParameterAction, ParameterListAction, Permission, allowed_parameter_actions, allowed_parameter_list_actions,
 };
@@ -292,8 +294,7 @@ impl Services {
         Ok(with_actions(saved, heap, role))
     }
 
-    /// Writes `parameter` over the version it was read at, records `action`, and commits. The caller holds the
-    /// heap and parameter locks, so the version can't have moved.
+    /// [`Self::write_parameter`], then commits.
     #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     async fn save_parameter(
         &self,
@@ -305,15 +306,34 @@ impl Services {
         diff: Value,
         now: Timestamp,
     ) -> Result<Parameter, ServiceError> {
-        let saved = store::parameters::update_parameter(&txn, parameter, parameter.version, now)
+        let saved = self
+            .write_parameter(&txn, heap, principal, parameter, action, diff, now)
+            .await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        Ok(saved)
+    }
+
+    /// Writes `parameter` over the version it was read at and records `action`, without committing. The caller
+    /// holds the heap and parameter locks, so the version can't have moved.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
+    pub(crate) async fn write_parameter(
+        &self,
+        txn: &DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        parameter: &Parameter,
+        action: AuditAction,
+        diff: Value,
+        now: Timestamp,
+    ) -> Result<Parameter, ServiceError> {
+        let saved = store::parameters::update_parameter(txn, parameter, parameter.version, now)
             .await?
             .ok_or(ServiceError::VersionConflict {
                 expected: parameter.version,
                 current: parameter.version.next(),
             })?;
         let entry = self.parameter_audit_entry(heap, principal, action, &saved, diff, now);
-        store::audit::insert_audit_entry(&txn, &entry).await?;
-        txn.commit().await.map_err(StoreError::from)?;
+        store::audit::insert_audit_entry(txn, &entry).await?;
         Ok(saved)
     }
 
@@ -338,6 +358,50 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// The heap's parameters in use, by name, with what `role` may do with each.
+pub(crate) async fn list_parameters_in_use(
+    db: &impl ConnectionTrait,
+    heap: &Heap,
+    role: Role,
+) -> Result<Vec<ParameterEntry>, ServiceError> {
+    Ok(store::parameters::list_parameters(db, heap.id)
+        .await?
+        .into_iter()
+        .filter(|parameter| !parameter.is_archived())
+        .map(|parameter| with_actions(parameter, heap, role))
+        .collect())
+}
+
+/// Reads a parameter named by a weights save under its own lock, after the caller locked the heap. It must be a
+/// parameter of `heap_id` ([`ParameterError::NotInHeap`]), in use ([`ParameterError::Archived`]) and at version
+/// `expected` ([`ServiceError::VersionConflict`]). Archived is checked first: archiving moves the version on, and
+/// the caller needs to know the parameter is gone rather than that it changed.
+pub(crate) async fn lock_listed(
+    txn: &DatabaseTransaction,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    expected: Version,
+) -> Result<Parameter, ServiceError> {
+    let not_in_heap = ParameterError::NotInHeap { parameter_id };
+    store::parameters::find_parameter(txn, parameter_id)
+        .await?
+        .filter(|parameter| parameter.heap_id == heap_id)
+        .ok_or_else(|| not_in_heap.clone())?;
+    let current = store::parameters::lock_parameter(txn, parameter_id)
+        .await?
+        .ok_or(not_in_heap)?;
+    if current.is_archived() {
+        return Err(ParameterError::Archived { parameter_id }.into());
+    }
+    if current.version != expected {
+        return Err(ServiceError::VersionConflict {
+            expected,
+            current: current.version,
+        });
+    }
+    Ok(current)
 }
 
 fn with_actions(parameter: Parameter, heap: &Heap, role: Role) -> ParameterEntry {

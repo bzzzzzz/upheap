@@ -60,7 +60,8 @@ impl OptionLabel {
     }
 }
 
-/// A parameter's influence on the ranking, relative to the heap's other weights. `0` turns it off.
+/// A ranking factor's weight: a parameter's or one of the heap's own. It is the factor's influence on the ranking,
+/// relative to the other weights. `0` turns it off.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Weight(u16);
 

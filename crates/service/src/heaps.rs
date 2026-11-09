@@ -5,18 +5,22 @@
 
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::Handle;
-use domain::heap::{Heap, HeapPolicy};
+use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
+use domain::parameter::{ParameterPatch, Weight};
 use domain::permission::{Permission, allowed_heap_actions};
 use domain::text::Name;
 use domain::validation::Field;
-use domain::{HeapId, TeamId, Timestamp, Version};
+use domain::{HeapId, ParameterId, TeamId, Timestamp, ValidationError, Version};
 use serde_json::json;
+use std::collections::BTreeSet;
 use store::audit::NewAuditEntry;
 use store::{StoreError, TransactionTrait};
 
-use crate::access::{authorize_heap, authorize_team, ensure_active};
+use crate::access::{authorize_heap, authorize_heap_write, authorize_team, ensure_active};
+use crate::audit::{diff_parameters, diff_policies};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
+use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
 use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view};
 use crate::{Principal, ServiceError, Services};
 
@@ -25,6 +29,29 @@ use crate::{Principal, ServiceError, Services};
 pub struct HeapPatch {
     pub name: Option<Name>,
     pub slug: Option<Handle>,
+}
+
+/// New weights for a heap and its parameters, saved together. `None` and unlisted parameters keep their weights.
+#[derive(Clone, Debug, Default)]
+pub struct WeightsChange {
+    pub heap: HeapPolicyPatch,
+    pub parameters: Vec<ParameterWeightChange>,
+}
+
+/// A new weight for one parameter, if it is still at `version`.
+#[derive(Clone, Copy, Debug)]
+pub struct ParameterWeightChange {
+    pub id: ParameterId,
+    pub weight: Weight,
+    pub version: Version,
+}
+
+/// A heap and its parameters in use, as they are after a weights save.
+#[derive(Debug)]
+pub struct HeapWeightsView {
+    pub heap: HeapView,
+    /// By name.
+    pub parameters: Vec<ParameterEntry>,
 }
 
 impl Services {
@@ -158,6 +185,86 @@ impl Services {
         Ok(to_heap_view(saved, role, open_count))
     }
 
+    /// Sets the heap's own weights and its parameters' weights in one transaction, if the heap is still at version
+    /// `expected`. The heap's version guards the whole save, even when only parameter weights change, since the
+    /// weights are one policy; each listed parameter must also be at its given version
+    /// ([`ServiceError::VersionConflict`]). A parameter must be one in use of this heap
+    /// ([`domain::parameter::ParameterError::NotInHeap`], [`domain::parameter::ParameterError::Archived`]) and
+    /// listed once ([`ValidationError::DuplicateParameter`]). An archived heap is read-only
+    /// ([`ServiceError::HeapArchived`]). Any failure saves nothing.
+    ///
+    /// Weights equal to the stored ones are skipped. The heap's version moves on, with a `heap_updated` entry, only
+    /// when one of its own weights changes; each parameter whose weight changes gets a `parameter_updated` entry and
+    /// its next version. A request that changes nothing succeeds and writes nothing.
+    pub async fn update_weights(
+        &self,
+        principal: Principal,
+        heap_id: HeapId,
+        change: WeightsChange,
+        expected: Version,
+    ) -> Result<HeapWeightsView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let access = authorize_heap_write(&txn, principal, heap_id, Permission::ConfigureHeap).await?;
+        let (heap, role) = (access.heap, access.membership.role);
+        if heap.version != expected {
+            return Err(ServiceError::VersionConflict {
+                expected,
+                current: heap.version,
+            });
+        }
+        let listed: BTreeSet<ParameterId> = change.parameters.iter().map(|p| p.id).collect();
+        if listed.len() != change.parameters.len() {
+            return Err(ValidationError::DuplicateParameter.into());
+        }
+
+        let now = self.now();
+        let mut parameters_changed = 0_usize;
+        for requested in &change.parameters {
+            let current = lock_listed(&txn, heap_id, requested.id, requested.version).await?;
+            let patch = ParameterPatch {
+                weight: Some(requested.weight),
+                ..ParameterPatch::default()
+            };
+            let Some(edited) = current.apply_patch(&patch)? else {
+                continue;
+            };
+            let diff = diff_parameters(&current, &edited);
+            self.write_parameter(
+                &txn,
+                &heap,
+                principal,
+                &edited,
+                AuditAction::ParameterUpdated,
+                diff,
+                now,
+            )
+            .await?;
+            parameters_changed += 1;
+        }
+
+        let policy = change.heap.apply(&heap.policy);
+        let heap_changed = policy != heap.policy;
+        let heap = if heap_changed {
+            let diff = diff_policies(&heap.policy, &policy);
+            let edited = Heap { policy, ..heap.clone() };
+            self.write_heap(&txn, principal, &edited, expected, AuditAction::HeapUpdated, diff, now)
+                .await?
+        } else {
+            heap
+        };
+
+        let open_count = count_heap_open_items(&txn, heap_id).await?;
+        let parameters = list_parameters_in_use(&txn, &heap, role).await?;
+        if heap_changed || parameters_changed > 0 {
+            txn.commit().await.map_err(StoreError::from)?;
+            tracing::info!(%heap_id, user_id = %principal.user_id, heap_changed, parameters_changed, "weights updated");
+        }
+        Ok(HeapWeightsView {
+            heap: to_heap_view(heap, role, open_count),
+            parameters,
+        })
+    }
+
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
     pub async fn archive_heap(&self, principal: Principal, heap_id: HeapId) -> Result<HeapView, ServiceError> {
         self.set_archived(principal, heap_id, true).await
@@ -206,7 +313,7 @@ impl Services {
         Ok(to_heap_view(saved, role, open_count))
     }
 
-    /// Writes `heap` and its audit entry, and commits. The caller holds the heap lock.
+    /// [`Self::write_heap`], then commits.
     #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     async fn save_heap(
         &self,
@@ -218,7 +325,26 @@ impl Services {
         diff: serde_json::Value,
         now: Timestamp,
     ) -> Result<Heap, ServiceError> {
-        let saved = store::heaps::update_heap(&txn, heap, expected)
+        let saved = self
+            .write_heap(&txn, principal, heap, expected, action, diff, now)
+            .await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        Ok(saved)
+    }
+
+    /// Writes `heap` and its audit entry, without committing. The caller holds the heap lock.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
+    async fn write_heap(
+        &self,
+        txn: &store::DatabaseTransaction,
+        principal: Principal,
+        heap: &Heap,
+        expected: Version,
+        action: AuditAction,
+        diff: serde_json::Value,
+        now: Timestamp,
+    ) -> Result<Heap, ServiceError> {
+        let saved = store::heaps::update_heap(txn, heap, expected)
             .await
             .map_err(|e| handle_taken_on_duplicate(e, Field::Slug))?
             .ok_or(ServiceError::VersionConflict {
@@ -226,8 +352,7 @@ impl Services {
                 current: expected.next(),
             })?;
         let entry = self.heap_audit_entry(principal, &saved, action, diff, now);
-        store::audit::insert_audit_entry(&txn, &entry).await?;
-        txn.commit().await.map_err(StoreError::from)?;
+        store::audit::insert_audit_entry(txn, &entry).await?;
         Ok(saved)
     }
 

@@ -25,6 +25,11 @@ pub enum ValidationError {
     TooManyOptions { max: usize },
     #[error("weight must be from 0 to {max}")]
     WeightOutOfRange { max: u16 },
+    /// A weights save or preview names a parameter more than once.
+    #[error("each parameter may be listed once")]
+    DuplicateParameter,
+    #[error("limit must be from {min} to {max}")]
+    LimitOutOfRange { min: usize, max: usize },
     /// Not a valid username or slug. `hint` is one made from the input that would be, when there is one.
     #[error("{field} must be lowercase letters, digits and single dashes, starting with a letter")]
     HandleInvalid { field: Field, hint: Option<String> },

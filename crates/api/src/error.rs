@@ -322,6 +322,8 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
         ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),
         ValidationError::WeightOutOfRange { .. } => ("weight_out_of_range", Some("weight")),
+        ValidationError::DuplicateParameter => ("duplicate_parameter", Some("parameters")),
+        ValidationError::LimitOutOfRange { .. } => ("limit_out_of_range", Some("limit")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
         ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
         ValidationError::ItemKeyInvalid => ("invalid_item_key", None),

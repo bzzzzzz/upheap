@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use domain::item::Need;
+use domain::parameter::Weight;
 use domain::{HeapId, ItemId};
 use googletest::prelude::*;
 use store::{ConnectionTrait, DatabaseConnection, DbBackend};
@@ -69,6 +70,6 @@ async fn existing_items_become_expected_and_heaps_get_the_default_weight() -> Re
         .await?
         .context("heap")?;
     expect_that!(item.need, eq(Need::Expected));
-    expect_that!(heap.policy.need_weight, eq(10));
+    expect_that!(heap.policy.need_weight, eq(Weight::DEFAULT));
     Ok(())
 }

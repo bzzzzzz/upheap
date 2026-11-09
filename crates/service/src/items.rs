@@ -4,16 +4,16 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::ItemKey;
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
 use domain::list_view::{Group, ListView};
-use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, check_values, current_values};
+use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{ItemAction, Permission, allowed_item_actions};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
-use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
+use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, ValidationError, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
@@ -28,6 +28,12 @@ pub const MAX_AS_OF_AGE: Duration = Duration::from_hours(24);
 
 /// Largest page of closed items.
 pub const MAX_CLOSED_PAGE: u64 = 200;
+
+/// How many items a ranking preview lists when the request doesn't say.
+pub const DEFAULT_PREVIEW_LIMIT: usize = 5;
+
+/// Most items a ranking preview lists.
+pub const MAX_PREVIEW_LIMIT: usize = 20;
 
 /// An item with its tags, its parameter values, its blocker, and what the caller may do with it.
 #[derive(Debug)]
@@ -95,6 +101,55 @@ pub struct RankedList {
     pub unfiltered_count: u32,
     /// Items of the heap in progress, whatever the view and its filters leave out.
     pub in_progress_count: u32,
+}
+
+/// Weights to rank a heap with instead of the stored ones, without saving them. Weights left out keep their stored
+/// value.
+#[derive(Clone, Debug, Default)]
+pub struct WeightsDraft {
+    pub heap: HeapPolicyPatch,
+    pub parameters: Vec<ParameterWeightDraft>,
+}
+
+/// A draft weight for one parameter in use.
+#[derive(Clone, Copy, Debug)]
+pub struct ParameterWeightDraft {
+    pub id: ParameterId,
+    pub weight: Weight,
+}
+
+/// An item near the top of the list, with where the stored weights put it.
+#[derive(Debug)]
+pub struct PreviewEntry {
+    pub item: ItemSummary,
+    /// 1-based position within the default view's ranked group, under the draft weights.
+    pub position: u32,
+    /// Its 1-based position in the same group under the stored weights.
+    pub current_position: u32,
+}
+
+/// The top of a heap's list under draft weights.
+#[derive(Debug)]
+pub struct RankingPreview {
+    /// The time both rankings used.
+    pub as_of: Timestamp,
+    /// The first items of the ranked group under the draft, in order.
+    pub items: Vec<PreviewEntry>,
+}
+
+/// A preview's item count: `limit`, or [`DEFAULT_PREVIEW_LIMIT`] when `None`. Fails with
+/// [`ValidationError::LimitOutOfRange`] outside 1 to [`MAX_PREVIEW_LIMIT`].
+pub fn parse_preview_limit(limit: Option<i64>) -> Result<usize, ValidationError> {
+    let Some(limit) = limit else {
+        return Ok(DEFAULT_PREVIEW_LIMIT);
+    };
+    usize::try_from(limit)
+        .ok()
+        .filter(|limit| (1..=MAX_PREVIEW_LIMIT).contains(limit))
+        .ok_or(ValidationError::LimitOutOfRange {
+            min: 1,
+            max: MAX_PREVIEW_LIMIT,
+        })
 }
 
 #[derive(Debug)]
@@ -204,6 +259,53 @@ impl Services {
             unfiltered_count,
             in_progress_count,
         })
+    }
+
+    /// The first `limit` items of the default list view's ranked group (open items by priority) under the heap's
+    /// stored weights changed by `draft`, each with its position under the stored weights. Nothing is saved. Any
+    /// member may ask, and an archived heap can be previewed.
+    ///
+    /// A parameter in the draft must be one in use of the heap ([`ParameterError::NotInHeap`],
+    /// [`ParameterError::Archived`]) and listed once ([`ValidationError::DuplicateParameter`]).
+    pub async fn preview_ranking(
+        &self,
+        principal: Principal,
+        heap_id: HeapId,
+        draft: WeightsDraft,
+        limit: usize,
+    ) -> Result<RankingPreview, ServiceError> {
+        let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
+        let as_of = self.now();
+        let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
+        let items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
+        let stored_parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
+        let drafted_parameters = apply_parameter_draft(&stored_parameters, &draft.parameters)?;
+        let drafted_policy = draft.heap.apply(&access.heap.policy);
+
+        let view = ListView::default();
+        let current = ranked_group(&view, &items, &access.heap.policy, &stored_parameters, as_of);
+        let drafted = ranked_group(&view, &items, &drafted_policy, &drafted_parameters, as_of);
+        let current_positions: HashMap<ItemId, usize> =
+            current.iter().enumerate().map(|(i, id)| (*id, i + 1)).collect();
+        let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
+        let entries = drafted
+            .iter()
+            .take(limit)
+            .enumerate()
+            .filter_map(|(index, id)| {
+                // Both groups hold the same items, so each has a position and an item.
+                let item = by_id.get(id)?;
+                let current_position = current_positions.get(id)?;
+                Some(PreviewEntry {
+                    item: ItemSummary::from(*item),
+                    position: to_position(index + 1),
+                    current_position: to_position(*current_position),
+                })
+            })
+            .collect();
+
+        tracing::debug!(%heap_id, items = items.len(), as_of = as_of.as_millis(), "ranked heap preview");
+        Ok(RankingPreview { as_of, items: entries })
     }
 
     /// Closed items, most recently closed first.
@@ -452,6 +554,56 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker
+/// inherits from what it blocks even when that is left out.
+fn ranked_group(
+    view: &ListView,
+    items: &[Item],
+    policy: &HeapPolicy,
+    parameters: &[Parameter],
+    as_of: Timestamp,
+) -> Vec<ItemId> {
+    let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
+    let ranking = rank(CURRENT_FORMULA, policy, parameters, &inputs, as_of);
+    let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
+    let mut group: Vec<&Item> = ranking
+        .iter()
+        .filter_map(|ranked| by_id.get(&ranked.item_id).copied())
+        .filter(|item| view.group_of(item.state.kind()) == Some(Group::Ranked))
+        .collect();
+    view.sort(Group::Ranked, &mut group, |item| *item, parameters);
+    group.into_iter().map(|item| item.id).collect()
+}
+
+/// `parameters` with the weights of `draft` in place of the stored ones. The draft's parameters must be unique and
+/// in use.
+fn apply_parameter_draft(
+    parameters: &[Parameter],
+    draft: &[ParameterWeightDraft],
+) -> Result<Vec<Parameter>, ServiceError> {
+    let listed: BTreeSet<ParameterId> = draft.iter().map(|d| d.id).collect();
+    if listed.len() != draft.len() {
+        return Err(ValidationError::DuplicateParameter.into());
+    }
+    let mut drafted = parameters.to_vec();
+    for weight in draft {
+        let parameter_id = weight.id;
+        let parameter = drafted
+            .iter_mut()
+            .find(|p| p.id == parameter_id)
+            .ok_or(ParameterError::NotInHeap { parameter_id })?;
+        if parameter.is_archived() {
+            return Err(ParameterError::Archived { parameter_id }.into());
+        }
+        parameter.weight = weight.weight;
+    }
+    Ok(drafted)
+}
+
+fn to_position(position: usize) -> u32 {
+    u32::try_from(position).unwrap_or(u32::MAX)
 }
 
 /// Checks that `item` may wait for `blocker`: a non-closed item of the same heap that doesn't wait, directly or

@@ -315,15 +315,15 @@ mod v2 {
         as_of: Timestamp,
     ) -> Vec<Component> {
         let mut components = vec![
-            age(policy.age_weight, item.need, item.created_at, as_of),
-            value(policy.value_weight, item),
+            age(policy.age_weight.get(), item.need, item.created_at, as_of),
+            value(policy.value_weight.get(), item),
         ];
         if let Some(due) = item.due {
-            components.push(deadline(policy.deadline_weight, due, as_of));
+            components.push(deadline(policy.deadline_weight.get(), due, as_of));
         }
         components.extend(parameters.iter().filter_map(|parameter| custom(parameter, item)));
         // Last, so a tie in the contributors goes to the other factor: most items are expected, which says less.
-        components.push(need(policy.need_weight, item.need));
+        components.push(need(policy.need_weight.get(), item.need));
         components
     }
 
@@ -490,6 +490,7 @@ mod tests {
 
     use super::*;
     use crate::Duration;
+    use crate::parameter::Weight;
 
     fn day(n: i64) -> Timestamp {
         Timestamp::from_millis(1_798_804_800_000 + Duration::from_days(n).as_millis()).expect("in range")
@@ -512,6 +513,17 @@ mod tests {
             due: None,
             blocked_by: None,
             parameters: &NO_VALUES,
+        }
+    }
+
+    /// Every heap weight at 0.
+    fn all_off() -> HeapPolicy {
+        let off = Weight::parse(0).expect("valid");
+        HeapPolicy {
+            need_weight: off,
+            age_weight: off,
+            deadline_weight: off,
+            value_weight: off,
         }
     }
 
@@ -576,6 +588,25 @@ mod tests {
     }
 
     #[gtest]
+    fn raising_the_deadline_weight_lifts_a_near_deadline_above_age() {
+        let old = item(1, -60);
+        let soon = ItemForRanking {
+            due: Some(Due { at: day(1), firm: true }),
+            ..item(2, 0)
+        };
+        let heavy = HeapPolicy {
+            deadline_weight: Weight::parse(100).expect("valid"),
+            ..HeapPolicy::default()
+        };
+
+        let by_default = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[old, soon], day(0));
+        let by_deadline = rank(CURRENT_FORMULA, &heavy, &[], &[old, soon], day(0));
+
+        expect_that!(order(&by_default), elements_are![eq(&old.id), eq(&soon.id)]);
+        expect_that!(order(&by_deadline), elements_are![eq(&soon.id), eq(&old.id)]);
+    }
+
+    #[gtest]
     fn exact_deadline_outranks_the_same_loose_date_once_past() {
         let firm = ItemForRanking {
             due: Some(Due {
@@ -599,12 +630,7 @@ mod tests {
 
     #[gtest]
     fn zero_weights_leave_creation_order() {
-        let policy = HeapPolicy {
-            need_weight: 0,
-            age_weight: 0,
-            deadline_weight: 0,
-            value_weight: 0,
-        };
+        let policy = all_off();
         let items = [item(2, 0), item(1, 0)];
 
         let ranked = rank(CURRENT_FORMULA, &policy, &[], &items, day(1));
@@ -680,12 +706,7 @@ mod tests {
 
     #[gtest]
     fn a_blocker_wins_a_tie_with_what_it_blocks() {
-        let policy = HeapPolicy {
-            need_weight: 0,
-            age_weight: 0,
-            deadline_weight: 0,
-            value_weight: 0,
-        };
+        let policy = all_off();
         // The blocked item is older, so without the tie-break it would come first.
         let blocked = ItemForRanking {
             blocked_by: Some(id(2)),
@@ -769,7 +790,7 @@ mod tests {
     fn need_sets_how_fast_an_item_ages() {
         // With need's own factor off, only the aging rate tells them apart: same age, different needs.
         let policy = HeapPolicy {
-            need_weight: 0,
+            need_weight: Weight::parse(0).expect("valid"),
             ..HeapPolicy::default()
         };
         let items = Need::ALL.map(|need| ItemForRanking {
