@@ -1016,7 +1016,7 @@ The local build runs the same app with no accounts (local-build.md). What differ
 | Area | Server build | Local build |
 | --- | --- | --- |
 | S-sign-in, S-register | Shown | Never shown |
-| Sign out | In the shell and More | Hidden (`GET /me` `allowed_actions` is empty) |
+| Sign out | On S-account | Hidden (`GET /me` `allowed_actions` is empty) |
 | S-teams | List and Create team | Redirects to the one team ("My heaps", slug `me`) |
 | Shell "Teams" link | "Teams" | The team's name |
 | S-team | Members and team actions by role | Heaps only; only `create_heap` on the team |
@@ -1131,8 +1131,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    makes it private (no members, no leaving, fixed slug). readable-ids.md lists this as a doc fix to make.
 5. **Local build names.** local-build.md: user "Me", team "My heaps", heap "My heap". readable-ids.md and
    `service/src/personal.rs`: team slug `me`, first heap "Personal". local-build.md is stale.
-6. **More menu.** app-ux.md lists Tags, Parameters, Team, Account, Sign out; the code adds Teams (or the team's
-   name).
+6. ~~**More menu.**~~ Settled: app-ux.md lists Team, Teams, Tags, Parameters and Account, as the code does; Sign out
+   is on S-account.
 7. ~~**Sign-up on this branch.**~~ Settled: S-register sends the username.
 8. **"Removable from items in the list"** (progress.md Tags) predates the compact rows; tags are now removed in
    M-item only.
