@@ -147,7 +147,11 @@ heap slug alone works when only one of the caller's teams has a heap by that slu
 ## Output
 
 1. **Human output** by default: aligned columns, colour when stdout is a terminal and `NO_COLOR` isn't set. Labels
-   (due, contributors, audit phrases) are printed as the server wrote them.
+   (due, contributors, audit phrases) are printed as the server wrote them, except that every control character
+   (C0, DEL, C1: escapes, newlines) in what goes to the terminal, stdout or stderr, is shown as U+FFFD. Titles and
+   names come from other people through the server, which doesn't strip them, and an escape sequence would run in
+   the reader's terminal (clear it, write the clipboard) or a newline forge a row. `Output` does it in one place,
+   before adding its own colour codes; `--json` prints the body as it came.
 2. **`--json`** prints the server's response body unchanged, so scripts get the documented OpenAPI types and the CLI
    adds no second schema to keep in sync. For `item add`, that's the created item.
 3. **`--quiet`** prints only what a script needs next: the item ID for `item add`, nothing for a state change, IDs one
@@ -171,7 +175,7 @@ body printed to stderr.
 | 2 | The command line was wrong | clap, and checks that run before any request |
 | 3 | The request was refused: bad input or a rule | `400`, `409`, `422`, and the CLI's own lookups (unknown tag, ambiguous item) |
 | 4 | Not signed in, not allowed, or not found | `401`, `403`, `404` |
-| 5 | The server couldn't be reached or is unavailable | connection errors, timeouts, `503` |
+| 5 | The server couldn't be reached or is unavailable | connection errors, timeouts (a response cut off halfway too), `503`, and a proxy's `502` or `504` |
 | 6 | The local setup is broken: unreadable config, no keychain | |
 
 Signing in maps onto the same table: a cancel on the consent page, giving up waiting for the browser and a refused
@@ -213,12 +217,16 @@ How the CLI keeps the sign-in (built, [cli-tracker.md](cli-tracker.md) step 3):
    (`invalid_grant`) forgets the sign-in.
 4. **Login replaces an earlier sign-in** to the same server and revokes it, under the same lock, after reading the
    stored tokens again, so it can't race a refresh. If the keychain can't keep the new tokens, they're revoked too,
-   so nothing is left open on the server. `--server` is written to the config file once signed in.
+   so nothing is left open on the server. `--server` is written to the config file once signed in; when it
+   changes the file's server, a `heap` set for the old one is cleared, as a heap is one server's, and login says so.
 5. **The loopback listener** reads each connection in its own task, with a 10-second limit on the request line,
    because browsers open spare connections (preconnects) that send nothing. It checks `state` itself: a redirect with
    another `state` gets the not-signed-in page and the wait goes on; only the sign-in's own redirect gets the
    signed-in page.
-6. **Tokens go only where they were sent.** A plain `http://` server is refused (exit 2) unless it's on this machine
+6. **A keychain entry the CLI can't read** (another program's, or another version's) doesn't lock the user out:
+   `auth login` overwrites it (there's nothing to revoke), `auth logout --local` forgets it, and other commands fail
+   with exit 6 and a hint naming those two.
+7. **Tokens go only where they were sent.** A plain `http://` server is refused (exit 2) unless it's on this machine
    (`localhost`, `127.0.0.0/8`, `::1`), and the HTTP client follows no redirects: a `3xx` is an error (exit 2) naming
    where the server pointed, so a form with a refresh token or code verifier is never re-sent to another host.
 
@@ -228,8 +236,10 @@ One TOML file, `config.toml` in `upheap` under the platform's config dir (`~/.co
 Support` on macOS), with two settings: `server` (the base URL)
 and `heap` (the default heap). `upheap auth login --server` and `upheap heap use` write them. Flags beat environment variables
 (`UPHEAP_SERVER`, `UPHEAP_HEAP`), which beat the file. `upheap heap use` writes the heap as `team/heap`, after checking
-it against `GET /me`; with `--server` naming another server than the file's, it writes that server too, so the heap
-and its server stay a pair, and says so. The file is read and written with `toml` and serde; `confique` only reads config, and the CLI
+it against `GET /me`; when the server it used (`--server`, `UPHEAP_SERVER` or the file) isn't the file's, it writes
+that server too, so the heap and its server stay a pair, and says so. Each write reads the file again just before
+changing it, so a setting another `upheap` saved meanwhile isn't lost, and goes to a temporary file in the same
+directory that's then renamed over it, so nobody reads half a file. The file is read and written with `toml` and serde; `confique` only reads config, and the CLI
 writes it too. With `RUST_LOG` set, the CLI logs to `upheap.log` in the same directory.
 
 ## Code layout
@@ -259,8 +269,8 @@ in-memory store, a browser that answers the consent page itself, and buffers. Sh
 that work in a heap (`item list` for now), so it doesn't show where it would mean nothing.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
-truth](engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It depends
-on `domain`, serde and utoipa, so it keeps the conversions between the types and domain types; conversions from the
+truth](engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO
+and depends on nothing in the workspace but `domain`, so it keeps the conversions between the types and domain types; conversions from the
 service layer's views stay in `api` as plain functions. The move was a refactor with no behaviour change, its own
 commit before the CLI's.
 

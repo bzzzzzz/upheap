@@ -77,9 +77,20 @@ impl Output {
         self.mode
     }
 
-    /// Writes a line to stdout.
+    /// Writes a line to stdout, with any control characters in it made harmless.
     pub fn line(&mut self, text: &str) -> std::io::Result<()> {
-        writeln!(self.stdout, "{text}")
+        writeln!(self.stdout, "{}", defuse(text))
+    }
+
+    /// Writes a line to stdout in `tone`, with any control characters in it made harmless first.
+    pub fn line_toned(&mut self, text: &str, tone: Tone) -> std::io::Result<()> {
+        let painted = self.paint(&defuse(text), tone);
+        writeln!(self.stdout, "{painted}")
+    }
+
+    /// Writes a line of a table from [`Output::render_table`] to stdout, after `prefix`.
+    pub fn table_line(&mut self, prefix: &str, line: &TableLine) -> std::io::Result<()> {
+        writeln!(self.stdout, "{}{}", defuse(prefix), line.0)
     }
 
     /// Writes the server's body to stdout as it came, ending with a newline.
@@ -87,13 +98,19 @@ impl Output {
         writeln!(self.stdout, "{}", body.trim_end())
     }
 
-    /// Writes a line to stderr.
+    /// Writes a line to stderr, with any control characters in it made harmless.
     pub fn note(&mut self, text: &str) -> std::io::Result<()> {
-        writeln!(self.stderr, "{text}")
+        writeln!(self.stderr, "{}", defuse(text))
     }
 
-    /// `text` in `tone`, coloured when colour is on.
-    pub fn paint(&self, text: &str, tone: Tone) -> String {
+    /// Writes the server's body to stderr as it came, ending with a newline: a problem, with `--json`.
+    pub fn json_note(&mut self, body: &str) -> std::io::Result<()> {
+        writeln!(self.stderr, "{}", body.trim_end())
+    }
+
+    /// `text` in `tone`, coloured when colour is on. `text` must have been defused already, as the colour codes are
+    /// the only control characters a line may carry.
+    fn paint(&self, text: &str, tone: Tone) -> String {
         if !self.color {
             return text.to_owned();
         }
@@ -106,14 +123,19 @@ impl Output {
         text.style(style).to_string()
     }
 
-    /// `rows` in aligned columns, two spaces apart, a line each. The last column isn't padded.
-    pub fn render_table(&self, rows: &[Vec<Cell>]) -> Vec<String> {
+    /// `rows` in aligned columns, two spaces apart, a line each, the cells defused and then coloured. The last
+    /// column isn't padded.
+    pub fn render_table(&self, rows: &[Vec<Cell>]) -> Vec<TableLine> {
+        let rows: Vec<Vec<(String, Tone)>> = rows
+            .iter()
+            .map(|row| row.iter().map(|cell| (defuse(&cell.text), cell.tone)).collect())
+            .collect();
         let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
         let widths: Vec<usize> = (0..columns)
             .map(|column| {
                 rows.iter()
                     .filter_map(|row| row.get(column))
-                    .map(|cell| cell.text.chars().count())
+                    .map(|(text, _)| text.chars().count())
                     .max()
                     .unwrap_or(0)
             })
@@ -121,18 +143,34 @@ impl Output {
         rows.iter()
             .map(|row| {
                 let last = row.len().saturating_sub(1);
-                let cells = row.iter().enumerate().map(|(column, cell)| {
+                let cells = row.iter().enumerate().map(|(column, (text, tone))| {
                     let pad = if column == last {
                         0
                     } else {
-                        widths[column].saturating_sub(cell.text.chars().count())
+                        widths[column].saturating_sub(text.chars().count())
                     };
-                    format!("{}{}", self.paint(&cell.text, cell.tone), " ".repeat(pad))
+                    format!("{}{}", self.paint(text, *tone), " ".repeat(pad))
                 });
-                cells.collect::<Vec<_>>().join("  ").trim_end().to_owned()
+                TableLine(cells.collect::<Vec<_>>().join("  ").trim_end().to_owned())
             })
             .collect()
     }
+}
+
+/// A line of a table, defused and coloured, ready to write with [`Output::table_line`].
+#[derive(Debug, PartialEq, Eq)]
+pub struct TableLine(String);
+
+/// `text` with every control character (C0, DEL and C1: escape sequences, newlines, carriage returns) shown as U+FFFD.
+///
+/// Titles, names and labels come from other people through the server, which doesn't strip them. Printed raw, an
+/// escape sequence would run in the reader's terminal (clear the screen, write the clipboard) and a newline could
+/// forge rows. Human output is the only place they're interpreted, so it's defused here; `--json` prints the body as
+/// it came, where JSON escapes them.
+fn defuse(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
+        .collect()
 }
 
 #[cfg(test)]
@@ -151,7 +189,13 @@ mod tests {
 
         let lines = output.render_table(&rows);
 
-        expect_that!(lines, elements_are![eq("1   k3x9a  Rotate certs"), eq("10  ab     x")]);
+        expect_that!(
+            lines,
+            elements_are![
+                eq(&TableLine("1   k3x9a  Rotate certs".to_owned())),
+                eq(&TableLine("10  ab     x".to_owned()))
+            ]
+        );
     }
 
     #[gtest]
@@ -161,5 +205,22 @@ mod tests {
 
         expect_that!(plain.paint("overdue", Tone::Alert), eq("overdue"));
         expect_that!(colored.paint("overdue", Tone::Alert), contains_substring("\u{1b}["));
+    }
+
+    #[gtest]
+    fn control_characters_are_shown_not_run() {
+        let output = Output::new(Box::new(std::io::sink()), Box::new(std::io::sink()), Mode::Human, true);
+        let rows = vec![vec![Cell::toned("\u{1b}]52;c;aGk=\u{7}x\nforged", Tone::Strong)]];
+
+        let lines = output.render_table(&rows);
+
+        expect_that!(defuse("a\u{1b}[2Jb\r\u{9b}c"), eq("a\u{FFFD}[2Jb\u{FFFD}\u{FFFD}c"));
+        // The colour codes are the only escape left: bold on, the defused text, bold off.
+        expect_that!(
+            lines,
+            elements_are![eq(&TableLine(
+                "\u{1b}[1m\u{FFFD}]52;c;aGk=\u{FFFD}x\u{FFFD}forged\u{1b}[0m".to_owned()
+            ))]
+        );
     }
 }

@@ -227,15 +227,15 @@ fn render_ranked(
     let headed = shown.len() > 1 || shown.first().is_some_and(|(heading, _)| *heading != "Ranked");
     for (heading, entries) in &shown {
         if headed {
-            out.line(&out.paint(heading, Tone::Strong))?;
+            out.line_toned(heading, Tone::Strong)?;
         }
         for line in lines.by_ref().take(entries.len()) {
-            out.line(&line)?;
+            out.table_line("", &line)?;
         }
     }
     if let Some(footer) = hidden_footer(list.hidden_count, query) {
         out.line("")?;
-        out.line(&out.paint(&footer, Tone::Dim))?;
+        out.line_toned(&footer, Tone::Dim)?;
     }
     Ok(())
 }
@@ -335,19 +335,19 @@ fn render_closed(
         // Consecutive items of one group go under its heading, as the API asks.
         if item.closed_group != group {
             group = item.closed_group;
-            out.line(&out.paint(closed_heading(group), Tone::Strong))?;
+            out.line_toned(closed_heading(group), Tone::Strong)?;
         }
-        out.line(&line)?;
+        out.table_line("", &line)?;
     }
     if page.next_cursor.is_some() {
         out.line("")?;
-        out.line(&out.paint(
+        out.line_toned(
             &format!(
                 "The {} most recently closed; older ones are in the web app.",
                 page.items.len()
             ),
             Tone::Dim,
-        ))?;
+        )?;
     }
     Ok(())
 }

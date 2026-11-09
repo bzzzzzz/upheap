@@ -240,7 +240,7 @@ fn report(err: &CliError, out: &mut Output) {
     if out.mode() == Mode::Json
         && let Some(body) = err.problem_body()
     {
-        let _ = out.note(body.trim_end());
+        let _ = out.json_note(body);
         return;
     }
     for line in err.to_message() {

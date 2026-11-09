@@ -306,3 +306,30 @@ async fn a_reader_that_stops_early_isnt_an_error() -> Result<()> {
     expect_that!(listed.exited(0), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn control_characters_in_server_text_are_shown_not_run() -> Result<()> {
+    // Arrange: a title with a clear-screen escape and a newline that would forge a row.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let item = server
+        .add_item(&ada, HEAP, json!({ "title": "Pay\u{1b}[2J the\n1  zzzzz  forged row" }))
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let human = cli.run(&["item", "list"]).await;
+    let json = cli.run(&["item", "list", "--json"]).await;
+
+    // Assert
+    expect_that!(human.stdout, not(contains_substring("\u{1b}")));
+    expect_that!(human.stdout.lines().count(), eq(1));
+    expect_that!(
+        human.stdout,
+        contains_substring("Pay\u{FFFD}[2J the\u{FFFD}1  zzzzz  forged row")
+    );
+    let listed: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(listed["ranked"][0]["item"]["title"], eq(&item["title"]));
+    Ok(())
+}

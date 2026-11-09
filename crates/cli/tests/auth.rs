@@ -369,3 +369,116 @@ async fn the_heap_flag_is_only_for_commands_that_work_in_a_heap() -> Result<()> 
     expect_that!(logout.exited(2), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn an_unreadable_keychain_entry_can_be_signed_over_or_forgotten() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
+    cli.tokens.plant_unreadable(&server.url)?;
+
+    // Act
+    let listed = cli.run(&["heap", "list"]).await;
+    let forgotten = cli.run(&["auth", "logout", "--local"]).await;
+    let after_forgetting = cli.tokens.load(&server.url);
+    cli.tokens.plant_unreadable(&server.url)?;
+    let login = cli.run(&["auth", "login"]).await;
+
+    // Assert
+    expect_that!(listed.stderr, contains_substring("isn't one the CLI wrote"));
+    expect_that!(
+        listed.stderr,
+        contains_substring(
+            "hint: sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`"
+        )
+    );
+    expect_that!(listed.exited(6), eq(true));
+    expect_that!(forgotten.exited(0), eq(true));
+    expect_that!(after_forgetting, ok(none()));
+    expect_that!(login.exited(0), eq(true));
+    expect_that!(cli.stored(&server)?, some(anything()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn login_to_another_server_clears_the_heap_of_the_old_one() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let mut cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
+    cli.env.server = None;
+    std::fs::write(
+        cli.config_dir.path().join("config.toml"),
+        "server = \"https://old.example.test\"\nheap = \"infra/ops\"\n",
+    )?;
+
+    // Act
+    let login = cli.run(&["auth", "login", "--server", &server.url]).await;
+
+    // Assert
+    expect_that!(
+        login.stdout,
+        ends_with(
+            "The default heap infra/ops was on another server, so it's cleared: pick one with `upheap heap use`.\n"
+        )
+    );
+    expect_that!(login.exited(0), eq(true));
+    expect_that!(cli.config_text(), eq(&format!("server = \"{}\"\n", server.url)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_redirect_is_refused_and_nothing_goes_where_it_points() -> Result<()> {
+    // Arrange: a server that sends every request on to another listener, which counts what reaches it.
+    let elsewhere = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let elsewhere_url = format!("http://{}", elsewhere.local_addr()?);
+    let reached = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = reached.clone();
+    tokio::spawn(async move {
+        while elsewhere.accept().await.is_ok() {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    });
+    let redirecting = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let redirecting_url = format!("http://{}", redirecting.local_addr()?);
+    let location = format!("{elsewhere_url}/api/v1/oauth/token");
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = redirecting.accept().await {
+            let response =
+                format!("HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            let mut request = [0_u8; 4096];
+            let _ = tokio::io::AsyncReadExt::read(&mut stream, &mut request).await;
+            let _ = tokio::io::AsyncWriteExt::write_all(&mut stream, response.as_bytes()).await;
+        }
+    });
+    let server = TestServer::start().await?;
+    let mut cli = TestCli::new(&server)?;
+    cli.env.server = Some(redirecting_url.clone());
+    // A stale access token, so the first request is the refresh: a form carrying the refresh token.
+    cli.tokens.save(
+        &redirecting_url,
+        &StoredTokens {
+            refresh_token: "a refresh token".to_owned(),
+            access_token: "an access token".to_owned(),
+            access_expires_at: 0,
+        },
+    )?;
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(
+        heaps.stderr,
+        contains_substring(format!(
+            "answered with a redirect (302 Found) to {elsewhere_url}/api/v1/oauth/token; set the server to the address it's served at"
+        ))
+    );
+    expect_that!(heaps.exited(2), eq(true));
+    expect_that!(reached.load(std::sync::atomic::Ordering::SeqCst), eq(0));
+    Ok(())
+}

@@ -106,6 +106,11 @@ impl CliError {
     fn hint(&self) -> Option<&'static str> {
         let status = self.problem().map(|problem| problem.status);
         match (self, status) {
+            (
+                Self::TokenStore(TokenStoreError::Corrupt { .. })
+                | Self::Auth(AuthError::Store(TokenStoreError::Corrupt { .. })),
+                _,
+            ) => Some("sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`"),
             (Self::Auth(AuthError::Revoke(_)), _) => {
                 Some("to forget the sign-in on this machine only, run `upheap auth logout --local`")
             }
@@ -141,12 +146,13 @@ fn client_exit_code(err: &ClientError) -> u8 {
     }
 }
 
-/// `401`, `403` and `404` are 4, as the server doesn't tell "not allowed" from "not there"; `503` is 5; other
-/// refusals are 3; anything else, a `500` included, is unexpected.
+/// `401`, `403` and `404` are 4, as the server doesn't tell "not allowed" from "not there"; `503`, and a proxy's `502`
+/// or `504` for a server behind it that's down or slow, are 5; other refusals are 3; anything else, a `500` included,
+/// is unexpected.
 fn status_exit_code(status: u16) -> u8 {
     match status {
         401 | 403 | 404 => 4,
-        503 => 5,
+        502..=504 => 5,
         400..=499 => 3,
         _ => 1,
     }
@@ -166,7 +172,9 @@ mod tests {
         expect_that!(status_exit_code(401), eq(4));
         expect_that!(status_exit_code(403), eq(4));
         expect_that!(status_exit_code(404), eq(4));
+        expect_that!(status_exit_code(502), eq(5));
         expect_that!(status_exit_code(503), eq(5));
+        expect_that!(status_exit_code(504), eq(5));
         expect_that!(status_exit_code(500), eq(1));
     }
 }

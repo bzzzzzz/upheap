@@ -6,8 +6,8 @@
 //! views, and anything that needs the request (its caller, its timezone), stay in `api`.
 //!
 //! Response types derive `Deserialize` as well as `Serialize`, so a client reads them back; request and query
-//! types derive `Serialize` where a client sends them. This crate has no IO and depends on nothing but `domain`,
-//! serde and utoipa, so it builds for the browser and for the CLI alike.
+//! types derive `Serialize` where a client sends them. This crate has no IO, and nothing in the workspace
+//! but `domain` (outside it: serde, utoipa, jiff and uuid), so it builds for the browser and for the CLI alike.
 
 pub mod audit;
 pub mod auth;

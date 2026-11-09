@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use api::{AppState, Authentication, CookieSettings};
-use cli::{Browser, Deps, Environment, MemoryTokenStore, StoredTokens, TokenStore};
+use cli::{Browser, Deps, Environment, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
 use serde_json::{Value, json};
@@ -278,7 +278,7 @@ impl Outcome {
 
 /// One machine with the CLI on it: its keychain, config directory and environment, kept across runs.
 pub struct TestCli {
-    pub tokens: Arc<MemoryTokenStore>,
+    pub tokens: Arc<TestKeychain>,
     pub config_dir: tempfile::TempDir,
     pub env: Environment,
     browser: Arc<dyn Browser>,
@@ -289,7 +289,7 @@ impl TestCli {
     pub fn new(server: &TestServer) -> Result<Self> {
         let config_dir = tempfile::tempdir()?;
         Ok(Self {
-            tokens: Arc::new(MemoryTokenStore::default()),
+            tokens: Arc::new(TestKeychain::default()),
             env: Environment {
                 server: Some(server.url.clone()),
                 heap: None,
@@ -359,6 +359,50 @@ struct SharedBrowser(Arc<dyn Browser>);
 impl Browser for SharedBrowser {
     fn open(&self, url: &str) -> std::io::Result<()> {
         self.0.open(url)
+    }
+}
+
+/// A keychain in memory that can also hold an entry the CLI didn't write, as another program, or an older or newer
+/// `upheap`, might leave.
+#[derive(Default)]
+pub struct TestKeychain {
+    tokens: MemoryTokenStore,
+    unreadable: Mutex<std::collections::HashSet<String>>,
+}
+
+impl TestKeychain {
+    /// Puts an entry for `server` that doesn't parse in place of its sign-in.
+    pub fn plant_unreadable(&self, server: &str) -> Result<()> {
+        self.tokens.delete(server)?;
+        self.unreadable().insert(server.to_owned());
+        Ok(())
+    }
+
+    fn unreadable(&self) -> std::sync::MutexGuard<'_, std::collections::HashSet<String>> {
+        self.unreadable
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+impl TokenStore for TestKeychain {
+    fn load(&self, server: &str) -> Result<Option<StoredTokens>, TokenStoreError> {
+        if self.unreadable().contains(server) {
+            return Err(TokenStoreError::Corrupt {
+                server: server.to_owned(),
+            });
+        }
+        self.tokens.load(server)
+    }
+
+    fn save(&self, server: &str, tokens: &StoredTokens) -> Result<(), TokenStoreError> {
+        self.unreadable().remove(server);
+        self.tokens.save(server, tokens)
+    }
+
+    fn delete(&self, server: &str) -> Result<(), TokenStoreError> {
+        self.unreadable().remove(server);
+        self.tokens.delete(server)
     }
 }
 

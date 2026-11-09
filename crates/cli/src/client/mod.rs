@@ -95,7 +95,7 @@ impl ApiClient {
     ) -> Result<Fetched<T>, ClientError> {
         let request = self.http.get(self.api_url(path)).query(query).bearer_auth(token);
         let response = self.send(request).await?;
-        read_json(response).await
+        self.read_json(response).await
     }
 
     /// Exchanges an authorization code or a refresh token at `POST /api/v1/oauth/token`.
@@ -103,9 +103,9 @@ impl ApiClient {
         let request = self.http.post(self.api_url(&["oauth", "token"])).form(form);
         let response = self.send(request).await?;
         if !response.status().is_success() {
-            return Err(read_failure(response).await);
+            return Err(self.read_failure(response).await);
         }
-        read_json(response).await.map(|fetched| fetched.value)
+        self.read_json(response).await.map(|fetched| fetched.value)
     }
 
     /// Revokes a token, and the sign-in it belongs to, at `POST /api/v1/oauth/revoke`.
@@ -113,7 +113,7 @@ impl ApiClient {
         let request = self.http.post(self.api_url(&["oauth", "revoke"])).form(form);
         let response = self.send(request).await?;
         if !response.status().is_success() {
-            return Err(read_failure(response).await);
+            return Err(self.read_failure(response).await);
         }
         Ok(())
     }
@@ -143,6 +143,47 @@ impl ApiClient {
         Ok(response)
     }
 
+    /// The body of a successful response, read as `T`. A failure is read as a problem.
+    async fn read_json<T: DeserializeOwned>(&self, response: Response) -> Result<Fetched<T>, ClientError> {
+        let status = response.status();
+        if !status.is_success() {
+            return Err(self.read_failure(response).await);
+        }
+        let body = self.read_body(response).await?;
+        match serde_json::from_str(&body) {
+            Ok(value) => Ok(Fetched { value, body }),
+            Err(_) => Err(ClientError::Unreadable { status, body }),
+        }
+    }
+
+    /// The error a failed response stands for: an OAuth refusal, a problem, or neither.
+    async fn read_failure(&self, response: Response) -> ClientError {
+        let status = response.status();
+        let body = match self.read_body(response).await {
+            Ok(body) => body,
+            Err(err) => return err,
+        };
+        if let Ok(problem) = serde_json::from_str::<Problem>(&body) {
+            return ClientError::Problem {
+                problem: Box::new(problem),
+                body,
+            };
+        }
+        if let Ok(refusal) = serde_json::from_str::<OAuthErrorDto>(&body) {
+            return ClientError::OAuthRefused { status, refusal };
+        }
+        ClientError::Unreadable { status, body }
+    }
+
+    /// The body as text. A connection that breaks or times out halfway is the server being out of reach, like one
+    /// that never connects.
+    async fn read_body(&self, response: Response) -> Result<String, ClientError> {
+        response.text().await.map_err(|source| ClientError::Unreachable {
+            server: self.server.to_string(),
+            source,
+        })
+    }
+
     fn api_url(&self, path: &[&str]) -> Url {
         let mut full = vec!["api", "v1"];
         full.extend_from_slice(path);
@@ -157,36 +198,4 @@ impl ApiClient {
         }
         url
     }
-}
-
-/// The body of a successful response, read as `T`. A failure is read as a problem.
-async fn read_json<T: DeserializeOwned>(response: Response) -> Result<Fetched<T>, ClientError> {
-    let status = response.status();
-    if !status.is_success() {
-        return Err(read_failure(response).await);
-    }
-    let body = response.text().await.map_err(|_| ClientError::Unreadable {
-        status,
-        body: String::new(),
-    })?;
-    match serde_json::from_str(&body) {
-        Ok(value) => Ok(Fetched { value, body }),
-        Err(_) => Err(ClientError::Unreadable { status, body }),
-    }
-}
-
-/// The error a failed response stands for: an OAuth refusal, a problem, or neither.
-async fn read_failure(response: Response) -> ClientError {
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if let Ok(problem) = serde_json::from_str::<Problem>(&body) {
-        return ClientError::Problem {
-            problem: Box::new(problem),
-            body,
-        };
-    }
-    if let Ok(refusal) = serde_json::from_str::<OAuthErrorDto>(&body) {
-        return ClientError::OAuthRefused { status, refusal };
-    }
-    ClientError::Unreadable { status, body }
 }

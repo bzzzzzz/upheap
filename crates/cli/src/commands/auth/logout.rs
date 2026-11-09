@@ -2,7 +2,7 @@
 
 use clap::Args;
 
-use crate::auth::{self, AuthError};
+use crate::auth::{self, AuthError, StoredTokens, TokenStoreError};
 use crate::commands::SharedArgs;
 use crate::config::server_key;
 use crate::output::{Mode, Output};
@@ -27,13 +27,19 @@ pub async fn run(args: LogoutArgs, app: &App, out: &mut Output) -> Result<(), Cl
     let client = app.client(server)?;
     // A refresh in another `upheap` would replace the token being revoked.
     let _lock = auth::lock_tokens(app.config_dir()?).await?;
-    let Some(tokens) = auth::load_tokens(&app.tokens, &key).await? else {
-        if out.mode() == Mode::Human {
-            out.line(&format!("Not signed in to {key}; nothing to do."))?;
+    let stored = match auth::load_tokens(&app.tokens, &key).await {
+        // An entry the CLI can't read has no token to revoke, but `--local` can still forget it.
+        Err(TokenStoreError::Corrupt { .. }) if args.local => Stored::Unreadable,
+        Err(err) => return Err(err.into()),
+        Ok(Some(tokens)) => Stored::Tokens(tokens),
+        Ok(None) => {
+            if out.mode() == Mode::Human {
+                out.line(&format!("Not signed in to {key}; nothing to do."))?;
+            }
+            return Ok(());
         }
-        return Ok(());
     };
-    if !args.local {
+    if let (Stored::Tokens(tokens), false) = (&stored, args.local) {
         auth::revoke(&client, &tokens.refresh_token)
             .await
             .map_err(AuthError::Revoke)?;
@@ -49,4 +55,11 @@ pub async fn run(args: LogoutArgs, app: &App, out: &mut Output) -> Result<(), Cl
         )?;
     }
     Ok(())
+}
+
+/// What the keychain holds for the server.
+enum Stored {
+    Tokens(StoredTokens),
+    /// An entry that isn't one the CLI wrote, or no longer reads.
+    Unreadable,
 }

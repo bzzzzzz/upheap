@@ -8,7 +8,7 @@ use clap::Args;
 use crate::auth::login::{LoginError, authorization_request, read_callback};
 use crate::auth::loopback::Loopback;
 use crate::auth::pkce::{Pkce, generate_state};
-use crate::auth::{self, StoredTokens};
+use crate::auth::{self, StoredTokens, TokenStoreError};
 use crate::client::NO_QUERY;
 use crate::commands::SharedArgs;
 use crate::config::{self, server_key};
@@ -30,8 +30,12 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let server = app.server(&args.shared)?;
     let key = server_key(&server);
     let client = app.client(server)?;
-    // Reading the keychain first proves it works before the user goes to the browser.
-    auth::load_tokens(&app.tokens, &key).await?;
+    // Reading the keychain first proves it works before the user goes to the browser. An entry it can't read is
+    // replaced below.
+    match auth::load_tokens(&app.tokens, &key).await {
+        Ok(_) | Err(TokenStoreError::Corrupt { .. }) => {}
+        Err(err) => return Err(err.into()),
+    }
     let lock_dir = app.config_dir()?;
 
     let loopback = Loopback::bind().await.map_err(LoginError::from)?;
@@ -40,8 +44,11 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let request = authorization_request(loopback.redirect_uri(), &pkce, &state);
     let url = client.web_url(&["oauth", "authorize"], &request);
     out.note(&format!(
-        "Opening the browser to sign in to {key}. If it doesn't open, go to:\n\n  {url}\n"
+        "Opening the browser to sign in to {key}. If it doesn't open, go to:"
     ))?;
+    out.note("")?;
+    out.note(&format!("  {url}"))?;
+    out.note("")?;
     if let Err(err) = app.browser.open(url.as_str()) {
         tracing::warn!(error = %err, "can't open the browser");
     }
@@ -53,7 +60,12 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let tokens = StoredTokens::issued(issued, app.env.now.as_second());
     // Another `upheap` may be refreshing the earlier sign-in; replace and revoke it only once that's done.
     let _lock = auth::lock_tokens(lock_dir).await?;
-    let previous = auth::load_tokens(&app.tokens, &key).await?;
+    let previous = match auth::load_tokens(&app.tokens, &key).await {
+        Ok(previous) => previous,
+        // Nothing the CLI can revoke: overwriting it is all that's left to do.
+        Err(TokenStoreError::Corrupt { .. }) => None,
+        Err(err) => return Err(err.into()),
+    };
     if let Err(err) = auth::save_tokens(&app.tokens, &key, &tokens).await {
         // Not kept means not usable, so don't leave the sign-in open on the server.
         if let Err(revoke) = auth::revoke(&client, &tokens.refresh_token).await {
@@ -66,13 +78,15 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     {
         tracing::warn!(error = %err, "can't revoke the earlier sign-in");
     }
-    if args.shared.server.is_some() {
-        let config = config::ConfigFile {
-            server: Some(key.clone()),
-            ..app.config.clone()
-        };
-        config::save_config(app.config_dir()?, &config)?;
-    }
+    // A default heap is one server's, so it goes when the server does.
+    let dropped_heap = match args.shared.server {
+        Some(_) => config::update_config(app.config_dir()?, |file| {
+            let moved = file.server.as_deref() != Some(key.as_str());
+            file.server = Some(key.clone());
+            if moved { file.heap.take() } else { None }
+        })?,
+        None => None,
+    };
 
     let me = client.get::<MeDto>(&["me"], NO_QUERY, &tokens.access_token).await?;
     match out.mode() {
@@ -84,6 +98,11 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
                 "Signed in to {key} as {} (@{}).",
                 user.display_name, user.username
             ))?;
+            if let Some(heap) = dropped_heap {
+                out.line(&format!(
+                    "The default heap {heap} was on another server, so it's cleared: pick one with `upheap heap use`."
+                ))?;
+            }
         }
     }
     Ok(())

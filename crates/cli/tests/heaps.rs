@@ -91,9 +91,17 @@ async fn heap_use_sets_the_default_which_heap_list_marks() -> Result<()> {
     // Assert
     expect_that!(
         used.stdout,
-        eq("Commands now work in infra/ops unless told otherwise.\n")
+        // The server came from UPHEAP_SERVER and the file had none, so it's saved with the heap.
+        eq(&format!(
+            "Commands now work in infra/ops unless told otherwise.\nThe default server is now {} too, the server infra/ops is on.\n",
+            server.url
+        ))
     );
     expect_that!(used.exited(0), eq(true));
+    expect_that!(
+        cli.config_text(),
+        contains_substring(format!("server = \"{}\"", server.url))
+    );
     expect_that!(cli.config_text(), contains_substring("heap = \"infra/ops\""));
     expect_that!(listed.stdout, contains_substring("* infra/ops      ops      0 open"));
     expect_that!(listed.stdout, contains_substring("  infra/backlog  backlog  0 open"));

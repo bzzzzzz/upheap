@@ -50,9 +50,9 @@ fn render(me: &MeDto, default: Option<&HeapHandle>, out: &mut Output) -> std::io
         }
         let personal = if team.personal { ", personal" } else { "" };
         let heading = format!("{} ({}{personal})", team.name, team.slug);
-        out.line(&out.paint(&heading, Tone::Strong))?;
+        out.line_toned(&heading, Tone::Strong)?;
         if team.heaps.is_empty() {
-            out.line(&out.paint("  no heaps", Tone::Dim))?;
+            out.line_toned("  no heaps", Tone::Dim)?;
             continue;
         }
         let is_default = |slug: &str| default.is_some_and(|d| d.team == team.slug && d.heap == slug);
@@ -75,7 +75,7 @@ fn render(me: &MeDto, default: Option<&HeapHandle>, out: &mut Output) -> std::io
             .collect();
         for (heap, line) in team.heaps.iter().zip(out.render_table(&rows)) {
             let mark = if is_default(&heap.heap.slug) { "* " } else { "  " };
-            out.line(&format!("{mark}{line}"))?;
+            out.table_line(mark, &line)?;
         }
     }
     Ok(())

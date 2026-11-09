@@ -25,6 +25,8 @@ serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded.workspace = true
 sha2.workspace = true
+# Writing the config file whole: a temporary file in the same directory, renamed over it.
+tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"] }
 toml.workspace = true
@@ -42,7 +44,6 @@ domain.workspace = true
 googletest.workspace = true
 service = { workspace = true, features = ["accounts"] }
 store = { workspace = true, features = ["testing"] }
-tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

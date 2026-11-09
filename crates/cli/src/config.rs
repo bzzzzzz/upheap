@@ -55,16 +55,29 @@ pub fn load_config(dir: &Path) -> Result<ConfigFile, ConfigError> {
     toml::from_str(&text).map_err(|source| ConfigError::Parse { path, source })
 }
 
-/// Writes `config` to the config file in `dir`, creating the directory when needed.
-pub fn save_config(dir: &Path, config: &ConfigFile) -> Result<(), ConfigError> {
+/// Changes the config file in `dir` with `change`, and returns what `change` returns.
+///
+/// The file is read again just before the change, so a setting another `upheap` wrote since startup isn't lost, and
+/// written to a temporary file in the same directory that then replaces it, so a reader never sees half a file.
+/// Creates the directory when needed.
+pub fn update_config<T>(dir: &Path, change: impl FnOnce(&mut ConfigFile) -> T) -> Result<T, ConfigError> {
+    let mut config = load_config(dir)?;
+    let changed = change(&mut config);
     let path = dir.join(CONFIG_FILE);
-    let write = |path: &Path| -> std::io::Result<()> {
+    let write = || -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
         // Two plain strings always serialize.
-        let text = toml::to_string(config).map_err(std::io::Error::other)?;
-        std::fs::write(path, text)
+        let text = toml::to_string(&config).map_err(std::io::Error::other)?;
+        let mut file = tempfile::NamedTempFile::new_in(dir)?;
+        std::io::Write::write_all(&mut file, text.as_bytes())?;
+        file.persist(&path).map_err(|err| err.error)?;
+        Ok(())
     };
-    write(&path).map_err(|source| ConfigError::Write { path, source })
+    write().map_err(|source| ConfigError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    Ok(changed)
 }
 
 const CONFIG_FILE: &str = "config.toml";
@@ -222,8 +235,29 @@ mod tests {
             server: Some("https://example.test".to_owned()),
             heap: Some("team/heap".to_owned()),
         };
-        save_config(&dir.path().join("nested"), &config)?;
+        update_config(&dir.path().join("nested"), |file| *file = config.clone())?;
         verify_that!(load_config(&dir.path().join("nested"))?, eq(&config))
+    }
+
+    #[gtest]
+    fn an_update_keeps_what_another_writer_saved_since() -> googletest::Result<()> {
+        // Arrange: this `upheap` read an empty file at startup; another one has since saved a heap.
+        let dir = tempfile::tempdir()?;
+        update_config(dir.path(), |file| file.heap = Some("team/heap".to_owned()))?;
+
+        // Act
+        update_config(dir.path(), |file| file.server = Some("https://example.test".to_owned()))?;
+
+        // Assert
+        let leftovers = std::fs::read_dir(dir.path())?.count();
+        verify_that!(leftovers, eq(1))?;
+        verify_that!(
+            load_config(dir.path())?,
+            eq(&ConfigFile {
+                server: Some("https://example.test".to_owned()),
+                heap: Some("team/heap".to_owned()),
+            })
+        )
     }
 
     #[gtest]
