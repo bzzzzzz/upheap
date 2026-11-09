@@ -23,6 +23,7 @@ api = { workspace = true, features = ["accounts", "trace-and-timeout"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 domain.workspace = true
 mime_guess.workspace = true
+mimalloc.workspace = true
 rust-embed.workspace = true
 serde_json.workspace = true
 service = { workspace = true, features = ["accounts"] }
