@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use domain::item::Size;
+use domain::item::{Need, Size};
 use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
 use domain::saved_view::SavedView;
 use domain::text::Name;
@@ -159,6 +159,8 @@ struct StoredListView {
     effort: Vec<String>,
     #[serde(default)]
     impact: Vec<String>,
+    #[serde(default)]
+    need: Vec<String>,
     /// Options of custom parameters.
     #[serde(default)]
     options: Vec<Uuid>,
@@ -177,6 +179,7 @@ impl From<&ListView> for StoredListView {
             tags: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
             effort: sizes(&view.filter.effort),
             impact: sizes(&view.filter.impact),
+            need: view.filter.need.iter().map(|n| n.code().to_owned()).collect(),
             options: view.filter.options.iter().map(|id| *id.as_uuid()).collect(),
         }
     }
@@ -201,6 +204,11 @@ impl StoredListView {
                 tags: self.tags.iter().copied().map(TagId::from_uuid).collect(),
                 effort: sizes(&self.effort)?,
                 impact: sizes(&self.impact)?,
+                need: self
+                    .need
+                    .iter()
+                    .map(|code| parse_code(code, Need::from_code))
+                    .collect::<Result<_, _>>()?,
                 options: self.options.iter().copied().map(OptionId::from_uuid).collect(),
             },
         })
@@ -229,6 +237,7 @@ mod tests {
                 tags: BTreeSet::from([TagId::from_uuid(Uuid::from_u128(7))]),
                 effort: BTreeSet::from([Size::S, Size::Xl]),
                 impact: BTreeSet::from([Size::M]),
+                need: BTreeSet::from([Need::Idea, Need::Critical]),
                 options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(8))]),
             },
         };

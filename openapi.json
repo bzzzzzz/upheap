@@ -1201,6 +1201,20 @@
             "explode": false
           },
           {
+            "name": "need",
+            "in": "query",
+            "description": "Keep items with any of these needs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Need"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
             "name": "param",
             "in": "query",
             "description": "Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with\nany of its options listed. An archived option keeps the items that switched to its replacement.",
@@ -4803,6 +4817,7 @@
           "tag",
           "effort",
           "impact",
+          "need",
           "param"
         ],
         "properties": {
@@ -4828,6 +4843,13 @@
           },
           "in_progress": {
             "$ref": "#/components/schemas/StateMode"
+          },
+          "need": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Need"
+            },
+            "description": "Keeps items with any of these needs. Empty doesn't filter."
           },
           "open": {
             "$ref": "#/components/schemas/StateMode"
@@ -4906,6 +4928,12 @@
                 "$ref": "#/components/schemas/StateMode"
               }
             ]
+          },
+          "need": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Need"
+            }
           },
           "open": {
             "oneOf": [
@@ -5341,7 +5369,7 @@
           "unfiltered_count": {
             "type": "integer",
             "format": "int32",
-            "description": "How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the \"14\" in\n\"6 of 14\". Hidden states still leave theirs out.",
+            "description": "How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the \"14\" in\n\"6 of 14\". Hidden states still leave theirs out.",
             "minimum": 0
           }
         }
