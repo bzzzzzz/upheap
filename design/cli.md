@@ -85,7 +85,7 @@ state reads better than `upheap item edit --state done`, and there's only one wa
 - `reopen` on a closed item is how a closed item comes back; the one-week window is the server's
   (`reopen_window_expired`).
 - `done` on a won't-do item fails with `item_closed`. The CLI shows the server's message and the hint to reopen first.
-- `block --by <item>` sets `blocked_by_item_id` in the same request. Cycles and blockers from other heaps are refused
+- `item block --by <item>` sets `blocked_by_item_id` in the same request. Cycles and blockers from other heaps are refused
   by the server, as in the web app.
 
 **`upheap item list`** shows pinned items, then the ranked ones, then grouped blocked items when shown, each row with its position,
@@ -261,7 +261,7 @@ The guideline lists eight conflicts between its sources. These are the ones that
 3. **Exit codes:** categories with their own codes, as above, rather than `1` for every failure.
 4. **Command shape:** `<category> <verb>`, with positional required inputs. The "named flags only" rule is for tools
    called by build actions, which `upheap` isn't.
-5. **Layout:** `commands/<category>/<verb>.rs` in a source tree, not `endpoints/`.
+5. **Layout:** `commands/<category>/`, one file per verb or group of related verbs, in a source tree, not `endpoints/`.
 
 The rest (string interning, Bazel, support contacts in errors) don't apply to this repo.
 
