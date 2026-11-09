@@ -7,22 +7,25 @@
 
 use std::collections::BTreeSet;
 
+use api_types::common::HeapSummaryDto;
+use api_types::parameters::{
+    AddOptionDto, ArchiveOptionDto, ArchivedOptionDto, ArrangeOptionsDto, CreateParameterDto, LinkTagsDto, OptionDto,
+    ParameterDto, ParameterListDto, ParameterPatchDto,
+};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::parameter::{OptionLabel, Parameter, ParameterName, ParameterOption, ParameterPatch, Weight};
-use domain::permission::{ParameterAction, ParameterListAction};
 use domain::tag::parse_tag_set;
 use domain::{OptionId, ParameterId, TagId, Timestamp, ValidationError};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use service::ServiceError;
 use service::parameters::{ParameterDraft, ParameterEntry};
-use utoipa::ToSchema;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
-use crate::dto::{HeapSummaryDto, IfMatchHeader};
+use crate::dto::IfMatchHeader;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, IfMatch};
 use crate::paths::{HeapParams, HeapPath};
@@ -50,206 +53,45 @@ struct OptionPathId {
     option_id: Uuid,
 }
 
-/// An action the caller can take on a parameter.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = ParameterAction)]
-pub(crate) enum ParameterActionDto {
-    /// Rename it, change its weight, change its options and link it to tags.
-    Edit,
-    Archive,
-    ViewHistory,
-}
-
-impl From<ParameterAction> for ParameterActionDto {
-    fn from(action: ParameterAction) -> Self {
-        match action {
-            ParameterAction::Edit => Self::Edit,
-            ParameterAction::Archive => Self::Archive,
-            ParameterAction::ViewHistory => Self::ViewHistory,
-        }
+fn to_parameter_dto(entry: ParameterEntry) -> ParameterDto {
+    let Parameter {
+        id,
+        heap_id,
+        name,
+        weight,
+        options,
+        archived_options,
+        tags,
+        archived_at,
+        version,
+        ..
+    } = entry.parameter;
+    ParameterDto {
+        id: *id.as_uuid(),
+        heap_id: *heap_id.as_uuid(),
+        name: name.as_str().to_owned(),
+        weight: weight.get(),
+        options: options
+            .into_iter()
+            .map(|o| OptionDto {
+                id: *o.id.as_uuid(),
+                label: o.label.as_str().to_owned(),
+            })
+            .collect(),
+        archived_options: archived_options
+            .into_iter()
+            .map(|o| ArchivedOptionDto {
+                id: *o.id.as_uuid(),
+                label: o.label.as_str().to_owned(),
+                archived_at: o.archived_at.as_millis(),
+                replaced_by_option_id: *o.replaced_by.as_uuid(),
+            })
+            .collect(),
+        tag_ids: tags.iter().map(|t| *t.as_uuid()).collect(),
+        archived_at: archived_at.map(Timestamp::as_millis),
+        version: version.get(),
+        allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
     }
-}
-
-/// An action the caller can take on a heap's parameters.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = ParameterListAction)]
-pub(crate) enum ParameterListActionDto {
-    Create,
-}
-
-impl From<ParameterListAction> for ParameterListActionDto {
-    fn from(action: ParameterListAction) -> Self {
-        match action {
-            ParameterListAction::Create => Self::Create,
-        }
-    }
-}
-
-/// An option in use.
-#[derive(Serialize, ToSchema)]
-#[schema(as = ParameterOption)]
-pub(crate) struct OptionDto {
-    pub id: Uuid,
-    pub label: String,
-}
-
-/// An archived option.
-#[derive(Serialize, ToSchema)]
-#[schema(as = ArchivedOption)]
-pub(crate) struct ArchivedOptionDto {
-    pub id: Uuid,
-    pub label: String,
-    /// UTC milliseconds.
-    pub archived_at: i64,
-    /// The option open items switched to. It may be archived too, with a replacement of its own.
-    pub replaced_by_option_id: Uuid,
-}
-
-#[derive(Serialize, ToSchema)]
-#[schema(as = Parameter)]
-pub(crate) struct ParameterDto {
-    pub id: Uuid,
-    pub heap_id: Uuid,
-    pub name: String,
-    /// Influence on the ranking next to the heap's other weights, 0 to 100.
-    pub weight: u16,
-    /// The options in use, highest priority first.
-    pub options: Vec<OptionDto>,
-    /// Archived options, in the order they were archived.
-    pub archived_options: Vec<ArchivedOptionDto>,
-    /// The tags whose items the parameter is suggested for.
-    pub tag_ids: Vec<Uuid>,
-    /// UTC milliseconds; `null` while the parameter is in use.
-    pub archived_at: Option<i64>,
-    /// Send back in `If-Match` when editing.
-    pub version: u32,
-    pub allowed_actions: Vec<ParameterActionDto>,
-}
-
-impl From<ParameterEntry> for ParameterDto {
-    fn from(entry: ParameterEntry) -> Self {
-        let Parameter {
-            id,
-            heap_id,
-            name,
-            weight,
-            options,
-            archived_options,
-            tags,
-            archived_at,
-            version,
-            ..
-        } = entry.parameter;
-        Self {
-            id: *id.as_uuid(),
-            heap_id: *heap_id.as_uuid(),
-            name: name.as_str().to_owned(),
-            weight: weight.get(),
-            options: options
-                .into_iter()
-                .map(|o| OptionDto {
-                    id: *o.id.as_uuid(),
-                    label: o.label.as_str().to_owned(),
-                })
-                .collect(),
-            archived_options: archived_options
-                .into_iter()
-                .map(|o| ArchivedOptionDto {
-                    id: *o.id.as_uuid(),
-                    label: o.label.as_str().to_owned(),
-                    archived_at: o.archived_at.as_millis(),
-                    replaced_by_option_id: *o.replaced_by.as_uuid(),
-                })
-                .collect(),
-            tag_ids: tags.iter().map(|t| *t.as_uuid()).collect(),
-            archived_at: archived_at.map(Timestamp::as_millis),
-            version: version.get(),
-            allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-#[derive(Serialize, ToSchema)]
-#[schema(as = ParameterList)]
-pub(crate) struct ParameterListDto {
-    pub heap: HeapSummaryDto,
-    /// The parameters in use, by name.
-    pub parameters: Vec<ParameterDto>,
-    /// Archived parameters, by name. Closed items may still show their values.
-    pub archived: Vec<ParameterDto>,
-    pub allowed_actions: Vec<ParameterListActionDto>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = CreateParameterRequest)]
-pub(crate) struct CreateParameterDto {
-    /// 1 to 50 characters, unique among the heap's parameters in use ignoring case.
-    pub name: String,
-    /// 0 to 100. Defaults to 10, the same as the heap's own weights.
-    #[schema(minimum = 0, maximum = 100)]
-    pub weight: Option<i64>,
-    /// Option labels, highest priority first: at most 50, unique ignoring case.
-    #[serde(default)]
-    pub options: Vec<String>,
-    /// Tags of the same heap to suggest the parameter for.
-    #[serde(default)]
-    pub tag_ids: Vec<Uuid>,
-}
-
-/// A partial edit. Leave a field out to keep it.
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = ParameterPatchRequest)]
-pub(crate) struct ParameterPatchDto {
-    pub name: Option<String>,
-    /// 0 to 100.
-    #[schema(minimum = 0, maximum = 100)]
-    pub weight: Option<i64>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = AddOptionRequest)]
-pub(crate) struct AddOptionDto {
-    /// 1 to 50 characters, unique among the parameter's options in use ignoring case. The new option comes last,
-    /// as the lowest priority.
-    pub label: String,
-}
-
-/// One option of a new arrangement.
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = OptionArrangement)]
-pub(crate) struct OptionArrangementDto {
-    pub id: Uuid,
-    pub label: String,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = ArrangeOptionsRequest)]
-pub(crate) struct ArrangeOptionsDto {
-    /// Every option in use, exactly once, in the new order (highest priority first) and with its label.
-    pub options: Vec<OptionArrangementDto>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = ArchiveOptionRequest)]
-pub(crate) struct ArchiveOptionDto {
-    /// Another option of the same parameter, in use. Open items with the archived option switch to it.
-    pub replacement_option_id: Option<Uuid>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = LinkTagsRequest)]
-pub(crate) struct LinkTagsDto {
-    /// Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all.
-    pub tag_ids: Vec<Uuid>,
 }
 
 /// The heap's parameters. Any member may list them; only admins change them.
@@ -263,8 +105,8 @@ async fn list_parameters(State(state): State<AppState>, path: HeapPath) -> Resul
         .await?;
     Ok(Json(ParameterListDto {
         heap: HeapSummaryDto::from(&list.heap),
-        parameters: list.parameters.into_iter().map(ParameterDto::from).collect(),
-        archived: list.archived.into_iter().map(ParameterDto::from).collect(),
+        parameters: list.parameters.into_iter().map(to_parameter_dto).collect(),
+        archived: list.archived.into_iter().map(to_parameter_dto).collect(),
         allowed_actions: list.allowed_actions.into_iter().map(Into::into).collect(),
     }))
 }
@@ -289,7 +131,7 @@ async fn create_parameter(
         .services
         .create_parameter(path.principal, path.heap.heap_id, draft)
         .await?;
-    Ok((StatusCode::CREATED, Json(ParameterDto::from(entry))))
+    Ok((StatusCode::CREATED, Json(to_parameter_dto(entry))))
 }
 
 /// Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`.
@@ -329,7 +171,7 @@ async fn update_parameter(
             expected,
         )
         .await?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 /// Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter
@@ -351,7 +193,7 @@ async fn archive_parameter(
         .services
         .archive_parameter(path.principal, path.heap.heap_id, ParameterId::from_uuid(parameter_id))
         .await?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 /// Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`.
@@ -389,7 +231,7 @@ async fn add_option(
             }
             other => other.into(),
         })?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 /// Puts the options in use in a new order, highest priority first, and relabels them. Admins only; send the
@@ -432,7 +274,7 @@ async fn arrange_options(
             expected,
         )
         .await?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 /// Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep
@@ -461,7 +303,7 @@ async fn archive_option(
             body.replacement_option_id.map(OptionId::from_uuid),
         )
         .await?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 /// Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`.
@@ -493,7 +335,7 @@ async fn link_tags(
             expected,
         )
         .await?;
-    Ok(Json(entry.into()))
+    Ok(Json(to_parameter_dto(entry)))
 }
 
 fn to_draft(body: &CreateParameterDto) -> Result<ParameterDraft, ValidationError> {

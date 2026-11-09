@@ -42,10 +42,12 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 
 ## Workspace
 
-Dependencies point one way: `server → api → service → store, domain`, and `local` sits beside `server` as the
-other entry point. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
-property-tested in isolation, and `store` and `api` never depend on each other. The crates and their roles are
-listed in [README.md](../README.md#layout); each crate's root module says what it owns.
+Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it,
+and `local` sits beside `server` as the other entry point. `domain` depends on nothing in the workspace, so ranking
+and the state rules are unit- and property-tested in isolation, and `store` and `api` never depend on each other.
+`api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
+linking the server. The crates and their roles are listed in [README.md](../README.md#layout); each crate's root
+module says what it owns.
 
 `service` and `api` put what only a shared server needs behind their default `accounts` feature: registration,
 sign-in and sessions, team management, user lookup, OAuth. The local build leaves it out, so that code and its

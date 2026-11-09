@@ -1,17 +1,16 @@
 //! Registration, sign-in and sign-out for local accounts. Sessions are carried in an `HttpOnly` cookie.
 
+use api_types::auth::{RegisterRequest, SignInRequest};
+use api_types::me::UserDto;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
 use service::auth::{Registration, SessionGrant};
-use utoipa::ToSchema;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::error::Problem;
 use crate::extract::{ApiJson, clear_session_cookie, session_cookie, session_token};
-use crate::me::UserDto;
 use crate::{ApiError, AppState, Authentication, CookieSettings};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -19,25 +18,6 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(register))
         .routes(routes!(sign_in))
         .routes(routes!(sign_out))
-}
-
-#[derive(Deserialize, ToSchema)]
-pub(crate) struct RegisterRequest {
-    pub email: String,
-    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
-    /// the personal team, and can't be changed later.
-    #[schema(example = "eugene")]
-    pub username: String,
-    pub display_name: String,
-    pub password: String,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub(crate) struct SignInRequest {
-    /// An email address, or a username. `email` is still accepted in its place.
-    #[serde(alias = "email")]
-    pub login: String,
-    pub password: String,
 }
 
 /// Creates an account with a personal team and heap, and signs in.

@@ -12,16 +12,18 @@
 //! they take no CSRF header (see `api_router`). A failure of the server itself (`500`, `503`) is still a problem
 //! response, as the RFC defines no error for it there.
 
+use api_types::oauth::{
+    ApprovalDto, AuthorizationRequestDto, ClientDto, OAuthErrorDto, RevokeRequestForm, TokenRequestForm,
+    TokenResponseDto,
+};
 use axum::extract::State;
 use axum::extract::rejection::FormRejection;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
-use domain::oauth::{AuthorizationError, AuthorizationParams};
-use serde::{Deserialize, Serialize};
+use domain::oauth::AuthorizationError;
 use service::ServiceError;
 use service::oauth::{CodeExchange, OAuthSecret, TokenPair};
-use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
@@ -39,62 +41,6 @@ pub(crate) fn token_routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(issue_token))
         .routes(routes!(revoke_token))
-}
-
-/// An authorization request, as the client put it in the consent page's address (RFC 6749 §4.1.1, RFC 7636 §4.3).
-/// Every value is checked on the server; a missing one is refused with the problem for that value.
-#[derive(Deserialize, IntoParams, ToSchema)]
-#[into_params(parameter_in = Query)]
-#[schema(as = OAuthAuthorizationRequest)]
-pub(crate) struct AuthorizationRequestDto {
-    /// Must be `code`.
-    #[serde(default)]
-    pub response_type: String,
-    /// A registered client: `upheap-cli`.
-    #[serde(default)]
-    pub client_id: String,
-    /// `http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`, with no query or fragment.
-    #[serde(default)]
-    pub redirect_uri: String,
-    /// The S256 challenge of the client's PKCE code verifier.
-    #[serde(default)]
-    pub code_challenge: String,
-    /// Must be `S256`.
-    #[serde(default)]
-    pub code_challenge_method: String,
-    /// The client's value, sent back to the redirect URI with the code.
-    #[serde(default)]
-    pub state: String,
-}
-
-impl AuthorizationRequestDto {
-    fn as_params(&self) -> AuthorizationParams<'_> {
-        AuthorizationParams {
-            response_type: &self.response_type,
-            client_id: &self.client_id,
-            redirect_uri: &self.redirect_uri,
-            code_challenge: &self.code_challenge,
-            code_challenge_method: &self.code_challenge_method,
-            state: &self.state,
-        }
-    }
-}
-
-/// The client an authorization request is from, once the request is known to be good.
-#[derive(Serialize, ToSchema)]
-#[schema(as = OAuthClient)]
-pub(crate) struct ClientDto {
-    pub client_id: &'static str,
-    /// What to call the client when asking the user, such as "Upheap CLI".
-    pub display_name: &'static str,
-}
-
-/// Where to send the browser now that the user allowed the request.
-#[derive(Serialize, ToSchema)]
-#[schema(as = OAuthApproval)]
-pub(crate) struct ApprovalDto {
-    /// The request's redirect URI with `code` and `state` added.
-    pub redirect_to: String,
 }
 
 /// Checks an authorization request without approving it.
@@ -116,8 +62,8 @@ async fn check_authorization(
     require_accounts(&state)?;
     let checked = state.services.check_authorization(request.as_params())?;
     Ok(Json(ClientDto {
-        client_id: checked.client.id,
-        display_name: checked.client.display_name,
+        client_id: checked.client.id.to_owned(),
+        display_name: checked.client.display_name.to_owned(),
     }))
 }
 
@@ -152,70 +98,13 @@ async fn approve_authorization(
     }))
 }
 
-/// A token request (RFC 6749 §4.1.3 and §6), form-encoded.
-#[derive(Deserialize, ToSchema)]
-#[schema(as = OAuthTokenRequest)]
-pub(crate) struct TokenRequestForm {
-    /// `authorization_code` or `refresh_token`.
-    pub grant_type: String,
-    /// A registered client: `upheap-cli`. Required with either grant, as the client is public.
-    pub client_id: Option<String>,
-    /// With `authorization_code`: the code the redirect URI received.
-    pub code: Option<String>,
-    /// With `authorization_code`: the redirect URI the code was issued for, exactly.
-    pub redirect_uri: Option<String>,
-    /// With `authorization_code`: the PKCE code verifier the challenge was made from.
-    pub code_verifier: Option<String>,
-    /// With `refresh_token`: the refresh token, which this request uses up.
-    pub refresh_token: Option<String>,
-}
-
-/// A token revocation request (RFC 7009 §2.1), form-encoded.
-#[derive(Deserialize, ToSchema)]
-#[schema(as = OAuthRevokeRequest)]
-pub(crate) struct RevokeRequestForm {
-    /// An access or refresh token. Either ends the client's sign-in.
-    pub token: Option<String>,
-    /// `access_token` or `refresh_token`. Accepted and not needed: the server finds the token either way.
-    #[allow(dead_code)] // Read by serde and documented; the lookup doesn't need it.
-    pub token_type_hint: Option<String>,
-    /// When given, a token of another client is left alone.
-    pub client_id: Option<String>,
-}
-
-/// A successful token response (RFC 6749 §5.1).
-#[derive(Serialize, ToSchema)]
-#[schema(as = OAuthTokens)]
-pub(crate) struct TokenResponseDto {
-    /// Send as `Authorization: Bearer <access_token>`.
-    pub access_token: String,
-    /// Always `Bearer`.
-    pub token_type: &'static str,
-    /// Seconds until the access token expires.
-    pub expires_in: i64,
-    /// Good for one refresh, within 30 days.
-    pub refresh_token: String,
-}
-
-impl From<TokenPair> for TokenResponseDto {
-    fn from(pair: TokenPair) -> Self {
-        Self {
-            access_token: pair.access_token.expose().to_owned(),
-            token_type: "Bearer",
-            expires_in: pair.expires_in.as_seconds_ceil(),
-            refresh_token: pair.refresh_token.expose().to_owned(),
-        }
+fn to_token_response(pair: TokenPair) -> TokenResponseDto {
+    TokenResponseDto {
+        access_token: pair.access_token.expose().to_owned(),
+        token_type: "Bearer".to_owned(),
+        expires_in: pair.expires_in.as_seconds_ceil(),
+        refresh_token: pair.refresh_token.expose().to_owned(),
     }
-}
-
-/// A refused token or revocation request (RFC 6749 §5.2). The token endpoints answer with this, not a `Problem`.
-#[derive(Debug, Serialize, ToSchema)]
-#[schema(as = OAuthError)]
-pub(crate) struct OAuthErrorDto {
-    /// `invalid_request`, `invalid_client`, `invalid_grant` or `unsupported_grant_type`.
-    pub error: &'static str,
-    /// What was wrong, for people. May change; branch on `error`.
-    pub error_description: String,
 }
 
 /// A refusal on the token endpoints, in the RFC's format.
@@ -262,7 +151,7 @@ impl IntoResponse for OAuthRefusal {
     fn into_response(self) -> Response {
         tracing::debug!(error = self.error, "token request refused");
         let body = OAuthErrorDto {
-            error: self.error,
+            error: self.error.to_owned(),
             error_description: self.description,
         };
         (self.status, [(header::CACHE_CONTROL, "no-store")], Json(body)).into_response()
@@ -355,7 +244,7 @@ async fn issue_token(
     };
     // Tokens mustn't be kept by a cache on the way (RFC 6749 §5.1).
     let headers = [(header::CACHE_CONTROL, "no-store"), (header::PRAGMA, "no-cache")];
-    Ok((headers, Json(TokenResponseDto::from(pair))).into_response())
+    Ok((headers, Json(to_token_response(pair))).into_response())
 }
 
 /// Revokes a token, and with it every token of the sign-in it came from.

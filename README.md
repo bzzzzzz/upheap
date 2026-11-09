@@ -35,11 +35,13 @@ The design docs are indexed in [design/README.md](design/README.md).
 - Audit log: the history of each item, tag, parameter, saved view, heap and member, and Activity pages per heap and
   team.
 - Sign-in rate limiting: each email address gets 5 attempts per 15 minutes.
-- Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the coming
+- Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the
   `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
+- The `upheap` CLI's first commands: sign in through the browser, list your heaps and pick a default, and list a
+  heap's ranked or closed items with the web app's filters and saved views.
 
-Not yet: editing the heap's own weights, OIDC sign-in, the CLI itself and invitations.
+Not yet: editing the heap's own weights, OIDC sign-in, adding and editing items from the CLI, and invitations.
 
 ## Run it
 
@@ -73,6 +75,24 @@ than SQLite. For Cloud Run with Neon, see [design/cloud-run-postgres.md](design/
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups |
 | `SESSION_TTL_DAYS` | `30` | How long a sign-in lasts |
 | `LOG_FORMAT` | `json` | `json` or `pretty`; levels via `RUST_LOG` |
+
+## The CLI
+
+`upheap` talks to a running server over its API ([design/cli.md](design/cli.md)). Build it with
+`cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
+
+```sh
+cargo run -p cli -- auth login --server http://localhost:8080   # opens the browser; the sign-in goes in the keychain
+cargo run -p cli -- heap list
+cargo run -p cli -- heap use personal                           # or team/heap
+cargo run -p cli -- item list --effort s,m --tag infra
+cargo run -p cli -- item list --json | jq '.ranked[].item.key'
+cargo run -p cli -- auth logout
+```
+
+The server address and default heap are kept in `config.toml` under the platform's config directory, and
+`UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. Exit codes: 0 done, 2 bad command line, 3
+refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1 anything else.
 
 ## Develop
 
@@ -141,13 +161,15 @@ cargo run -q -p server -- openapi > openapi.json && (cd web && npm run gen:api)
 ## Layout
 
 ```
-crates/domain   pure logic: types, state machine, ranking, due labels, permissions
-crates/store    SeaORM entities, migrations, repositories
-crates/service  use cases: authorization, transactions, audit
-crates/api      axum routes, DTOs, OpenAPI, sessions, problem+json
-crates/server   the binary: config, startup, embedded web app
-crates/local    the local build: the backend in wasm, on SQLite-wasm in the browser
-web/            React app (TypeScript), generated API types only
+crates/domain     pure logic: types, state machine, ranking, due labels, permissions
+crates/store      SeaORM entities, migrations, repositories
+crates/service    use cases: authorization, transactions, audit
+crates/api-types  request and response types, shared by the API and the CLI
+crates/api        axum routes, OpenAPI, sessions, problem+json
+crates/cli        the upheap command-line client
+crates/server     the binary: config, startup, embedded web app
+crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
+web/              React app (TypeScript), generated API types only
 ```
 
 ## License

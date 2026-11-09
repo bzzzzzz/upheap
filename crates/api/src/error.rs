@@ -13,32 +13,12 @@ use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::team::TeamError;
 use domain::validation::Field;
-use serde::Serialize;
 use service::ServiceError;
 use store_error::StoreErrorKind;
-use utoipa::ToSchema;
+
+pub(crate) use api_types::problem::Problem;
 
 use crate::request_id::current_request_id;
-
-/// An error response body (RFC 9457 problem details).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Problem {
-    /// Stable machine-readable error code, for example `version_conflict`.
-    pub code: &'static str,
-    /// Short human-readable summary. May change; don't match on it.
-    pub title: String,
-    pub status: u16,
-    /// The input field the error is about, when there is one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub field: Option<&'static str>,
-    /// A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
-    /// at, such as `my-team` for `My-Team`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<String>,
-    /// Present on unexpected errors, so the operator can find the details in the log.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-}
 
 /// Why a request failed.
 #[derive(Debug)]
@@ -385,10 +365,10 @@ impl IntoResponse for ApiError {
             }
         };
         let body = Problem {
-            code: classified.code,
+            code: classified.code.to_owned(),
             title: classified.title,
             status: classified.status.as_u16(),
-            field: classified.field,
+            field: classified.field.map(str::to_owned),
             hint: classified.hint,
             request_id,
         };
