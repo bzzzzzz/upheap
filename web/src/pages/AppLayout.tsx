@@ -1,16 +1,7 @@
 // The app shell at each width (design/app-ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import {
-  Link,
-  Outlet,
-  useMatch,
-  useMatches,
-  useNavigate,
-  useParams,
-  useSearch,
-  type LinkProps,
-} from "@tanstack/react-router";
+import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
 import {
   Activity,
   Check,
@@ -253,7 +244,10 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
-  const onMorePage = useMatches({ select: (matches) => matches.some((match) => morePages.has(match.routeId)) });
+  // The heap's pages that only More leads to, so More shows as active on them. The tabs show only on a heap's pages.
+  const onTags = useMatch({ from: "/app/teams/$team/heaps/$heap/tags", shouldThrow: false }) !== undefined;
+  const onParameters = useMatch({ from: "/app/teams/$team/heaps/$heap/parameters", shouldThrow: false }) !== undefined;
+  const onMorePage = onTags || onParameters;
 
   return (
     <nav
@@ -288,19 +282,6 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
     </nav>
   );
 }
-
-/**
- * The pages More leads to, and the team's activity, reached from its Team page, so the tab that holds the page on
- * screen shows as active also when it's in More.
- */
-const morePages: ReadonlySet<string> = new Set([
-  "/app/teams/$team/heaps/$heap/tags",
-  "/app/teams/$team/heaps/$heap/parameters",
-  "/app/teams",
-  "/app/teams/$team",
-  "/app/teams/$team/activity",
-  "/app/account",
-]);
 
 /**
  * More on a phone: the heap's other views and the account pages, as a card of 52 px rows above the tabs. It opens on

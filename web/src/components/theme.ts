@@ -13,6 +13,14 @@ const KEY = "upheap.theme";
 
 const listeners = new Set<() => void>();
 
+/** For useSyncExternalStore, which wants the same function on every render. */
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** The theme applied to the page. */
 function readTheme(): Theme {
   const theme = document.documentElement.dataset.theme;
@@ -70,9 +78,6 @@ export function followThemeAcrossTabs() {
 
 /** The theme picked in this browser, System when none is, and the way to change it. */
 export function useTheme(): [Theme, (theme: Theme) => void] {
-  const theme = useSyncExternalStore((listener) => {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  }, readTheme);
+  const theme = useSyncExternalStore(subscribe, readTheme);
   return [theme, setTheme];
 }

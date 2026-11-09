@@ -1,6 +1,6 @@
 // The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
@@ -140,28 +140,39 @@ test("the theme picked on Account holds over a reload and in other tabs, and Sys
   expect(await canvasOf()).toBe(light);
 });
 
-test("the active navigation entry stands out from its bar in either theme, and More holds its pages", async ({
-  page,
-}) => {
-  const phone = (page.viewportSize()?.width ?? 0) < 640;
-  const bar = phone
+/** The bar the heap's views are in at this width: the phone's tabs, or the sidebar or rail. */
+function viewsBar(page: Page) {
+  return isPhone(page)
     ? page.getByRole("navigation", { name: "Heap views" })
     : page.getByRole("complementary", { name: "Heaps and views" });
-  const backgroundOf = (target: Locator) => target.evaluate((element) => getComputedStyle(element).backgroundColor);
-  const expectToStandOut = async (entry: Locator) => {
-    await expect(entry).toHaveAttribute("data-status", "active");
-    expect(await backgroundOf(entry)).not.toBe(await backgroundOf(bar));
-  };
+}
 
+function isPhone(page: Page) {
+  return (page.viewportSize()?.width ?? 0) < 640;
+}
+
+/** `entry` is the active one, and its fill shows against the bar it's in. */
+async function expectToStandOut(entry: Locator, bar: Locator) {
+  const backgroundOf = (target: Locator) => target.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await expect(entry).toHaveAttribute("data-status", "active");
+  expect(await backgroundOf(entry)).not.toBe(await backgroundOf(bar));
+}
+
+test("the active navigation entry stands out from its bar in either theme", async ({ page }) => {
+  const bar = viewsBar(page);
   for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });
-    await expectToStandOut(bar.getByRole("link", { name: "Open", exact: true }));
+    await expectToStandOut(bar.getByRole("link", { name: "Open", exact: true }), bar);
   }
-  test.skip(!phone, "Only the phone's tabs have More.");
+});
+
+test("on a phone, More shows as active on the pages it holds", async ({ page }) => {
+  test.skip(!isPhone(page), "Only the phone's tabs have More.");
+  const bar = viewsBar(page);
   await goTo(page, "Tags");
   const more = bar.getByRole("button", { name: "More" });
   await expect(more).toHaveAttribute("aria-current", "true");
-  await expectToStandOut(more);
+  await expectToStandOut(more, bar);
   await goTo(page, "Closed");
   await expect(more).not.toHaveAttribute("data-status");
 });
