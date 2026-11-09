@@ -61,12 +61,26 @@ pub(crate) async fn load_heap_view(
     heap: Heap,
     role: Role,
 ) -> Result<HeapView, ServiceError> {
-    let open_counts = count_open_items(db, &[heap.id]).await?;
-    Ok(HeapView {
-        open_count: open_counts.get(&heap.id).copied().unwrap_or(0),
+    let open_count = count_heap_open_items(db, heap.id).await?;
+    Ok(to_heap_view(heap, role, open_count))
+}
+
+/// How many open items `heap_id` has (see [`HeapView::open_count`]).
+pub(crate) async fn count_heap_open_items(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<u32, ServiceError> {
+    Ok(count_open_items(db, &[heap_id])
+        .await?
+        .get(&heap_id)
+        .copied()
+        .unwrap_or(0))
+}
+
+/// `heap` as a member with `role` sees it, with `open_count` already counted.
+pub(crate) fn to_heap_view(heap: Heap, role: Role, open_count: u32) -> HeapView {
+    HeapView {
+        open_count,
         allowed_actions: allowed_heap_actions(&heap, role),
         heap,
-    })
+    }
 }
 
 /// `heaps`, in the same order, as a member with `role` sees them, with their open items counted in one query.
@@ -79,10 +93,9 @@ pub(crate) async fn load_heap_views(
     let open_counts = count_open_items(db, &ids).await?;
     Ok(heaps
         .into_iter()
-        .map(|heap| HeapView {
-            open_count: open_counts.get(&heap.id).copied().unwrap_or(0),
-            allowed_actions: allowed_heap_actions(&heap, role),
-            heap,
+        .map(|heap| {
+            let open_count = open_counts.get(&heap.id).copied().unwrap_or(0);
+            to_heap_view(heap, role, open_count)
         })
         .collect())
 }

@@ -16,7 +16,7 @@ const defaultClasses: NameFormClasses = { input: inputClass, save: primaryButton
 /**
  * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
  * `version` (a save, or someone else's edit), the input shows it. With `onCancel`, the form was opened to edit: Cancel
- * always shows, and it or Escape closes the form.
+ * always shows, and it, Escape, or Enter with nothing changed closes the form.
  */
 export function NameForm({
   label,
@@ -80,6 +80,12 @@ export function NameForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
+          // Opened to edit and left as it was: Enter closes it, as Cancel would. (It can't submit: Save is disabled.)
+          if (e.key === "Enter" && !changed && onCancel) {
+            e.preventDefault();
+            onCancel();
+            return;
+          }
           if (e.key !== "Escape" || (!changed && !onCancel)) return;
           e.preventDefault();
           setName(value);

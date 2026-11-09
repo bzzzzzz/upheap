@@ -17,7 +17,7 @@ use store::{StoreError, TransactionTrait};
 use crate::access::{authorize_heap, authorize_team, ensure_active};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
-use crate::teams::{HeapView, load_heap_view};
+use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view};
 use crate::{Principal, ServiceError, Services};
 
 /// A change to a heap's name and slug. `None` leaves it as it is.
@@ -140,6 +140,8 @@ impl Services {
             slug: slug.unwrap_or_else(|| current.slug.clone()),
             ..current.clone()
         };
+        // Counted before the commit, so a saved change is never reported as failed. Renaming doesn't change it.
+        let open_count = count_heap_open_items(&txn, heap_id).await?;
         let now = self.now();
         let saved = self
             .save_heap(
@@ -153,7 +155,7 @@ impl Services {
             )
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
-        load_heap_view(&self.db, saved, role).await
+        Ok(to_heap_view(saved, role, open_count))
     }
 
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
@@ -181,6 +183,8 @@ impl Services {
             return load_heap_view(&txn, current, role).await;
         }
 
+        // Counted before the commit, as in `update_heap`. Archiving doesn't change it.
+        let open_count = count_heap_open_items(&txn, heap_id).await?;
         let now = self.now();
         let changed = Heap {
             archived_at: archived.then_some(now),
@@ -199,7 +203,7 @@ impl Services {
             .save_heap(txn, principal, &changed, current.version, action, diff, now)
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, archived, "heap archive state changed");
-        load_heap_view(&self.db, saved, role).await
+        Ok(to_heap_view(saved, role, open_count))
     }
 
     /// Writes `heap` and its audit entry, and commits. The caller holds the heap lock.

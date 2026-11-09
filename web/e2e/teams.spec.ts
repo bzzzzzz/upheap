@@ -27,12 +27,20 @@ async function createTeam(page: Page, name: string, linkName?: string) {
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
 
-/** Adds the user `username` from the member search, with the keyboard. */
+/** The member search, by its exact name: the hint describes it without being part of it. */
+const memberSearch = (page: Page) =>
+  page.getByRole("combobox", { name: "Add a member by username, name or email", exact: true });
+
+/** Adds the user `username` from the member search: with Enter on a wider screen, a tap on the result on a phone. */
 async function addMember(page: Page, username: string) {
-  const search = page.getByRole("combobox", { name: "Add a member by username, name or email" });
+  const search = memberSearch(page);
   await search.fill(username);
-  await expect(page.getByRole("option", { selected: true })).toContainText(`@${username}`);
-  await search.press("Enter");
+  if (isPhone(page)) {
+    await page.getByRole("option", { name: new RegExp(`@${username}`) }).click();
+  } else {
+    await expect(page.getByRole("option", { selected: true })).toContainText(`@${username}`);
+    await search.press("Enter");
+  }
   await expect(search).toHaveValue("");
 }
 
@@ -135,14 +143,27 @@ test("a member is added from the search with the keyboard, and removing one says
   await page.getByRole("button", { name: "Add heap" }).click();
   await expect(heaps(page).getByText("Launch", { exact: true })).toBeVisible();
 
-  // The arrows and Enter pick from the results; someone already in the team can't be added.
-  const search = page.getByRole("combobox", { name: "Add a member by username, name or email" });
+  // On a wider screen the arrows and Enter pick from the results. On a phone nothing is highlighted and the keyboard's
+  // Enter adds no one: a tap does. Someone already in the team can't be added.
+  const search = memberSearch(page);
+  await expect(search).toHaveAccessibleName("Add a member by username, name or email");
+  await expect(search).toHaveAccessibleDescription("They need an account first");
   await search.fill(sam.username);
   const option = page.getByRole("option", { name: new RegExp(`Sam Ortiz @${sam.username}`) });
-  await expect(option).toHaveAttribute("aria-selected", "true");
-  await expect(option).toContainText("Add as member");
-  await search.press("ArrowDown");
-  await search.press("Enter");
+  if (isPhone(page)) {
+    await expect(option).toBeVisible();
+    await expect(option).toHaveAttribute("aria-selected", "false");
+    await expect(option).not.toContainText("Add as member");
+    await search.press("Enter");
+    await expect(search).toHaveValue(sam.username);
+    await expect(page.getByRole("heading", { name: "Members · 1" })).toBeVisible();
+    await option.click();
+  } else {
+    await expect(option).toHaveAttribute("aria-selected", "true");
+    await expect(option).toContainText("Add as member");
+    await search.press("ArrowDown");
+    await search.press("Enter");
+  }
   await expect(search).toHaveValue("");
   await expect(page.getByRole("heading", { name: "Members · 2" })).toBeVisible();
   await search.fill(sam.username);
@@ -258,6 +279,13 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   await link.press("Escape");
   await expect(link).toHaveCount(0);
   await expect(more).toBeFocused();
+  // So does Enter with nothing changed.
+  await more.click();
+  await page.getByRole("menuitem", { name: "Link name" }).click();
+  await expect(link).toBeFocused();
+  await link.press("Enter");
+  await expect(link).toHaveCount(0);
+  await expect(more).toBeFocused();
   await more.click();
   await page.getByRole("menuitem", { name: "Link name" }).click();
   await link.fill(linkName);
@@ -303,9 +331,10 @@ test("Enter waits for the results of what was typed, not the ones still on scree
   localBuild,
 }) => {
   test.skip(localBuild, SERVER_ONLY);
+  test.skip(isPhone(page), "A phone's Enter never adds anyone; the member test covers that.");
   const sam = await registerOther(request, "Sam Ortiz");
   await createTeam(page, "Waiting");
-  const search = page.getByRole("combobox", { name: "Add a member by username, name or email" });
+  const search = memberSearch(page);
   await search.fill(sam.username);
   await expect(page.getByRole("option", { selected: true })).toContainText(`@${sam.username}`);
 

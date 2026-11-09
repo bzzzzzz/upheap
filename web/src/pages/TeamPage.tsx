@@ -477,7 +477,7 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
       <h2 ref={heading} tabIndex={-1} id="team-members" className={sectionTitleClass}>
         Members · {team.members.length}
       </h2>
-      {team.allowed_actions.includes("add_member") && <AddMember team={team} />}
+      {team.allowed_actions.includes("add_member") && <AddMember team={team} phone={phone} />}
       <ul className={cardClass}>
         {team.members.map((member) => {
           const you = member.user_id === me?.user.id;
@@ -814,7 +814,7 @@ function PhoneMemberRow({
  * at least 3 characters or a whole username, and shows an email only when it was typed. The results are a listbox
  * under the field: the first one that can be added is highlighted, the arrows move, Enter or a click adds.
  */
-function AddMember({ team }: { team: Team }) {
+function AddMember({ team, phone }: { team: Team; phone: boolean }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState<string | null>(null);
@@ -831,8 +831,9 @@ function AddMember({ team }: { team: Team }) {
   // added, so a fast Enter never adds someone the text no longer names.
   const stale = found.isPlaceholderData;
   const choices = stale ? [] : users.filter(addable);
-  // The one Enter adds: the one the arrows or the pointer picked, else the first that can be added.
-  const highlighted = choices.find((user) => user.id === active) ?? choices[0];
+  // The one Enter adds: the one the arrows or the pointer picked, else the first that can be added. A phone has no
+  // highlight: its keyboard's Enter mustn't add anyone, so adding is a tap on a result.
+  const highlighted = phone ? undefined : (choices.find((user) => user.id === active) ?? choices[0]);
   const optionId = (user: UserMatch) => `${listId}-${user.id}`;
 
   const addUser = (user: UserMatch) =>
@@ -861,38 +862,41 @@ function AddMember({ team }: { team: Team }) {
   const expanded = shown && users.length > 0;
   return (
     <div className="flex flex-col">
-      <label className="flex items-center gap-2.5 rounded-[10px] border border-line-strong bg-surface px-3 py-[9px] focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft max-sm:h-12 max-sm:gap-2 max-sm:rounded-xl max-sm:py-0">
-        <Plus aria-hidden="true" className="size-4 shrink-0 text-muted" />
-        <span className="sr-only">Add a member by username, name or email</span>
-        <input
-          type="text"
-          role="combobox"
-          aria-expanded={expanded}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={expanded && highlighted ? optionId(highlighted) : undefined}
-          aria-describedby={hintId}
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActive(null);
-            add.reset();
-          }}
-          onKeyDown={onKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder="Username, name or email"
-          autoComplete="off"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          enterKeyHint="done"
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted focus-visible:outline-none max-sm:text-base"
-        />
+      {/* The hint sits outside the label, so it describes the field without being part of its name. */}
+      <div className="flex items-center gap-2.5 rounded-[10px] border border-line-strong bg-surface px-3 py-[9px] focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft max-sm:h-12 max-sm:gap-2 max-sm:rounded-xl max-sm:py-0">
+        <label className="flex min-w-0 flex-1 items-center gap-2.5 max-sm:gap-2">
+          <Plus aria-hidden="true" className="size-4 shrink-0 text-muted" />
+          <span className="sr-only">Add a member by username, name or email</span>
+          <input
+            type="text"
+            role="combobox"
+            aria-expanded={expanded}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={expanded && highlighted ? optionId(highlighted) : undefined}
+            aria-describedby={hintId}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActive(null);
+              add.reset();
+            }}
+            onKeyDown={onKeyDown}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Username, name or email"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="search"
+            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted focus-visible:outline-none max-sm:text-base"
+          />
+        </label>
         <span id={hintId} className="shrink-0 text-xs text-muted max-sm:sr-only">
           They need an account first
         </span>
-      </label>
+      </div>
       {shown && users.length === 0 && (
         <p role="status" className="mt-1.5 px-1 text-sm text-muted">
           No one matches.
