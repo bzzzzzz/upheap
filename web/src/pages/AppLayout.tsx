@@ -84,9 +84,11 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
 }
 
 // The shared look of a navigation entry: icon over a short label in the rail, icon beside the label in the sidebar,
-// and at least 44 px tall everywhere. Links get `data-status="active"` from the router.
+// and at least 44 px tall everywhere. Links get `data-status="active"` from the router. The active entry is an amber
+// pill, as the selected row of the list is amber: a surface-coloured fill vanished on the phone's tabs, which are the
+// surface, and barely showed on the dark sidebar. Hovering it keeps the pill, so hover and active stay apart.
 const navItemClass =
-  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
+  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-accent-soft data-[status=active]:text-accent-ink data-[status=active]:hover:bg-accent-soft data-[status=active]:hover:text-accent-ink lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
 /** With `current`, the link shows as active also where the router wouldn't say so. */
 function NavLink({
