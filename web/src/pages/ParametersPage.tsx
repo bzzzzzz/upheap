@@ -231,7 +231,6 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
             <NameForm
               label={`Name of parameter ${parameter.name}`}
               value={parameter.name}
-              version={parameter.version}
               maxLength={50}
               pending={rename.isPending}
               error={rename.error}
@@ -355,13 +354,16 @@ function WeightForm({
 function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
   const change = useChangeParameter(heapRef);
   const [options, setOptions] = useState<ParameterOption[]>(parameter.options);
-  const [shownVersion, setShownVersion] = useState(parameter.version);
   const [newLabel, setNewLabel] = useState("");
-  if (shownVersion !== parameter.version) {
-    setShownVersion(parameter.version);
+  // Reseeded when the saved options change (added, archived, relabelled or reordered), not on every new version, so
+  // saving the weight, a rename or a tag link doesn't drop an arrangement not yet saved.
+  const saved = JSON.stringify(parameter.options);
+  const [shownOptions, setShownOptions] = useState(saved);
+  if (shownOptions !== saved) {
+    setShownOptions(saved);
     setOptions(parameter.options);
   }
-  const changed = JSON.stringify(options) !== JSON.stringify(parameter.options);
+  const changed = JSON.stringify(options) !== saved;
 
   const move = (index: number, by: -1 | 1) => {
     const next = [...options];
@@ -586,6 +588,7 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; hea
         value={linked}
         disabled={change.isPending}
         label={heading}
+        inputLabel={`Tags that suggest ${parameter.name}`}
         onChange={(next) => change.mutate({ parameter, change: { kind: "link_tags", tagIds: next.map((t) => t.id) } })}
       />
       <p className="mt-2 text-[13px]/[1.45] text-muted">

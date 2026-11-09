@@ -15,6 +15,7 @@ import {
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
 import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
+import { BASE } from "./basePath";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -40,9 +41,6 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ c
 export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
 }
-
-/** The app's base path without its trailing slash: empty on the server, `/upheap` for the local build on Pages. */
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /**
  * `href`, the router's address of the page the browser shows, as the browser has it, when the browser does show
@@ -267,10 +265,19 @@ const heapSettingsRoute = createRoute({
   path: "/teams/$team/heaps/$heap/settings",
   component: function HeapSettingsRoute() {
     const { team, heap } = heapSettingsRoute.useParams();
-    const { data } = useHeap({ team, heap });
+    const record = useHeap({ team, heap });
     // Another heap starts afresh, but a new link name for this one keeps the page as it is, with focus where it was.
-    // So it's keyed by the heap's ID, once it's known.
-    return <HeapSettingsLayout key={data?.id ?? `${team}/${heap}`} heap={{ team, heap }} />;
+    // So it's keyed by the heap's ID, and waits for it rather than rendering once under another key. A new link
+    // name's heap is already cached under it, so it doesn't load again.
+    if (record.isPending) return <p className="py-16 text-center text-muted">Loading…</p>;
+    if (record.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {record.error.message}
+        </p>
+      );
+    }
+    return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
   },
 });
 

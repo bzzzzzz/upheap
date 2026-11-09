@@ -12,13 +12,18 @@ test("General renames the heap, changes its link name and archives it", async ({
   await expect(page.getByRole("button", { name: /^Switch heap: Allotment/ }).first()).toBeAttached();
 
   // A new link name moves the page to the heap's new path (under the local build's base path too), with the heap
-  // shown at once and focus still in the field.
+  // shown at once and focus still in the field. To a finger, focus isn't moved back to the field, which would bring
+  // the on-screen keyboard back up.
   const linkName = page.getByLabel("Heap link name");
   await linkName.fill("allotment");
   await expect(page.getByText(`New link: ${heapPath.replace(/[^/]+$/, "allotment")}.`)).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/heaps\/allotment\/settings$/);
-  await expect(linkName).toBeFocused();
+  if (await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches)) {
+    await expect(linkName).not.toBeFocused();
+  } else {
+    await expect(linkName).toBeFocused();
+  }
   await expect(linkName).toHaveValue("allotment");
   await expect(page.getByText("Loading…")).toHaveCount(0);
 
@@ -26,6 +31,18 @@ test("General renames the heap, changes its link name and archives it", async ({
   await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
   await page.getByRole("button", { name: "Unarchive heap" }).click();
   await expect(page.getByRole("button", { name: "Archive heap" })).toBeVisible();
+});
+
+test("saving the link name keeps a name being typed beside it", async ({ page }) => {
+  await goTo(page, "Settings");
+  const name = page.getByLabel("Heap name");
+  await name.fill("Allotment");
+  const linkName = page.getByLabel("Heap link name");
+  await linkName.fill("allotment");
+  await page.locator("form").filter({ has: linkName }).getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(/\/heaps\/allotment\/settings$/);
+  await expect(linkName).toHaveValue("allotment");
+  await expect(name).toHaveValue("Allotment");
 });
 
 test("Tags and Parameters are tabs of Settings, and their old paths lead there", async ({ page, heapPath }) => {

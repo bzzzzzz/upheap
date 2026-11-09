@@ -96,4 +96,5 @@ test("New parameter opens a form that Cancel closes, and Rename renames the para
       .getByText("Adding one of these tags to an item suggests Plan.")
       .or(page.getByText("No tags suggest Plan yet.")),
   ).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Tags that suggest Plan" })).toBeVisible();
 });

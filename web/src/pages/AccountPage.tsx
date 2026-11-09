@@ -51,7 +51,6 @@ export function AccountPage() {
                 <NameForm
                   label="Display name"
                   value={user.display_name}
-                  version={user.version}
                   pending={update.isPending}
                   error={update.error}
                   onSave={(display_name) => update.mutate({ user, display_name })}

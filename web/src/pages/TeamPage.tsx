@@ -128,7 +128,6 @@ function TeamHeader({ team }: { team: Team }) {
             <NameForm
               label="Team name"
               value={team.name}
-              version={team.version}
               pending={update.isPending}
               error={update.error}
               onSave={(name) => update.mutate({ team, patch: { name } }, { onSuccess: close })}
@@ -162,7 +161,6 @@ function TeamHeader({ team }: { team: Team }) {
           <NameForm
             label="Team link name"
             value={team.slug}
-            version={team.version}
             maxLength={39}
             pending={update.isPending}
             error={update.error}
@@ -320,7 +318,6 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
         <NameForm
           label={editing === "name" ? `Name of heap ${heap.name}` : `Link name of heap ${heap.name}`}
           value={editing === "name" ? heap.name : heap.slug}
-          version={heap.version}
           maxLength={editing === "name" ? 100 : 39}
           pending={update.isPending}
           error={update.error}

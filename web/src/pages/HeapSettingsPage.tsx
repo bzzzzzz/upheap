@@ -3,14 +3,12 @@ import { useState } from "react";
 
 import type { HeapRef } from "../api/client";
 import { useHeap, useSetHeapArchived, useUpdateHeap } from "../api/queries";
+import { BASE } from "../basePath";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
-
-/** The app's base path without its trailing slash, which the heap's links start with: `/upheap` in the local build. */
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -91,7 +89,6 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
                 <NameForm
                   label="Heap name"
                   value={data.name}
-                  version={data.version}
                   pending={update.isPending}
                   error={update.variables && "name" in update.variables.patch ? update.error : null}
                   onSave={(name) => save({ name })}
@@ -113,7 +110,6 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
                 <NameForm
                   label="Heap link name"
                   value={data.slug}
-                  version={data.version}
                   maxLength={39}
                   pending={update.isPending}
                   error={update.variables && "slug" in update.variables.patch ? update.error : null}

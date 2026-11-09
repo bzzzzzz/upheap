@@ -18,6 +18,7 @@ export function TagPicker({
   inline = false,
   layout = "stack",
   label = <span className="text-xs font-medium text-ink-soft">Tags</span>,
+  inputLabel = "Add a tag",
 }: {
   heapRef: HeapRef;
   value: ItemTag[];
@@ -28,6 +29,8 @@ export function TagPicker({
   layout?: FieldLayout;
   /** The heading above the tags, for a page that names them otherwise, such as a parameter's "Suggested by tags". */
   label?: ReactNode;
+  /** The input's accessible name, for a page with several pickers, such as "Tags that suggest Plan". */
+  inputLabel?: string;
 }) {
   const tags = useTags(heapRef);
   const create = useCreateTag(heapRef);
@@ -124,7 +127,7 @@ export function TagPicker({
         ))}
         <input
           role="combobox"
-          aria-label="Add a tag"
+          aria-label={inputLabel}
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"

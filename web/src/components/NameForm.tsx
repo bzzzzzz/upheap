@@ -5,14 +5,13 @@ import { ProblemText } from "./ProblemText";
 export type NameFormClasses = { input: string; save: string; cancel: string; problem?: string };
 
 /**
- * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
- * `version` (a save, or someone else's edit), the input shows it. With `onCancel`, the form was opened to edit: Cancel
+ * A name that can be edited in place: Save and Cancel appear once it changes. When the saved `value` changes (a save,
+ * or someone else's edit), the input shows it. With `onCancel`, the form was opened to edit: Cancel
  * always shows, and it, Escape, or Enter with nothing changed closes the form.
  */
 export function NameForm({
   label,
   value,
-  version,
   maxLength = 100,
   pending,
   error,
@@ -25,7 +24,6 @@ export function NameForm({
 }: {
   label: string;
   value: string;
-  version: number;
   maxLength?: number;
   pending: boolean;
   error: Error | null;
@@ -53,20 +51,25 @@ export function NameForm({
       window.cancelAnimationFrame(second);
     };
   }, [autoFocus]);
-  const [shownVersion, setShownVersion] = useState(version);
-  if (shownVersion !== version) {
-    setShownVersion(version);
+  // Reseeded when the saved value changes, not on every new version, so saving another field beside this one, which
+  // bumps the record's version, doesn't drop a name being typed here.
+  const [shownValue, setShownValue] = useState(value);
+  if (shownValue !== value) {
+    setShownValue(value);
     setName(value);
   }
   useEffect(() => onDraftChange?.(name), [name, onDraftChange]);
   // The server trims names, so surrounding spaces alone aren't a change.
   const changed = name.trim() !== value;
 
-  const submit = (event: FormEvent) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!changed || name.trim() === "") return;
-    // Save goes once the name is saved, so focus waits in the input rather than falling to the page.
-    input.current?.focus();
+    // Save goes once the name is saved, so focus that's on it waits in the input rather than falling to the page. Not
+    // for a finger, where focusing the input brings the on-screen keyboard back up just after Save was tapped.
+    if (event.currentTarget.contains(document.activeElement) && !window.matchMedia("(pointer: coarse)").matches) {
+      input.current?.focus();
+    }
     onSave(name);
   };
 
