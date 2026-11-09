@@ -61,26 +61,4 @@ impl MigrationTrait for Migration {
             )
             .await
     }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_index(
-                Index::drop()
-                    .name(USER_INDEX)
-                    .table(OauthTokenFamilies::Table)
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .drop_index(Index::drop().name(FAMILY_INDEX).table(OauthTokens::Table).to_owned())
-            .await?;
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(OauthTokenFamilies::Table)
-                    .drop_column(OauthTokenFamilies::DeviceName)
-                    .to_owned(),
-            )
-            .await
-    }
 }
