@@ -36,9 +36,11 @@ Design docs: [requirements](design/requirements.md), [offering](design/offering.
 - Audit log: the history of each item, tag, parameter, saved view, heap and member, and Activity pages per heap and
   team.
 - Sign-in rate limiting: each email address gets 5 attempts per 15 minutes.
+- Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the coming
+  `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 
-Not yet: editing the heap's own weights, OIDC sign-in, the CLI OAuth flow and invitations.
+Not yet: editing the heap's own weights, OIDC sign-in, the CLI itself and invitations.
 
 ## Run it
 

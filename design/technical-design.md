@@ -67,8 +67,8 @@ Tables:
 | `password_credentials` | user_id, argon2 hash, updated_at |
 | `identities` | id, user_id, provider, subject (unique per provider) |
 | `sessions` | token_hash (SHA-256 of a random 256-bit token), user_id, created_at, expires_at |
-| `oauth_auth_codes` | code hash, user_id, client_id, PKCE challenge, redirect_uri, expires_at |
-| `oauth_tokens` | token hash, user_id, client_id, kind (access/refresh), expires_at, revoked_at |
+| `oauth_auth_codes` | code_hash (SHA-256 of a random 256-bit code), user_id, client_id, redirect_uri, code_challenge (S256), created_at, expires_at, used_at and family_id (set together when the code is exchanged) |
+| `oauth_tokens` | token_hash (SHA-256 of a random 256-bit token), family_id (indexed), kind (access/refresh), user_id, client_id, created_at, expires_at, used_at (a refresh token's exchange), revoked_at |
 | `teams` | id, name, slug (unique; for a personal team, its owner's username), personal_user_id (unique, nullable: set on a user's personal team), created_at, version |
 | `team_members` | team_id, user_id, role (admin/member), joined_at |
 | `heaps` | id, team_id, name, slug (unique per team), age_weight, deadline_weight, value_weight, archived_at, version |
@@ -94,6 +94,7 @@ Notes:
 - The application can only insert into `audit_log`. There is no update or delete code path for it.
 - Tag names are unique per heap ignoring case. The check runs on `name_key` rather than the column collation, because MySQL compares case-insensitively by default and SQLite doesn't.
 - A parameter is one aggregate: its options and tag links have no version of their own, so every change to them takes the parameter's version. Options in use are ordered by `position`, highest priority first. An archived option always names its replacement (`archived_at` and `replaced_by_option_id` are set together), so a value can always be followed to an option in use. Unlinking a tag sets `parameter_tags.removed_at`, and clearing an item's value sets `option_id` to `NULL`, so neither deletes a row. Parameter names are unique among a heap's parameters in use, ignoring case; archived parameters keep their names, so a unique index can't express it, and the service checks it under the heap lock.
+- `oauth_tokens.family_id` groups the tokens of one sign-in by a client: the first pair and every pair refreshed from it. Revoking a token, or reusing a refresh token or a code, sets `revoked_at` on the whole family, so an access token is linked to its refresh tokens by the family rather than one by one. `client_id` names a client of the registry in code (`domain::oauth`), so it has no foreign key. Used codes and spent tokens stay for now; like sessions they are plumbing that may be deleted, and cleaning them up comes with `/me/tokens`.
 - Taking a tag off an item sets `item_tags.removed_at` instead of deleting the row, so relationship rows follow the no-`DELETE` rule too. The change is audited as an `item_updated` entry whose diff lists the tag IDs before and after. Team membership is the one exception (see [Resources](#resources-initial-set)).
 
 ## Ranking
@@ -164,7 +165,7 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 ### Conventions
 
 1. All endpoints are under `/api/v1`, JSON over HTTPS.
-2. Errors use `application/problem+json` with a stable `code` field.
+2. Errors use `application/problem+json` with a stable `code` field. The one exception is `POST /oauth/token` and `POST /oauth/revoke`, which refuse a request in the RFC 6749 §5.2 format (`{"error": "invalid_grant", "error_description": …}`, `400`, or `401` for `invalid_client`), so any OAuth client library understands them. A failure of the server itself there (`500`, `503`) is still a problem response, since the RFC defines no error for it.
 3. Updates are `PATCH` requests with partial bodies. The expected `version` goes in an `If-Match` header.
 4. List endpoints paginate with a cursor, except the ranked list, which returns every open item in one response (see [Search](#search)).
 5. Responses carry presentation-ready derived data, so clients don't compute anything:
@@ -179,7 +180,8 @@ Setting `blocked_by_item_id` walks the blocker chain inside the write transactio
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/oidc/{provider}/start`, `GET /auth/oidc/{provider}/callback`, `GET /oauth/authorize`, `POST /oauth/token`, `POST /oauth/revoke` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/oidc/{provider}/start`, `GET /auth/oidc/{provider}/callback` |
+| OAuth | `GET /oauth/authorize` (checks a request for the consent page), `POST /oauth/authorize` (approves it), `POST /oauth/token`, `POST /oauth/revoke` |
 | Me | `GET /me` (the caller, their teams with `member_count`, and each team's heaps with `open_count`), `PATCH /me` (display name), `GET /me/tokens`, `POST /me/tokens/{id}/revoke` |
 | Teams | `POST /teams`, `GET/PATCH /teams/{team}` (the team with its members and heaps; name and slug), `POST /teams/{team}/members`, `PATCH/DELETE /teams/{team}/members/{username}` (role change, removal), `POST /teams/{team}/leave`. The caller's teams are listed by `GET /me` |
 | Users | `GET /users?query=` (lookup for adding members, for admins of a shared team) |
@@ -208,11 +210,15 @@ A display name change is audited once in each of the user's teams, since the aud
 ## Authentication and authorization
 
 1. **Web app:** cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`). The cookie holds a random 256-bit token; the database stores only its SHA-256, so a leaked database can't be used to sign in. Every state-changing request, sign-in included, must carry an `X-CSRF-Protection` header. Browsers only let same-origin scripts set custom headers (cross-origin ones need a CORS preflight, which the server never approves), so the header together with `SameSite=Lax` blocks cross-site request forgery without a per-session token.
-2. **Non-web clients:** the OAuth 2.0 authorization code flow with PKCE (S256), against the server's own `/oauth/authorize` and `/oauth/token`.
-   - The CLI opens the browser and listens on a loopback redirect URI.
-   - The user signs in using the normal web flow.
-   - The CLI receives a short-lived access token and a rotating refresh token.
-   - Only registered first-party public clients are allowed.
+2. **Non-web clients:** the OAuth 2.0 authorization code flow with PKCE (S256), against the server's own endpoints (RFC 6749, RFC 7636, RFC 7009 for revoking).
+   - The CLI opens the browser on the web app's `/oauth/authorize` page and listens on a loopback redirect URI.
+   - The user signs in using the normal web flow, if they aren't already, and returns to the page, which asks whether the client may use their account. The page checks the request with `GET /api/v1/oauth/authorize` before it shows anything, so it never offers, or redirects to, a request the server would refuse. Allow approves it with `POST /api/v1/oauth/authorize` (session cookie and CSRF header, never a bearer token, so a client can't approve more access for itself) and sends the browser to the `redirect_to` it gets back, `redirect_uri?code=…&state=…`. Cancel sends it to `redirect_uri?error=access_denied&state=…`, which the page builds itself, as the server has checked the redirect URI by then.
+   - The CLI exchanges the code at `POST /api/v1/oauth/token` (`grant_type=authorization_code`, with `code_verifier`, `redirect_uri` and `client_id`) for an access token and a refresh token. Token responses carry `Cache-Control: no-store`.
+   - Only registered first-party public clients are allowed. The registry is a constant in `domain::oauth`, not a table: one client today, `upheap-cli` ("Upheap CLI"). Its redirect URIs are loopback only, per RFC 8252: `http://127.0.0.1:<port><path>` and `http://[::1]:<port><path>` with any port. `localhost`, other schemes and hosts, user info, a query and a fragment are all refused, so adding `?code=…` always gives the URI that was approved.
+   - Codes and tokens are random 256-bit values, stored only as SHA-256 hashes, as session tokens are. Codes last 10 minutes and work once, for the client, redirect URI and challenge they were issued for. Access tokens last 15 minutes and refresh tokens 30 days; see [Non-web client tokens](#non-web-client-tokens) for rotation.
+   - `POST /oauth/token` and `POST /oauth/revoke` take form-encoded bodies and answer refusals in the RFC format (see [Conventions](#conventions)). They read no cookie, so they need no CSRF header.
+   - **Bearer tokens:** `Authorization: Bearer <access token>` resolves to the same `Principal` a session cookie does, on every endpoint. A request with an `Authorization` header is authenticated by it alone and any cookie is ignored, so it doesn't need `X-CSRF-Protection`: a cross-site page can't set that header either, and CSRF is a cookie problem. An invalid, expired or revoked token is `401` `unauthenticated` with `WWW-Authenticate: Bearer error="invalid_token"`.
+   - All of it is part of the `accounts` feature; the local build has none of it.
 3. **External identity providers:** generic OIDC, configured per deployment, for example Okta, Google or Keycloak. A first sign-in creates the user. An identity is matched by `(provider, subject)`, never by email alone.
 4. **Local accounts:** passwords are hashed with argon2id, and sign-in takes an email address or a username, and attempts are rate-limited per account, keyed by its email address whichever was typed, or per unknown address or username (`domain::sign_in`).
    - An address gets five attempts per 15-minute window, opened by its first attempt. Later attempts get `429` `too_many_attempts`, with `Retry-After` in seconds, until the window ends. They are refused before any password is checked, so they cost no argon2 work.
@@ -273,6 +279,10 @@ These checks run in the same transaction as the write, after the permission chec
 
 1. For now, access tokens issued to the CLI or other first-party clients carry the user's full permissions. There are no narrower scopes.
 2. Access tokens are short-lived (15 minutes). Refresh tokens rotate on each use, and if an old one is reused, the whole token family is revoked.
+   - A family is one sign-in by a client: the pair the code was exchanged for and every pair refreshed from it. Refreshing uses the refresh token up and issues a new pair in the same family; the new refresh token lasts 30 days from then, so a client in use stays signed in.
+   - A refresh token presented a second time means someone holds a copy, so the family is revoked, the legitimate client included, which then signs in again. A code presented a second time revokes the family its first exchange issued, as RFC 6749 §4.1.2 asks.
+   - Single use is enforced by a conditional update (`used_at IS NULL`), so of two requests racing with one refresh token or code, one wins and the other counts as reuse.
+   - Revoking either token of a family (`POST /oauth/revoke`, as `upheap auth logout` will) revokes the family. It answers `200` for unknown tokens too (RFC 7009).
 3. A user can list and revoke their own client tokens (`GET /me/tokens`, `POST /me/tokens/{id}/revoke`).
 4. Scoped tokens (for example read-only, or a single heap) can be added later without changing the permission model, because a scope would only ever narrow the role's permissions.
 
