@@ -27,7 +27,7 @@ export function Sheet({
   role?: "dialog" | "alertdialog";
   /** The id of what describes the dialog, such as a confirm's question. */
   describedBy?: string;
-  /** Beside the title: what the sheet is for, such as the item's title. */
+  /** Beside the title: what the sheet is for, such as the item's title, or an action on all of it, such as Reset all. */
   aside?: ReactNode;
   children: ReactNode;
 }) {

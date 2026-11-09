@@ -2,14 +2,14 @@
 //! and the view a saved view stores. Both use the same names and values, so a client can turn a saved view into a
 //! list query field by field.
 
-use domain::item::Size;
+use domain::item::{Need, Size};
 use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
 use domain::{OptionId, ParameterId, TagId, ValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::dto::SizeDto;
+use crate::dto::{NeedDto, SizeDto};
 
 /// Where items in one state go in the list.
 #[derive(Clone, Copy, Serialize, Deserialize, ToSchema)]
@@ -126,6 +126,8 @@ pub(crate) struct ListViewDto {
     pub effort: Vec<SizeDto>,
     /// Keeps items with any of these impacts. Empty doesn't filter.
     pub impact: Vec<SizeDto>,
+    /// Keeps items with any of these needs. Empty doesn't filter.
+    pub need: Vec<NeedDto>,
     /// Options of custom parameters. For each parameter they belong to, keeps items with any of its options listed.
     /// Empty doesn't filter.
     pub param: Vec<Uuid>,
@@ -144,6 +146,7 @@ impl From<&ListView> for ListViewDto {
             tag: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
             effort: sizes(&view.filter.effort),
             impact: sizes(&view.filter.impact),
+            need: view.filter.need.iter().copied().map(NeedDto::from).collect(),
             param: view.filter.options.iter().map(|id| *id.as_uuid()).collect(),
         }
     }
@@ -169,6 +172,8 @@ pub(crate) struct ListViewInputDto {
     pub effort: Vec<SizeDto>,
     #[serde(default)]
     pub impact: Vec<SizeDto>,
+    #[serde(default)]
+    pub need: Vec<NeedDto>,
     /// Options of the same heap's parameters.
     #[serde(default)]
     pub param: Vec<Uuid>,
@@ -191,6 +196,7 @@ impl ListViewInputDto {
                 tags: self.tag.iter().copied().map(TagId::from_uuid).collect(),
                 effort: self.effort.iter().copied().map(Size::from).collect(),
                 impact: self.impact.iter().copied().map(Size::from).collect(),
+                need: self.need.iter().copied().map(Need::from).collect(),
                 options: self.param.iter().copied().map(OptionId::from_uuid).collect(),
             },
         })

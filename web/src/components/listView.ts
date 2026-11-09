@@ -1,23 +1,19 @@
 // The list view lives in the URL, so a view can be bookmarked, shared and kept on reload. The search params are
-// the API's query parameters, with lists comma-separated as the API takes them, plus `view`, the saved view the list
-// was opened from. Anything else in the URL is dropped.
+// the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
 import type {
   BlockedLayout,
   ItemState,
   ListSort,
-  ListViewInput,
   ListViewQuery,
+  Need,
   RankedItem,
   RankedList,
-  SavedView,
   Size,
   StateMode,
 } from "../api/client";
-import { SIZES } from "./labels";
+import { NEEDS, SIZES } from "./labels";
 
 export type ListSearch = {
-  /** The saved view the list was opened from. The other params say what is shown, so they may differ from it. */
-  view?: string;
   open?: StateMode;
   in_progress?: StateMode;
   blocked?: StateMode;
@@ -27,6 +23,8 @@ export type ListSearch = {
   sort_parameter?: string;
   /** Tag IDs, comma-separated. */
   tag?: string;
+  /** Needs, comma-separated. */
+  need?: string;
   /** Sizes, comma-separated. */
   effort?: string;
   impact?: string;
@@ -43,6 +41,31 @@ export const DEFAULT_MODES: Record<ShownState, StateMode> = { open: "shown", in_
 
 export const STATE_MODES: readonly StateMode[] = ["pinned", "shown", "hidden"];
 export const MODE_LABELS: Record<StateMode, string> = { pinned: "Pinned", shown: "Shown", hidden: "Hidden" };
+
+/** The view settings besides the sort, which the Filters panel's Show section sets. */
+export type ViewSetting = ShownState | "blocked_layout";
+export const VIEW_SETTINGS: readonly ViewSetting[] = [...SHOWN_STATES, "blocked_layout"];
+
+/** Whether blocked items are in the list on their own, the one case where their layout matters. */
+export const isBlockedShown = (search: ListSearch) => (search.blocked ?? DEFAULT_MODES.blocked) === "shown";
+
+/**
+ * The view settings changed from the server's defaults (the URL leaves defaults out). The blocked layout counts only
+ * while blocked items are shown, as it has no effect otherwise.
+ */
+export const viewChanges = (search: ListSearch): ViewSetting[] =>
+  VIEW_SETTINGS.filter(
+    (setting) => search[setting] !== undefined && (setting !== "blocked_layout" || isBlockedShown(search)),
+  );
+
+/** The same view with every state and the blocked layout back at the defaults. */
+export const withoutViewChanges = (search: ListSearch): ListSearch => ({
+  ...search,
+  open: undefined,
+  in_progress: undefined,
+  blocked: undefined,
+  blocked_layout: undefined,
+});
 
 /** The sorts that need no parameter. Sorting by a parameter is offered once per parameter. */
 export const SORTS: readonly Exclude<ListSort, "parameter">[] = ["priority", "due", "effort", "impact"];
@@ -65,7 +88,7 @@ const list = (raw: unknown) => (typeof raw === "string" && raw !== "" ? raw : un
 
 /**
  * Keeps only the known list view params of a URL, and drops values that equal the server's defaults, so equal
- * views have equal URLs and query keys. Lists are sorted for the same reason. Unknown sizes are dropped too; tag IDs
+ * views have equal URLs and query keys. Lists are sorted for the same reason. Unknown sizes and needs are dropped too; tag IDs
  * go to the server, which refuses malformed or foreign ones (the page then offers to reset the view).
  */
 export function parseListSearch(raw: Record<string, unknown>): ListSearch {
@@ -73,25 +96,29 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
     const value = mode(raw[state]);
     return value === DEFAULT_MODES[state] ? undefined : value;
   };
-  const sizes = (value: unknown) =>
+  // Known values only, once each, in their own order.
+  const known = (values: readonly string[], value: unknown) =>
     joinList(
       splitList(list(value))
-        .filter((size, index, all) => SIZES.includes(size as Size) && all.indexOf(size) === index)
-        .sort((a, b) => SIZES.indexOf(a as Size) - SIZES.indexOf(b as Size)),
+        .filter((v, index, all) => values.includes(v) && all.indexOf(v) === index)
+        .sort((a, b) => values.indexOf(a) - values.indexOf(b)),
     );
-  const blockedLayout = layout(raw.blocked_layout);
+  const sizes = (value: unknown) => known(SIZES, value);
+  const blocked = modeOf("blocked");
+  // The layout only applies to shown blocked items, so a layout left over from them is dropped with them.
+  const blockedLayout = isBlockedShown({ blocked }) ? layout(raw.blocked_layout) : undefined;
   const sortParameter = list(raw.sort_parameter);
   // A parameter sort needs its parameter, and no other sort takes one, so a half of the pair alone is dropped.
   const sortBy = sort(raw.sort) === "parameter" && sortParameter === undefined ? undefined : sort(raw.sort);
   const search: ListSearch = {
-    view: list(raw.view),
     open: modeOf("open"),
     in_progress: modeOf("in_progress"),
-    blocked: modeOf("blocked"),
+    blocked,
     blocked_layout: blockedLayout === "grouped" ? undefined : blockedLayout,
     sort: sortBy === "priority" ? undefined : sortBy,
     sort_parameter: sortBy === "parameter" ? sortParameter : undefined,
     tag: ids(raw.tag),
+    need: known(NEEDS, raw.need),
     effort: sizes(raw.effort),
     impact: sizes(raw.impact),
     param: ids(raw.param),
@@ -116,6 +143,7 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     sort: search.sort,
     sort_parameter: search.sort_parameter,
     tag: splitList(search.tag),
+    need: splitList(search.need) as Need[],
     effort: splitList(search.effort) as Size[],
     impact: splitList(search.impact) as Size[],
     param: splitList(search.param),
@@ -129,6 +157,7 @@ export function toListQuery(search: ListSearch): ListViewQuery {
 /** How many filters are on. */
 export const filterCount = (search: ListSearch) =>
   splitList(search.tag).length +
+  splitList(search.need).length +
   splitList(search.effort).length +
   splitList(search.impact).length +
   splitList(search.param).length;
@@ -137,10 +166,15 @@ export const filterCount = (search: ListSearch) =>
 export const withoutFilters = (search: ListSearch): ListSearch => ({
   ...search,
   tag: undefined,
+  need: undefined,
   effort: undefined,
   impact: undefined,
   param: undefined,
 });
+
+/** Reset all: no filters and the default view settings. The sort stays, as does the search text. */
+export const withoutFiltersOrViewChanges = (search: ListSearch): ListSearch =>
+  withoutFilters(withoutViewChanges(search));
 
 /**
  * The text search, the one filter the client runs: every word must appear in the title or description, ignoring
@@ -152,27 +186,6 @@ export function matchesSearch(entry: RankedItem, text: string): boolean {
   const haystack = `${entry.item.title}\n${entry.item.description ?? ""}`.toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
-
-/** The URL of a saved view: its settings, and its ID so the page knows which one is open. */
-export function searchFor(saved: SavedView): ListSearch {
-  const { view } = saved;
-  return parseListSearch({
-    ...view,
-    view: saved.id,
-    sort_parameter: view.sort_parameter ?? undefined,
-    tag: joinList(view.tag),
-    effort: joinList(view.effort),
-    impact: joinList(view.impact),
-    param: joinList(view.param),
-  });
-}
-
-/** What to save for the view in the URL. The fields are the list query's, so it carries over unchanged. */
-export const toViewInput = (search: ListSearch): ListViewInput => toListQuery(search);
-
-/** Whether two URLs show the same list, whichever saved view they were opened from. */
-export const showSameList = (a: ListSearch, b: ListSearch) =>
-  JSON.stringify(toListQuery(a)) === JSON.stringify(toListQuery(b));
 
 /**
  * Where an item sits in the list, as the server ranked it: its entry, with its position within its group, and the

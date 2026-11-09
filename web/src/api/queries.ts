@@ -19,7 +19,6 @@ import {
   type HeapRef,
   type Item,
   type ItemPatch,
-  type ListViewInput,
   type ListViewQuery,
   type Me,
   type NewItem,
@@ -30,7 +29,6 @@ import {
   type RankedList,
   type ParameterPatch,
   type Role,
-  type SavedView,
   type Tag,
   type TagPatch,
   type Team,
@@ -61,7 +59,6 @@ const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => [...rankedKey(heap
 const blockerCandidatesKey = (heap: HeapRef) => [...rankedKey(heap), "blocker-candidates"] as const;
 const closedKey = (heap: HeapRef) => ["closed", heap.team, heap.heap] as const;
 const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as const;
-const savedViewsKey = (heap: HeapRef) => ["saved-views", heap.team, heap.heap] as const;
 const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 const teamKey = (team: string) => ["team", team] as const;
@@ -184,6 +181,14 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
 }
 
 /**
+ * The heaps' open counts in `/me`, which the sidebar shows. Only adding an item or changing its state changes them,
+ * so only those refetch `/me`, and nothing waits for it.
+ */
+function invalidateOpenCounts(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+}
+
+/**
  * Gives back a view of a heap's ranked list, the one on screen, as fetched from now on, so Add can say where an item
  * the server has just taken landed, from the list itself (ux-tracker.md, open question 4). A fetch already on
  * its way, as after the add invalidated the heap, is waited for rather than started again; if it was cancelled
@@ -213,7 +218,10 @@ export function useCreateItem() {
     mutationFn: async ({ heap, body }: { heap: HeapRef; body: NewItem }) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Not returned: the mutation is done once the server has the item, and the lists catch up after.
-    onSettled: (_item, _error, { heap }) => void invalidateHeap(queryClient, heap),
+    onSettled: (_item, _error, { heap }) => {
+      invalidateOpenCounts(queryClient);
+      void invalidateHeap(queryClient, heap);
+    },
   });
 }
 
@@ -237,7 +245,10 @@ export function useUpdateItem(heap: HeapRef) {
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: (_saved, _error, { patch }) => {
+      if (patch.state !== undefined) invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
   });
 }
 
@@ -250,7 +261,10 @@ export function useReopenItem(heap: HeapRef) {
           params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
         }),
       ),
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
   });
 }
 
@@ -390,52 +404,6 @@ export function useArchiveOption(heap: HeapRef) {
         }),
       ),
     onSettled: () => invalidateParameters(queryClient, heap),
-  });
-}
-
-/** The heap's saved views in use, by name. */
-export function useSavedViews(heap: HeapRef) {
-  return useQuery({
-    queryKey: savedViewsKey(heap),
-    queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/heaps/{heap}/views", { params: { path: heap } })),
-    staleTime: 30_000,
-  });
-}
-
-export function useCreateSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: { name: string; view: ListViewInput }) =>
-      unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/views", { params: { path: heap }, body })),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
-  });
-}
-
-export function useUpdateSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ saved, patch }: { saved: SavedView; patch: { name?: string; view?: ListViewInput } }) =>
-      unwrap(
-        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/views/{view_id}", {
-          params: { path: { ...heap, view_id: saved.id }, header: { "If-Match": `"${saved.version}"` } },
-          body: patch,
-        }),
-      ),
-    // Also after a conflict, so the bar shows the version someone else saved.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
-  });
-}
-
-export function useArchiveSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (saved: SavedView) =>
-      unwrap(
-        await api.POST("/api/v1/teams/{team}/heaps/{heap}/views/{view_id}/archive", {
-          params: { path: { ...heap, view_id: saved.id } },
-        }),
-      ),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
   });
 }
 
@@ -587,14 +555,7 @@ export function useLeaveTeam(team: Team) {
       queryClient.removeQueries({ queryKey: teamKey(team.slug) });
       for (const { slug } of team.heaps) {
         const heap = { team: team.slug, heap: slug };
-        for (const key of [
-          heapKey(heap),
-          rankedKey(heap),
-          closedKey(heap),
-          tagsKey(heap),
-          savedViewsKey(heap),
-          parametersKey(heap),
-        ]) {
+        for (const key of [heapKey(heap), rankedKey(heap), closedKey(heap), tagsKey(heap), parametersKey(heap)]) {
           queryClient.removeQueries({ queryKey: key });
         }
       }
@@ -651,7 +612,6 @@ function invalidateHeapRecord(queryClient: QueryClient, heap: HeapRef) {
     invalidateTeam(queryClient, heap.team),
     invalidateHeap(queryClient, heap),
     queryClient.invalidateQueries({ queryKey: tagsKey(heap) }),
-    queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
     queryClient.invalidateQueries({ queryKey: parametersKey(heap) }),
   ]);
 }

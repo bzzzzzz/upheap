@@ -1,13 +1,15 @@
-import { X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-import type { BlockedLayout, HeapRef, Parameter, Size, StateMode } from "../api/client";
+import type { BlockedLayout, HeapRef, Parameter, ParameterList, Size, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
-import { SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { NEED_LABELS, NEEDS, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import {
   DEFAULT_MODES,
   filterCount,
+  isBlockedShown,
   joinList,
   MODE_LABELS,
   SHOWN_STATES,
@@ -15,15 +17,22 @@ import {
   SORTS,
   splitList,
   STATE_MODES,
-  withoutFilters,
+  viewChanges,
+  withoutFiltersOrViewChanges,
   type ListSearch,
+  type ShownState,
+  type ViewSetting,
 } from "./listView";
 
-export type Panel = "filters" | "view" | null;
+export type Panel = "filters" | null;
+
+/** How many items the view lists (`listed`) and would list without its filters (`total`). */
+export type ListCounts = { listed: number; total: number };
 
 /**
- * Search, sort, filters and view settings for the ranked list. Everything but the search text is a URL param that
- * the server applies; `onChange` gets the whole new view. `/` focuses the search box.
+ * Search, sort, and one Filters panel for the filters and what the list shows (app-ux.md, The list §7). Everything
+ * but the search text is a URL param that the server applies; `onChange` gets the whole new view. On a phone the
+ * sort moves into the panel. `/` focuses the search box.
  */
 export function ListControls({
   heapRef,
@@ -33,6 +42,7 @@ export function ListControls({
   onSearch,
   panel,
   onPanel,
+  counts,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
@@ -41,14 +51,19 @@ export function ListControls({
   onSearch: (text: string) => void;
   panel: Panel;
   onPanel: (panel: Panel) => void;
+  /** `undefined` while the view loads. */
+  counts: ListCounts | undefined;
 }) {
+  const phone = useMedia(PHONE);
   const parameters = useParameters(heapRef);
   const searchRef = useRef<HTMLInputElement>(null);
   const filtersRef = useRef<HTMLButtonElement>(null);
-  const viewRef = useRef<HTMLButtonElement>(null);
 
-  const filters = filterCount(view);
-  const viewChanged = SHOWN_STATES.some((state) => view[state] !== undefined) || view.blocked_layout !== undefined;
+  const changes = filterCount(view) + viewChanges(view).length;
+  // On a phone the sort lives in the panel too, so the button counts a sort other than priority; on a wider screen
+  // the sort select shows it. Reset all leaves the sort as it is either way.
+  const badge = changes + (phone && sortValue(view) !== "priority" ? 1 : 0);
+  const close = () => onPanel(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -63,11 +78,9 @@ export function ListControls({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const toggle = (which: Exclude<Panel, null>) => onPanel(panel === which ? null : which);
-
   return (
     <div className="mt-6">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2">
         <input
           ref={searchRef}
           type="search"
@@ -79,63 +92,84 @@ export function ListControls({
               onSearch("");
             }
           }}
-          placeholder="Search titles and descriptions  /"
+          placeholder={phone ? "Search" : "Search titles and descriptions  /"}
           aria-label="Search items"
-          className="h-9 min-w-0 flex-1 basis-48 rounded-lg border border-line bg-surface px-3 text-sm placeholder:text-muted pointer-coarse:h-11"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm placeholder:text-muted max-sm:h-11 max-sm:text-base pointer-coarse:h-11"
         />
-        <label className="inline-flex items-center gap-1 text-sm text-muted">
-          <span>Sort</span>
+        <label className="inline-flex h-9 shrink-0 items-center rounded-lg border border-line bg-surface pl-3 text-sm max-sm:hidden pointer-coarse:h-11">
+          <span className="text-muted">Sort by</span>
           <select
-            value={view.sort === "parameter" ? `parameter:${view.sort_parameter}` : (view.sort ?? "priority")}
+            value={sortValue(view)}
             onChange={(e) => onChange({ ...view, ...sortFrom(e.target.value) })}
-            className="h-9 max-w-44 rounded-lg border border-line bg-surface px-1.5 text-ink pointer-coarse:h-11"
+            className="h-full max-w-44 cursor-pointer rounded-lg bg-transparent pr-1.5 pl-1 font-medium text-ink outline-offset-2"
           >
-            {SORTS.map((sort) => (
-              <option key={sort} value={sort}>
-                {SORT_LABELS[sort]}
+            {sortOptions(view, parameters.data).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
-            {parameters.data?.parameters.map((parameter) => (
-              <option key={parameter.id} value={`parameter:${parameter.id}`}>
-                By {parameter.name}
-              </option>
-            ))}
-            {view.sort === "parameter" &&
-              !parameters.data?.parameters.some((parameter) => parameter.id === view.sort_parameter) && (
-                <option value={`parameter:${view.sort_parameter}`}>
-                  By {archivedName(parameters.data?.archived, view.sort_parameter) ?? "a parameter no longer in use"}{" "}
-                  (archived, priority order)
-                </option>
-              )}
           </select>
         </label>
-        <PanelButton
-          buttonRef={filtersRef}
-          open={panel === "filters"}
-          onClick={() => toggle("filters")}
-          active={filters > 0}
+        <button
+          ref={filtersRef}
+          type="button"
+          onClick={() => onPanel(panel === "filters" ? null : "filters")}
+          aria-expanded={panel === "filters"}
+          aria-haspopup="dialog"
+          // A label rather than hidden text: screen-reader-only spans are laid out as blocks, which puts a stray space
+          // in the name ("Filters , 2 on").
+          aria-label={`${phone ? "Filters and sort" : "Filters"}${badge > 0 ? `, ${badge} on` : ""}`}
+          className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium max-sm:relative max-sm:size-11 max-sm:px-0 pointer-coarse:h-11 ${
+            badge > 0
+              ? "border-accent/40 bg-accent-soft text-accent-ink"
+              : "border-line bg-surface text-ink-soft hover:bg-sunken"
+          }`}
         >
-          Filters{filters > 0 && ` (${filters})`}
-        </PanelButton>
-        <PanelButton buttonRef={viewRef} open={panel === "view"} onClick={() => toggle("view")} active={viewChanged}>
-          View
-        </PanelButton>
+          <SlidersHorizontal aria-hidden="true" className="size-4 shrink-0" />
+          {/* The phone's button is the icon alone, and opens the sort too, which its name says. */}
+          <span className="max-sm:hidden">Filters</span>
+          {badge > 0 && (
+            <span
+              aria-hidden="true"
+              className="min-w-5 rounded-full bg-accent px-1.5 text-xs leading-5 font-semibold text-surface tabular-nums max-sm:absolute max-sm:-top-1.5 max-sm:-right-1.5"
+            >
+              {badge}
+            </span>
+          )}
+        </button>
       </div>
 
-      <PopoverSheet title="Filters" triggerRef={filtersRef} isOpen={panel === "filters"} onClose={() => onPanel(null)}>
-        <FiltersPanel heapRef={heapRef} view={view} onChange={onChange} />
-      </PopoverSheet>
-      <PopoverSheet title="View settings" triggerRef={viewRef} isOpen={panel === "view"} onClose={() => onPanel(null)}>
-        <ViewPanel view={view} onChange={onChange} />
+      <PopoverSheet
+        title={phone ? "Filters & sort" : "Filters"}
+        triggerRef={filtersRef}
+        isOpen={panel === "filters"}
+        onClose={close}
+        action={
+          changes > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(withoutFiltersOrViewChanges(view))}
+              className="rounded-md px-1.5 py-1 text-sm font-medium text-accent-ink hover:bg-accent-soft pointer-coarse:min-h-11 pointer-coarse:px-3"
+            >
+              Reset all
+            </button>
+          )
+        }
+      >
+        {phone && <SortSection view={view} parameters={parameters.data} onChange={onChange} />}
+        <ShowSection view={view} onChange={onChange} />
+        <hr className="border-line" />
+        <NarrowSection heapRef={heapRef} view={view} onChange={onChange} />
+        <PanelFooter phone={phone} filtered={filterCount(view) > 0} counts={counts} onDone={close} />
       </PopoverSheet>
     </div>
   );
 }
 
 /**
- * The filters that are on, as chips that each take one off, so the user always sees why the list is short
- * (ux-overview.md, The list §3). `shown` of `total` says how much they leave out; `total` is the view's count without
- * them, `undefined` until it has loaded.
+ * The filters that are on and the view settings changed from the defaults, as chips that each take one off, so the
+ * user always sees why the list looks as it does (ux-overview.md, The list §3). `shown` of `total` says how much the
+ * filters leave out; `total` is the view's count without them, `undefined` until it has loaded.
  */
 export function FilterChips({
   heapRef,
@@ -158,11 +192,16 @@ export function FilterChips({
       label: `${parameter.name}: ${option.label}`,
     })),
   );
-  const chips = [
+  const filters = [
     ...splitList(view.tag).map((id) => ({
       key: `tag:${id}`,
       label: tags.data?.tags.find((tag) => tag.id === id)?.name ?? "A tag",
       remove: () => onChange({ ...view, tag: toggled(view.tag, id) }),
+    })),
+    ...splitList(view.need).map((need) => ({
+      key: `need:${need}`,
+      label: `Need: ${NEED_LABELS[need as keyof typeof NEED_LABELS]}`,
+      remove: () => onChange({ ...view, need: toggled(view.need, need) }),
     })),
     ...(["effort", "impact"] as const).flatMap((field) =>
       splitList(view[field]).map((size) => ({
@@ -177,156 +216,117 @@ export function FilterChips({
       remove: () => onChange({ ...view, param: toggled(view.param, id) }),
     })),
   ];
+  const settings = viewChanges(view).map((setting) => {
+    const [name, value] = describeSetting(view, setting);
+    return { key: setting, name, value, remove: () => onChange({ ...view, [setting]: undefined }) };
+  });
 
   return (
     <div role="group" aria-label="Filters on" className="mt-3 flex flex-wrap items-center gap-1.5">
-      {chips.map((chip) => (
-        <button
-          key={chip.key}
-          type="button"
-          onClick={chip.remove}
-          aria-label={`Remove filter ${chip.label}`}
-          className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1.5 pl-2.5 text-xs text-ink-soft hover:bg-line pointer-coarse:h-9"
-        >
+      {filters.map((chip) => (
+        <Chip key={chip.key} label={`Remove filter ${chip.label}`} onClick={chip.remove}>
           {chip.label}
-          <X aria-hidden="true" className="size-3" />
-        </button>
+        </Chip>
       ))}
-      {total !== undefined && (
+      {settings.map((chip) => (
+        <Chip key={chip.key} label={`Remove view setting ${chip.name} ${chip.value}`} onClick={chip.remove}>
+          {chip.name}: {chip.value}
+        </Chip>
+      ))}
+      {filters.length > 0 && total !== undefined && (
         <span className="ml-1 text-xs text-muted tabular-nums">
           {shown} of {total}
         </span>
       )}
+      <button
+        type="button"
+        onClick={() => onChange(withoutFiltersOrViewChanges(view))}
+        className="ml-1 rounded-md px-1 text-xs font-medium text-accent-ink hover:underline pointer-coarse:h-9"
+      >
+        Reset all
+      </button>
     </div>
   );
 }
 
-function PanelButton({
-  buttonRef,
-  open,
-  active,
-  onClick,
-  children,
-}: {
-  buttonRef: React.RefObject<HTMLButtonElement | null>;
-  open: boolean;
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+function Chip({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
-      ref={buttonRef}
       type="button"
       onClick={onClick}
-      aria-expanded={open}
-      aria-haspopup="dialog"
-      className={`h-9 rounded-lg border px-3 text-sm hover:bg-sunken pointer-coarse:h-11 ${
-        active ? "border-accent text-accent-ink" : "border-line text-ink-soft"
-      }`}
+      aria-label={label}
+      className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1.5 pl-2.5 text-xs text-ink-soft hover:bg-line pointer-coarse:h-9"
     >
       {children}
+      <X aria-hidden="true" className="size-3" />
     </button>
   );
 }
 
-/** A chip's look, filled once it's on, for the filters' toggles and the view's choices. */
-const chipClass =
-  "inline-flex h-8 items-center rounded-full border border-line px-3 text-sm text-ink-soft hover:border-muted pointer-coarse:h-10";
-const chipOnClass = "border-ink bg-ink text-canvas hover:border-ink";
-
-function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={`${chipClass} ${pressed ? chipOnClass : ""}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PanelRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-ink-soft">{label}</span>
-      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
-    </div>
-  );
-}
-
-/** One choice out of a few, as a radio group styled like the toggles. */
-function Choice<T extends string>({
-  label,
-  options,
-  value,
-  labels,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  options: readonly T[];
-  value: T;
-  labels: Record<T, string>;
-  onChange: (value: T) => void;
-  disabled?: boolean;
-}) {
-  const name = useId();
-  return (
-    <div role="radiogroup" aria-label={label} className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-ink-soft">{label}</span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {options.map((option) => (
-          <label key={option} className="inline-flex">
-            <input
-              type="radio"
-              name={name}
-              value={option}
-              checked={value === option}
-              disabled={disabled}
-              onChange={() => onChange(option)}
-              className="peer sr-only"
-            />
-            <span
-              className={`${chipClass} peer-checked:border-ink peer-checked:bg-ink peer-checked:text-canvas peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:opacity-50`}
-            >
-              {labels[option]}
-            </span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** The sort params for a value of the sort select: a fixed sort, or `parameter:<id>`. */
-function sortFrom(value: string): Pick<ListSearch, "sort" | "sort_parameter"> {
-  if (value.startsWith("parameter:")) {
-    return { sort: "parameter", sort_parameter: value.slice("parameter:".length) };
+/** A changed view setting as its chip says it: the state, or Blocked for its layout, and its value in lower case. */
+function describeSetting(view: ListSearch, setting: ViewSetting): [string, string] {
+  if (setting === "blocked_layout") {
+    return [STATE_LABELS.blocked, LAYOUT_LABELS[view.blocked_layout ?? "grouped"].toLowerCase()];
   }
-  const sort = SORTS.find((s) => s === value);
-  return { sort: sort === "priority" ? undefined : sort, sort_parameter: undefined };
+  return [STATE_LABELS[setting], MODE_LABELS[view[setting] ?? DEFAULT_MODES[setting]].toLowerCase()];
 }
 
-const archivedName = (archived: { id: string; name: string }[] | undefined, id: string | undefined) =>
-  archived?.find((parameter) => parameter.id === id)?.name;
-
-/** Archived options of `parameter` that the filter still names, labelled as archived so they can be removed. */
-function chosenArchived(parameter: Parameter, chosen: string[]) {
-  return parameter.archived_options
-    .filter((option) => chosen.includes(option.id))
-    .map((option) => ({ id: option.id, label: `${option.label} (archived)` }));
+/** The sort, phone only: the same choices as the sort select of a wider screen. */
+function SortSection({
+  view,
+  parameters,
+  onChange,
+}: {
+  view: ListSearch;
+  parameters: ParameterList | undefined;
+  onChange: (view: ListSearch) => void;
+}) {
+  return (
+    <Section title="Sort by">
+      <ChipChoice
+        label="Sort by"
+        options={sortOptions(view, parameters)}
+        value={sortValue(view)}
+        onChange={(value) => onChange({ ...view, ...sortFrom(value) })}
+      />
+    </Section>
+  );
 }
 
-/** Toggles `value` in a comma-separated list param. */
-const toggled = (raw: string | undefined, value: string) => {
-  const values = splitList(raw);
-  return joinList(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
-};
+/** Where each state goes, and where shown blocked items go. A dot marks a state changed from the default. */
+function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: ListSearch) => void }) {
+  const blockedShown = isBlockedShown(view);
+  const modes = STATE_MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }));
+  return (
+    <Section title="Show">
+      {SHOWN_STATES.map((state: ShownState) => (
+        <Segmented
+          key={state}
+          label={STATE_LABELS[state]}
+          changed={view[state] !== undefined}
+          options={modes}
+          value={view[state] ?? DEFAULT_MODES[state]}
+          onChange={(mode: StateMode) =>
+            onChange({ ...view, [state]: mode === DEFAULT_MODES[state] ? undefined : mode })
+          }
+        />
+      ))}
+      <Segmented
+        label="Shown blocked"
+        changed={viewChanges(view).includes("blocked_layout")}
+        options={BLOCKED_LAYOUTS.map((layout) => ({ value: layout, label: LAYOUT_LABELS[layout] }))}
+        value={view.blocked_layout ?? "grouped"}
+        disabled={!blockedShown}
+        onChange={(layout: BlockedLayout) =>
+          onChange({ ...view, blocked_layout: layout === "grouped" ? undefined : layout })
+        }
+      />
+    </Section>
+  );
+}
 
-function FiltersPanel({
+/** The filters: tags, need, effort, impact, then each custom parameter. */
+function NarrowSection({
   heapRef,
   view,
   onChange,
@@ -338,9 +338,10 @@ function FiltersPanel({
   const tags = useTags(heapRef);
   const parameters = useParameters(heapRef);
   const chosenTags = splitList(view.tag);
+  const chosenNeeds = splitList(view.need);
   const chosenOptions = splitList(view.param);
   return (
-    <>
+    <Section title="Narrow down">
       <PanelRow label="Tags (any)">
         {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}
         {tags.data?.tags.map((tag) => (
@@ -350,6 +351,17 @@ function FiltersPanel({
             onClick={() => onChange({ ...view, tag: toggled(view.tag, tag.id) })}
           >
             {tag.name}
+          </Toggle>
+        ))}
+      </PanelRow>
+      <PanelRow label="Need">
+        {NEEDS.map((need) => (
+          <Toggle
+            key={need}
+            pressed={chosenNeeds.includes(need)}
+            onClick={() => onChange({ ...view, need: toggled(view.need, need) })}
+          >
+            {NEED_LABELS[need]}
           </Toggle>
         ))}
       </PanelRow>
@@ -379,7 +391,7 @@ function FiltersPanel({
           ))}
         </PanelRow>
       ))}
-      {/* Archived parameters no longer filter; a filter a saved view still has on one is shown so it can be removed. */}
+      {/* Archived parameters no longer filter; a filter a link still has on one is shown so it can be removed. */}
       {parameters.data?.archived.map((parameter) => {
         const chosen = [...parameter.options, ...parameter.archived_options].filter((option) =>
           chosenOptions.includes(option.id),
@@ -400,57 +412,235 @@ function FiltersPanel({
           )
         );
       })}
-      {filterCount(view) > 0 && (
+    </Section>
+  );
+}
+
+/**
+ * How many items the panel's settings leave, and the way out: "N of M items" and Done on a wider screen, one
+ * "Show N items" button on a phone.
+ */
+function PanelFooter({
+  phone,
+  filtered,
+  counts,
+  onDone,
+}: {
+  phone: boolean;
+  filtered: boolean;
+  counts: ListCounts | undefined;
+  onDone: () => void;
+}) {
+  const items = (n: number) => (n === 1 ? "item" : "items");
+  const total = filtered ? counts?.total : undefined;
+  if (phone) {
+    const label = !counts
+      ? "Show items"
+      : total !== undefined
+        ? `Show ${counts.listed} of ${total} ${items(total)}`
+        : `Show ${counts.listed} ${items(counts.listed)}`;
+    return (
+      <div className="sticky bottom-0 -mx-4 mt-1 bg-surface px-4 pt-2">
         <button
           type="button"
-          onClick={() => onChange(withoutFilters(view))}
-          className="self-start text-sm text-muted underline hover:text-ink"
+          onClick={onDone}
+          className="h-12 w-full rounded-xl bg-ink text-[15px] font-semibold text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
         >
-          Clear filters
+          {label}
         </button>
-      )}
-    </>
-  );
-}
-
-function ViewPanel({ view, onChange }: { view: ListSearch; onChange: (view: ListSearch) => void }) {
-  const blockedShown = (view.blocked ?? DEFAULT_MODES.blocked) === "shown";
+      </div>
+    );
+  }
   return (
-    <>
-      {SHOWN_STATES.map((state) => (
-        <Choice
-          key={state}
-          label={STATE_LABELS[state]}
-          options={STATE_MODES}
-          labels={MODE_LABELS}
-          value={view[state] ?? DEFAULT_MODES[state]}
-          onChange={(mode: StateMode) =>
-            onChange({ ...view, [state]: mode === DEFAULT_MODES[state] ? undefined : mode })
-          }
-        />
-      ))}
-      <Choice
-        label="Shown blocked"
-        options={BLOCKED_LAYOUTS}
-        labels={LAYOUT_LABELS}
-        value={view.blocked_layout ?? "grouped"}
-        disabled={!blockedShown}
-        onChange={(layout: BlockedLayout) =>
-          onChange({ ...view, blocked_layout: layout === "grouped" ? undefined : layout })
-        }
-      />
+    <div className="sticky -bottom-4 -mx-4 -mb-4 flex items-center gap-2 border-t border-line bg-surface px-4 py-3">
+      {counts && total !== undefined && (
+        <span className="text-sm text-muted tabular-nums">
+          <b className="font-semibold text-ink">{counts.listed}</b> of {total} {items(total)}
+        </span>
+      )}
       <button
         type="button"
-        onClick={() =>
-          onChange({ ...view, open: undefined, in_progress: undefined, blocked: undefined, blocked_layout: undefined })
-        }
-        className="self-start text-sm text-muted underline hover:text-ink"
+        onClick={onDone}
+        className="ml-auto h-9 rounded-lg bg-ink px-4 text-sm font-medium text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:h-11"
       >
-        Reset to the default view
+        Done
       </button>
-    </>
+    </div>
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-3">
+      <h3 id={id} className="text-xs font-semibold tracking-wide text-muted uppercase">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** A chip's look, filled once it's on, for the filters' toggles and the phone's sort choices. */
+// The pressed look is amber, like the Filters button it answers to. Off and on each set their own text color, as two
+// utilities for one property in the same class list would leave the winner to the stylesheet's order.
+const chipClass = "inline-flex h-8 items-center rounded-full border px-3 text-sm pointer-coarse:h-10";
+const chipOffClass = "border-line text-ink-soft hover:border-muted";
+const chipOnClass = "border-accent/40 bg-accent-soft font-semibold text-accent-ink";
+
+function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={`${chipClass} ${pressed ? chipOnClass : chipOffClass}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PanelRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium text-ink-soft">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+type ChoiceOption<T extends string> = { value: T; label: string };
+
+/** One choice out of several, as a radio group of chips like the filters' toggles. */
+function ChipChoice<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly ChoiceOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-1.5">
+      {options.map((option) => (
+        <label key={option.value} className="inline-flex">
+          <input
+            type="radio"
+            name={name}
+            value={option.value}
+            checked={value === option.value}
+            onChange={() => onChange(option.value)}
+            className="peer sr-only"
+          />
+          <span
+            className={`${chipClass} ${chipOffClass} peer-checked:border-accent/40 peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:text-accent-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
+          >
+            {option.label}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** One choice out of a few, as a labelled row with a segmented control: a radio group. */
+function Segmented<T extends string>({
+  label,
+  changed,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  /** Whether the value differs from the default, which a dot by the label shows. */
+  changed: boolean;
+  options: readonly ChoiceOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  const name = useId();
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className={`inline-flex items-center gap-1.5 text-sm ${disabled ? "text-muted" : "text-ink"}`}>
+        {label}
+        {changed && <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />}
+      </span>
+      <div className="inline-flex rounded-lg bg-sunken p-0.5">
+        {options.map((option) => (
+          <label key={option.value} className="inline-flex">
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={value === option.value}
+              disabled={disabled}
+              onChange={() => onChange(option.value)}
+              className="peer sr-only"
+            />
+            <span className="inline-flex h-7 cursor-pointer items-center rounded-md px-2.5 text-[13px] text-ink-soft peer-checked:bg-surface peer-checked:font-medium peer-checked:text-ink peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-accent peer-disabled:cursor-default peer-disabled:opacity-50 pointer-coarse:h-9">
+              {option.label}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The sort as one value: a fixed sort, or `parameter:<id>`. */
+const sortValue = (view: ListSearch) =>
+  view.sort === "parameter" ? `parameter:${view.sort_parameter}` : (view.sort ?? "priority");
+
+/**
+ * The sorts on offer: the fixed ones, one per parameter, and an archived parameter the view still sorts by, so it
+ * shows as chosen.
+ */
+function sortOptions(view: ListSearch, parameters: ParameterList | undefined): ChoiceOption<string>[] {
+  const options = [
+    ...SORTS.map((sort) => ({ value: sort as string, label: SORT_LABELS[sort] })),
+    ...(parameters?.parameters ?? []).map((parameter) => ({
+      value: `parameter:${parameter.id}`,
+      label: `By ${parameter.name}`,
+    })),
+  ];
+  if (view.sort === "parameter" && !parameters?.parameters.some((parameter) => parameter.id === view.sort_parameter)) {
+    const name = parameters?.archived.find((parameter) => parameter.id === view.sort_parameter)?.name;
+    options.push({
+      value: sortValue(view),
+      label: `By ${name ?? "a parameter no longer in use"} (archived, priority order)`,
+    });
+  }
+  return options;
+}
+
+/** The sort params for a sort value: a fixed sort, or `parameter:<id>`. */
+function sortFrom(value: string): Pick<ListSearch, "sort" | "sort_parameter"> {
+  if (value.startsWith("parameter:")) {
+    return { sort: "parameter", sort_parameter: value.slice("parameter:".length) };
+  }
+  const sort = SORTS.find((s) => s === value);
+  return { sort: sort === "priority" ? undefined : sort, sort_parameter: undefined };
+}
+
+/** Archived options of `parameter` that the filter still names, labelled as archived so they can be removed. */
+function chosenArchived(parameter: Parameter, chosen: string[]) {
+  return parameter.archived_options
+    .filter((option) => chosen.includes(option.id))
+    .map((option) => ({ id: option.id, label: `${option.label} (archived)` }));
+}
+
+/** Toggles `value` in a comma-separated list param. */
+const toggled = (raw: string | undefined, value: string) => {
+  const values = splitList(raw);
+  return joinList(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
+};
+
 const BLOCKED_LAYOUTS: readonly BlockedLayout[] = ["grouped", "mixed"];
-const LAYOUT_LABELS: Record<BlockedLayout, string> = { grouped: "In their own group", mixed: "Mixed in" };
+const LAYOUT_LABELS: Record<BlockedLayout, string> = { grouped: "Own group", mixed: "Mixed in" };

@@ -11,7 +11,6 @@ import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
-import { SavedViewsBar } from "../components/SavedViewsBar";
 import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
@@ -21,12 +20,13 @@ import {
   placeOf,
   SHOWN_STATES,
   toListQuery,
+  viewChanges,
   type ListSearch,
 } from "../components/listView";
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
- * page only narrows it further by the search text. Saved views are links that put their settings in the URL.
+ * page only narrows it further by the search text.
  * `itemKey` is the key of the item open over the list, if any (app-ux.md, The item).
  */
 export function HeapPage({
@@ -190,6 +190,7 @@ function ListPage({
   onChangeState: ChangeState;
 }) {
   const filters = filterCount(view);
+  const changed = filters > 0 || viewChanges(view).length > 0;
   if (list.isPending) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
@@ -203,17 +204,20 @@ function ListPage({
       onSearch={onSearch}
       panel={panel}
       onPanel={onPanel}
+      // None while the previous view stands in for this one, so the panel never shows its counts as this view's.
+      counts={
+        list.data && !list.isPlaceholderData
+          ? { listed: everyEntry(list.data).length, total: list.data.unfiltered_count }
+          : undefined
+      }
     />
   );
-
-  const savedViews = <SavedViewsBar heapRef={heapRef} view={view} onViewChange={onViewChange} />;
 
   if (list.isError) {
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
       <main>
-        {badView && savedViews}
         {badView && controls}
         <div className="py-16 text-center">
           <p role="alert" className="text-red-700 dark:text-red-400">
@@ -253,13 +257,11 @@ function ListPage({
       {/* On a phone the heap name is already at the top, as the heap switcher. */}
       <h1 className="mt-2 text-xl font-semibold tracking-tight max-sm:sr-only sm:mt-6">{heap.name}</h1>
 
-      {savedViews}
-
       <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
 
       {controls}
 
-      {filters > 0 && (
+      {changed && (
         <FilterChips
           heapRef={heapRef}
           view={view}

@@ -15,6 +15,7 @@ export function PopoverSheet({
   isOpen,
   onClose,
   placement = "bottom end",
+  action,
   children,
 }: {
   title: string;
@@ -22,12 +23,14 @@ export function PopoverSheet({
   isOpen: boolean;
   onClose: () => void;
   placement?: "bottom end" | "bottom start" | "end top";
+  /** Beside the title, before ✕: an action on the whole panel, such as Reset all. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const phone = useMedia(PHONE);
   if (phone) {
     return (
-      <Sheet title={title} isOpen={isOpen} onClose={onClose}>
+      <Sheet title={title} isOpen={isOpen} onClose={onClose} aside={action}>
         <div className="flex flex-col gap-3 pt-1">{children}</div>
       </Sheet>
     );
@@ -48,6 +51,7 @@ export function PopoverSheet({
           <Heading slot="title" className="text-sm font-semibold">
             {title}
           </Heading>
+          <span className="ml-auto">{action}</span>
           <button
             type="button"
             onClick={onClose}

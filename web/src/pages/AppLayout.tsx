@@ -88,17 +88,26 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
 const navItemClass =
   "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
-/** With `current`, the link shows as active also where the router wouldn't say so. */
+/**
+ * With `current`, the link shows as active also where the router wouldn't say so. `count`, such as the heap's open
+ * items, shows on its right in the sidebar only; it stays out of the link's name, which is the view's.
+ */
 function NavLink({
   icon: Icon,
   label,
   current,
+  count,
   ...link
-}: LinkProps & { icon: LucideIcon; label: string; current?: boolean }) {
+}: LinkProps & { icon: LucideIcon; label: string; current?: boolean; count?: number }) {
   return (
     <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
+      {count !== undefined && (
+        <span aria-hidden="true" className="ml-auto hidden font-normal text-muted tabular-nums lg:inline">
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
@@ -124,6 +133,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
   const links = useShellLinks(me, heapRef);
   const { item: itemKey } = useParams({ strict: false });
   const views = heapRef && heapViews(heapRef, itemKey !== undefined);
+  const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
 
   return (
     <aside
@@ -150,38 +160,36 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
         </HeapSwitcher>
       </div>
 
-      <nav aria-label="Heaps" className="hidden flex-col gap-0.5 lg:flex">
-        {me.teams.map((team) => (
-          <div key={team.id} className="flex flex-col gap-0.5">
-            <h2 className="px-3 pt-1 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">
-              {me.teams.length > 1 ? team.name : "Heaps"}
-            </h2>
-            {team.heaps.map((heap) => (
-              <Link
-                key={heap.id}
-                to="/teams/$team/heaps/$heap"
-                params={{ team: team.slug, heap: heap.slug }}
-                activeOptions={{ includeSearch: false }}
-                className="flex min-h-9 items-center rounded-lg px-3 text-sm text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:font-semibold data-[status=active]:text-ink"
-              >
-                <span className="truncate">
-                  {heap.name}
-                  {heap.archived && <span className="text-muted"> (archived)</span>}
-                </span>
-              </Link>
-            ))}
-          </div>
-        ))}
-      </nav>
+      <div className="hidden lg:block">
+        <HeapSwitcher me={me} heapRef={heapRef} placement="bottom start">
+          {(props) => (
+            <button
+              type="button"
+              {...props}
+              className="flex h-10 w-full items-center gap-2 rounded-[10px] border border-line-strong bg-surface px-3 text-left text-sm outline-offset-2 hover:border-muted focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              {/* The name is what the button shows, after what it does. */}
+              <span className="min-w-0 flex-1 truncate">
+                <span className="sr-only">Switch heap: </span>
+                {links.heap ? (
+                  <>
+                    <span className="font-semibold text-ink">{links.heap.name}</span>
+                    {links.heap.archived && <span className="text-muted"> (archived)</span>}
+                    {heapTeam && <span className="text-muted"> · {heapTeam.name}</span>}
+                  </>
+                ) : (
+                  <span className="text-ink-soft">Choose a heap</span>
+                )}
+              </span>
+              <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted" />
+            </button>
+          )}
+        </HeapSwitcher>
+      </div>
 
       {views && (
         <nav aria-label="Heap views" className="flex flex-col gap-1 lg:gap-0.5">
-          {links.heap && (
-            <p className="hidden truncate px-3 pb-1 text-xs font-semibold tracking-wide text-muted uppercase lg:block">
-              {links.heap.name}
-            </p>
-          )}
-          <NavLink {...views.open} icon={List} label="Open" />
+          <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
           <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
           <NavLink {...views.activity} icon={Activity} label="Activity" />
           <NavLink {...views.tags} icon={Tag} label="Tags" />
@@ -345,7 +353,7 @@ function MoreSheet({
 
 /**
  * Every heap, by team, with a check on the one on screen (ux-overview.md, What comes first §3): a popover beside the
- * rail on a tablet, a sheet of 52 px rows on a phone. It ends with a new heap in the heap's own team, where the user
+ * rail on a tablet or under the sidebar's heap button on a wide screen, a sheet of 52 px rows on a phone. It ends with a new heap in the heap's own team, where the user
  * may create one.
  */
 function HeapSwitcher({
@@ -356,11 +364,12 @@ function HeapSwitcher({
 }: {
   me: Me;
   heapRef: HeapRef | undefined;
-  placement?: "bottom end" | "end top";
+  placement?: "bottom end" | "bottom start" | "end top";
   children: (props: {
     ref: RefObject<HTMLButtonElement | null>;
     onClick: () => void;
     "aria-expanded": boolean;
+    "aria-haspopup": "dialog";
   }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -370,7 +379,7 @@ function HeapSwitcher({
 
   return (
     <>
-      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open })}
+      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open, "aria-haspopup": "dialog" })}
       <PopoverSheet title="Heaps" triggerRef={trigger} isOpen={open} onClose={close} placement={placement}>
         <nav aria-label="Heaps" className="-mx-1 flex flex-col">
           {me.teams.map((t) => (

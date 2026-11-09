@@ -248,6 +248,40 @@ async fn the_size_filters_keep_items_with_one_of_the_sizes() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_need_filter_keeps_items_with_one_of_the_needs() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    add(
+        &app,
+        &session,
+        &heap,
+        json!({ "title": "Critical", "need": "critical" }),
+    )
+    .await?;
+    add(
+        &app,
+        &session,
+        &heap,
+        json!({ "title": "Expected", "need": "expected" }),
+    )
+    .await?;
+    add(&app, &session, &heap, json!({ "title": "Idea", "need": "idea" })).await?;
+
+    // Act
+    let response = list(&app, &session, &heap, "need=critical,expected").await?;
+
+    // Assert
+    expect_that!(
+        titles(&response.body["ranked"]),
+        unordered_elements_are![eq("Critical"), eq("Expected")]
+    );
+    expect_that!(response.body["unfiltered_count"], eq(&json!(3)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn sorting_by_due_lists_the_soonest_first_and_renumbers_positions() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
@@ -447,7 +481,13 @@ async fn malformed_list_values_are_bad_requests() -> Result<()> {
     let app = TestApp::start().await?;
     let (session, heap) = app.register("ada@example.test").await?;
 
-    for query in ["effort=xs", "impact=s,huge", "tag=not-a-uuid", "blocked=collapsed"] {
+    for query in [
+        "effort=xs",
+        "impact=s,huge",
+        "need=urgent",
+        "tag=not-a-uuid",
+        "blocked=collapsed",
+    ] {
         // Act
         let response = list(&app, &session, &heap, query).await?;
 
