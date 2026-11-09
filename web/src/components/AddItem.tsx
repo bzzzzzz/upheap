@@ -22,8 +22,8 @@ import { useToast, useToastCount } from "./UndoToast";
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
 /**
- * The way in to adding an item (app-ux.md, Adding an item): a field-like button above the list, or `N`, opens the Add
- * dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone, where the
+ * The way in to adding an item (app-ux.md, Adding an item): the Add item button beside the heap name, or `N`, opens
+ * the Add dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone, where the
  * + in the middle of the tabs opens it instead of this button (ux-overview.md, What comes first §1). `view` is the
  * list's, for the dialog to start from, and `search` the text the list is narrowed by.
  */
@@ -63,14 +63,11 @@ export function AddItem({
         onClick={() => setOpen(true)}
         disabled={disabled}
         aria-keyshortcuts="n"
-        className="my-4 flex min-h-12 w-full max-sm:hidden items-center gap-2 rounded-xl border border-line bg-surface px-4 text-left text-muted shadow-sm hover:border-muted disabled:opacity-50"
+        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] bg-ink px-3.5 text-sm font-semibold text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 max-sm:hidden"
       >
-        <Plus aria-hidden="true" className="size-4 shrink-0" />
-        <span className="flex-1">Add an item</span>
-        <kbd
-          aria-hidden="true"
-          className="hidden rounded border border-line px-1.5 text-xs font-sans text-muted sm:inline"
-        >
+        <Plus aria-hidden="true" className="size-4 shrink-0" strokeWidth={2.25} />
+        Add item
+        <kbd aria-hidden="true" className="font-sans text-xs font-medium opacity-70">
           N
         </kbd>
       </button>

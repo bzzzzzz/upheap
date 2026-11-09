@@ -133,8 +133,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 ### Adding an item
 
-1. Clicking or tapping "Add an item" (or pressing `N`) opens the Add dialog: a modal over the list on a wide screen
-   and a tablet, a sheet above the keyboard on a phone. The field above the list stays only as the way in.
+1. The Add item button beside the heap name (or `N`) opens the Add dialog: a modal over the list on a wide screen and
+   a tablet. On a phone the + in the middle of the tabs opens it as a sheet above the keyboard.
 2. The dialog has every field Add item takes: title (focused), description, need, effort, impact, due, tags, and the
    parameters linked to the chosen tags, which appear as soon as a tag is added. Each is optional apart from the
    title and the need: Add stays off until a need is picked. Nothing is picked for you, so every need is someone's

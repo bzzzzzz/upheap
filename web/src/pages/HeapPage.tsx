@@ -254,10 +254,11 @@ function ListPage({
 
   return (
     <main>
-      {/* On a phone the heap name is already at the top, as the heap switcher. */}
-      <h1 className="mt-2 text-xl font-semibold tracking-tight max-sm:sr-only sm:mt-6">{heap.name}</h1>
-
-      <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
+      <div className="flex items-center justify-between gap-4 sm:mt-6 sm:mb-4">
+        {/* On a phone the heap name is already at the top, as the heap switcher. */}
+        <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight max-sm:sr-only">{heap.name}</h1>
+        <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
+      </div>
 
       {controls}
 
