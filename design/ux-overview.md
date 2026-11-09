@@ -96,7 +96,9 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    state buttons are Start / Blocked / Done in a bar at the bottom of the sheet. In the browser they're the main
    button plus the others, as above.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
-   title, one-line explanation, "+ New" at the top right, rows with inline edit, and ⋯ for the rarer actions.
+   title, one-line explanation, a way to add one near the top (a "+ New" button, or a short form when adding takes a
+   field or two), rows that turn into a form when edited, and the rarer actions out of the way (a ⋯, or the foot of
+   a card).
 4. **After the session expires, signing in returns the user to the page they were on** (gap 16).
 
 ## What comes first

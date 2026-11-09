@@ -247,8 +247,8 @@ scope for now; "browser" is 1024 px and up, "phone" under 640 px.
 G-shell-wide, G-shell-phone, M-more, M-heap-switcher, G-storage-note (local), G-session-expired (server), and
 E-loading _(frequency: every screen shows it, and a blank page reads as broken)_.
 
-- **Browser:** the sidebar with every heap (grouped by team when there are several), the open heap's Open and
-  Closed, then Team (server), Account and the storage note (local). The sidebar is the heap switcher. Loading keeps the previous view, dimmed.
+- **Browser:** the sidebar with the heap button (it opens the switcher), the open heap's Open, Closed, Activity and
+  Settings, then Teams, Account and the storage note (local). Loading keeps the previous view, dimmed.
 - **Phone:** the top bar with the heap name, which opens M-heap-switcher as a sheet; the tabs Open, Closed, +,
   Settings and More; the More sheet with Activity, Team (server), Teams and Account; the storage note under the
   content (local).

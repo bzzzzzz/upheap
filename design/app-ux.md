@@ -90,7 +90,8 @@ the block when it opens.
 A tablet gets its own layout rather than a stretched phone or a squeezed wide screen:
 
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
-   list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels; the account sits at the bottom.
+   list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels;
+   the account sits at the bottom.
 2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows,
    including the effort and impact sizes, at touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
