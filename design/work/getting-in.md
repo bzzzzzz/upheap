@@ -566,6 +566,54 @@ Exit: 0 made; 2 no user given; 3 no such user; 5 the database can't be reached.
 
 ## 6. Stages
 
+### Stage 1: the golden path, end to end
+
+An admin makes a link, a newcomer creates an account through it on a closed server and lands in the team, a
+second person with an account joins through the same link, and the link stops after a week. Five pieces, one pull
+request each, in this order. Commitments are numbered as in the Golden path, rules and scenarios as in Behaviours.
+
+1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
+   readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
+   are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
+   hides the team from an outsider, with rows in the access-control table test; a personal team has none;
+   scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Commitments 1 to 5 and 10, and the making
+   and revoking half of 11.
+2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
+   state (rule 5). A signed-in user joins as a member (rules 6 and 7), a person removed since the link was made is
+   refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
+   are tests; a direct add still works as before. Commitments 6, 8, 9 and 12, the signed-in half of 7, and the
+   rest of 11.
+3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
+   (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
+   on a closed server is still refused. Commitments 13 and 14, and the rest of 7.
+4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
+   Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
+   the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
+   it.
+5. **The invite page, and the path as a test.** Signed out with Create account and Sign in, signed in with the
+   confirm, and the page for a link that can't be used (Interface 2 to 4), with the landing rule. Done when: a
+   Playwright golden path runs the whole of stage 1 against a server with registration closed, at three widths:
+   an admin makes a link, a newcomer creates an account and lands in the heap, a second user signs in and joins,
+   and a revoked link says so.
+
+Deployment needs no piece: production already runs with registration closed, and the path is what makes that
+usable. Each pull request updates the Getting in row in progress.md.
+
+### Stage 2: the rest of the first set
+
+1. **Past links and each link's history** on the Team page (the rest of Interface 1).
+2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
+   without History; commitments 15 and 16; rules 13 to 15; scenario 7).
+3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
+   (Interface 6, 7 and 9; commitments 17 to 19; rules 16 to 18; scenarios 8 to 10).
+4. **Account history** under the Password card (the rest of Interface 8; commitment 20; rules 21 and 22).
+5. **This doc dissolves:** the flows into ux.md, the concepts and rules into architecture.md, the choices into
+   decisions.md, and the file goes.
+
+### Later
+
+The Later list at the end of this doc. Nothing there is a commitment.
+
 ## Parked
 
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
