@@ -223,9 +223,10 @@ test("an item the list's search hides is added without a position", async ({ pag
 test("the item goes into the heap chosen in the dialog's title", async ({ page, heapPath }) => {
   // A second heap to choose, from the team's page.
   await page.goto(heapPath.replace(/\/heaps\/[^/]+$/, ""));
+  await page.getByRole("button", { name: "+ New heap" }).click();
   await page.getByLabel("New heap name").fill("Garden");
   await page.getByRole("button", { name: "Add heap" }).click();
-  await expect(page.getByLabel("Name of heap Garden")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Heaps" }).getByText("Garden", { exact: true })).toBeVisible();
   await page.goto(heapPath);
   await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
 

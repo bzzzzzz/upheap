@@ -27,6 +27,17 @@
   --param-ink: #4c1d95;
   --overdue-soft: #fee2e2;
   --overdue-ink: #991b1b;
+  /* Initials avatars (WideTeam): a soft fill and its ink, five hues picked by the user. */
+  --avatar-1: #fde68a;
+  --avatar-1-ink: #78350f;
+  --avatar-2: #ccfbf1;
+  --avatar-2-ink: #115e59;
+  --avatar-3: #e0e7ff;
+  --avatar-3-ink: #3730a3;
+  --avatar-4: #fce7f3;
+  --avatar-4-ink: #9d174d;
+  --avatar-5: #e0f2fe;
+  --avatar-5-ink: #075985;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,6 +58,16 @@
     --param-ink: #ddd6fe;
     --overdue-soft: #450a0a;
     --overdue-ink: #fca5a5;
+    --avatar-1: #78350f;
+    --avatar-1-ink: #fde68a;
+    --avatar-2: #134e4a;
+    --avatar-2-ink: #99f6e4;
+    --avatar-3: #312e81;
+    --avatar-3-ink: #c7d2fe;
+    --avatar-4: #831843;
+    --avatar-4-ink: #fbcfe8;
+    --avatar-5: #0c4a6e;
+    --avatar-5-ink: #bae6fd;
   }
 }
 
@@ -68,6 +89,16 @@
   --color-param-ink: var(--param-ink);
   --color-overdue-soft: var(--overdue-soft);
   --color-overdue-ink: var(--overdue-ink);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-1-ink: var(--avatar-1-ink);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-2-ink: var(--avatar-2-ink);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-3-ink: var(--avatar-3-ink);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-4-ink: var(--avatar-4-ink);
+  --color-avatar-5: var(--avatar-5);
+  --color-avatar-5-ink: var(--avatar-5-ink);
 }
 
 @layer base {

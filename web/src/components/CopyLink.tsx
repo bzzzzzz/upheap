@@ -10,6 +10,21 @@ export function shortLink(...handles: string[]): string {
     .href;
 }
 
+/** Copies the short link to what the handles name; `copied` is true for a moment after. */
+export function useCopyLink() {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return {
+    copied,
+    copy: (...handles: string[]) =>
+      void navigator.clipboard.writeText(shortLink(...handles)).then(() => setCopied(true)),
+  };
+}
+
 /**
  * Copies the short link to what `handles` name, and says so for a moment. `label` replaces "Copy link" as the button's
  * text, such as an item's key, and `description` then says what the button does.
@@ -25,19 +40,14 @@ export function CopyLink({
   description?: string;
   className?: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
+  const { copied, copy } = useCopyLink();
 
   // The status sits beside the button rather than in it, as a live region inside a button doesn't name it.
   return (
     <>
       <button
         type="button"
-        onClick={() => void navigator.clipboard.writeText(shortLink(...handles)).then(() => setCopied(true))}
+        onClick={() => copy(...handles)}
         title={description}
         className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-soft hover:bg-sunken ${className}`}
       >

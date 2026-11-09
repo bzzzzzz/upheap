@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ProblemText } from "./ProblemText";
 
@@ -15,7 +15,8 @@ const defaultClasses: NameFormClasses = { input: inputClass, save: primaryButton
 
 /**
  * A name that can be edited in place: Save and Cancel appear once it changes. When the server sends a newer
- * `version` (a save, or someone else's edit), the input shows it.
+ * `version` (a save, or someone else's edit), the input shows it. With `onCancel`, the form was opened to edit: Cancel
+ * always shows, and it or Escape closes the form.
  */
 export function NameForm({
   label,
@@ -27,6 +28,8 @@ export function NameForm({
   onSave,
   className = "",
   classes = defaultClasses,
+  onCancel,
+  autoFocus = false,
 }: {
   label: string;
   value: string;
@@ -38,8 +41,24 @@ export function NameForm({
   className?: string;
   /** The input's, buttons' and error's look, for a page in the design tokens; other pages keep the defaults. */
   classes?: NameFormClasses;
+  onCancel?: () => void;
+  autoFocus?: boolean;
 }) {
   const [name, setName] = useState(value);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    // Opened from a menu or a sheet, which gives focus back to what opened it a frame after it closes; this comes
+    // after that.
+    let second = 0;
+    const first = window.requestAnimationFrame(() => {
+      second = window.requestAnimationFrame(() => input.current?.focus());
+    });
+    return () => {
+      window.cancelAnimationFrame(first);
+      window.cancelAnimationFrame(second);
+    };
+  }, [autoFocus]);
   const [shownVersion, setShownVersion] = useState(version);
   if (shownVersion !== version) {
     setShownVersion(version);
@@ -56,24 +75,32 @@ export function NameForm({
   return (
     <form onSubmit={submit} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
       <input
+        ref={input}
         aria-label={label}
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Escape" && changed) {
-            e.preventDefault();
-            setName(value);
-          }
+          if (e.key !== "Escape" || (!changed && !onCancel)) return;
+          e.preventDefault();
+          setName(value);
+          onCancel?.();
         }}
         maxLength={maxLength}
         className={`${classes.input} min-w-0 flex-1 ${className}`}
       />
-      {changed && (
+      {(changed || onCancel) && (
         <>
-          <button type="submit" disabled={pending || name.trim() === ""} className={classes.save}>
+          <button type="submit" disabled={pending || !changed || name.trim() === ""} className={classes.save}>
             Save
           </button>
-          <button type="button" onClick={() => setName(value)} className={classes.cancel}>
+          <button
+            type="button"
+            onClick={() => {
+              setName(value);
+              onCancel?.();
+            }}
+            className={classes.cancel}
+          >
             Cancel
           </button>
         </>
