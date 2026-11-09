@@ -3,7 +3,7 @@
 How a person gets an account, gets into a team, and keeps being able to sign in: invite links, password change and
 password reset. In progress, by the steps of the maintainer's design method. Scale: a feature area, so Value is
 short and [product.md](../product.md), [ux.md](../ux.md) and [architecture.md](../architecture.md) are given.
-Step agreed: 4.
+Step agreed: 5.
 
 ## Constraints
 
