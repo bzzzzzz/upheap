@@ -55,12 +55,42 @@ pub fn load_config(dir: &Path) -> Result<ConfigFile, ConfigError> {
     toml::from_str(&text).map_err(|source| ConfigError::Parse { path, source })
 }
 
-/// Changes the config file in `dir` with `change`, and returns what `change` returns.
+/// Changes the config file in `dir` with `change`, and returns what `change` returns. Runs on the blocking pool, as
+/// it waits for a lock and writes a file.
+pub async fn update_config<T: Send + 'static>(
+    dir: &Path,
+    change: impl FnOnce(&mut ConfigFile) -> T + Send + 'static,
+) -> Result<T, ConfigError> {
+    let owned = dir.to_path_buf();
+    tokio::task::spawn_blocking(move || update_config_now(&owned, change))
+        .await
+        .map_err(|err| ConfigError::Write {
+            path: dir.join(CONFIG_FILE),
+            source: std::io::Error::other(err),
+        })?
+}
+
+/// [`update_config`], on this thread.
 ///
-/// The file is read again just before the change, so a setting another `upheap` wrote since startup isn't lost, and
-/// written to a temporary file in the same directory that then replaces it, so a reader never sees half a file.
-/// Creates the directory when needed.
-pub fn update_config<T>(dir: &Path, change: impl FnOnce(&mut ConfigFile) -> T) -> Result<T, ConfigError> {
+/// Holds an exclusive lock on `config.lock` in `dir` throughout, and reads the file again under it, so two
+/// `upheap`s changing different settings at once both keep theirs. Writes a temporary file in the same directory
+/// that then replaces the config, so a reader never sees half a file. Creates the directory when needed.
+fn update_config_now<T>(dir: &Path, change: impl FnOnce(&mut ConfigFile) -> T) -> Result<T, ConfigError> {
+    let lock_path = dir.join("config.lock");
+    let lock = || -> std::io::Result<std::fs::File> {
+        std::fs::create_dir_all(dir)?;
+        let file = std::fs::File::options()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)?;
+        file.lock()?;
+        Ok(file)
+    };
+    let _lock = lock().map_err(|source| ConfigError::Write {
+        path: lock_path.clone(),
+        source,
+    })?;
     let mut config = load_config(dir)?;
     let changed = change(&mut config);
     let path = dir.join(CONFIG_FILE);
@@ -120,7 +150,7 @@ pub fn resolve_server(flag: Option<&str>, env: Option<&str>, file: Option<&str>)
 }
 
 /// Whether `url`'s host is this machine: `localhost`, `127.0.0.0/8` or `::1`.
-fn is_loopback(url: &Url) -> bool {
+pub fn is_loopback(url: &Url) -> bool {
     let host = url.host_str().unwrap_or_default();
     let ip = host.trim_start_matches('[').trim_end_matches(']');
     host.eq_ignore_ascii_case("localhost") || ip.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
@@ -235,7 +265,7 @@ mod tests {
             server: Some("https://example.test".to_owned()),
             heap: Some("team/heap".to_owned()),
         };
-        update_config(&dir.path().join("nested"), |file| *file = config.clone())?;
+        update_config_now(&dir.path().join("nested"), |file| *file = config.clone())?;
         verify_that!(load_config(&dir.path().join("nested"))?, eq(&config))
     }
 
@@ -243,14 +273,15 @@ mod tests {
     fn an_update_keeps_what_another_writer_saved_since() -> googletest::Result<()> {
         // Arrange: this `upheap` read an empty file at startup; another one has since saved a heap.
         let dir = tempfile::tempdir()?;
-        update_config(dir.path(), |file| file.heap = Some("team/heap".to_owned()))?;
+        update_config_now(dir.path(), |file| file.heap = Some("team/heap".to_owned()))?;
 
         // Act
-        update_config(dir.path(), |file| file.server = Some("https://example.test".to_owned()))?;
+        update_config_now(dir.path(), |file| file.server = Some("https://example.test".to_owned()))?;
 
         // Assert
+        // The config and its lock, and no temporary file left behind.
         let leftovers = std::fs::read_dir(dir.path())?.count();
-        verify_that!(leftovers, eq(1))?;
+        verify_that!(leftovers, eq(2))?;
         verify_that!(
             load_config(dir.path())?,
             eq(&ConfigFile {
@@ -258,6 +289,21 @@ mod tests {
                 heap: Some("team/heap".to_owned()),
             })
         )
+    }
+
+    #[gtest]
+    fn an_unknown_setting_is_named() -> googletest::Result<()> {
+        let dir = tempfile::tempdir()?;
+        std::fs::write(dir.path().join(CONFIG_FILE), "colour = \"always\"\n")?;
+
+        let loaded = load_config(dir.path());
+
+        let Err(ConfigError::Parse { source, .. }) = loaded else {
+            return Err(googletest::internal::test_outcome::TestAssertionFailure::create(
+                format!("{loaded:?}"),
+            ));
+        };
+        verify_that!(source.to_string(), contains_substring("unknown field `colour`"))
     }
 
     #[gtest]

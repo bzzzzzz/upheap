@@ -16,6 +16,7 @@ use crate::auth::login::LoginError;
 use crate::auth::loopback::LoopbackError;
 use crate::auth::{AuthError, TokenStoreError};
 use crate::client::ClientError;
+use crate::commands::UsageError;
 use crate::config::{ConfigError, SettingError};
 use crate::lookup::LookupError;
 
@@ -25,6 +26,8 @@ pub enum CliError {
     Config(#[from] ConfigError),
     #[error(transparent)]
     Setting(#[from] SettingError),
+    #[error(transparent)]
+    Usage(#[from] UsageError),
     #[error(transparent)]
     Lookup(#[from] LookupError),
     #[error(transparent)]
@@ -44,7 +47,7 @@ impl CliError {
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::Config(_) | Self::TokenStore(_) => 6,
-            Self::Setting(_) => 2,
+            Self::Setting(_) | Self::Usage(_) => 2,
             Self::Lookup(LookupError::MalformedHeap { .. }) => 2,
             Self::Lookup(
                 LookupError::UnknownHeap { .. }
@@ -55,7 +58,7 @@ impl CliError {
                 | LookupError::UnknownParameter { .. },
             ) => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
-            Self::Auth(AuthError::Store(_) | AuthError::Lock { .. }) => 6,
+            Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err)) | Self::Client(err) => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
@@ -111,6 +114,10 @@ impl CliError {
                 | Self::Auth(AuthError::Store(TokenStoreError::Corrupt { .. })),
                 _,
             ) => Some("sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`"),
+            (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`"),
+            (Self::Config(ConfigError::Parse { .. }), _) => {
+                Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file")
+            }
             (Self::Auth(AuthError::Revoke(_)), _) => {
                 Some("to forget the sign-in on this machine only, run `upheap auth logout --local`")
             }

@@ -30,12 +30,14 @@ pub async fn run(args: UseArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     let token = app.access_token(&client).await?;
     let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
     let handle = resolve_heap(name, &me.value)?;
-    let new_server = config::update_config(app.config_dir()?, |file| {
-        file.heap = Some(handle.to_string());
-        let moved = file.server.as_deref() != Some(key.as_str());
-        file.server = Some(key.clone());
+    let (heap, server) = (handle.to_string(), key.clone());
+    let new_server = config::update_config(app.config_dir()?, move |file| {
+        file.heap = Some(heap);
+        let moved = file.server.as_deref() != Some(server.as_str());
+        file.server = Some(server);
         moved
-    })?;
+    })
+    .await?;
     if out.mode() == Mode::Human {
         out.line(&format!("Commands now work in {handle} unless told otherwise."))?;
         if new_server {

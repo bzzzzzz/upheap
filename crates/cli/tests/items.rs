@@ -333,3 +333,47 @@ async fn control_characters_in_server_text_are_shown_not_run() -> Result<()> {
     expect_that!(listed["ranked"][0]["item"]["title"], eq(&item["title"]));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn json_on_a_terminal_escapes_c1_characters_and_piped_json_is_as_it_came() -> Result<()> {
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    server
+        .add_item(&ada, HEAP, json!({ "title": "Pay\u{9b}2J the bills" }))
+        .await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+
+    let piped = cli.run(&["item", "list", "--json"]).await;
+    cli.env.stdout_is_terminal = true;
+    let on_terminal = cli.run(&["item", "list", "--json"]).await;
+
+    expect_that!(piped.stdout, contains_substring("Pay\u{9b}2J"));
+    expect_that!(on_terminal.stdout, not(contains_substring("\u{9b}")));
+    expect_that!(on_terminal.stdout, contains_substring("Pay\\u009b2J"));
+    let read: Value = serde_json::from_str(&on_terminal.stdout)?;
+    let as_it_came: Value = serde_json::from_str(&piped.stdout)?;
+    expect_that!(read, eq(&as_it_came));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sort_parameter_doesnt_go_with_another_sort() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    let listed = cli
+        .run(&["item", "list", "--sort", "due", "--sort-parameter", "Customer"])
+        .await;
+
+    expect_that!(
+        listed.stderr,
+        eq(
+            "error: --sort-parameter sorts by a custom parameter, so it doesn't go with --sort due; leave out one of them\n"
+        )
+    );
+    expect_that!(listed.exited(2), eq(true));
+    Ok(())
+}

@@ -24,6 +24,8 @@ pub struct Output {
     stderr: Box<dyn Write + Send>,
     mode: Mode,
     color: bool,
+    stdout_is_terminal: bool,
+    stderr_is_terminal: bool,
 }
 
 /// How a cell of a table looks.
@@ -70,6 +72,17 @@ impl Output {
             stderr,
             mode,
             color,
+            stdout_is_terminal: false,
+            stderr_is_terminal: false,
+        }
+    }
+
+    /// Says which streams are terminals, where `--json` escapes the characters a terminal would run.
+    pub fn on_terminals(self, stdout: bool, stderr: bool) -> Self {
+        Self {
+            stdout_is_terminal: stdout,
+            stderr_is_terminal: stderr,
+            ..self
         }
     }
 
@@ -93,9 +106,11 @@ impl Output {
         writeln!(self.stdout, "{}{}", defuse(prefix), line.0)
     }
 
-    /// Writes the server's body to stdout as it came, ending with a newline.
+    /// Writes the server's body to stdout as it came, ending with a newline. On a terminal, with its DEL and C1
+    /// characters escaped, which leaves the JSON value the same.
     pub fn json(&mut self, body: &str) -> std::io::Result<()> {
-        writeln!(self.stdout, "{}", body.trim_end())
+        let body = json_for(body.trim_end(), self.stdout_is_terminal);
+        writeln!(self.stdout, "{body}")
     }
 
     /// Writes a line to stderr, with any control characters in it made harmless.
@@ -103,9 +118,11 @@ impl Output {
         writeln!(self.stderr, "{}", defuse(text))
     }
 
-    /// Writes the server's body to stderr as it came, ending with a newline: a problem, with `--json`.
+    /// Writes the server's body to stderr as it came, ending with a newline: a problem, with `--json`. On a
+    /// terminal, escaped as [`Output::json`] does.
     pub fn json_note(&mut self, body: &str) -> std::io::Result<()> {
-        writeln!(self.stderr, "{}", body.trim_end())
+        let body = json_for(body.trim_end(), self.stderr_is_terminal);
+        writeln!(self.stderr, "{body}")
     }
 
     /// `text` in `tone`, coloured when colour is on. `text` must have been defused already, as the colour codes are
@@ -157,6 +174,28 @@ impl Output {
     }
 }
 
+/// `body`, a JSON document, with DEL and the C1 controls (U+007F to U+009F) written as `\u007f` to `\u009f` when it
+/// goes to a terminal, which could run them (U+009B starts an escape sequence on some). JSON allows a control
+/// character only inside a string, where the escape means the same character, so the value doesn't change. Piped,
+/// the body is left byte for byte as it came.
+fn json_for(body: &str, terminal: bool) -> std::borrow::Cow<'_, str> {
+    let is_raw_control = |c: char| ('\u{7f}'..='\u{9f}').contains(&c);
+    if !terminal || !body.contains(is_raw_control) {
+        return std::borrow::Cow::Borrowed(body);
+    }
+    let escaped = body
+        .chars()
+        .map(|c| {
+            if is_raw_control(c) {
+                format!("\\u{:04x}", u32::from(c))
+            } else {
+                c.to_string()
+            }
+        })
+        .collect();
+    std::borrow::Cow::Owned(escaped)
+}
+
 /// A line of a table, defused and coloured, ready to write with [`Output::table_line`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct TableLine(String);
@@ -165,8 +204,8 @@ pub struct TableLine(String);
 ///
 /// Titles, names and labels come from other people through the server, which doesn't strip them. Printed raw, an
 /// escape sequence would run in the reader's terminal (clear the screen, write the clipboard) and a newline could
-/// forge rows. Human output is the only place they're interpreted, so it's defused here; `--json` prints the body as
-/// it came, where JSON escapes them.
+/// forge rows, so human output is defused here. `--json` keeps the body's value: JSON escapes the C0 characters but
+/// not DEL and C1, which [`json_for`] escapes on a terminal.
 fn defuse(text: &str) -> String {
     text.chars()
         .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
@@ -222,5 +261,19 @@ mod tests {
                 "\u{1b}[1m\u{FFFD}]52;c;aGk=\u{FFFD}x\u{FFFD}forged\u{1b}[0m".to_owned()
             ))]
         );
+    }
+
+    #[gtest]
+    fn json_on_a_terminal_escapes_del_and_c1_and_means_the_same() -> googletest::Result<()> {
+        let body = "{\"title\":\"a\u{9b}2Jb\u{7f}c\"}";
+
+        let on_terminal = json_for(body, true);
+        let piped = json_for(body, false);
+
+        verify_that!(on_terminal.as_ref(), eq("{\"title\":\"a\\u009b2Jb\\u007fc\"}"))?;
+        verify_that!(piped.as_ref(), eq(body))?;
+        let read: serde_json::Value = serde_json::from_str(&on_terminal)?;
+        let original: serde_json::Value = serde_json::from_str(body)?;
+        verify_that!(read, eq(&original))
     }
 }

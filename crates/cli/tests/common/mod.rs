@@ -72,7 +72,7 @@ impl TestServer {
         tokio::spawn(async move { axum::serve(listener, router).await });
         Ok(Self {
             url,
-            http: reqwest::Client::new(),
+            http: local_client()?,
         })
     }
 
@@ -230,6 +230,12 @@ impl TestServer {
     }
 }
 
+/// An HTTP client for the test server, which ignores any proxy the environment names, as the CLI does for a server on
+/// this machine.
+fn local_client() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::builder().no_proxy().build()?)
+}
+
 /// The value of `name` in `url`'s query.
 pub fn query_value(url: &str, name: &str) -> Option<String> {
     let query = url.split_once('?')?.1;
@@ -295,6 +301,7 @@ impl TestCli {
                 heap: None,
                 no_color: false,
                 stdout_is_terminal: false,
+                stderr_is_terminal: false,
                 time_zone: Some("Europe/Berlin".to_owned()),
                 config_dir: Some(config_dir.path().to_path_buf()),
                 now: jiff::Timestamp::now(),
@@ -368,6 +375,8 @@ impl Browser for SharedBrowser {
 pub struct TestKeychain {
     tokens: MemoryTokenStore,
     unreadable: Mutex<std::collections::HashSet<String>>,
+    /// When set, saving fails, as a locked or full keychain would, and the tokens it was asked to keep are recorded.
+    refusing: Mutex<Option<Vec<StoredTokens>>>,
 }
 
 impl TestKeychain {
@@ -376,6 +385,20 @@ impl TestKeychain {
         self.tokens.delete(server)?;
         self.unreadable().insert(server.to_owned());
         Ok(())
+    }
+
+    /// Makes every save fail from now on.
+    pub fn refuse_saves(&self) {
+        *self.refusing() = Some(Vec::new());
+    }
+
+    /// The tokens saves were refused for, oldest first.
+    pub fn refused(&self) -> Vec<StoredTokens> {
+        self.refusing().clone().unwrap_or_default()
+    }
+
+    fn refusing(&self) -> std::sync::MutexGuard<'_, Option<Vec<StoredTokens>>> {
+        self.refusing.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn unreadable(&self) -> std::sync::MutexGuard<'_, std::collections::HashSet<String>> {
@@ -396,6 +419,10 @@ impl TokenStore for TestKeychain {
     }
 
     fn save(&self, server: &str, tokens: &StoredTokens) -> Result<(), TokenStoreError> {
+        if let Some(refused) = self.refusing().as_mut() {
+            refused.push(tokens.clone());
+            return Err(TokenStoreError::Unavailable("the keychain is locked".into()));
+        }
         self.unreadable().remove(server);
         self.tokens.save(server, tokens)
     }
@@ -469,7 +496,7 @@ async fn consent(server: &str, session: &str, allow: bool, wrong_state_first: bo
     let page = format!("{server}/oauth/authorize?");
     let query = url.strip_prefix(&page).context("not the consent page")?;
     let request: std::collections::BTreeMap<String, String> = serde_urlencoded::from_str(query)?;
-    let http = reqwest::Client::new();
+    let http = local_client()?;
     if wrong_state_first {
         let redirect_uri = request.get("redirect_uri").context("no redirect_uri")?;
         let turned_away = http

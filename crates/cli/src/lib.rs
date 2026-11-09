@@ -50,6 +50,7 @@ pub struct Environment {
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
     pub stdout_is_terminal: bool,
+    pub stderr_is_terminal: bool,
     /// The machine's IANA timezone, sent as `Time-Zone`. `None` when it can't be told, and the server uses UTC.
     pub time_zone: Option<String>,
     /// Where the config file and the token lock are: `upheap` in the platform's config directory. `None` on a
@@ -82,6 +83,7 @@ impl Environment {
             heap: var("UPHEAP_HEAP"),
             no_color: var("NO_COLOR").is_some(),
             stdout_is_terminal: std::io::stdout().is_terminal(),
+            stderr_is_terminal: std::io::stderr().is_terminal(),
             time_zone: jiff::tz::TimeZone::system().iana_name().map(str::to_owned),
             config_dir: dirs::config_dir().map(|dir| dir.join("upheap")),
             now: jiff::Timestamp::now(),
@@ -196,7 +198,7 @@ where
     } else {
         Mode::Human
     };
-    let mut out = Output::new(stdout, stderr, mode, color);
+    let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
     let result = match load_app(env, tokens, browser) {
         Ok(app) => dispatch(cli.command, &app, &mut out).await,
         Err(err) => Err(err.into()),

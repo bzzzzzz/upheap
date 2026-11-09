@@ -34,6 +34,9 @@ pub enum AuthError {
     },
     #[error(transparent)]
     Client(#[from] ClientError),
+    /// A refresh worked but the keychain wouldn't take the new tokens, so the sign-in was ended.
+    #[error("refreshed the sign-in but can't keep it, so it's ended")]
+    RefreshNotKept(#[source] TokenStoreError),
     /// Signing out couldn't end the sign-in on the server, so it's kept, to try again.
     #[error("can't end the sign-in on the server, so it's kept")]
     Revoke(#[source] ClientError),
@@ -80,7 +83,13 @@ pub async fn access_token(
         Err(err) => return Err(err.into()),
     };
     let fresh = StoredTokens::issued(issued, now);
-    save_tokens(store, server, &fresh).await?;
+    if let Err(err) = save_tokens(store, server, &fresh).await {
+        // The old refresh token is spent and the new one can't be kept: nobody can use this sign-in again, so end it.
+        if let Err(revoke_err) = revoke(client, &fresh.refresh_token).await {
+            tracing::warn!(error = %revoke_err, "can't revoke the refreshed sign-in that couldn't be kept");
+        }
+        return Err(AuthError::RefreshNotKept(err));
+    }
     tracing::debug!("refreshed the access token");
     Ok(fresh.access_token)
 }

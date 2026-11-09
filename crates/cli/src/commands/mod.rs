@@ -31,6 +31,13 @@ pub struct SharedArgs {
     pub server: Option<String>,
 }
 
+/// A command line that clap accepts but that asks for two things that don't go together. Checked before any request.
+#[derive(Debug, thiserror::Error)]
+pub enum UsageError {
+    #[error("--sort-parameter sorts by a custom parameter, so it doesn't go with --sort {sort}; leave out one of them")]
+    SortWithSortParameter { sort: String },
+}
+
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.
 pub fn parse_api_value<T: DeserializeOwned>(raw: &str) -> Result<T, String> {
     T::deserialize(serde::de::value::StrDeserializer::<serde::de::value::Error>::new(raw))

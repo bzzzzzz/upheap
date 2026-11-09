@@ -9,7 +9,7 @@ use crate::auth::login::{LoginError, authorization_request, read_callback};
 use crate::auth::loopback::Loopback;
 use crate::auth::pkce::{Pkce, generate_state};
 use crate::auth::{self, StoredTokens, TokenStoreError};
-use crate::client::NO_QUERY;
+use crate::client::{ApiClient, Fetched, NO_QUERY};
 use crate::commands::SharedArgs;
 use crate::config::{self, server_key};
 use crate::output::{Mode, Output};
@@ -36,7 +36,8 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
         Ok(_) | Err(TokenStoreError::Corrupt { .. }) => {}
         Err(err) => return Err(err.into()),
     }
-    let lock_dir = app.config_dir()?;
+    // The token lock lives there, so a missing one fails before the browser too.
+    app.config_dir()?;
 
     let loopback = Loopback::bind().await.map_err(LoginError::from)?;
     let pkce = Pkce::generate().map_err(LoginError::Random)?;
@@ -58,47 +59,24 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
 
     let issued = auth::exchange_code(&client, code, &redirect_uri, pkce.verifier).await?;
     let tokens = StoredTokens::issued(issued, app.env.now.as_second());
-    // Another `upheap` may be refreshing the earlier sign-in; replace and revoke it only once that's done.
-    let _lock = auth::lock_tokens(lock_dir).await?;
-    let previous = match auth::load_tokens(&app.tokens, &key).await {
-        Ok(previous) => previous,
-        // Nothing the CLI can revoke: overwriting it is all that's left to do.
-        Err(TokenStoreError::Corrupt { .. }) => None,
-        Err(err) => return Err(err.into()),
-    };
-    if let Err(err) = auth::save_tokens(&app.tokens, &key, &tokens).await {
-        // Not kept means not usable, so don't leave the sign-in open on the server.
-        if let Err(revoke) = auth::revoke(&client, &tokens.refresh_token).await {
-            tracing::warn!(error = %revoke, "can't revoke the sign-in that couldn't be kept");
+    let signed_in = match keep(&args, app, &client, &key, &tokens).await {
+        Ok(signed_in) => signed_in,
+        Err(err) => {
+            abandon(app, &client, &key, &tokens).await;
+            return Err(err);
         }
-        return Err(err.into());
-    }
-    if let Some(previous) = previous
-        && let Err(err) = auth::revoke(&client, &previous.refresh_token).await
-    {
-        tracing::warn!(error = %err, "can't revoke the earlier sign-in");
-    }
-    // A default heap is one server's, so it goes when the server does.
-    let dropped_heap = match args.shared.server {
-        Some(_) => config::update_config(app.config_dir()?, |file| {
-            let moved = file.server.as_deref() != Some(key.as_str());
-            file.server = Some(key.clone());
-            if moved { file.heap.take() } else { None }
-        })?,
-        None => None,
     };
 
-    let me = client.get::<MeDto>(&["me"], NO_QUERY, &tokens.access_token).await?;
     match out.mode() {
-        Mode::Json => out.json(&me.body)?,
+        Mode::Json => out.json(&signed_in.me.body)?,
         Mode::Quiet => {}
         Mode::Human => {
-            let user = &me.value.user;
+            let user = &signed_in.me.value.user;
             out.line(&format!(
                 "Signed in to {key} as {} (@{}).",
                 user.display_name, user.username
             ))?;
-            if let Some(heap) = dropped_heap {
+            if let Some(heap) = signed_in.dropped_heap {
                 out.line(&format!(
                     "The default heap {heap} was on another server, so it's cleared: pick one with `upheap heap use`."
                 ))?;
@@ -106,4 +84,67 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
         }
     }
     Ok(())
+}
+
+/// What a finished sign-in leaves to say.
+struct SignedIn {
+    me: Fetched<MeDto>,
+    /// The default heap, cleared as it was another server's.
+    dropped_heap: Option<String>,
+}
+
+/// Keeps `tokens` in place of any earlier sign-in to `key`, which is revoked, writes `--server` to the config file,
+/// and reads who signed in. Any failure leaves the new sign-in for [`abandon`].
+async fn keep(
+    args: &LoginArgs,
+    app: &App,
+    client: &ApiClient,
+    key: &str,
+    tokens: &StoredTokens,
+) -> Result<SignedIn, CliError> {
+    // Another `upheap` may be refreshing the earlier sign-in; replace and revoke it only once that's done.
+    let _lock = auth::lock_tokens(app.config_dir()?).await?;
+    let previous = match auth::load_tokens(&app.tokens, key).await {
+        Ok(previous) => previous,
+        // Nothing the CLI can revoke: overwriting it is all that's left to do.
+        Err(TokenStoreError::Corrupt { .. }) => None,
+        Err(err) => return Err(err.into()),
+    };
+    auth::save_tokens(&app.tokens, key, tokens).await?;
+    if let Some(previous) = previous
+        && let Err(err) = auth::revoke(client, &previous.refresh_token).await
+    {
+        tracing::warn!(error = %err, "can't revoke the earlier sign-in");
+    }
+    // A default heap is one server's, so it goes when the server does.
+    let dropped_heap = match args.shared.server {
+        Some(_) => {
+            let key = key.to_owned();
+            config::update_config(app.config_dir()?, move |file| {
+                let moved = file.server.as_deref() != Some(key.as_str());
+                file.server = Some(key);
+                if moved { file.heap.take() } else { None }
+            })
+            .await?
+        }
+        None => None,
+    };
+    let me = client.get::<MeDto>(&["me"], NO_QUERY, &tokens.access_token).await?;
+    Ok(SignedIn { me, dropped_heap })
+}
+
+/// Undoes a sign-in that couldn't be finished: ends it on the server, which would otherwise keep it open for 30
+/// days with nobody holding it, and takes it out of the keychain if it got there. Both are best effort, as the
+/// failure that led here is what gets reported.
+async fn abandon(app: &App, client: &ApiClient, key: &str, tokens: &StoredTokens) {
+    if let Err(err) = auth::revoke(client, &tokens.refresh_token).await {
+        tracing::warn!(error = %err, "can't revoke the sign-in that couldn't be finished");
+    }
+    let kept = auth::load_tokens(&app.tokens, key).await;
+    if let Ok(Some(kept)) = kept
+        && kept.refresh_token == tokens.refresh_token
+        && let Err(err) = auth::delete_tokens(&app.tokens, key).await
+    {
+        tracing::warn!(error = %err, "can't forget the sign-in that couldn't be finished");
+    }
 }

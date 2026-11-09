@@ -98,6 +98,7 @@ allow. When `hidden_count` isn't zero, the footer says how many items are hidden
 Flags given with `--view` replace that setting of the view. `<text>` doesn't go with `--json`, which prints the
 server's list unchanged; `--closed` shows the first page of closed items (the newest 50) and takes no list flags. Values
 are the API's own spellings (`nice_to_have`, `in_progress`), and `--tag` and `--sort-parameter` take names (or IDs).
+`--sort-parameter` implies `--sort parameter`; with any other `--sort` it's exit 2, before any request.
 
 **`upheap item show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
 entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`.
@@ -153,7 +154,10 @@ heap slug alone works when only one of the caller's teams has a heap by that slu
    the reader's terminal (clear it, write the clipboard) or a newline forge a row. `Output` does it in one place,
    before adding its own colour codes; `--json` prints the body as it came.
 2. **`--json`** prints the server's response body unchanged, so scripts get the documented OpenAPI types and the CLI
-   adds no second schema to keep in sync. For `item add`, that's the created item.
+   adds no second schema to keep in sync. For `item add`, that's the created item. Piped, it's byte for byte as it
+   came. On a terminal, DEL and the C1 controls (U+007F to U+009F), which JSON doesn't escape and a terminal may run,
+   are written as `\u007f` to `\u009f`: the same JSON value, nothing for the terminal to interpret. The same goes for
+   a problem body on stderr.
 3. **`--quiet`** prints only what a script needs next: the item ID for `item add`, nothing for a state change, IDs one
    per line for `item list`.
 4. Results go to stdout; warnings and errors go to stderr. A reader that stops early (`upheap item list -q | head -1`)
@@ -216,8 +220,10 @@ How the CLI keeps the sign-in (built, [cli-tracker.md](cli-tracker.md) step 3):
    config directory and reads the tokens again once it has it; whoever waited finds the new pair. A refused refresh
    (`invalid_grant`) forgets the sign-in.
 4. **Login replaces an earlier sign-in** to the same server and revokes it, under the same lock, after reading the
-   stored tokens again, so it can't race a refresh. If the keychain can't keep the new tokens, they're revoked too,
-   so nothing is left open on the server. `--server` is written to the config file once signed in; when it
+   stored tokens again, so it can't race a refresh. Any failure after the code is exchanged (the lock, the keychain,
+   the config file, reading `/me`) revokes the new tokens and takes them out of the keychain if they got there, so
+   nothing is left open on the server. Likewise a refresh whose new tokens the keychain won't take revokes them, and
+   says to sign in again (exit 6). `--server` is written to the config file once signed in; when it
    changes the file's server, a `heap` set for the old one is cleared, as a heap is one server's, and login says so.
 5. **The loopback listener** reads each connection in its own task, with a 10-second limit on the request line,
    because browsers open spare connections (preconnects) that send nothing. It checks `state` itself: a redirect with
@@ -227,7 +233,9 @@ How the CLI keeps the sign-in (built, [cli-tracker.md](cli-tracker.md) step 3):
    `auth login` overwrites it (there's nothing to revoke), `auth logout --local` forgets it, and other commands fail
    with exit 6 and a hint naming those two.
 7. **Tokens go only where they were sent.** A plain `http://` server is refused (exit 2) unless it's on this machine
-   (`localhost`, `127.0.0.0/8`, `::1`), and the HTTP client follows no redirects: a `3xx` is an error (exit 2) naming
+   (`localhost`, `127.0.0.0/8`, `::1`). Requests to a server on this machine ignore `HTTP_PROXY`, `HTTPS_PROXY` and
+   `ALL_PROXY` (reqwest doesn't leave loopback out by itself), so plain-`http` tokens never cross to a proxy; other
+   servers use a proxy as the environment says. And the HTTP client follows no redirects: a `3xx` is an error (exit 2) naming
    where the server pointed, so a form with a refresh token or code verifier is never re-sent to another host.
 
 ## Configuration
@@ -237,15 +245,17 @@ Support` on macOS), with two settings: `server` (the base URL)
 and `heap` (the default heap). `upheap auth login --server` and `upheap heap use` write them. Flags beat environment variables
 (`UPHEAP_SERVER`, `UPHEAP_HEAP`), which beat the file. `upheap heap use` writes the heap as `team/heap`, after checking
 it against `GET /me`; when the server it used (`--server`, `UPHEAP_SERVER` or the file) isn't the file's, it writes
-that server too, so the heap and its server stay a pair, and says so. Each write reads the file again just before
-changing it, so a setting another `upheap` saved meanwhile isn't lost, and goes to a temporary file in the same
+that server too, so the heap and its server stay a pair, and says so. Each write holds an exclusive lock on `config.lock`
+in the same directory and reads the file again under it, so two `upheap`s changing different settings at once both
+keep theirs, and goes to a temporary file in the same
 directory that's then renamed over it, so nobody reads half a file. The file is read and written with `toml` and serde; `confique` only reads config, and the CLI
-writes it too. With `RUST_LOG` set, the CLI logs to `upheap.log` in the same directory.
+writes it too. Unknown settings are refused, not ignored: the error names the setting, and the hint says to upgrade
+`upheap` if a newer one wrote it. With `RUST_LOG` set, the CLI logs to `upheap.log` in the same directory.
 
 ## Code layout
 
-A new crate, `crates/cli`, with the `upheap` binary. It talks to the server over HTTP and depends on nothing below `api`,
-so it never links the database drivers or the service layer.
+A new crate, `crates/cli`, with the `upheap` binary. It talks to the server over HTTP and depends on nothing below `api`
+but `domain`, through `api-types`, so it never links the database drivers or the service layer.
 
 ```
 crates/cli/src/

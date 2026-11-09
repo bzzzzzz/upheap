@@ -17,6 +17,8 @@ use tokio::sync::mpsc;
 const CALLBACK_PATH: &str = "/callback";
 /// The most of a request the listener reads; a request line longer than this isn't from the consent page.
 const MAX_REQUEST: usize = 16 * 1024;
+/// How long to wait before accepting again after a failed accept.
+const ACCEPT_RETRY: Duration = Duration::from_millis(100);
 /// How long one connection may take to send its request line.
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -72,7 +74,15 @@ impl Loopback {
             tokio::select! {
                 Some(callback) = callbacks.recv() => return callback,
                 accepted = self.listener.accept() => {
-                    let Ok((stream, _)) = accepted else { continue };
+                    let stream = match accepted {
+                        Ok((stream, _)) => stream,
+                        Err(err) => {
+                            // Such as running out of file descriptors: retrying at once would only spin.
+                            tracing::debug!(error = %err, "can't accept a loopback connection");
+                            tokio::time::sleep(ACCEPT_RETRY).await;
+                            continue;
+                        }
+                    };
                     let (found, state) = (found.clone(), Arc::clone(&state));
                     tokio::spawn(async move {
                         match answer(stream, &state).await {

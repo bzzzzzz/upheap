@@ -482,3 +482,77 @@ async fn a_redirect_is_refused_and_nothing_goes_where_it_points() -> Result<()> 
     expect_that!(reached.load(std::sync::atomic::Ordering::SeqCst), eq(0));
     Ok(())
 }
+
+/// Whether `refresh_token` is still good on `server`, which spends it when it is.
+async fn refresh_works(server: &TestServer, refresh_token: &str) -> Result<bool> {
+    let (status, _) = server
+        .token_request(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", "upheap-cli"),
+            ("refresh_token", refresh_token),
+        ])
+        .await?;
+    Ok(status == 200)
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_login_that_cant_be_kept_is_ended_on_the_server() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
+    cli.tokens.refuse_saves();
+
+    // Act
+    let login = cli.run(&["auth", "login"]).await;
+
+    // Assert
+    expect_that!(login.stderr, contains_substring("can't use the system keychain"));
+    expect_that!(login.exited(6), eq(true));
+    let refused = cli.tokens.refused();
+    expect_that!(refused.len(), eq(1));
+    for tokens in &refused {
+        expect_that!(refresh_works(&server, &tokens.refresh_token).await?, eq(false));
+        expect_that!(server.me_status(&tokens.access_token).await?, eq(401));
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_refresh_that_cant_be_kept_is_ended_on_the_server() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let stored = cli.stored(&server)?.context("signed in")?;
+    cli.tokens.save(
+        &server.url,
+        &StoredTokens {
+            access_expires_at: 0,
+            ..stored
+        },
+    )?;
+    cli.tokens.refuse_saves();
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(
+        heaps.stderr,
+        contains_substring("refreshed the sign-in but can't keep it, so it's ended")
+    );
+    expect_that!(
+        heaps.stderr,
+        contains_substring("hint: sign in again with `upheap auth login`")
+    );
+    expect_that!(heaps.exited(6), eq(true));
+    let refused = cli.tokens.refused();
+    expect_that!(refused.len(), eq(1));
+    for tokens in &refused {
+        expect_that!(refresh_works(&server, &tokens.refresh_token).await?, eq(false));
+    }
+    Ok(())
+}

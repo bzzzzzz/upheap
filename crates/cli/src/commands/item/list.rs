@@ -10,7 +10,7 @@ use api_types::views::SavedViewListDto;
 use clap::Args;
 
 use crate::client::{ApiClient, NO_QUERY};
-use crate::commands::{HeapArgs, SharedArgs, parse_api_value};
+use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
 use crate::config::SettingError;
 use crate::lookup::{HeapHandle, HeapName, find_view, matches_text, resolve_heap, resolve_parameter, resolve_tags};
 use crate::output::{Cell, Mode, Output, Tone};
@@ -71,6 +71,15 @@ pub struct ListArgs {
 }
 
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
+    if let (Some(sort), Some(_)) = (args.sort, &args.sort_parameter)
+        && sort != SortDto::Parameter
+    {
+        let sort = serde_json::to_value(sort)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .unwrap_or_default();
+        return Err(UsageError::SortWithSortParameter { sort }.into());
+    }
     let typed = app.heap_name(args.heap.name.as_deref()).ok_or(SettingError::NoHeap)?;
     let name = HeapName::parse(typed)?;
     let client = app.client(app.server(&args.shared)?)?;

@@ -10,6 +10,15 @@ use reqwest::{RequestBuilder, Response, StatusCode, Url};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::config::is_loopback;
+
+/// Whether requests to `server` may go through a proxy from `HTTPS_PROXY`, `HTTP_PROXY` or `ALL_PROXY`. Not for a
+/// server on this machine: plain `http` is allowed only there, and a proxy would see its tokens in the clear (reqwest
+/// doesn't leave loopback out by itself).
+fn uses_proxy(server: &Url) -> bool {
+    !is_loopback(server)
+}
+
 /// The query of a request that has none.
 pub const NO_QUERY: &[(&str, &str)] = &[];
 
@@ -58,13 +67,17 @@ impl ApiClient {
     /// A client of `server` that sends `time_zone`, an IANA name, with every request, so labels and dates come back
     /// in the machine's timezone. Without one, the server uses UTC.
     pub fn new(server: Url, time_zone: Option<String>) -> Result<Self, ClientError> {
-        let http = reqwest::Client::builder()
+        let builder = reqwest::Client::builder()
             .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
             // A redirect could carry a form with a refresh token or a code verifier to another host.
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(ClientError::Setup)?;
+            .redirect(reqwest::redirect::Policy::none());
+        let builder = if uses_proxy(&server) {
+            builder
+        } else {
+            builder.no_proxy()
+        };
+        let http = builder.build().map_err(ClientError::Setup)?;
         Ok(Self {
             http,
             server,
@@ -197,5 +210,26 @@ impl ApiClient {
             path.pop_if_empty().extend(segments);
         }
         url
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn a_server_on_this_machine_is_reached_without_a_proxy() -> googletest::Result<()> {
+        for local in [
+            "http://127.0.0.1:8080",
+            "http://localhost:8080",
+            "http://[::1]:8080",
+            "https://localhost",
+        ] {
+            expect_that!(uses_proxy(&Url::parse(local)?), eq(false), "{local}");
+        }
+        expect_that!(uses_proxy(&Url::parse("https://upheap.example.test")?), eq(true));
+        Ok(())
     }
 }
