@@ -173,18 +173,6 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 The Playwright golden paths run on phone (Pixel 7 emulation) and tablet (iPad emulation) projects as well as desktop
 Chromium, against both the server and the local build.
 
-## Plan
-
-1. **Foundations.** Tokens, icons, React Aria, and the app shell at each width: sidebar, rail, bottom tabs, safe
-   areas. The phone and tablet Playwright projects start here.
-2. **List and item**, in two changes:
-   1. The due picker and its choices from the server, the S M L XL buttons, and the Add dialog.
-   2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
-      keyboard navigation.
-3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
-   sheet down and swiping the tablet panel right to close them, the Filters & sort sheet, heap switcher.
-4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
-
 ## Later: an installable app
 
 Once the website works at every width, the local build can become a Progressive Web App (PWA): the same site,
