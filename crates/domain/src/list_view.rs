@@ -198,6 +198,17 @@ impl Default for ListView {
 }
 
 impl ListView {
+    /// Whether the view lists items in `state`, pinned or shown, before its filters.
+    pub fn lists(&self, state: StateKind) -> bool {
+        self.group_of(state).is_some()
+    }
+
+    /// The states the view lists. For the default view these are the items a heap counts as open: its list's
+    /// `unfiltered_count`, and the heap's `open_count`.
+    pub fn listed_states(&self) -> Vec<StateKind> {
+        StateKind::ALL.into_iter().filter(|state| self.lists(*state)).collect()
+    }
+
     /// The group an item in `state` goes to, or `None` when its state is hidden or closed.
     pub fn group_of(&self, state: StateKind) -> Option<Group> {
         let (mode, shown_group) = match state {
@@ -311,6 +322,22 @@ mod tests {
             sort,
             ..ListView::default()
         }
+    }
+
+    #[gtest]
+    fn the_default_view_lists_open_and_in_progress_items() {
+        expect_that!(
+            ListView::default().listed_states(),
+            eq(&vec![StateKind::Open, StateKind::InProgress])
+        );
+        let everything = ListView {
+            blocked: StateMode::Shown,
+            ..ListView::default()
+        };
+        expect_that!(
+            everything.listed_states(),
+            eq(&vec![StateKind::Open, StateKind::InProgress, StateKind::Blocked])
+        );
     }
 
     #[gtest]

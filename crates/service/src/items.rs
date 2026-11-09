@@ -136,7 +136,7 @@ impl Services {
             rank(CURRENT_FORMULA, &access.heap.policy, &parameters, &inputs, as_of)
         };
         let item_count = items.len();
-        let unfiltered_count = count_items(&items, |item| view.group_of(item.state.kind()).is_some());
+        let unfiltered_count = count_items(&items, |item| view.lists(item.state.kind()));
         let in_progress_count = count_items(&items, |item| item.state.kind() == StateKind::InProgress);
         let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
         let users = load_item_users(&self.db, &items).await?;
@@ -494,6 +494,15 @@ async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<I
 }
 
 /// How many of `items` `keep` is true for.
+/// How many open items each of `heap_ids` has, in one query: those its list shows by default, before filters (the
+/// `unfiltered_count` of [`ListView::default`]). Heaps with none are left out.
+pub(crate) async fn count_open_items(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<HashMap<HeapId, u32>, StoreError> {
+    store::items::count_items_by_heap(db, heap_ids, &ListView::default().listed_states()).await
+}
+
 fn count_items(items: &[Item], keep: impl Fn(&Item) -> bool) -> u32 {
     u32::try_from(items.iter().filter(|item| keep(item)).count()).unwrap_or(u32::MAX)
 }

@@ -59,3 +59,26 @@ pub(crate) fn version_to_db(version: Version, table: &'static str, id: &str) -> 
 pub(crate) fn id_to_db(uuid: &Uuid) -> String {
     uuid.hyphenated().to_string()
 }
+
+/// One group of a `GROUP BY` count, selected as `group_key` and `count`: the grouping column's stored value and how
+/// many rows have it.
+#[derive(Debug)]
+pub(crate) struct GroupCount {
+    pub group_key: String,
+    pub count: u32,
+}
+
+impl sea_orm::FromQueryResult for GroupCount {
+    fn from_query_result(row: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
+        let group_key = row.try_get(pre, "group_key")?;
+        // sqlx returns `COUNT` as a 64-bit integer on every backend. The local build's proxy types an expression
+        // from its value, as a 32-bit integer while it fits, and SeaORM won't read that as `i64`.
+        let count = row
+            .try_get::<i64>(pre, "count")
+            .or_else(|_| row.try_get::<i32>(pre, "count").map(i64::from))?;
+        Ok(Self {
+            group_key,
+            count: u32::try_from(count).unwrap_or(u32::MAX),
+        })
+    }
+}

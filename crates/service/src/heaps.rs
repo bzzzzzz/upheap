@@ -17,7 +17,7 @@ use store::{StoreError, TransactionTrait};
 use crate::access::{authorize_heap, authorize_team, ensure_active};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
-use crate::teams::HeapView;
+use crate::teams::{HeapView, load_heap_view};
 use crate::{Principal, ServiceError, Services};
 
 /// A change to a heap's name and slug. `None` leaves it as it is.
@@ -84,16 +84,15 @@ impl Services {
         Ok(HeapView {
             allowed_actions: allowed_heap_actions(&heap, membership.role),
             heap,
+            // A new heap has no items.
+            open_count: 0,
         })
     }
 
     /// The heap with what the caller may do with it. Non-members get [`ServiceError::NotFound`].
     pub async fn load_heap(&self, principal: Principal, heap_id: HeapId) -> Result<HeapView, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
-        Ok(HeapView {
-            allowed_actions: allowed_heap_actions(&access.heap, access.membership.role),
-            heap: access.heap,
-        })
+        load_heap_view(&self.db, access.heap, access.membership.role).await
     }
 
     /// Changes the heap's name or slug if it is still at version `expected`. An archived heap is read-only, so this
@@ -120,10 +119,7 @@ impl Services {
         let name = patch.name.filter(|name| *name != current.name);
         let slug = patch.slug.filter(|slug| *slug != current.slug);
         if name.is_none() && slug.is_none() {
-            return Ok(HeapView {
-                allowed_actions: allowed_heap_actions(&current, role),
-                heap: current,
-            });
+            return load_heap_view(&txn, current, role).await;
         }
 
         let mut diff = serde_json::Map::new();
@@ -157,10 +153,7 @@ impl Services {
             )
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
-        Ok(HeapView {
-            allowed_actions: allowed_heap_actions(&saved, role),
-            heap: saved,
-        })
+        load_heap_view(&self.db, saved, role).await
     }
 
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
@@ -185,10 +178,7 @@ impl Services {
         let current = lock(&txn, heap_id).await?;
         let role = access.membership.role;
         if current.is_archived() == archived {
-            return Ok(HeapView {
-                allowed_actions: allowed_heap_actions(&current, role),
-                heap: current,
-            });
+            return load_heap_view(&txn, current, role).await;
         }
 
         let now = self.now();
@@ -209,10 +199,7 @@ impl Services {
             .save_heap(txn, principal, &changed, current.version, action, diff, now)
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, archived, "heap archive state changed");
-        Ok(HeapView {
-            allowed_actions: allowed_heap_actions(&saved, role),
-            heap: saved,
-        })
+        load_heap_view(&self.db, saved, role).await
     }
 
     /// Writes `heap` and its audit entry, and commits. The caller holds the heap lock.

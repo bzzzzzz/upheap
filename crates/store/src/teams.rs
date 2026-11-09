@@ -3,11 +3,13 @@
 use domain::handle::Handle;
 use domain::team::{Membership, Role, Team};
 use domain::text::Name;
+use std::collections::HashMap;
+
 use domain::{TeamId, UserId, Version};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db, version_to_db};
+use crate::codes::{GroupCount, RowReader, id_to_db, version_to_db};
 use crate::entities::{team_members, teams};
 
 /// Inserts a new team. Its members are inserted separately ([`insert_membership`]). Fails with
@@ -114,6 +116,31 @@ pub async fn list_memberships(db: &impl ConnectionTrait, team_id: TeamId) -> Res
         .await?
         .into_iter()
         .map(to_membership)
+        .collect()
+}
+
+/// How many members each of `team_ids` has, in one query. Teams without members, or unknown ones, are left out.
+pub async fn count_members_by_team(
+    db: &impl ConnectionTrait,
+    team_ids: &[TeamId],
+) -> Result<HashMap<TeamId, u32>, StoreError> {
+    let rows = team_members::Entity::find()
+        .select_only()
+        .column_as(team_members::Column::TeamId, "group_key")
+        .column_as(team_members::Column::UserId.count(), "count")
+        .filter(team_members::Column::TeamId.is_in(team_ids.iter().map(|id| id_to_db(id.as_uuid()))))
+        .group_by(team_members::Column::TeamId)
+        .into_model::<GroupCount>()
+        .all(db)
+        .await?;
+    rows.into_iter()
+        .map(|row| {
+            let read = RowReader {
+                table: "team_members",
+                id: &row.group_key,
+            };
+            Ok((TeamId::from_uuid(read.uuid(&row.group_key)?), row.count))
+        })
         .collect()
 }
 
