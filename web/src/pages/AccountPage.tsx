@@ -1,11 +1,13 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useId } from "react";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
-import { useMe, useUpdateMe } from "../api/queries";
+import { useMe, useSignOut, useUpdateMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { ProblemText } from "../components/ProblemText";
 import { useTheme, type Theme } from "../components/theme";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
@@ -22,10 +24,15 @@ const themes: readonly { id: Theme; label: string }[] = [
   { id: "dark", label: "Dark" },
 ];
 
-/** The signed-in user's display name, which teammates see, this browser's theme, and in the local build their data. */
+/**
+ * The signed-in user's display name, which teammates see, this browser's theme, and in the local build their data.
+ * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
+ */
 export function AccountPage() {
   const { data: me } = useMe();
   const update = useUpdateMe();
+  const signOut = useSignOut();
+  const navigate = useNavigate();
   if (!me) return null;
 
   const { user } = me;
@@ -60,6 +67,19 @@ export function AccountPage() {
         </section>
         <AppearanceSection />
         <LocalDataSection />
+        {me.allowed_actions.includes("sign_out") && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={signOut.isPending}
+              onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
+              className={compactButtonClass.borderedDanger}
+            >
+              Sign out
+            </button>
+            <ProblemText error={signOut.error} className="text-overdue-ink" />
+          </div>
+        )}
       </div>
     </main>
   );

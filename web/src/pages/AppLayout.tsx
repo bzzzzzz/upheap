@@ -9,7 +9,6 @@ import {
   CircleCheck,
   Ellipsis,
   List,
-  LogOut,
   Plus,
   SlidersHorizontal,
   Tag,
@@ -20,7 +19,7 @@ import {
 import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useSignOut, useTeam } from "../api/queries";
+import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useTeam } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
@@ -203,10 +202,6 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       <div className="mt-auto flex flex-col gap-1 lg:gap-0.5">
         <NavLink {...links.teams} activeOptions={{ exact: true }} icon={Users} />
         <NavLink to="/account" icon={User} label="Account" />
-        <SignOutButton me={me} className={navItemClass}>
-          <LogOut aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
-          <span>Sign out</span>
-        </SignOutButton>
         <div className="hidden lg:block">
           <StorageNote className="px-2 pt-1.5" />
         </div>
@@ -308,8 +303,6 @@ function MoreSheet({
 }) {
   const links = useShellLinks(me, heapRef);
   const views = heapViews(heapRef, false);
-  const navigate = useNavigate();
-  const signOut = useSignOut();
   const row = (label: string, note?: string) => (
     <>
       <span className="flex-1">{label}</span>
@@ -344,16 +337,6 @@ function MoreSheet({
         <Link to="/account" onClick={onClose} className={sheetRowClass}>
           {row("Account", `@${me.user.username}`)}
         </Link>
-        {me.allowed_actions.includes("sign_out") && (
-          <button
-            type="button"
-            onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
-            className={`${sheetRowClass} mt-1 rounded-t-none border-t border-line text-overdue-ink`}
-          >
-            <LogOut aria-hidden="true" className="size-4" />
-            Sign out
-          </button>
-        )}
       </nav>
     </Sheet>
   );
@@ -484,21 +467,6 @@ function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: ()
         </button>
       )}
     </div>
-  );
-}
-
-function SignOutButton({ me, className, children }: { me: Me; className: string; children: ReactNode }) {
-  const navigate = useNavigate();
-  const signOut = useSignOut();
-  if (!me.allowed_actions.includes("sign_out")) return null;
-  return (
-    <button
-      type="button"
-      onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
-      className={className}
-    >
-      {children}
-    </button>
   );
 }
 
