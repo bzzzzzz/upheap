@@ -11,7 +11,6 @@ import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
-import { SavedViewsBar } from "../components/SavedViewsBar";
 import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
@@ -206,14 +205,11 @@ function ListPage({
     />
   );
 
-  const savedViews = <SavedViewsBar heapRef={heapRef} view={view} onViewChange={onViewChange} />;
-
   if (list.isError) {
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
       <main>
-        {badView && savedViews}
         {badView && controls}
         <div className="py-16 text-center">
           <p role="alert" className="text-red-700 dark:text-red-400">
@@ -252,8 +248,6 @@ function ListPage({
     <main>
       {/* On a phone the heap name is already at the top, as the heap switcher. */}
       <h1 className="mt-2 text-xl font-semibold tracking-tight max-sm:sr-only sm:mt-6">{heap.name}</h1>
-
-      {savedViews}
 
       <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
 

@@ -101,7 +101,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `x` marks done;
    `N` and `/` stay.
 5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
-6. Saved views stay chips above the list, scrolling sideways on a phone.
+6. Saved views are hidden in the web app for now; the API keeps them, so a client can bring them back.
 7. Filters and View open as a popover on a wide screen and as a sheet on a phone.
 
 ### The item

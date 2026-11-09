@@ -32,7 +32,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Tags and Manage tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case; never deleted; removable from items in the list; filterable in the list |
 | Blockers, inheritance, cycle check | Req Items §8, Priority §5 | ✅ | Picked in the list row of a blocked item; "Blocks …" contributor; runs on MySQL 8.4 in CI |
 | Custom parameters and Manage parameters | Req Custom parameters, Manage parameters | ✅ | Admins add, rename and weigh parameters, add, relabel, reorder and archive options (open items switch to the replacement), link tags, archive unused parameters. Values on items, in ranking and contributors |
-| Saved views | Req Heaps §4 | ✅ | Shared by the team, as links above the list; save the current view, save a change into the open view, rename, archive; parameter filters and sort included |
+| Saved views | Req Heaps §4 | 🟡 | The API is done: shared by the team; create, update, rename, archive; parameter filters and sort included. Hidden in the web app for now, so it has no UI, until the list controls are redesigned |
 | Teams, members, roles | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found with `GET /users`, promote, demote, remove, leave; `last_admin` checked under a team row lock. Teams and Team views, Account view for the display name |
 | Heap create, rename, archive, unarchive | Off Teams §4, 9 | ✅ | Archiving is checked under the heap lock, so no write lands in a heap archived while it waited. A banner on archived heaps offers Unarchive to admins |
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |

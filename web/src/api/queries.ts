@@ -19,7 +19,6 @@ import {
   type HeapRef,
   type Item,
   type ItemPatch,
-  type ListViewInput,
   type ListViewQuery,
   type Me,
   type NewItem,
@@ -30,7 +29,6 @@ import {
   type RankedList,
   type ParameterPatch,
   type Role,
-  type SavedView,
   type Tag,
   type TagPatch,
   type Team,
@@ -61,7 +59,6 @@ const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => [...rankedKey(heap
 const blockerCandidatesKey = (heap: HeapRef) => [...rankedKey(heap), "blocker-candidates"] as const;
 const closedKey = (heap: HeapRef) => ["closed", heap.team, heap.heap] as const;
 const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as const;
-const savedViewsKey = (heap: HeapRef) => ["saved-views", heap.team, heap.heap] as const;
 const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 const teamKey = (team: string) => ["team", team] as const;
@@ -393,52 +390,6 @@ export function useArchiveOption(heap: HeapRef) {
   });
 }
 
-/** The heap's saved views in use, by name. */
-export function useSavedViews(heap: HeapRef) {
-  return useQuery({
-    queryKey: savedViewsKey(heap),
-    queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/heaps/{heap}/views", { params: { path: heap } })),
-    staleTime: 30_000,
-  });
-}
-
-export function useCreateSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: { name: string; view: ListViewInput }) =>
-      unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/views", { params: { path: heap }, body })),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
-  });
-}
-
-export function useUpdateSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ saved, patch }: { saved: SavedView; patch: { name?: string; view?: ListViewInput } }) =>
-      unwrap(
-        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/views/{view_id}", {
-          params: { path: { ...heap, view_id: saved.id }, header: { "If-Match": `"${saved.version}"` } },
-          body: patch,
-        }),
-      ),
-    // Also after a conflict, so the bar shows the version someone else saved.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
-  });
-}
-
-export function useArchiveSavedView(heap: HeapRef) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (saved: SavedView) =>
-      unwrap(
-        await api.POST("/api/v1/teams/{team}/heaps/{heap}/views/{view_id}/archive", {
-          params: { path: { ...heap, view_id: saved.id } },
-        }),
-      ),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
-  });
-}
-
 export function useSignIn() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -587,14 +538,7 @@ export function useLeaveTeam(team: Team) {
       queryClient.removeQueries({ queryKey: teamKey(team.slug) });
       for (const { slug } of team.heaps) {
         const heap = { team: team.slug, heap: slug };
-        for (const key of [
-          heapKey(heap),
-          rankedKey(heap),
-          closedKey(heap),
-          tagsKey(heap),
-          savedViewsKey(heap),
-          parametersKey(heap),
-        ]) {
+        for (const key of [heapKey(heap), rankedKey(heap), closedKey(heap), tagsKey(heap), parametersKey(heap)]) {
           queryClient.removeQueries({ queryKey: key });
         }
       }
@@ -651,7 +595,6 @@ function invalidateHeapRecord(queryClient: QueryClient, heap: HeapRef) {
     invalidateTeam(queryClient, heap.team),
     invalidateHeap(queryClient, heap),
     queryClient.invalidateQueries({ queryKey: tagsKey(heap) }),
-    queryClient.invalidateQueries({ queryKey: savedViewsKey(heap) }),
     queryClient.invalidateQueries({ queryKey: parametersKey(heap) }),
   ]);
 }

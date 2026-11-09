@@ -1,23 +1,18 @@
 // The list view lives in the URL, so a view can be bookmarked, shared and kept on reload. The search params are
-// the API's query parameters, with lists comma-separated as the API takes them, plus `view`, the saved view the list
-// was opened from. Anything else in the URL is dropped.
+// the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
 import type {
   BlockedLayout,
   ItemState,
   ListSort,
-  ListViewInput,
   ListViewQuery,
   RankedItem,
   RankedList,
-  SavedView,
   Size,
   StateMode,
 } from "../api/client";
 import { SIZES } from "./labels";
 
 export type ListSearch = {
-  /** The saved view the list was opened from. The other params say what is shown, so they may differ from it. */
-  view?: string;
   open?: StateMode;
   in_progress?: StateMode;
   blocked?: StateMode;
@@ -84,7 +79,6 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
   // A parameter sort needs its parameter, and no other sort takes one, so a half of the pair alone is dropped.
   const sortBy = sort(raw.sort) === "parameter" && sortParameter === undefined ? undefined : sort(raw.sort);
   const search: ListSearch = {
-    view: list(raw.view),
     open: modeOf("open"),
     in_progress: modeOf("in_progress"),
     blocked: modeOf("blocked"),
@@ -152,27 +146,6 @@ export function matchesSearch(entry: RankedItem, text: string): boolean {
   const haystack = `${entry.item.title}\n${entry.item.description ?? ""}`.toLowerCase();
   return words.every((word) => haystack.includes(word));
 }
-
-/** The URL of a saved view: its settings, and its ID so the page knows which one is open. */
-export function searchFor(saved: SavedView): ListSearch {
-  const { view } = saved;
-  return parseListSearch({
-    ...view,
-    view: saved.id,
-    sort_parameter: view.sort_parameter ?? undefined,
-    tag: joinList(view.tag),
-    effort: joinList(view.effort),
-    impact: joinList(view.impact),
-    param: joinList(view.param),
-  });
-}
-
-/** What to save for the view in the URL. The fields are the list query's, so it carries over unchanged. */
-export const toViewInput = (search: ListSearch): ListViewInput => toListQuery(search);
-
-/** Whether two URLs show the same list, whichever saved view they were opened from. */
-export const showSameList = (a: ListSearch, b: ListSearch) =>
-  JSON.stringify(toListQuery(a)) === JSON.stringify(toListQuery(b));
 
 /**
  * Where an item sits in the list, as the server ranked it: its entry, with its position within its group, and the
