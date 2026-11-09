@@ -103,7 +103,7 @@ To cut a release:
 2. Tag the commit on main: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
 
 The workflow refuses a tag that doesn't match that version or isn't on main, and never replaces a published release;
-its header comment says what else it checks. Pull requests that touch the packaging or what the CLI is built from run
+its steps' error messages say what else it checks and what to do. Pull requests that touch the packaging or what the CLI is built from run
 it as a dry run that publishes nothing.
 
 Recovering from a failed run:

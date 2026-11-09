@@ -24,6 +24,7 @@ on:
       - crates/cli/**
       - crates/api-types/**
       - crates/domain/**
+      - .cargo/**
   workflow_dispatch:
 
 permissions:
@@ -237,6 +238,8 @@ jobs:
     concurrency:
       group: homebrew-tap
       cancel-in-progress: false
+    outputs:
+      newest: ${{ steps.cask.outputs.newest }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -260,11 +263,20 @@ jobs:
           echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known_hosts"
           echo "GIT_SSH_COMMAND=ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" >> "$GITHUB_ENV"
 
+      # Never moves the tap back: re-running an older tag's failed jobs after a newer release leaves the newer cask.
       - name: Update the cask
+        id: cask
         run: |
           git clone git@github.com:bzzzzzz/homebrew-tap.git tap
           cd tap
           mkdir -p Casks
+          current=$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/upheap.rb 2> /dev/null || true)
+          if [ -n "$current" ] && [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]; then
+            echo "::notice::The tap has upheap $current, newer than $VERSION; leaving it, and skipping the install checks."
+            echo "newest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "newest=true" >> "$GITHUB_OUTPUT"
           cp ../cask/upheap.rb Casks/upheap.rb
           if [ -z "$(git status --porcelain Casks/upheap.rb)" ]; then
             echo "The tap already has upheap $VERSION; nothing to commit."
@@ -279,6 +291,8 @@ jobs:
   verify:
     name: Verify on ${{ matrix.name }}
     needs: [version, tap]
+    # The install checks fetch the tap's cask and the latest release, which are this version's only when it's newest.
+    if: needs.tap.outputs.newest == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -298,8 +312,7 @@ jobs:
           out=$(upheap --version)
           echo "$out"
           [ "$out" = "upheap $VERSION" ] || { echo "::error::The installed binary printed '$out', expected 'upheap $VERSION'."; exit 1; }
-          # Only proves something where the runner's brew quarantines downloads; the postflight was also checked by hand
-          # with a quarantined archive (design/decisions.md, decision 30).
+          # Only proves something where the runner's brew quarantines downloads.
           bin=$(readlink -f "$(brew --prefix)/bin/upheap")
           if xattr -p com.apple.quarantine "$bin" 2> /dev/null; then
             echo "::error::$bin still carries the quarantine attribute; the cask's postflight didn't clear it."
