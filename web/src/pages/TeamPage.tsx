@@ -28,6 +28,7 @@ import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
+import { namedForOwner, useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 
 /** Name and link name forms in the design tokens, as on Account. */
@@ -87,6 +88,7 @@ type TeamEdit = "name" | "slug";
  */
 function TeamHeader({ team }: { team: Team }) {
   const { data: me } = useMe();
+  const label = useTeamName(team);
   const update = useUpdateTeam();
   const navigate = useNavigate();
   const [editing, setEditing] = useState<TeamEdit | null>(null);
@@ -138,16 +140,17 @@ function TeamHeader({ team }: { team: Team }) {
             />
           </>
         ) : (
-          <h1 className="min-w-0 text-[22px] font-semibold tracking-[-0.015em] break-words">{team.name}</h1>
+          <h1 className="min-w-0 text-[22px] font-semibold tracking-[-0.015em] break-words">{label}</h1>
         )}
         {editing === null && (
           <MenuTrigger>
-            <Button ref={moreButton} aria-label={`More for ${team.name}`} className={moreButtonClass}>
+            <Button ref={moreButton} aria-label={`More for ${label}`} className={moreButtonClass}>
               <Ellipsis aria-hidden="true" className="size-4" />
             </Button>
             <MenuPopover placement="bottom start">
-              <Menu aria-label={`More for ${team.name}`} className="outline-none" onAction={act}>
-                {can("rename") ? <MenuEntry id="rename">Rename</MenuEntry> : null}
+              <Menu aria-label={`More for ${label}`} className="outline-none" onAction={act}>
+                {/* A team shown as "<name>'s team" whatever it is stored as: renaming it would change nothing. */}
+                {can("rename") && !(me && namedForOwner(team, me)) ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
                 <MenuEntry id="activity">Activity</MenuEntry>
               </Menu>

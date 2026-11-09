@@ -17,6 +17,7 @@ import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
 import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
 import { parseListSearch } from "./components/listView";
+import { teamName } from "./components/teamName";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
@@ -209,7 +210,7 @@ const indexRoute = createRoute({
             <Link to="/teams/$team" params={{ team: team.slug }} className={linkClass}>
               Start one
             </Link>{" "}
-            in {team.name}.
+            in {me && teamName(team, me)}.
           </>
         ) : (
           <>

@@ -41,7 +41,7 @@ It answers questions like:
 
 1. Users form teams. A team has one or more admins.
 2. Any user can create a team and becomes its admin.
-3. Every new user gets a personal team, named by their username, with a first heap called "Personal". The personal
+3. Every new user gets a personal team, shown as "\<their name\>'s team", with a first heap called "Personal". The personal
    team is theirs alone: it holds as many heaps as they like, but it can't be shared. Anything shared lives in
    another team.
 4. A team owns its heaps, and can have more than one.

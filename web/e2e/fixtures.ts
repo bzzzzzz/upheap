@@ -247,3 +247,13 @@ export async function signOut(page: Page) {
 
 /** The calendar day `days` from today, in the browser's timezone (UTC, as the config sets it). */
 export const dayFromToday = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+/** Creates a team from the Teams page and waits for its page. */
+export async function createTeam(page: Page, name: string, linkName?: string) {
+  await page.goto("/teams");
+  await page.getByRole("button", { name: "+ Create team" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  if (linkName) await page.getByLabel("Link name").fill(linkName);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+}

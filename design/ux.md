@@ -97,9 +97,9 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width | Navigation | List | Item |
 | --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, + (Add), Settings, More | Full width, compact rows | Bottom sheet over the list |
-| Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
+| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Closed, + (Add), Settings, More | Full width, compact rows | Bottom sheet over the list |
+| Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams, Account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
 **More** on a phone holds Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
 rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
@@ -107,8 +107,11 @@ its cards, which are Profile, Appearance, Command line (server build) and Your d
 so the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
-Teams and Account. A phone's tabs have room for four: Settings sits right of the +, and Activity goes into More with
-the account pages.
+the team in the URL (a link to its page, shown on the heap's pages and the team's own, and not in the local build,
+where Teams already leads to the one team), Teams and Account. The heap's title names its team too ("Product ·
+Acme"), on the phone's top bar as well, except for a heap in the personal team.
+
+A phone's tabs have room for four: Settings sits right of the +, and Activity goes into More with the account pages.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
 wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
@@ -287,6 +290,10 @@ Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Only you · 1 he
 and + Create team, which opens a form with Name and an optional Link name; the server's errors show under the field
 they name. After sign-up, the empty heap offers the next two steps, Add your first item and Create a team; once a
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.
+
+Among other teams, the personal team shows everywhere as "<name>'s team", by the user's display name whatever it is
+stored as, so it has no Rename. Alone, as in the local build, it keeps its own name ("My heaps")
+([decisions.md](decisions.md), 31).
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
 Activity) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,

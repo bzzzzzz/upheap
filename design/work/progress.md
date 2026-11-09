@@ -13,7 +13,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Area | Spec | Status | Notes |
 | --- | --- | :---: | --- |
 | Local accounts | Product Accounts §1–2, Arch Auth §4 | ✅ | Register, sign in by email or username, sign out. argon2id, hashed session tokens, CSRF header, five sign-in attempts per account per 15 minutes |
-| Personal team and heap | Product Teams §3 | ✅ | Made on registration and named by the username. Private, so it takes no members |
+| Personal team and heap | Product Teams §3 | ✅ | Made on registration, with the username as its slug. Private, so it takes no members. The web app shows it as "\<name\>'s team", without Rename, beside other teams |
 | Readable IDs | Arch Handles | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
 | Items | Product Items §1–4, 6–7 | ✅ | Loose and exact due times with fuzzy labels. Need is required on every item and never cleared. Reopen within 7 × 24 h |
 | Ranking | Product Priority | ✅ | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. Admins edit every weight, the heap's and its parameters', on Settings › Ranking, with a preview of the top of the list |
@@ -57,7 +57,7 @@ Ideas, not commitments. product.md holds the commitments.
 - **Keyboard.** Shortcut hints on controls, a hint bar, `?` for help, and ⌘K across heaps, which needs a server
   search endpoint ([ux.md](../ux.md#later-keyboard)).
 - **Tablet.** Its own design pass. Today it keeps ux.md's layout.
-- **First-set leftovers.** The member count beside Team in More and open counts in the heap switcher, both already
+- **First-set leftovers.** The member count on the team row in More and open counts in the heap switcher, both already
   in `GET /me`; an "Added" row among the phone item sheet's fields; a badge on More fields when a new tag asks for a
   parameter; a back button on phone pages outside a heap; a confirm before demoting yourself; an optional link name
   when adding a heap; "team · heap" over a closed item's title.
@@ -84,5 +84,7 @@ Ideas, not commitments. product.md holds the commitments.
 4. **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. They are authentication
    plumbing, which may be deleted ([engineering principles](../engineering-principles.md#nothing-is-deleted)), so a small cleanup on
    each exchange, as sign-in attempts have, is still to do.
-5. **An exported local database on a server.** Is moving one there worth building? The local user has no
+5. **Renaming a personal team.** The web app shows it as "\<name\>'s team" and hides Rename, but the server still
+   offers `rename` on it. Should the domain stop offering it, or the label give way to a renamed team?
+6. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.
