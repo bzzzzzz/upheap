@@ -135,13 +135,27 @@ would see in the browser.
 
 ### Tags
 
-`upheap tag add <name> [--description <text>]` and `upheap tag edit <tag> [--name <name>] [--description <text>]`.
-`<tag>` is the tag's name (compared ignoring case, as the server compares them) or its ID. Tags can't be deleted, so
-there's no `upheap tag delete`.
+**`upheap tag list`** prints the heap's tags by name, each with the first line of its description (cut to 60
+characters). An empty heap gets a line pointing to `tag add`. `--quiet` prints the names one per line, since names are
+what `--tag` and `tag edit` take, and `--json` the server's body.
 
-`--tag <name>` on `item add` and `item edit` refers to existing tags only. The web app creates a tag when you type a new name,
-but in a terminal a typo would leave a tag nobody can delete. An unknown name fails with the closest existing names
-and the `upheap tag add` command that would create it.
+**`upheap tag add <name> [--description <text>]`** sends the name as typed; the server trims and validates it, and a
+name taken ignoring case is refused (exit 3). It prints `Added tag "<name>"` with the name the server kept.
+`--description -` reads stdin, as on `item add`.
+
+**`upheap tag edit <tag> [--name <name>] [--description <text> | --no-description]`** reads the tags to find `<tag>`,
+the tag's name (compared ignoring case, as the server compares them) or its ID, and patches it at the version it
+read. It says `Renamed tag "a" to "b"`, `Updated tag "a"`, or `No change to tag "a"` when the server's version didn't
+move. With no field flag it says there is nothing to change and makes no request. `--quiet` prints nothing.
+
+Tags can't be deleted, so there's no `upheap tag delete`.
+
+`--tag <name>` on the item commands refers to existing tags only. The web app creates a tag when you type a new name,
+but in a terminal a typo would leave a tag nobody can delete. An unknown name fails (exit 3) with the closest existing
+names by edit distance (all of them when the heap has five or fewer). Names are trimmed before they're compared, as
+the server trims them. When the tag was to go on an item (`--tag` on `item add` and `item edit`), a hint gives the
+`upheap tag add` command that would create it, with the heap spelled out so it can be pasted whatever the default is.
+`--untag`, `item list --tag` and `tag edit` meant a tag that exists, so they get the closest names only.
 
 ### Heaps
 
@@ -275,8 +289,10 @@ crates/cli/src/
   auth/            the OAuth flow, keychain, token refresh
   lookup/          resolving <heap>, <tag> and due choices to handles, IDs and values
   commands/
+    heap_api.rs    the calls under one heap's path, and finding the heap, for the commands that work in one
     item/          add.rs  list.rs  show.rs  edit.rs  state.rs
-    tag/  heap/
+    tag/           list.rs  add.rs  edit.rs
+    heap/
     auth/          login.rs  logout.rs
   output/          human and JSON rendering
 ```
@@ -286,7 +302,7 @@ with a thin binary: `main` gathers the environment (`Deps::system`) and calls `c
 exit code. `Deps` holds the environment, the token store, the browser, stdin and the two output streams, so tests pass an
 in-memory store, a browser that answers the consent page itself, and buffers. Shared flags (`--json`, `--quiet`,
 `--server`) are one struct flattened into every command; `--heap` is a second one, flattened only into the commands
-that work in a heap (every item command), so it doesn't show where it would mean nothing.
+that work in a heap (every item and tag command), so it doesn't show where it would mean nothing.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
 truth](../engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO

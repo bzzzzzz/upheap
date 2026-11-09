@@ -119,6 +119,72 @@ fn tags_resolve_by_name_ignoring_case_or_by_id() -> googletest::Result<()> {
     )
 }
 
+fn tags_named(names: &[&str]) -> googletest::Result<TagListDto> {
+    Ok(serde_json::from_value(json!({
+        "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },
+        "tags": names.iter().enumerate().map(|(i, name)| json!({
+            "id": Uuid::from_u128(i as u128 + 1), "heap_id": Uuid::new_v4(), "name": name, "description": null,
+            "version": 1, "allowed_actions": [],
+        })).collect::<Vec<_>>(),
+        "allowed_actions": [],
+    }))?)
+}
+
+#[gtest]
+fn an_unknown_tag_names_the_closest_ones_first() -> googletest::Result<()> {
+    let tags = tags_named(&["Billing", "Infra", "Ops"])?;
+
+    verify_that!(
+        find_tag("Opz", &tags, &handle()),
+        err(displays_as(eq(
+            "ada/personal has no tag `Opz`; it has Ops, Infra, Billing"
+        )))
+    )
+}
+
+#[gtest]
+fn more_than_five_tags_name_only_the_five_closest() -> googletest::Result<()> {
+    let tags = tags_named(&["Aaaa", "Bbbb", "Cccc", "Dddd", "Eeee", "Ffff", "Ops"])?;
+
+    verify_that!(
+        find_tag("ops2", &tags, &handle()),
+        err(displays_as(eq(
+            "ada/personal has no tag `ops2`; the closest are Ops, Aaaa, Bbbb, Cccc, Dddd"
+        )))
+    )
+}
+
+#[gtest]
+fn a_heap_without_tags_names_none() -> googletest::Result<()> {
+    let tags = tags_named(&[])?;
+
+    verify_that!(
+        find_tag("ops", &tags, &handle()),
+        err(displays_as(eq("ada/personal has no tag `ops`")))
+    )
+}
+
+#[gtest]
+fn find_tag_matches_by_name_ignoring_case_and_by_id() -> googletest::Result<()> {
+    let tags = tags_named(&["Infra", "Ops"])?;
+
+    verify_that!(
+        find_tag("OPS", &tags, &handle()).map(|tag| tag.name.clone()),
+        ok(eq("Ops"))
+    )?;
+    verify_that!(
+        find_tag(&Uuid::from_u128(1).to_string(), &tags, &handle()).map(|tag| tag.name.clone()),
+        ok(eq("Infra"))
+    )
+}
+
+#[gtest]
+fn edit_distance_counts_chars() {
+    expect_that!(levenshtein("kitten", "sitting"), eq(3));
+    expect_that!(levenshtein("", "abc"), eq(3));
+    expect_that!(levenshtein("café", "cafe"), eq(1));
+}
+
 #[gtest]
 fn views_resolve_by_name_and_say_when_two_share_it() -> googletest::Result<()> {
     let view = |id: &str, name: &str| {

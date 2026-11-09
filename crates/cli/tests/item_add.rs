@@ -131,7 +131,9 @@ async fn item_add_with_an_unknown_tag_lists_the_heaps_tags_and_adds_nothing() ->
     expect_that!(added.exited(3), eq(true));
     expect_that!(
         added.stderr,
-        eq("error: ada/personal has no tag `Nope`; it has Infra\n")
+        eq(
+            "error: ada/personal has no tag `Nope`; it has Infra\nhint: add it with `upheap tag add Nope --heap ada/personal`\n"
+        )
     );
     expect_that!(item_count(&server, &ada).await?, eq(3));
     Ok(())
