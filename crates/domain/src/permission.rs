@@ -36,8 +36,8 @@ impl Permission {
     }
 }
 
-/// The permission needed to see audit entries of `action`: the one needed to take it (Off Audit §4). Members see
-/// item, tag and saved view changes; only admins see heap, parameter, team and membership changes.
+/// The permission needed to see audit entries of `action`: the one needed to take it (product.md, Audit log §4).
+/// Members see item, tag and saved view changes; only admins see heap, parameter, team and membership changes.
 ///
 /// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
 /// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
@@ -212,7 +212,8 @@ pub fn allowed_parameter_list_actions(heap: &Heap, role: Role) -> Vec<ParameterL
     vec![ParameterListAction::Create]
 }
 
-/// Parameters are heap configuration, which only admins change (Off Roles). Nothing in an archived heap changes.
+/// Parameters are heap configuration, which only admins change (product.md, Roles and permissions). Nothing in an
+/// archived heap changes.
 const fn can_configure(heap: &Heap, role: Role) -> bool {
     !heap.is_archived() && Permission::ConfigureHeap.is_granted_to(role)
 }

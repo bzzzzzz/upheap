@@ -8,10 +8,8 @@ The CLI is another client of the API, like the web app. It follows the [thin cli
 rules, so it never ranks, never checks permissions and never works out due labels. The server already returns all of
 that.
 
-Command shape, errors, output and code layout follow the Rust CLI guideline shared earlier ("Writing Rust code in
-dev-infra"), adapted where this repo's [engineering principles](engineering-principles.md) already decide something.
-Where that guideline's sources disagree, [Choices from the CLI guideline](#choices-from-the-cli-guideline) says which
-side we took.
+Command shape, errors, output and code layout follow [Conventions](#conventions) below, where this repo's
+[engineering principles](engineering-principles.md) don't already decide.
 
 ## Goals and non-goals
 
@@ -35,7 +33,7 @@ Not now:
 
 The binary is `upheap`, since it's the one people type. The server binary, which has that name today, becomes
 `upheap-server` (see [Server changes](#server-changes)). Anyone who wants fewer keystrokes can alias it to `uh`.
-Commands read as a short sentence, as the guideline asks:
+Commands read as a short sentence:
 
 ```
 upheap <category> <verb> [<required-input>...] [--<option> ...]
@@ -117,7 +115,7 @@ A key that isn't in the heap is the server's `404`. The CLI says so and suggests
 ### Due times
 
 `--due` takes either a rough choice or a date, matching the two kinds of due time in the
-[requirements](requirements.md#items):
+[product.md](product.md#items):
 
 - **A rough choice** such as `next-week` or `"in a few weeks"`. The CLI fetches `GET /due-choices` and matches the
   label, ignoring case and treating `-` as a space. It sends the choice's date with `firm: false`, so the item reads
@@ -275,7 +273,7 @@ crates/cli/src/
   output/          human and JSON rendering
 ```
 
-Each command file holds its args struct (`item::AddArgs`) and its `run`, as the guideline asks. The crate is a library
+Each command file holds its args struct (`item::AddArgs`) and its `run`. The crate is a library
 with a thin binary: `main` gathers the environment (`Deps::system`) and calls `cli::run(args, deps)`, which returns the
 exit code. `Deps` holds the environment, the token store, the browser and the two output streams, so tests pass an
 in-memory store, a browser that answers the consent page itself, and buffers. Shared flags (`--json`, `--quiet`,
@@ -329,9 +327,9 @@ Everything else uses endpoints the web app uses today.
 3. The OAuth flow is tested in the API suite, where it lives. The CLI's half (loopback listener, PKCE verifier) gets a
    unit test with a fake authorization server.
 
-## Choices from the CLI guideline
+## Conventions
 
-The guideline lists eight conflicts between its sources. These are the ones that matter here:
+Where common CLI conventions pull in different directions, these are the choices here:
 
 1. **Printing:** a single `Output` passed down, not `println!` scattered through commands.
 2. **Errors:** typed `thiserror` errors per layer, `anyhow` only in `main`, as the engineering principles already say.
@@ -339,8 +337,6 @@ The guideline lists eight conflicts between its sources. These are the ones that
 4. **Command shape:** `<category> <verb>`, with positional required inputs. The "named flags only" rule is for tools
    called by build actions, which `upheap` isn't.
 5. **Layout:** `commands/<category>/`, one file per verb or group of related verbs, in a source tree, not `endpoints/`.
-
-The rest (string interning, Bazel, support contacts in errors) don't apply to this repo.
 
 ## Open questions
 

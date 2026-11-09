@@ -1,8 +1,8 @@
 //! Custom parameters: per-heap fields such as "Customer" or "Area", each with an ordered list of options. The order
 //! of the options is their priority within the parameter, and the parameter's weight is its influence on the
-//! ranking next to age, deadline and value (Req Custom parameters).
+//! ranking next to age, deadline and value (product.md, Custom parameters).
 //!
-//! Parameters and options are archived, never deleted (Off Nothing is deleted §5):
+//! Parameters and options are archived, never deleted (product.md, Nothing is deleted §5):
 //! - Archiving an option needs a replacement: open items switch to it, and closed items keep the archived option.
 //!   An archived option always names its replacement, so a value can always be followed to an option in use.
 //! - A parameter can be archived only when no open item has a value for it, which the service checks.

@@ -10,7 +10,7 @@
 //!
 //! **Custom parameters** count like the heap's own factors: each parameter in use adds its weight times where the
 //! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
-//! counts as the last option (Req Priority §4), and an archived option as the option that replaced it.
+//! counts as the last option (product.md, Priority §4), and an archived option as the option that replaced it.
 //!
 //! **Blockers** take on the priority of the most important item they block, times a small boost, through whole
 //! chains. The blocking edges form a forest because cycles are refused on write; the walk still tolerates a cycle

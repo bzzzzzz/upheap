@@ -1,6 +1,6 @@
 //! Saved views: named list views of one heap, such as "Ready to pick up" or "Blocked work". Every member of the
 //! team sees them, and can open, change and archive them. They point at the heap's items rather than holding any,
-//! so a view never becomes a separate backlog (Req Heaps §4).
+//! so a view never becomes a separate backlog.
 //!
 //! Views are archived rather than deleted, like everything else. An archived view is left out of the heap's list
 //! and can't be changed.

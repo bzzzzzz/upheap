@@ -143,7 +143,7 @@ function changedSince(edits: Partial<Draft>, sent: Partial<Draft>): Partial<Draf
 }
 
 /**
- * Every field Add item takes, the title focused (Req Views: Add item). The title and the need are required. Picking
+ * Every field Add item takes, the title focused (product.md, Add item). The title and the need are required. Picking
  * a tag brings up the parameters linked to it. Enter in the title or ⌘↵ adds; with Add another ticked the dialog
  * clears for the next item instead of closing. Closing with a title typed asks first, so a stray tap outside doesn't
  * lose it.

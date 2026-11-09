@@ -24,7 +24,7 @@ const rankClass =
   "inline-flex size-[22px] shrink-0 items-center justify-center rounded-md bg-param-soft text-xs font-semibold text-param-ink max-sm:size-6";
 
 /**
- * Manage parameters (Req Views: Manage parameters). Every member sees the parameters, since they set their values on
+ * Manage parameters (product.md, Manage parameters). Every member sees the parameters, since they set their values on
  * items; only admins get the controls, as `allowed_actions` says. Parameters and options are archived, never deleted.
  */
 export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
