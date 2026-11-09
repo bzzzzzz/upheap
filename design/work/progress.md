@@ -1,7 +1,7 @@
 # Progress
 
-What's built, what's next and what's undecided, against [product.md](product.md) and
-[architecture.md](architecture.md). Last reviewed 2026-11-09.
+What's built, what's next and what's undecided, against [product.md](../product.md) and
+[architecture.md](../architecture.md). Last reviewed 2026-11-09.
 
 This file records state, not history: one line per area, and the pull requests for how an area got there. How
 something works belongs in the design doc or the code each row points to.
@@ -30,9 +30,9 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
 | CLI | [cli.md](cli.md) | 🟡 | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Not started: `/me/tokens`, release packaging |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
-| Deployment | Arch Configuration, [operations.md](operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
+| Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [ux.md](ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings (General, Tags, Parameters, Ranking) fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
+| Web app at every width | [ux.md](../ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings (General, Tags, Parameters, Ranking) fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next
@@ -52,11 +52,11 @@ Ideas, not commitments. product.md holds the commitments.
 
 - **Saved views.** Named views of a heap, defined by its filters and shared by the team, so "ready to pick up" or
   "blocked work" is one click without becoming a separate backlog. The API is built; the web app hides them until
-  they have a place in the Filters panel ([decisions.md](decisions.md), decision 27).
+  they have a place in the Filters panel ([decisions.md](../decisions.md), decision 27).
 - **Invitations** by email or link, and membership from identity-provider groups. Today an admin adds an existing
   user.
 - **Keyboard.** Shortcut hints on controls, a hint bar, `?` for help, and ⌘K across heaps, which needs a server
-  search endpoint ([ux.md](ux.md#later-keyboard)).
+  search endpoint ([ux.md](../ux.md#later-keyboard)).
 - **Tablet.** Its own design pass. Today it keeps ux.md's layout.
 - **First-set leftovers.** The member count beside Team in More and open counts in the heap switcher, both already
   in `GET /me`; an "Added" row among the phone item sheet's fields; a badge on More fields when a new tag asks for a
@@ -71,7 +71,7 @@ Ideas, not commitments. product.md holds the commitments.
   closed, which needs the server to say so before sign-in.
 - **Password and account.** No password change, reset, email change or "sign out everywhere". The server sends no
   email, so a reset needs an admin path or a design.
-- **Installable app.** A PWA for the local build, then store builds with Tauri ([ux.md](ux.md#later-an-installable-app)).
+- **Installable app.** A PWA for the local build, then store builds with Tauri ([ux.md](../ux.md#later-an-installable-app)).
 - **Playwright against Postgres.** Optional; the config starts the server on in-memory SQLite.
 
 ## Open questions
@@ -83,7 +83,7 @@ Ideas, not commitments. product.md holds the commitments.
    parameter, removing a member and leaving confirm first. The rule (ux.md, Rules §1) says Undo for the reversible
    and a confirm for what affects others or can't be undone; the code doesn't follow it everywhere yet.
 4. **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. They are authentication
-   plumbing, which may be deleted ([engineering principles](engineering-principles.md#data)), so a small cleanup on
+   plumbing, which may be deleted ([engineering principles](../engineering-principles.md#nothing-is-deleted)), so a small cleanup on
    each exchange, as sign-in attempts have, can come with `/me/tokens`.
 5. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.
