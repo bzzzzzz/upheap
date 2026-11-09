@@ -186,16 +186,16 @@ impl Services {
     }
 
     /// Sets the heap's own weights and its parameters' weights in one transaction, if the heap is still at version
-    /// `expected`. The heap's version guards the whole save, even when only parameter weights change, since the
-    /// weights are one policy; each listed parameter must also be at its given version
-    /// ([`ServiceError::VersionConflict`]). A parameter must be one in use of this heap
+    /// `expected`. The heap's version orders saves through here, even those that change only parameter weights, and
+    /// each listed parameter must also be at its given version ([`ServiceError::VersionConflict`]). Edits through
+    /// the parameter use cases are guarded by each parameter's version alone. A parameter must be one in use of this heap
     /// ([`domain::parameter::ParameterError::NotInHeap`], [`domain::parameter::ParameterError::Archived`]) and
     /// listed once ([`ValidationError::DuplicateParameter`]). An archived heap is read-only
     /// ([`ServiceError::HeapArchived`]). Any failure saves nothing.
     ///
     /// Weights equal to the stored ones are skipped. The heap's version moves on whenever any weight changes, with a
-    /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a `parameter_updated` entry and
-    /// its next version. A request that changes nothing succeeds and writes nothing.
+    /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a
+    /// `parameter_updated` entry and its next version. A request that changes nothing succeeds and writes nothing.
     pub async fn update_weights(
         &self,
         principal: Principal,
@@ -250,8 +250,8 @@ impl Services {
             self.write_heap(&txn, principal, &edited, expected, AuditAction::HeapUpdated, diff, now)
                 .await?
         } else if parameters_changed > 0 {
-            // The heap's version guards the whole policy, so a save of parameter weights alone moves it on too, and
-            // a save made against the old policy conflicts. The parameters' own entries record what changed.
+            // A save of parameter weights alone moves the heap's version on too, so another weights save made
+            // against the policy as it was conflicts. The parameters' own entries record what changed.
             store::heaps::update_heap(&txn, &heap, expected)
                 .await?
                 .ok_or(ServiceError::VersionConflict {

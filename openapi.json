@@ -3738,7 +3738,7 @@
         "tags": [
           "heaps"
         ],
-        "summary": "Sets the heap's weights and its parameters' weights in one transaction. Admins only; send the heap's `version` in\n`If-Match`. The heap's version guards the whole save, even when only parameter weights change; each listed\nparameter's `version` is checked too. Weights equal to the stored ones are skipped, and a request that changes\nnothing succeeds. Any error saves nothing.",
+        "summary": "Sets the heap's weights and its parameters' weights in one transaction. Admins only; send the heap's `version` in\n`If-Match`. The heap's version orders saves through here, even those that change only parameter weights, and\neach listed parameter's `version` is checked too. A parameter's own edits are guarded by its version alone. Weights equal to the stored ones are skipped, and a request that changes\nnothing succeeds. Any error saves nothing.",
         "operationId": "update_weights",
         "parameters": [
           {

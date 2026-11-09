@@ -694,8 +694,8 @@ export function useSetHeapArchived(team: string) {
 }
 
 /**
- * Saves the heap's weights and its parameters' weights in one request, sent with the heap's version, which guards
- * them all. The answer holds the heap and its parameters in use, which replace the cached ones, so the next save
+ * Saves the heap's weights and its parameters' weights in one request, sent with the heap's version, which orders
+ * weights saves; each parameter's version is checked too. The answer holds the heap and its parameters in use, which replace the cached ones, so the next save
  * has the new versions even before the refetch.
  */
 export function useUpdateWeights(heapRef: HeapRef) {

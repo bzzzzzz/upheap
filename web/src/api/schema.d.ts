@@ -619,8 +619,8 @@ export interface paths {
         head?: never;
         /**
          * Sets the heap's weights and its parameters' weights in one transaction. Admins only; send the heap's `version` in
-         *     `If-Match`. The heap's version guards the whole save, even when only parameter weights change; each listed
-         *     parameter's `version` is checked too. Weights equal to the stored ones are skipped, and a request that changes
+         *     `If-Match`. The heap's version orders saves through here, even those that change only parameter weights, and
+         *     each listed parameter's `version` is checked too. A parameter's own edits are guarded by its version alone. Weights equal to the stored ones are skipped, and a request that changes
          *     nothing succeeds. Any error saves nothing.
          */
         patch: operations["update_weights"];
