@@ -1,4 +1,4 @@
-// End-to-end tests of the golden paths (design/technical-design.md, Testing §5), at each width, against the real
+// End-to-end tests of the golden paths (design/architecture.md, Testing §5), at each width, against the real
 // server binary with the built web app embedded. The server runs on a fresh in-memory SQLite database, and each
 // test registers its own account, so tests share nothing and run in parallel.
 import { defineConfig } from "@playwright/test";

@@ -19,8 +19,9 @@ Build, run and check commands are in [README.md](README.md).
 ## Docs
 
 Read [design/engineering-principles.md](design/engineering-principles.md) before writing code. **Must follow.**
-Where code and principles disagree, fix one of them. [design/technical-design.md](design/technical-design.md) is
-the architecture. [design/README.md](design/README.md) indexes every doc and says what each is for.
+Where code and principles disagree, fix one of them. [design/architecture.md](design/architecture.md) explains how
+it's built and why, and [design/decisions.md](design/decisions.md) records the choices that could have gone another
+way. [design/README.md](design/README.md) indexes every doc and says what each is for.
 
 Rules for the docs:
 
@@ -30,8 +31,8 @@ Rules for the docs:
 2. **Status lives in [design/progress.md](design/progress.md) only,** as state, not history: one line per area, no
    changelogs, no test counts. Update the row for the area you changed. The pull requests are the history.
 3. **A design doc for unbuilt work is temporary.** It lives in `design/` while the work is built. Once built, the
-   reasons worth keeping move into the architecture or the module docs, its status into progress.md, and the file
-   goes. Git remembers it.
+   mechanisms worth keeping move into architecture.md or the module docs, the choices into decisions.md, its status
+   into progress.md, and the file goes. Git remembers it.
 4. **Open questions** about built things go in progress.md's one list. A design doc for unbuilt work keeps its own
    until it's built.
 

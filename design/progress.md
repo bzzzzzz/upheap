@@ -1,18 +1,19 @@
 # Progress
 
 What's built, what's next and what's undecided, against [requirements.md](requirements.md),
-[offering.md](offering.md) and [technical-design.md](technical-design.md). Last reviewed 2026-11-08.
+[offering.md](offering.md) and [architecture.md](architecture.md). Last reviewed 2026-11-08.
 
 This file records state, not history: one line per area, and the pull requests for how an area got there. How
 something works belongs in the design doc or the code each row points to.
 
-Status: ✅ done · 🟡 partial · ⬜ not started.
+Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Req, Off and Arch are requirements.md, offering.md
+and architecture.md.
 
 ## Status
 
 | Area | Spec | Status | Notes |
 | --- | --- | :---: | --- |
-| Local accounts | Off Auth §2–3, TD Auth §4 | ✅ | Register, sign in by email or username, sign out. argon2id, hashed session tokens, CSRF header, five sign-in attempts per account per 15 minutes |
+| Local accounts | Off Auth §2–3, Arch Auth §4 | ✅ | Register, sign in by email or username, sign out. argon2id, hashed session tokens, CSRF header, five sign-in attempts per account per 15 minutes |
 | Personal team and heap | Off Teams §3 | ✅ | Made on registration and named by the username. Private, so it takes no members |
 | Readable IDs | [readable-ids.md](readable-ids.md) | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
 | Items | Req Items §1–4, 6–7 | ✅ | Loose and exact due times with fuzzy labels. Need is required on every item and never cleared. Reopen within 7 × 24 h |
@@ -21,20 +22,20 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Closed items | Req Views: Closed items | ✅ | Sections Today, This week and Earlier. Reopen while allowed. Cursor paging |
 | Add item | Req Views: Add item | ✅ | A dialog (`N`, or + on a phone) with every field, prefilled from the list's filters. Says where the item landed. Add another is remembered per device |
 | Item pane | Req Views: Edit item | ✅ | Over the list: a pane beside it, a panel on a tablet, a sheet on a phone. Every field, the state and the blocker, each change saved as it's made |
-| Tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case, never deleted. Created from the picker. Renamed and described on the Tags tab of the heap's Settings |
+| Tags | Req Items §5, Manage tags | ✅ | Unique per heap ignoring case, never deleted. Created from the picker. Renamed and described in the heap's Settings |
 | Blockers | Req Items §8, Priority §5 | ✅ | Cycle check in the write transaction. "Blocks …" contributor |
 | Custom parameters | Req Custom parameters, Manage parameters | ✅ | Admins add, weigh, reorder and archive parameters and options (open items switch to the replacement) and link tags. Values count in ranking, contributors, filters and sort |
 | Saved views | Req Heaps §4 | 🟡 | API done, shared by the team. Hidden in the web app until they have a place in the Filters panel |
 | Teams and members | Req Heaps §2–3, Off Teams | ✅ | Create and rename teams, add members found by `GET /users`, promote, demote, remove, leave. A team always keeps an admin |
-| Heaps | Off Teams §4, 9 | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or on the heap's Settings page (General, Tags and Parameters tabs). An archived heap is read-only, with an Unarchive banner for admins |
+| Heaps | Off Teams §4, 9 | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Off Audit | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI | [cli.md](cli.md) | 🟡 | Server half done: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. Not started: `crates/api-types`, `crates/cli`, `/me/tokens` |
-| API conventions | TD API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
-| Deployment | TD Configuration, [cloud-run-postgres.md](cloud-run-postgres.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
+| API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
+| Deployment | Arch Configuration, [cloud-run-postgres.md](cloud-run-postgres.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | [local-build.md](local-build.md) | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams and Team fitted to phones and wide screens in the design tokens. Heap Settings (General, Tags, Parameters) too, with Settings in the sidebar and phone tabs and Activity in More. Left: Activity at phone width. The tablet keeps app-ux.md's layout, unreviewed |
-| Testing and CI | TD Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
+| Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps app-ux.md's layout, unreviewed |
+| Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next
 
@@ -51,11 +52,9 @@ In rough order.
 6. **OIDC sign-in**, with a username step on first sign-in ([readable-ids.md](readable-ids.md), Sign-up).
 7. **Invitations** by email or link (Off Teams §6).
 8. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
-9. **Docs.** Finish the restructuring this file is the first step of: `architecture.md` and `decisions.md` from
-   technical-design.md, without the endpoint, column and error-code tables that `openapi.json`, the migrations and
-   `error.rs` already hold; local-build.md, readable-ids.md and cloud-run-postgres.md dissolved into them and an
-   `operations.md`; `ux.md` from ux-overview.md and app-ux.md with screens.md's core flows; `product.md` from
-   requirements.md and offering.md. The rules are in [CLAUDE.md](../CLAUDE.md).
+9. **Docs.** Finish the restructuring: local-build.md, readable-ids.md and cloud-run-postgres.md dissolved into
+   architecture.md, decisions.md and an `operations.md`; `ux.md` from ux-overview.md and app-ux.md with screens.md's
+   core flows; `product.md` from requirements.md and offering.md. The rules are in [CLAUDE.md](../CLAUDE.md).
 
 ## Later
 

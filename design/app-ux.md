@@ -1,6 +1,6 @@
 # Web app UX for phones and wide screens
 
-Draft. A change spec on top of [technical-design.md](technical-design.md). Status lives in [progress.md](progress.md).
+A change spec on top of [architecture.md](architecture.md). Status lives in [progress.md](progress.md).
 The mockups are in the "Upheap layouts" canvas linked from the pull request that adds this file.
 
 ## Goal

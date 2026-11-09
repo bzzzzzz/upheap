@@ -1,6 +1,6 @@
 # Local build
 
-Draft. A change spec on top of [technical-design.md](technical-design.md). Status lives in
+A change spec on top of [architecture.md](architecture.md). Status lives in
 [progress.md](progress.md).
 
 ## Goal
