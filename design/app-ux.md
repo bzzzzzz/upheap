@@ -107,7 +107,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
    sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
-   and changed settings, amber while any are on.
+   and changed settings, amber while any are on; on a phone, where the sort is out of sight in the sheet, it counts a
+   sort other than Priority too ("Filters and sort, 1 on").
 8. Under the toolbar a chip takes off each filter ("Need: Critical") or changed setting ("Blocked: shown"), with
    "6 of 14" while filters are on and Reset all. Reset all keeps the sort and the search.
 
@@ -177,7 +178,7 @@ Chromium, against both the server and the local build.
    2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
       keyboard navigation.
 3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
-   sheet down and swiping the tablet panel right to close them, Filters and View sheets, heap switcher.
+   sheet down and swiping the tablet panel right to close them, the Filters & sort sheet, heap switcher.
 4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 
 ## Later: an installable app

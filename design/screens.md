@@ -182,20 +182,20 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | E-item-missing | Item not found | M-item | 1 | 2 | 3 | built |
 | S-backend-failed | Local backend didn't start | — | 1 | 3 | n/a | implied |
 | E-load-error | Page failed to load | every screen | 1 | 3 | 3 | built |
-| P-saved-views | Saved views bar | S-heap | 4 | 2 | 2 | built |
+| P-saved-views | Saved views bar | S-heap | 4 | 2 | 2 | hidden for now |
 | P-item-history | Item history | M-item | 3 | 1 | 2 | built |
 | P-param-picker | Parameter picker | M-item, M-add-item | 3 | 2 | 2 | built |
 | P-sort | Sort select | S-heap | 3 | 2 | 2 | built |
-| P-view-changed | Changed-view actions | P-saved-views | 2 | 2 | 2 | built |
+| P-view-changed | Changed-view actions | P-saved-views | 2 | 2 | 2 | hidden for now |
 | M-add-discard | Discard this item? | M-add-item | 2 | 2 | 2 | built |
 | S-heap-activity | Heap activity | — | 2 | 1 | 2 | built |
-| P-view-name | Name a view (new or rename) | P-saved-views | 2 | 2 | 2 | built |
+| P-view-name | Name a view (new or rename) | P-saved-views | 2 | 2 | 2 | hidden for now |
 | E-no-match | No items match | S-heap | 2 | 2 | 2 | built |
 | S-parameters | Parameters | — | 2 | 2 | 2 | built |
 | P-refresh | Refresh order | S-heap | 2 | 2 | 2 | removed |
 | P-tag-row | Tag row (inline edit) | S-tags | 2 | 1 | 2 | built |
 | S-tags | Tags | — | 2 | 1 | 2 | built |
-| M-view-settings | View settings | S-heap | 2 | 2 | 2 | built |
+| M-view-settings | View settings | S-heap | 2 | 2 | 2 | replaced by M-filters |
 | S-invite | Accept an invitation | — | 1 | n/a | 2 | implied (later) |
 | G-archived-banner | Archived heap notice | shell | 1 | 2 | 2 | built |
 | S-oidc-username | Choose a username | — | 1 | n/a | 2 | designed |
@@ -220,7 +220,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | P-option-archive | Archive option, with replacement | P-param-card | 1 | 1 | 1 | built |
 | P-param-archive | Archive parameter | P-param-card | 1 | 1 | 1 | built |
 | M-heap-archive | Archive this heap? | P-heap-row | 1 | 1 | 1 | implied |
-| M-view-archive | Archive this view? | P-saved-views | 1 | 1 | 1 | built |
+| M-view-archive | Archive this view? | P-saved-views | 1 | 1 | 1 | hidden for now |
 | P-param-archived | Archived parameters | S-parameters | 1 | 1 | 1 | built |
 | S-oauth-done | Back to the terminal | — | 1 | n/a | 1 | implied |
 | P-display-name | Display name | S-account | 1 | 1 | 1 | built |
@@ -233,7 +233,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | P-tag-history | Tag history | P-tag-row | 1 | 1 | 1 | built |
 | S-team-activity | Team activity | — | 1 | 1 | 1 | built |
 | P-team-name | Team name and slug | S-team | 1 | n/a | 1 | built (slug designed) |
-| P-view-history | View history | P-saved-views | 1 | 1 | 1 | built |
+| P-view-history | View history | P-saved-views | 1 | 1 | 1 | hidden for now |
 
 ## First design and build set
 
@@ -259,7 +259,7 @@ S-heap, P-row, P-search, P-hidden-count, G-toast *(frequency: shown after every 
 is the cheap fix for a mis-tap)*, and P-saved-views *(frequency: used daily, and its chips sit at the top of the
 list at both widths, so leaving them out of the first design would mean laying the list out twice)*.
 
-- **Browser:** heap name; the saved view chips; the Add field; search; the Pinned and Up next groups; rows with the
+- **Browser:** heap name; the saved view chips (hidden for now); the Add field; search; the Pinned and Up next groups; rows with the
   state circle, position, title, due chip, tags, contributors, and effort and impact at the right edge; the
   selected row while M-item is open; the hidden-items note with its way to show blocked items; the toast at the
   bottom centre with Undo. No shortcut hints (see Deferred).
@@ -601,15 +601,15 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
   read-only in an archived heap.
 - **Shows, top to bottom:**
   1. Heap name (hidden on a phone, where the top bar has it).
-  2. P-saved-views.
+  2. P-saved-views: hidden for now.
   3. "Add an item" field with an `N` hint: the way into M-add-item. Disabled in an archived heap.
-  4. Toolbar: P-search, P-sort, Filters (with a count, M-filters), View (M-view-settings).
+  4. Toolbar: P-search, P-sort, Filters (with a count, M-filters); on a phone, search and Filters only, with the sort
+     in the Filters & sort sheet. Under it, a chip for each filter on and each changed view setting, with Reset all.
   5. Groups: **Pinned** (titled "In progress" when every pinned item is in progress; compact rows without
      contributors), **Up next** (the ranked items; untitled when nothing is pinned), **Blocked** (when blocked is
      shown and grouped). Each group numbers its rows from 1.
   6. P-hidden-count.
-- **Actions:** open an item, mark one done, change state by swipe, add, search, sort, filter, change view, open or
-  save a saved view.
+- **Actions:** open an item, mark one done, change state by swipe, add, search, sort, filter, change view.
 - **Exits:** M-item (over the list), other heap views via the shell.
 - **Widths:** wide shows effort and impact sizes ("M · L") at each row's right edge and parameter chips on the first
   line; phone and tablet put parameter chips on their own line. While another view loads, the previous one stays,
@@ -649,22 +649,24 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 #### M-filters: Filters
 
-- **Trigger:** Filters button (shows "Filters (3)" when on). **Contents:** Tags (any) chips, Effort S M L XL, Impact
-  S M L XL, each parameter's options "(any)", and filters a saved view still has on archived parameters, labelled
-  "(archived, ignored)" so they can be removed. Clear filters.
+- **Trigger:** Filters button, with a badge counting the filters on and the changed view settings (on a phone, the
+  icon alone, which also counts a sort other than Priority). **Contents:** on a phone first Sort by (P-sort's
+  choices); then Show: Open, In progress, Blocked, each Pinned / Shown / Hidden (defaults: open shown, in progress
+  pinned, blocked hidden; a dot marks a changed one), and "Shown blocked": Own group / Mixed in (only while blocked
+  is shown); then Narrow down: Tags (any) chips, Need, Effort S M L XL, Impact S M L XL, each parameter's options
+  "(any)", and filters a link still has on archived parameters, labelled "(archived, ignored)" so they can be
+  removed. Reset all puts back the default view settings and takes the filters off; the sort and search stay.
 - **Semantics:** values within one filter match any; filters combine with AND. Filtering keeps priority order.
-- **Presentation:** popover under the button (tablet, wide); bottom sheet above the keyboard (phone).
-- **Freq 3.** **Source:** Req List items §6, app-ux.md The list §7; `FiltersPanel`. Built.
+- **Presentation:** popover under the button with "4 of 14 items" and Done (tablet, wide); the "Filters & sort"
+  bottom sheet above the keyboard, whose button reads "Show 4 items" (phone).
+- **Freq 3.** **Source:** Req List items §2–3, §6, app-ux.md The list §7; `ListControls.tsx`. Built.
 - **Must:** local 2, server 3. Server: with no assignees, filtering by tag is how a team member narrows a shared heap
   to their part; search is the fallback.
 
 #### M-view-settings: View settings
 
-- **Trigger:** View button. **Contents:** Open, In progress, Blocked, each
-  Pinned / Shown / Hidden (defaults: open shown, in progress pinned, blocked hidden); "Shown blocked": In their own
-  group / Mixed in (only when blocked is shown); Reset to the default view.
-- **Presentation:** as M-filters.
-- **Freq 2.** **Source:** Req List items §2–3, TD Search §3; `ViewPanel`. Built.
+- Replaced: its settings are M-filters' Show section, and there is no View button.
+- **Freq 2.** **Source:** Req List items §2–3, TD Search §3. Replaced by M-filters.
 - **Must:** local 2, server 2. The way to show blocked items is also P-hidden-count's job; pinning and mixing are
   rarely changed.
 
@@ -675,7 +677,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
   blocked item exists under the default view.
 - **Freq 3.** Built.
 - **Must:** local 4, server 4. Blocked items are hidden by default; without the note they vanish, and unblocking
-  (L2.7) has no visible way in. M-view-settings is the long way round.
+  (L2.7) has no visible way in. M-filters' Show section is the long way round.
 
 #### P-refresh: Refresh order
 
@@ -683,7 +685,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
   The list otherwise keeps its order for the session, apart from edited items, which move at once.
 - **Freq 2.** **Source:** Req Priority §6, TD Session-stable order §6. Removed.
 
-#### P-saved-views: Saved views bar
+#### P-saved-views: Saved views bar (hidden for now)
 
 - **Shows:** chips, Default first, then the heap's views by name; the open one filled, with a dot when the
   list differs from it. Scrolls sideways on a phone.
@@ -692,7 +694,8 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
     (P-view-history).
   - Changed (P-view-changed): the dot's menu, with Save to {name}, Save as a new view… and Undo changes.
 - **Who:** every member sees and edits views (`create` on the list; `edit`, `archive` on each).
-- **Freq 4.** **Source:** Req Heaps §4, TD API saved views; `SavedViewsBar.tsx`. Built.
+- **Freq 4.** **Source:** Req Heaps §4, TD API saved views. Hidden for now: the web app doesn't show saved views,
+  which the API keeps; they need a place in M-filters.
 - **Must:** local 2, server 2. Filters and search rebuild any view by hand.
 
 ##### P-view-changed, P-view-name, M-view-archive, P-view-history
@@ -710,9 +713,9 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 | --- | --- | --- | :---: | :---: | :---: | --- |
 | E-heap-empty | No open items, nothing hidden, no filter or search | "Nothing here yet. Add the first thing on your plate." | 1 | 3 | 3 | built |
 | E-no-match | A filter, search or view leaves nothing | "No items match." | 2 | 2 | 2 | built |
-| E-bad-view | The server refuses the URL's view (`400`/`422`, such as a tag from a bookmark that's gone) | Saved views and toolbar stay; "This view can't be shown: {message}" and Reset to the default view | 1 | 2 | 2 | built |
+| E-bad-view | The server refuses the URL's view (`400`/`422`, such as a tag from a bookmark that's gone) | The toolbar stays; "This view can't be shown: {message}" and Reset to the default view | 1 | 2 | 2 | built |
 
-A view URL naming an archived saved view silently drops `view` (TD API saved views). Built.
+While saved views are hidden, the web app ignores `view` in the URL, as any unknown parameter (TD API saved views).
 
 ### M-item: Item pane, panel or sheet
 
@@ -866,7 +869,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ## Views, filters and tags
 
-The list's view controls (P-search, P-sort, M-filters, M-view-settings, P-saved-views) are described under S-heap,
+The list's view controls (P-search, P-sort, M-filters, and P-saved-views, hidden for now) are described under S-heap,
 where they live.
 
 ### S-tags: Tags
