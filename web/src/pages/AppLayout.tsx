@@ -84,9 +84,12 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
 }
 
 // The shared look of a navigation entry: icon over a short label in the rail, icon beside the label in the sidebar,
-// and at least 44 px tall everywhere. Links get `data-status="active"` from the router.
+// and at least 44 px tall everywhere. Links get `data-status="active"` from the router. The active entry is an amber
+// pill, as the selected row of the list is amber: a surface-coloured fill vanished on the phone's tabs, which are the
+// surface, and barely showed on the dark sidebar. A tint of the accent rather than `accent-soft`, which is too close to
+// white to show on the tabs and the sidebar in light mode. Hovering it keeps the pill, so hover and active stay apart.
 const navItemClass =
-  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
+  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-accent/20 data-[status=active]:text-accent-ink data-[status=active]:hover:bg-accent/20 data-[status=active]:hover:text-accent-ink lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
 /**
  * With `current`, the link shows as active also where the router wouldn't say so. `count`, such as the heap's open
@@ -249,6 +252,10 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
+  // The heap's pages that only More leads to, so More shows as active on them. The tabs show only on a heap's pages.
+  const onTags = useMatch({ from: "/app/teams/$team/heaps/$heap/tags", shouldThrow: false }) !== undefined;
+  const onParameters = useMatch({ from: "/app/teams/$team/heaps/$heap/parameters", shouldThrow: false }) !== undefined;
+  const onMorePage = onTags || onParameters;
 
   return (
     <nav
@@ -271,6 +278,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       <button
         type="button"
         aria-expanded={more}
+        {...(onMorePage && { "data-status": "active", "aria-current": "true" })}
         onClick={() => setMore(true)}
         className={`${navItemClass} outline-none focus-visible:outline-2 focus-visible:outline-accent aria-expanded:text-ink`}
       >

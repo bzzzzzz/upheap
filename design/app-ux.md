@@ -31,7 +31,10 @@ The app is one 768 px column with a top bar of text links. That works on a lapto
 ## Toolkit
 
 1. **Tailwind v4, kept**, with our design tokens in `@theme` (surface, ink, muted, accent, state colours, radii), so
-   light and dark modes come from one place instead of `dark:` pairs on every element.
+   light and dark modes come from one place instead of `dark:` pairs on every element. Which one shows is the
+   Account page's Appearance setting: System (the default) follows the device, and Light or Dark overrides it. It's
+   kept per browser in localStorage, not on the server, as it's about the screen rather than the account, and applied
+   by an inline script in `index.html` before the first paint, so a reload doesn't flash the other theme.
 2. **React Aria Components** for behaviour: dialogs and sheets, menus, radio and toggle groups, date picker, tag
    group, and the list itself (`GridList`, for keyboard navigation and selection). It is unstyled, so it takes our
    Tailwind classes, and it is one dependency rather than copied code. It handles touch properly: a scroll doesn't

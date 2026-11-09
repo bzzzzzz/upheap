@@ -2,11 +2,29 @@
 @import "@fontsource-variable/inter";
 
 /*
+ * Dark is the theme picked on the Account page (src/components/theme.ts), which sets `data-theme` on <html>, or with
+ * none picked, the device's. Tailwind's `dark:` follows only the device, so it's redefined here, and the tokens below
+ * use the same variant, so the two can't disagree.
+ */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/*
  * Design tokens (design/app-ux.md, Toolkit). Each colour is named for its job, and dark mode swaps the values here,
  * so components use `bg-surface` rather than a `bg-white dark:bg-stone-900` pair. The values follow the mockups:
  * stone for ink and surfaces, amber for the accent, teal for done, violet for custom parameters, red for overdue.
  */
 :root {
+  /* Form controls and scrollbars in the theme's colours. */
+  color-scheme: light;
   /* The height the on-screen keyboard covers (useKeyboardInset), for sheets that sit above it. */
   --keyboard-inset: 0px;
   --phone-tabs-height: 0px;
@@ -38,10 +56,9 @@
   --avatar-4-ink: #9d174d;
   --avatar-5: #e0f2fe;
   --avatar-5-ink: #075985;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
+  @variant dark {
+    color-scheme: dark;
     --canvas: #0c0a09;
     --surface: #1c1917;
     --sunken: #141210;

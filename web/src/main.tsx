@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
 import { LocalDatabaseGate } from "./components/LocalDatabase";
+import { followThemeAcrossTabs } from "./components/theme";
 import { createAppRouter, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
 
@@ -45,6 +46,8 @@ const queryClient = new QueryClient({
 });
 
 const router = createAppRouter(queryClient);
+
+followThemeAcrossTabs();
 
 const root = document.getElementById("root");
 if (root) {
