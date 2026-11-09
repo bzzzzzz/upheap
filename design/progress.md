@@ -6,8 +6,9 @@ Tracks what is built against [requirements.md](requirements.md), [offering.md](o
 About 70% of the golden path is built: local accounts, teams with members and roles, heaps that can be created,
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
-rate limiting, readable handles in every URL, and need with ranking formula `V2`. OIDC and CLI sign-in are not started. All 267 Rust tests pass
-(`cargo test --workspace`), the store and API suites also pass on MySQL 8.4 and Postgres 17, the 49 Playwright tests run at each of
+rate limiting, readable handles in every URL, need with ranking formula `V2`, and the server's half of CLI sign-in
+(OAuth with PKCE and bearer tokens). OIDC is not started. All 299 Rust tests pass
+(`cargo test --workspace`), the store and API suites also pass on MySQL 8.4 and Postgres 17, the 57 Playwright tests run at each of
 three widths (a few skip at widths they don't apply to), and 46 against the local build (those that need accounts or
 request routing skip there), and the web typecheck and lint are clean. CI
 runs all of them on every pull request.
@@ -38,8 +39,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 | Audit log: writing entries | Off Audit §1–3 | ✅ | Written in the same transaction as every write |
 | Audit log: viewing entries | Off Audit §4 | ✅ | Heap and team logs, filtered by permission and paged; one entity's history in the item pane and on tags, parameters, saved views, heaps and members; Activity pages |
 | OIDC sign-in | Off Auth §1 | ⬜ | |
-| CLI sign-in: OAuth with PKCE | Off Auth §4 | ⬜ | |
-| CLI: items, states, list, tags, heaps | [cli.md](cli.md) | ⬜ | Designed; needs CLI sign-in and the DTOs moved to `api-types` first |
+| CLI sign-in: OAuth with PKCE | Off Auth §4 | 🟡 | Server done ([cli-tracker.md](cli-tracker.md) step 1): `/oauth/authorize`, `/oauth/token`, `/oauth/revoke` for the one client `upheap-cli` with loopback redirect URIs, rotating refresh tokens that revoke their family when reused, `Authorization: Bearer` on every endpoint without the CSRF header, and the web app's consent page. Left: `/me/tokens`, and the CLI's own login |
+| CLI: items, states, list, tags, heaps | [cli.md](cli.md) | ⬜ | Designed and tracked in [cli-tracker.md](cli-tracker.md); the server half of sign-in is done, the DTOs move to `api-types` next |
 | Sign-in rate limiting | TD Auth §4 | ✅ | Five attempts per account (or per unknown address or username) per 15 minutes, counted with one upsert so concurrent attempts can't slip past; addresses compared exactly on MySQL too; `429` `too_many_attempts` with `Retry-After`. No per-IP limit |
 | API conventions: `If-Match`, problem+json, scoping | TD API, Access control | ✅ | Outsiders get 404, archived heaps get 409 |
 | Deployment: single binary, Docker, health checks | TD Configuration | ✅ | SQLite, MySQL or Postgres chosen at startup |
@@ -107,7 +108,8 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
   - [x] History in the item pane and on tags, parameters, saved views, heaps and members; heap and team Activity pages
 - [ ] **Auth**
   - [ ] Generic OIDC providers, matched by `(provider, subject)`
-  - [ ] OAuth authorization code + PKCE, refresh-token rotation, `/me/tokens`
+  - [x] OAuth authorization code + PKCE, refresh-token rotation, bearer tokens, the consent page
+  - [ ] `/me/tokens`: list and revoke the CLI's tokens
   - [x] Sign-in rate limiting
 - [x] **Local build** ([local-build.md](local-build.md))
   - [x] Spike: `domain`, `store`, `service` and `api` on `wasm32-unknown-unknown`, SeaORM proxy over SQLite-wasm
@@ -128,5 +130,5 @@ Status: ✅ done · 🟡 partial · ⬜ not started.
 
 ## Suggested order
 
-1. Editing the heap's own weights, OIDC sign-in, the CLI's OAuth flow, and invitations.
+1. Editing the heap's own weights, OIDC sign-in, the CLI ([cli-tracker.md](cli-tracker.md)), and invitations.
 2. The web app at phone and wide-screen widths ([app-ux.md](app-ux.md)), starting with the app shell.

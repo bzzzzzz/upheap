@@ -9,6 +9,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
 use domain::item::ItemError;
+use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::team::TeamError;
 use domain::validation::Field;
@@ -52,6 +53,9 @@ pub enum ApiError {
     VersionRequired,
     /// A state-changing request came without the CSRF header.
     CsrfHeaderMissing,
+    /// The `Authorization` header holds no bearer token, or one that is unknown, expired or revoked.
+    #[cfg(feature = "accounts")]
+    BearerRejected,
     NoSuchRoute,
     /// A service error caused by one query parameter or body field, which the problem names as its `field`.
     InField {
@@ -136,6 +140,13 @@ fn classify(err: &ApiError) -> Classified {
             "State-changing requests need the X-CSRF-Protection header",
             Category::Caller,
         ),
+        #[cfg(feature = "accounts")]
+        ApiError::BearerRejected => simple(
+            StatusCode::UNAUTHORIZED,
+            "unauthenticated",
+            "The access token is invalid, expired or revoked",
+            Category::Permission,
+        ),
         ApiError::NoSuchRoute => simple(StatusCode::NOT_FOUND, "not_found", "Not found", Category::Permission),
         ApiError::Service(err) => classify_service(err),
     }
@@ -169,6 +180,9 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some(field.as_str()),
             ..simple(StatusCode::CONFLICT, "handle_taken", Category::Conflict)
         },
+        ServiceError::Authorization(error) => classify_authorization(error, simple),
+        // Only the token endpoint refuses grants, in its own format (`oauth::OAuthRefusal`); this is for any other.
+        ServiceError::InvalidGrant(_) => simple(StatusCode::BAD_REQUEST, "invalid_grant", Category::Caller),
         ServiceError::RegistrationClosed => simple(StatusCode::FORBIDDEN, "registration_closed", Category::Permission),
         ServiceError::HeapArchived { .. } => simple(StatusCode::CONFLICT, "heap_archived", Category::Conflict),
         ServiceError::VersionConflict { .. } => simple(StatusCode::CONFLICT, "version_conflict", Category::Conflict),
@@ -291,6 +305,26 @@ fn classify_parameter(
     }
 }
 
+fn classify_authorization(
+    err: &AuthorizationError,
+    simple: impl Fn(StatusCode, &'static str, Category) -> Classified,
+) -> Classified {
+    let (code, field) = match err {
+        AuthorizationError::ResponseTypeUnsupported => ("response_type_unsupported", "response_type"),
+        AuthorizationError::ClientUnknown => ("client_unknown", "client_id"),
+        AuthorizationError::RedirectUriInvalid => ("redirect_uri_invalid", "redirect_uri"),
+        AuthorizationError::CodeChallengeInvalid => ("code_challenge_invalid", "code_challenge"),
+        AuthorizationError::CodeChallengeMethodUnsupported => {
+            ("code_challenge_method_unsupported", "code_challenge_method")
+        }
+        AuthorizationError::StateMissing => ("state_missing", "state"),
+    };
+    Classified {
+        field: Some(field),
+        ..simple(StatusCode::UNPROCESSABLE_ENTITY, code, Category::Caller)
+    }
+}
+
 fn classify_validation(err: &ValidationError) -> Classified {
     let hint = match err {
         ValidationError::HandleInvalid { hint, .. } => hint.clone(),
@@ -364,6 +398,14 @@ impl IntoResponse for ApiError {
             Json(body),
         )
             .into_response();
+        #[cfg(feature = "accounts")]
+        if matches!(self, ApiError::BearerRejected) {
+            // RFC 6750 §3: says how to authenticate, and why this token didn't.
+            response.headers_mut().insert(
+                header::WWW_AUTHENTICATE,
+                axum::http::HeaderValue::from_static("Bearer error=\"invalid_token\""),
+            );
+        }
         if let ApiError::Service(ServiceError::TooManySignInAttempts { retry_after }) = &self {
             response
                 .headers_mut()
