@@ -67,6 +67,7 @@ async function openSwitcher(page: Page) {
 const MORE_HEAPS = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"];
 
 const isNarrow = (page: Page) => (page.viewportSize()?.width ?? 0) < 640;
+const isCoarse = (page: Page) => page.evaluate(() => matchMedia("(pointer: coarse)").matches);
 
 test("the heap switcher opens another heap", async ({ page, localBuild }) => {
   await addHeaps(page, ["Garden"], localBuild);
@@ -74,10 +75,29 @@ test("the heap switcher opens another heap", async ({ page, localBuild }) => {
   const heaps = await openSwitcher(page);
   // The heap on screen is checked.
   await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveCount(1);
-  await heaps.getByRole("menuitem", { name: "Garden" }).click();
+  // Rows are links, under the app's base path, so they open in a new tab and can be copied.
+  const current = new URL(page.url()).pathname;
+  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveAttribute("href", current);
+  const garden = heaps.getByRole("menuitem", { name: "Garden" });
+  await expect(garden).toHaveAttribute("href", current.replace(/[^/]+$/, "garden"));
+  // A plain click navigates in place, without reloading the page.
+  await page.evaluate(() => ((window as unknown as { kept: boolean }).kept = true));
+  await garden.click();
   await expect(page).toHaveURL(/\/heaps\/garden$/);
+  expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
   await expect(page).not.toHaveURL(startUrl);
   await expect(heaps).toHaveCount(0);
+});
+
+test("a modifier-click on a heap opens it in a new tab", async ({ page, localBuild }) => {
+  await addHeaps(page, ["Garden"], localBuild);
+  const heaps = await openSwitcher(page);
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  const [tab] = await Promise.all([
+    page.context().waitForEvent("page"),
+    heaps.getByRole("menuitem", { name: "Garden" }).click({ modifiers: [modifier] }),
+  ]);
+  await expect(tab).toHaveURL(/\/heaps\/garden$/);
 });
 
 test("the heap switcher starts a new heap in the heap's team", async ({ page }) => {
@@ -116,7 +136,8 @@ test("searching for a heap that isn't there offers to make it, named as typed", 
   await addHeaps(page, MORE_HEAPS, localBuild);
   const heaps = await openSwitcher(page);
   await heaps.getByLabel("Find a heap").fill("Roadmap");
-  await expect(heaps.getByText("No heap matches “Roadmap”")).toBeVisible();
+  await expect(heaps.getByText("No heap matches “Roadmap”", { exact: true })).toBeVisible();
+  await expect(heaps.getByRole("status")).toHaveText(/^No heap matches “Roadmap”\./);
   await expect(heaps.getByText(/^Searched all 8 heaps/)).toBeVisible();
   await heaps.getByRole("menuitem", { name: /^New heap “Roadmap” in / }).click();
   const name = heaps.getByLabel(/^Name of the new heap in /);
@@ -129,6 +150,7 @@ test("searching for a heap that isn't there offers to make it, named as typed", 
 
 test("the arrow keys move through the heaps from the search field", async ({ page, localBuild }) => {
   test.skip(isNarrow(page), "A phone has no keyboard.");
+  test.skip(await isCoarse(page), "A coarse pointer doesn't focus the search field, so as not to raise a keyboard.");
   await addHeaps(page, MORE_HEAPS, localBuild);
   const start = page.url();
   const heaps = await openSwitcher(page);
@@ -174,7 +196,9 @@ test("archived heaps are folded away, and found by search", async ({ page, local
   await expect(heaps.getByRole("menuitem", { name: "Old news" })).toHaveCount(0);
   await heaps.getByRole("menuitem", { name: "1 archived" }).click();
   await expect(heaps.getByRole("menuitem", { name: "Old news (archived)" })).toBeVisible();
+  // The row stays as the toggle, so keyboard focus stays where it was.
   await expect(heaps.getByRole("menuitem", { name: "1 archived" })).toHaveCount(0);
+  await expect(heaps.getByRole("menuitem", { name: "Hide archived" })).toBeVisible();
 
   // Searching finds it, tagged, once the list is long.
   await page.keyboard.press("Escape");

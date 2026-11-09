@@ -117,7 +117,6 @@ function SwitcherBody({
 }) {
   const phone = useMedia(PHONE);
   const coarse = useMedia(TOUCH);
-  const navigate = useNavigate();
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
   const current = entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
@@ -135,10 +134,6 @@ function SwitcherBody({
 
   const query = long ? text.trim() : "";
   const searching = query !== "";
-  const open = (entry: Entry) => {
-    void navigate({ to: "/teams/$team/heaps/$heap", params: { team: entry.team.slug, heap: entry.heap.slug } });
-    close();
-  };
   const toggleFold = (id: string) => {
     const next = new Set(folded);
     if (!next.delete(id)) next.add(id);
@@ -182,7 +177,7 @@ function SwitcherBody({
         id={`heap:${heap.id}`}
         entry={{ team, heap }}
         current={heap.id === current?.heap.id}
-        onOpen={open}
+        onOpen={close}
       />
     );
     return (
@@ -206,24 +201,31 @@ function SwitcherBody({
           several && <SectionTitle count={unarchived.length}>{label}</SectionTitle>
         )}
         {!isFolded && unarchived.map(heapItem)}
-        {!isFolded && archived.length > 0 && !showArchived && (
+        {!isFolded && showArchived && archived.map(heapItem)}
+        {!isFolded && archived.length > 0 && (
           <MenuItem
             id={`archived:${team.id}`}
-            textValue={`${archived.length} archived`}
-            onAction={() => setRevealed(new Set(revealed).add(team.id))}
+            textValue={showArchived ? "Hide archived" : `${archived.length} archived`}
+            aria-expanded={showArchived}
+            onAction={() => {
+              const next = new Set(revealed);
+              if (!next.delete(team.id)) next.add(team.id);
+              setRevealed(next);
+            }}
             className={`${rowClass} text-muted`}
           >
             <Archive aria-hidden="true" className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{archived.length} archived</span>
+            <span className="min-w-0 flex-1 truncate">
+              {showArchived ? "Hide archived" : `${archived.length} archived`}
+            </span>
           </MenuItem>
         )}
-        {!isFolded && showArchived && archived.map(heapItem)}
       </MenuSection>
     );
   });
 
   const menu = (
-    <Menu aria-label="Heaps" autoFocus={!long && !phone} className="outline-none">
+    <Menu aria-label="Heaps" autoFocus={!long && !phone && !coarse} className="outline-none">
       {searching ? (
         <>
           {results.map((entry) => (
@@ -234,7 +236,7 @@ function SwitcherBody({
               current={isCurrent(entry)}
               teamLabel={teamLabel(entry)}
               query={query}
-              onOpen={open}
+              onOpen={close}
             />
           ))}
           {createRow}
@@ -255,7 +257,7 @@ function SwitcherBody({
                   entry={entry}
                   teamLabel={teamLabel(entry)}
                   extraClass={chipClass}
-                  onOpen={open}
+                  onOpen={close}
                 />
               ))}
             </MenuSection>
@@ -266,20 +268,25 @@ function SwitcherBody({
     </Menu>
   );
 
+  const noMatch = `No heap matches “${query}”`;
+  const searched = `Searched all ${entries.length} ${entries.length === 1 ? "heap" : "heaps"}${
+    several ? ` in ${me.teams.length} teams` : ""
+  }, archived ones too.`;
   const scrolling = (
     <div className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
-      {searching && results.length > 0 && (
-        <p role="status" className="px-3 pt-1 pb-1 text-[13px] text-muted">
-          {resultsSummary(results, me)}
+      {/* Mounted for as long as the panel is, so a screen reader announces the text when it changes. */}
+      {long && (
+        <p
+          role="status"
+          className={searching && results.length > 0 ? "px-3 pt-1 pb-1 text-[13px] text-muted" : "sr-only"}
+        >
+          {!searching ? "" : results.length > 0 ? resultsSummary(results, me) : `${noMatch}. ${searched}`}
         </p>
       )}
       {searching && results.length === 0 && (
-        <div role="status" className="flex flex-col items-center gap-1 px-4 py-6 text-center">
-          <p className="font-semibold break-words">No heap matches “{query}”</p>
-          <p className="text-[13px] text-muted">
-            Searched all {entries.length} {entries.length === 1 ? "heap" : "heaps"}
-            {several ? ` in ${me.teams.length} teams` : ""}, archived ones too.
-          </p>
+        <div aria-hidden="true" className="flex flex-col items-center gap-1 px-4 py-6 text-center">
+          <p className="font-semibold break-words">{noMatch}</p>
+          <p className="text-[13px] text-muted">{searched}</p>
         </div>
       )}
       {menu}
@@ -304,7 +311,7 @@ function SwitcherBody({
     <>
       {long ? (
         <Autocomplete inputValue={text} onInputChange={setText}>
-          <SearchField autoFocus={!phone} className="relative flex shrink-0 items-center">
+          <SearchField autoFocus={!phone && !coarse} className="relative flex shrink-0 items-center">
             <Label className="sr-only">Find a heap</Label>
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 size-4 text-muted" />
             <Input
@@ -380,14 +387,15 @@ function HeapItem({
   teamLabel?: string;
   query?: string;
   extraClass?: string;
-  onOpen: (entry: Entry) => void;
+  onOpen: () => void;
 }) {
   const { heap } = entry;
   return (
     <MenuItem
       id={id}
       textValue={heap.name}
-      onAction={() => onOpen(entry)}
+      href={`/teams/${encodeURIComponent(entry.team.slug)}/heaps/${encodeURIComponent(heap.slug)}`}
+      onAction={onOpen}
       className={`${rowClass} ${current ? currentRowClass : ""} ${extraClass}`}
     >
       <span className="min-w-0 flex-1 truncate">

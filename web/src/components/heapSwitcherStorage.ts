@@ -3,8 +3,8 @@
 // the theme. Storage can be blocked or hold anything, so every read and write is guarded: a failed read is an empty
 // list, a failed write just isn't remembered. Ids that no longer match anything are the reader's to skip.
 
-export const RECENT_HEAPS_KEY = "upheap.recentHeaps";
-export const FOLDED_TEAMS_KEY = "upheap.foldedTeams";
+const RECENT_HEAPS_KEY = "upheap.recentHeaps";
+const FOLDED_TEAMS_KEY = "upheap.foldedTeams";
 
 /** How many opened heaps are kept; the switcher shows fewer, as the heap on screen is left out. */
 const RECENT_KEPT = 5;

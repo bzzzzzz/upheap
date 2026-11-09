@@ -2,6 +2,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { RouterProvider } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
+import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
@@ -56,7 +57,13 @@ if (root) {
       <QueryClientProvider client={queryClient}>
         <MotionConfig reducedMotion="user">
           <LocalDatabaseGate>
-            <RouterProvider router={router} />
+            {/* Links in React Aria components (heap rows) navigate through the router, under its base path. */}
+            <AriaRouterProvider
+              navigate={(to) => void router.navigate({ to })}
+              useHref={(to) => router.buildLocation({ to }).href}
+            >
+              <RouterProvider router={router} />
+            </AriaRouterProvider>
           </LocalDatabaseGate>
         </MotionConfig>
       </QueryClientProvider>
