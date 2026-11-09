@@ -1,6 +1,6 @@
 # Engineering principles
 
-Companion to [technical-design.md](technical-design.md). These are the rules we follow when writing the code. Where a principle and the technical design disagree, fix one of them; don't leave them disagreeing.
+Companion to [architecture.md](architecture.md). These are the rules we follow when writing the code. Where a principle and the architecture disagree, fix one of them; don't leave them disagreeing.
 
 ## General
 

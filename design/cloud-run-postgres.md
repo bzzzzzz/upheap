@@ -9,9 +9,8 @@ deployment with little use costs close to nothing. Last reviewed 2026-11-08.
   external.
 - Most serverless databases that scale to zero speak Postgres (Neon, Supabase, Aurora Serverless v2). On the
   MySQL side only TiDB Serverless and Aiven are realistic.
-- [technical-design.md](technical-design.md) already plans Postgres ("Postgres later") and keeps to portable SQL,
-  and the store goes through SeaORM (`lock_exclusive()`, `SqlErr::UniqueConstraintViolation`), so adding
-  Postgres should be mostly configuration and tests.
+- [architecture.md](architecture.md) keeps to portable SQL, and the store goes through SeaORM
+  (`lock_exclusive()`, `SqlErr::UniqueConstraintViolation`), so adding Postgres was mostly configuration and tests.
 
 ## Target setup
 
@@ -20,7 +19,7 @@ deployment with little use costs close to nothing. Last reviewed 2026-11-08.
 2. **Database:** Neon Postgres, reached through its pooled endpoint (PgBouncer). Each instance keeps a small
    pool, at most 2–5 connections, because Cloud Run may run several instances at once.
 3. **Configuration:** `DATABASE_URL=postgres://…` and the other variables from
-   [technical-design.md](technical-design.md#configuration-and-deployment), with the database URL kept in Secret
+   [architecture.md](architecture.md#configuration-and-deployment), with the database URL kept in Secret
    Manager.
 4. **Readiness:** Cloud Run's startup probe uses `/readyz`, so no traffic reaches an instance before migrations
    finish.
