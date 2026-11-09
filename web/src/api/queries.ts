@@ -721,8 +721,8 @@ export function useUpdateWeights(heapRef: HeapRef) {
   });
 }
 
-/** How many items the Ranking tab's preview lists. */
-const PREVIEW_ITEMS = 5;
+/** How many items the Ranking tab's preview lists; a move from below them reads "New". */
+export const PREVIEW_ITEMS = 5;
 
 /** The weights a preview ranks with in place of the saved ones. */
 export type RankingPreviewDraft = Omit<RankingPreviewRequest, "limit">;

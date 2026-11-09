@@ -246,7 +246,7 @@ async fn saving_weights_reranks_the_list() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn saving_only_parameter_weights_leaves_the_heap_version() -> Result<()> {
+async fn saving_only_parameter_weights_moves_the_heap_version_without_a_heap_entry() -> Result<()> {
     // Arrange
     let s = setup().await?;
     let customer = s.new_parameter("Customer", &["Enterprise", "Free"]).await?;
@@ -259,7 +259,10 @@ async fn saving_only_parameter_weights_leaves_the_heap_version() -> Result<()> {
 
     // Assert
     expect_that!(saved.status, eq(StatusCode::OK));
-    expect_that!(saved.body["heap"]["version"], eq(&before));
+    expect_that!(
+        saved.body["heap"]["version"],
+        eq(&json!(before.as_u64().unwrap_or_default() + 1))
+    );
     expect_that!(saved.body["parameters"][0]["weight"], eq(&json!(0)));
     let heap = s.heap.clone();
     expect_that!(s.actions(&heap).await?, elements_are![eq("heap_created")]);
@@ -438,6 +441,39 @@ async fn a_stale_heap_version_conflicts_even_when_only_parameters_change() -> Re
     expect_that!(s.get_parameter(&customer).await?["weight"], eq(&json!(10)));
     expect_that!(missing.status, eq(StatusCode::PRECONDITION_REQUIRED));
     expect_that!(missing.body["code"], eq(&json!("version_required")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_save_against_a_policy_changed_only_in_its_parameters_conflicts() -> Result<()> {
+    // Arrange: two admins open the same policy; the first saves one parameter's weight.
+    let s = setup().await?;
+    let customer = s.new_parameter("Customer", &["Enterprise", "Free"]).await?;
+    let risk = s.new_parameter("Risk", &["High", "Low"]).await?;
+    let seen = s.heap_version().await?;
+    let first = s
+        .save_at(
+            &s.admin,
+            &seen,
+            json!({ "parameters": [{ "id": customer["id"], "weight": 40, "version": customer["version"] }] }),
+        )
+        .await?;
+
+    // Act: the second saves another parameter against the policy as it was.
+    let second = s
+        .save_at(
+            &s.admin,
+            &seen,
+            json!({ "parameters": [{ "id": risk["id"], "weight": 0, "version": risk["version"] }] }),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(first.status, eq(StatusCode::OK));
+    expect_that!(second.status, eq(StatusCode::CONFLICT));
+    expect_that!(second.body["code"], eq(&json!("version_conflict")));
+    expect_that!(s.get_parameter(&risk).await?["weight"], eq(&json!(10)));
     Ok(())
 }
 

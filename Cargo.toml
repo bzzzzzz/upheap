@@ -95,7 +95,8 @@ codegen-units = 1
 strip = true
 
 # Request handling and storage aren't hot loops, so they are built for size: the static web build ships them as
-# WebAssembly, under a size budget (architecture.md, Local build, Build and publish). Ranking in `domain` stays at full speed.
+# WebAssembly, under a size budget (architecture.md, Local build, Build and publish). The server's release build takes
+# the same setting, which costs it little. Ranking in `domain` stays at full speed.
 [profile.release.package.api]
 opt-level = "s"
 [profile.release.package.api-types]

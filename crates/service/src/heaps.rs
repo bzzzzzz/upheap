@@ -193,8 +193,8 @@ impl Services {
     /// listed once ([`ValidationError::DuplicateParameter`]). An archived heap is read-only
     /// ([`ServiceError::HeapArchived`]). Any failure saves nothing.
     ///
-    /// Weights equal to the stored ones are skipped. The heap's version moves on, with a `heap_updated` entry, only
-    /// when one of its own weights changes; each parameter whose weight changes gets a `parameter_updated` entry and
+    /// Weights equal to the stored ones are skipped. The heap's version moves on whenever any weight changes, with a
+    /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a `parameter_updated` entry and
     /// its next version. A request that changes nothing succeeds and writes nothing.
     pub async fn update_weights(
         &self,
@@ -249,6 +249,15 @@ impl Services {
             let edited = Heap { policy, ..heap.clone() };
             self.write_heap(&txn, principal, &edited, expected, AuditAction::HeapUpdated, diff, now)
                 .await?
+        } else if parameters_changed > 0 {
+            // The heap's version guards the whole policy, so a save of parameter weights alone moves it on too, and
+            // a save made against the old policy conflicts. The parameters' own entries record what changed.
+            store::heaps::update_heap(&txn, &heap, expected)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected,
+                    current: expected.next(),
+                })?
         } else {
             heap
         };

@@ -3,15 +3,20 @@ import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import type { Heap, HeapRef, Parameter, RankingPreview, WeightsPatch } from "../api/client";
-import { useHeap, useParameters, useRankingPreview, useUpdateWeights, type RankingPreviewDraft } from "../api/queries";
+import {
+  PREVIEW_ITEMS,
+  useHeap,
+  useParameters,
+  useRankingPreview,
+  useUpdateWeights,
+  type RankingPreviewDraft,
+} from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, clampWeight, inputClass, introClass, labelClass } from "./settingsForm";
 
 /** What "Reset all to 10" sets: the weight new heaps and parameters start with. */
 const DEFAULT_WEIGHT = 10;
-/** How many items the preview lists; a move to a place below it reads "New". */
-const PREVIEW_ITEMS = 5;
 const PREVIEW_DELAY_MS = 300;
 
 const BUILT_IN = [
