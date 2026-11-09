@@ -1,8 +1,8 @@
 # Architecture
 
-How Upheap is built, and why. Companion to [requirements.md](requirements.md) and [offering.md](offering.md). The
-coding rules are in [engineering-principles.md](engineering-principles.md), and the choices that could have gone
-another way, with their reasons, are in [decisions.md](decisions.md).
+How Upheap is built, and why. Companion to [product.md](product.md). The coding rules are in
+[engineering-principles.md](engineering-principles.md), and the choices that could have gone another way, with
+their reasons, are in [decisions.md](decisions.md).
 
 This doc explains mechanisms and reasons. What the code states, it doesn't repeat: the endpoints are in
 `openapi.json` (`upheap-server openapi` prints it), the error codes in `crates/api/src/error.rs`, the schema in
@@ -322,7 +322,7 @@ a fixed time.
 
 ### Permissions as code
 
-1. The roles table in [offering.md](offering.md#roles-and-permissions) is one typed enum in `domain::permission`,
+1. The roles table in [product.md](product.md#roles-and-permissions) is one typed enum in `domain::permission`,
    with a function that says whether a role grants each permission. One permission can back several rows of the
    table when they always grant the same roles; if the rows ever diverge, they get separate permissions.
 2. Every service use case declares the permission it requires and checks it first, before reading or writing

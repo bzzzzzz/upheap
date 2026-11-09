@@ -187,7 +187,7 @@ pub struct ListView {
 }
 
 impl Default for ListView {
-    /// In-progress items pinned, open items shown, blocked items hidden, by priority (Req Views: List items §2).
+    /// In-progress items pinned, open items shown, blocked items hidden, by priority (product.md, List items §2).
     fn default() -> Self {
         Self {
             open: StateMode::Shown,
@@ -234,7 +234,7 @@ impl ListView {
     }
 
     /// Sorts `group`, which is in priority order, by [`Self::sort`]. The sort is stable, so ties keep priority
-    /// order. Grouped blocked items always stay in priority order (Req Views: List items §3). `parameters` are the
+    /// order. Grouped blocked items always stay in priority order (product.md, List items §3). `parameters` are the
     /// heap's parameters; a sort by a parameter that isn't among them, or is archived, keeps priority order.
     pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item, parameters: &[Parameter]) {
         let key = self.sort;

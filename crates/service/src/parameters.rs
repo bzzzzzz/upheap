@@ -1,4 +1,5 @@
-//! Custom parameter use cases: listing a heap's parameters, and the admin's changes to them (Req Manage parameters).
+//! Custom parameter use cases (product.md, Manage parameters): listing a heap's parameters, and the admin's changes
+//! to them.
 //!
 //! Every write locks the heap first, like every other heap write, then the parameter, and reads the parameter
 //! under its lock. Names are unique among the heap's parameters in use, which the heap lock makes safe to check.

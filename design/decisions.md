@@ -9,8 +9,8 @@ both say so.
 
 ## 1. A stable order comes from a frozen `as_of`, not from server state
 
-**Context.** The list must not reorder on its own during a session (Req Priority §6), while an edited item should
-move at once and teammates' edits should still show up.
+**Context.** The list must not reorder on its own during a session (product.md, Priority §6), while an edited item
+should move at once and teammates' edits should still show up.
 
 **Decision.** The score is a deterministic function of item data and time, so the server returns an `as_of` with
 the first list and the client echoes it on later requests. Edits move because their data changed, not because
@@ -51,7 +51,7 @@ written down in [architecture.md](architecture.md#computation).
 
 ## 4. The ranking formula is a version in code, not a setting per heap
 
-**Context.** The formula was expected to change as the product found its shape (Req Priority §10).
+**Context.** The formula was expected to change as the product found its shape, and the requirements left it open.
 
 **Decision.** `rank` takes a `FormulaVersion`; the server uses one version, set in code. Tests pin orderings per
 version. `V2` replaced `V1` by adding need, both as a factor and as the rate items age at; items from before
@@ -322,8 +322,9 @@ tall, and the list read as a form rather than a ranking.
 
 **Instead of.** Inline editing of every field in the list, which the requirements first asked for.
 
-**Consequences.** Compact rows that show the ranking and its reasons. requirements.md's list view rule was changed
-to match. An edit means one tap more, but the item saves each change as it's made, so it costs no round trip.
+**Consequences.** Compact rows that show the ranking and its reasons. The list view rule (product.md, List items
+§7) was changed to match. An edit means one tap more, but the item saves each change as it's made, so it costs no
+round trip.
 
 ## 24. React Aria Components rather than a copied component library
 
