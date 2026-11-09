@@ -69,10 +69,16 @@ function setTheme(theme: Theme) {
  * tab cleared all storage. Called once, at startup.
  */
 export function followThemeAcrossTabs() {
-  window.addEventListener("storage", (event) => {
-    if (event.key !== KEY && event.key !== null) return;
+  const follow = () => {
     applyTheme(readStoredTheme());
     listeners.forEach((listener) => listener());
+  };
+  window.addEventListener("storage", (event) => {
+    if (event.key === KEY || event.key === null) follow();
+  });
+  // A page restored from the back/forward cache missed the storage events while it was frozen.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) follow();
   });
 }
 

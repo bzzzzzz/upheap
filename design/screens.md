@@ -14,25 +14,25 @@ Each entry is grounded in a doc or in the code. Status:
 
 Frequency, for an average user (a member of one shared team plus their personal team):
 
-| Rating | Meaning |
-| :---: | --- |
-| 5 | Constantly: several times per session |
-| 4 | Daily |
-| 3 | Weekly |
-| 2 | Monthly, or occasional |
-| 1 | Rare: once or a few times ever (setup, recovery) |
+| Rating | Meaning                                          |
+| :----: | ------------------------------------------------ |
+|   5    | Constantly: several times per session            |
+|   4    | Daily                                            |
+|   3    | Weekly                                           |
+|   2    | Monthly, or occasional                           |
+|   1    | Rare: once or a few times ever (setup, recovery) |
 
 Must-have, rated separately for the local build (**Must (local)**) and the server build (**Must (server)**): can
 the user do their job if this is absent?
 
-| Rating | Meaning |
-| :---: | --- |
-| 5 | The core loop breaks without it; there's no workaround |
-| 4 | The job gets done, but painfully, or a core flow has a dead end (such as no way to recover from an error). Needed for a first release |
-| 3 | A clear improvement to a core flow, with a workable fallback |
-| 2 | Nice to have; helps occasionally |
-| 1 | Polish, or for edge cases only |
-| n/a | Doesn't exist in that install |
+| Rating | Meaning                                                                                                                               |
+| :----: | ------------------------------------------------------------------------------------------------------------------------------------- |
+|   5    | The core loop breaks without it; there's no workaround                                                                                |
+|   4    | The job gets done, but painfully, or a core flow has a dead end (such as no way to recover from an error). Needed for a first release |
+|   3    | A clear improvement to a core flow, with a workable fallback                                                                          |
+|   2    | Nice to have; helps occasionally                                                                                                      |
+|   1    | Polish, or for edge cases only                                                                                                        |
+|  n/a   | Doesn't exist in that install                                                                                                         |
 
 Where one role has several presentations (the wide pane and the phone sheet, the sidebar and the phone tabs), the
 rating is for the role. Every 4 and 5 says why in one line.
@@ -140,111 +140,112 @@ is occasional.
 Sorted by the higher of the two must-have ratings, then by frequency, then by name. Each entry's details justify its
 4s and 5s.
 
-| ID | Name | Parent | Freq | Must (local) | Must (server) | Status |
-| --- | --- | --- | :---: | :---: | :---: | --- |
-| M-add-item | Add an item | S-heap | 5 | 5 | 5 | built |
-| S-heap | Heap list (Open) | — | 5 | 5 | 5 | built |
-| M-item | Item pane, panel or sheet | S-heap | 5 | 5 | 5 | built |
-| P-row | List row: state circle, swipe actions | S-heap | 5 | 5 | 5 | built |
-| P-due | Due picker | M-item, M-add-item | 4 | 5 | 5 | built |
-| S-sign-in | Sign in | — | 2 | n/a | 5 | built |
-| S-team | Team | — | 2 | 2 | 5 | built |
-| P-member-add | Add a member | S-team | 1 | n/a | 5 | built |
-| S-register | Create account | — | 1 | n/a | 5 | built |
-| P-heap-new | New heap | S-team | 1 | 2 | 5 | built |
-| S-teams | Teams | — | 1 | n/a | 5 | built |
-| G-shell-phone | Phone top bar and tabs | — | 5 | 4 | 4 | built |
-| G-storage-note | Storage note (local build) | shell | 5 | 4 | n/a | built |
-| G-shell-rail | Tablet rail | — | 5 | 4 | 4 | built |
-| G-shell-wide | Wide sidebar | — | 5 | 4 | 4 | built |
-| M-heap-switcher | Heap switcher | shell | 4 | 2 | 4 | built |
-| P-search | Search box | S-heap | 4 | 4 | 4 | built |
-| S-closed | Closed items | — | 3 | 4 | 4 | built |
-| P-hidden-count | Hidden items note | S-heap | 3 | 4 | 4 | built |
-| M-more | More menu (phone) | G-shell-phone | 3 | 4 | 4 | built |
-| P-local-export | Download a copy (local build) | S-account | 2 | 4 | n/a | built |
-| P-reopen | Reopen | S-closed, M-item | 2 | 4 | 4 | built |
-| G-session-expired | Session expired | shell | 2 | n/a | 4 | built |
-| S-account | Account | — | 1 | 4 | 1 | built |
-| E-conflict | Changed by someone else | M-item, S-tags, S-parameters, S-team | 1 | 1 | 4 | built |
-| P-member-row | Member row (role, remove) | S-team | 1 | n/a | 4 | built |
-| P-local-import | Open a copy (local build) | S-account | 1 | 4 | n/a | built |
-| S-tab-lock | Open in another tab | — | 1 | 4 | n/a | built |
-| M-local-import-confirm | Replace everything here? | P-local-import | 1 | 4 | n/a | built |
-| G-toast | Undo toast | S-heap | 5 | 3 | 3 | built |
-| E-loading | Loading states | every screen | 4 | 2 | 3 | built |
-| P-tag-picker | Tag picker | M-item, M-add-item, P-param-card | 4 | 2 | 3 | built |
-| M-filters | Filters | S-heap | 3 | 2 | 3 | built |
-| P-blocker | Waiting for (blocker picker) | M-item | 3 | 3 | 3 | built |
-| G-copy-link | Copy link | M-item | 2 | 1 | 3 | built |
-| G-offline | Can't reach the server | shell | 1 | n/a | 3 | implied |
-| E-heap-empty | Empty heap | S-heap | 1 | 3 | 3 | built |
-| E-item-missing | Item not found | M-item | 1 | 2 | 3 | built |
-| S-backend-failed | Local backend didn't start | — | 1 | 3 | n/a | implied |
-| E-load-error | Page failed to load | every screen | 1 | 3 | 3 | built |
-| P-saved-views | Saved views bar | S-heap | 4 | 2 | 2 | built |
-| P-item-history | Item history | M-item | 3 | 1 | 2 | built |
-| P-param-picker | Parameter picker | M-item, M-add-item | 3 | 2 | 2 | built |
-| P-sort | Sort select | S-heap | 3 | 2 | 2 | built |
-| P-view-changed | Changed-view actions | P-saved-views | 2 | 2 | 2 | built |
-| M-add-discard | Discard this item? | M-add-item | 2 | 2 | 2 | built |
-| S-heap-activity | Heap activity | — | 2 | 1 | 2 | built |
-| P-view-name | Name a view (new or rename) | P-saved-views | 2 | 2 | 2 | built |
-| E-no-match | No items match | S-heap | 2 | 2 | 2 | built |
-| S-parameters | Parameters | — | 2 | 2 | 2 | built |
-| P-refresh | Refresh order | S-heap | 2 | 2 | 2 | removed |
-| P-tag-row | Tag row (inline edit) | S-tags | 2 | 1 | 2 | built |
-| S-tags | Tags | — | 2 | 1 | 2 | built |
-| M-view-settings | View settings | S-heap | 2 | 2 | 2 | built |
-| S-invite | Accept an invitation | — | 1 | n/a | 2 | implied (later) |
-| G-archived-banner | Archived heap notice | shell | 1 | 2 | 2 | built |
-| S-oidc-username | Choose a username | — | 1 | n/a | 2 | designed |
-| M-self-demote | Give up admin rights? | P-member-row | 1 | n/a | 2 | implied |
-| P-heap-row | Heap row (rename, archive, open) | S-team | 1 | 2 | 2 | built |
-| P-leave | Leave team | S-team | 1 | n/a | 2 | built |
-| P-param-new | New parameter | S-parameters | 1 | 2 | 2 | built |
-| S-no-heaps | No heaps yet | — | 1 | 2 | 2 | built |
-| E-forbidden | Not allowed | every screen | 1 | n/a | 2 | implied |
-| P-last-admin | Only-admin note | S-team | 1 | n/a | 2 | built |
-| S-not-found | Page not found | — | 1 | 2 | 2 | implied |
-| P-param-card | Parameter card | S-parameters | 1 | 2 | 2 | built |
-| P-personal-team | Personal team variant | S-team | 1 | n/a | 2 | designed |
-| P-heap-weights | Ranking weights (age, deadline, value) | S-heap-settings or S-parameters | 1 | 2 | 2 | designed |
-| E-registration-closed | Registration closed | S-register | 1 | n/a | 2 | built (message only) |
-| M-member-remove | Remove member? | P-member-row | 1 | n/a | 2 | built |
-| S-oauth-authorize | Sign in the CLI | — | 1 | n/a | 2 | designed |
-| P-tokens | Signed-in clients (CLI tokens) | S-account | 1 | n/a | 2 | designed |
-| E-throttled | Too many sign-in attempts | S-sign-in | 1 | n/a | 2 | built (message only) |
-| E-bad-view | View can't be shown | S-heap | 1 | 2 | 2 | built |
-| M-shortcuts | Keyboard shortcuts help | shell | 2 | 1 | 1 | implied |
-| P-option-archive | Archive option, with replacement | P-param-card | 1 | 1 | 1 | built |
-| P-param-archive | Archive parameter | P-param-card | 1 | 1 | 1 | built |
-| M-heap-archive | Archive this heap? | P-heap-row | 1 | 1 | 1 | implied |
-| M-view-archive | Archive this view? | P-saved-views | 1 | 1 | 1 | built |
-| P-param-archived | Archived parameters | S-parameters | 1 | 1 | 1 | built |
-| S-oauth-done | Back to the terminal | — | 1 | n/a | 1 | implied |
-| P-display-name | Display name | S-account | 1 | 1 | 1 | built |
-| S-heap-settings | Heap settings | — | 1 | 1 | 1 | designed |
-| M-pwa-install | Install the app | shell (local build) | 1 | 1 | n/a | designed (later) |
-| P-param-tags | Linked tags | P-param-card | 1 | 1 | 1 | built |
-| P-tag-new | New tag | S-tags | 1 | 1 | 1 | built |
-| M-pwa-update | New version available | shell (local build) | 1 | 1 | n/a | designed (later) |
-| P-param-history | Parameter history | P-param-card | 1 | 1 | 1 | built |
-| P-tag-history | Tag history | P-tag-row | 1 | 1 | 1 | built |
-| S-team-activity | Team activity | — | 1 | 1 | 1 | built |
-| P-team-name | Team name and slug | S-team | 1 | n/a | 1 | built (slug designed) |
-| P-view-history | View history | P-saved-views | 1 | 1 | 1 | built |
+| ID                     | Name                                   | Parent                               | Freq | Must (local) | Must (server) | Status                |
+| ---------------------- | -------------------------------------- | ------------------------------------ | :--: | :----------: | :-----------: | --------------------- |
+| M-add-item             | Add an item                            | S-heap                               |  5   |      5       |       5       | built                 |
+| S-heap                 | Heap list (Open)                       | —                                    |  5   |      5       |       5       | built                 |
+| M-item                 | Item pane, panel or sheet              | S-heap                               |  5   |      5       |       5       | built                 |
+| P-row                  | List row: state circle, swipe actions  | S-heap                               |  5   |      5       |       5       | built                 |
+| P-due                  | Due picker                             | M-item, M-add-item                   |  4   |      5       |       5       | built                 |
+| S-sign-in              | Sign in                                | —                                    |  2   |     n/a      |       5       | built                 |
+| S-team                 | Team                                   | —                                    |  2   |      2       |       5       | built                 |
+| P-member-add           | Add a member                           | S-team                               |  1   |     n/a      |       5       | built                 |
+| S-register             | Create account                         | —                                    |  1   |     n/a      |       5       | built                 |
+| P-heap-new             | New heap                               | S-team                               |  1   |      2       |       5       | built                 |
+| S-teams                | Teams                                  | —                                    |  1   |     n/a      |       5       | built                 |
+| G-shell-phone          | Phone top bar and tabs                 | —                                    |  5   |      4       |       4       | built                 |
+| G-storage-note         | Storage note (local build)             | shell                                |  5   |      4       |      n/a      | built                 |
+| G-shell-rail           | Tablet rail                            | —                                    |  5   |      4       |       4       | built                 |
+| G-shell-wide           | Wide sidebar                           | —                                    |  5   |      4       |       4       | built                 |
+| M-heap-switcher        | Heap switcher                          | shell                                |  4   |      2       |       4       | built                 |
+| P-search               | Search box                             | S-heap                               |  4   |      4       |       4       | built                 |
+| S-closed               | Closed items                           | —                                    |  3   |      4       |       4       | built                 |
+| P-hidden-count         | Hidden items note                      | S-heap                               |  3   |      4       |       4       | built                 |
+| M-more                 | More menu (phone)                      | G-shell-phone                        |  3   |      4       |       4       | built                 |
+| P-local-export         | Download a copy (local build)          | S-account                            |  2   |      4       |      n/a      | built                 |
+| P-reopen               | Reopen                                 | S-closed, M-item                     |  2   |      4       |       4       | built                 |
+| G-session-expired      | Session expired                        | shell                                |  2   |     n/a      |       4       | built                 |
+| S-account              | Account                                | —                                    |  1   |      4       |       1       | built                 |
+| E-conflict             | Changed by someone else                | M-item, S-tags, S-parameters, S-team |  1   |      1       |       4       | built                 |
+| P-member-row           | Member row (role, remove)              | S-team                               |  1   |     n/a      |       4       | built                 |
+| P-local-import         | Open a copy (local build)              | S-account                            |  1   |      4       |      n/a      | built                 |
+| S-tab-lock             | Open in another tab                    | —                                    |  1   |      4       |      n/a      | built                 |
+| M-local-import-confirm | Replace everything here?               | P-local-import                       |  1   |      4       |      n/a      | built                 |
+| G-toast                | Undo toast                             | S-heap                               |  5   |      3       |       3       | built                 |
+| E-loading              | Loading states                         | every screen                         |  4   |      2       |       3       | built                 |
+| P-tag-picker           | Tag picker                             | M-item, M-add-item, P-param-card     |  4   |      2       |       3       | built                 |
+| M-filters              | Filters                                | S-heap                               |  3   |      2       |       3       | built                 |
+| P-blocker              | Waiting for (blocker picker)           | M-item                               |  3   |      3       |       3       | built                 |
+| G-copy-link            | Copy link                              | M-item                               |  2   |      1       |       3       | built                 |
+| G-offline              | Can't reach the server                 | shell                                |  1   |     n/a      |       3       | implied               |
+| E-heap-empty           | Empty heap                             | S-heap                               |  1   |      3       |       3       | built                 |
+| E-item-missing         | Item not found                         | M-item                               |  1   |      2       |       3       | built                 |
+| S-backend-failed       | Local backend didn't start             | —                                    |  1   |      3       |      n/a      | implied               |
+| E-load-error           | Page failed to load                    | every screen                         |  1   |      3       |       3       | built                 |
+| P-saved-views          | Saved views bar                        | S-heap                               |  4   |      2       |       2       | built                 |
+| P-item-history         | Item history                           | M-item                               |  3   |      1       |       2       | built                 |
+| P-param-picker         | Parameter picker                       | M-item, M-add-item                   |  3   |      2       |       2       | built                 |
+| P-sort                 | Sort select                            | S-heap                               |  3   |      2       |       2       | built                 |
+| P-view-changed         | Changed-view actions                   | P-saved-views                        |  2   |      2       |       2       | built                 |
+| M-add-discard          | Discard this item?                     | M-add-item                           |  2   |      2       |       2       | built                 |
+| S-heap-activity        | Heap activity                          | —                                    |  2   |      1       |       2       | built                 |
+| P-view-name            | Name a view (new or rename)            | P-saved-views                        |  2   |      2       |       2       | built                 |
+| E-no-match             | No items match                         | S-heap                               |  2   |      2       |       2       | built                 |
+| S-parameters           | Parameters                             | —                                    |  2   |      2       |       2       | built                 |
+| P-refresh              | Refresh order                          | S-heap                               |  2   |      2       |       2       | removed               |
+| P-tag-row              | Tag row (inline edit)                  | S-tags                               |  2   |      1       |       2       | built                 |
+| S-tags                 | Tags                                   | —                                    |  2   |      1       |       2       | built                 |
+| M-view-settings        | View settings                          | S-heap                               |  2   |      2       |       2       | built                 |
+| S-invite               | Accept an invitation                   | —                                    |  1   |     n/a      |       2       | implied (later)       |
+| G-archived-banner      | Archived heap notice                   | shell                                |  1   |      2       |       2       | built                 |
+| S-oidc-username        | Choose a username                      | —                                    |  1   |     n/a      |       2       | designed              |
+| M-self-demote          | Give up admin rights?                  | P-member-row                         |  1   |     n/a      |       2       | implied               |
+| P-heap-row             | Heap row (rename, archive, open)       | S-team                               |  1   |      2       |       2       | built                 |
+| P-leave                | Leave team                             | S-team                               |  1   |     n/a      |       2       | built                 |
+| P-param-new            | New parameter                          | S-parameters                         |  1   |      2       |       2       | built                 |
+| S-no-heaps             | No heaps yet                           | —                                    |  1   |      2       |       2       | built                 |
+| E-forbidden            | Not allowed                            | every screen                         |  1   |     n/a      |       2       | implied               |
+| P-last-admin           | Only-admin note                        | S-team                               |  1   |     n/a      |       2       | built                 |
+| S-not-found            | Page not found                         | —                                    |  1   |      2       |       2       | implied               |
+| P-param-card           | Parameter card                         | S-parameters                         |  1   |      2       |       2       | built                 |
+| P-personal-team        | Personal team variant                  | S-team                               |  1   |     n/a      |       2       | designed              |
+| P-heap-weights         | Ranking weights (age, deadline, value) | S-heap-settings or S-parameters      |  1   |      2       |       2       | designed              |
+| E-registration-closed  | Registration closed                    | S-register                           |  1   |     n/a      |       2       | built (message only)  |
+| M-member-remove        | Remove member?                         | P-member-row                         |  1   |     n/a      |       2       | built                 |
+| S-oauth-authorize      | Sign in the CLI                        | —                                    |  1   |     n/a      |       2       | designed              |
+| P-tokens               | Signed-in clients (CLI tokens)         | S-account                            |  1   |     n/a      |       2       | designed              |
+| E-throttled            | Too many sign-in attempts              | S-sign-in                            |  1   |     n/a      |       2       | built (message only)  |
+| E-bad-view             | View can't be shown                    | S-heap                               |  1   |      2       |       2       | built                 |
+| M-shortcuts            | Keyboard shortcuts help                | shell                                |  2   |      1       |       1       | implied               |
+| P-option-archive       | Archive option, with replacement       | P-param-card                         |  1   |      1       |       1       | built                 |
+| P-param-archive        | Archive parameter                      | P-param-card                         |  1   |      1       |       1       | built                 |
+| M-heap-archive         | Archive this heap?                     | P-heap-row                           |  1   |      1       |       1       | implied               |
+| M-view-archive         | Archive this view?                     | P-saved-views                        |  1   |      1       |       1       | built                 |
+| P-param-archived       | Archived parameters                    | S-parameters                         |  1   |      1       |       1       | built                 |
+| S-oauth-done           | Back to the terminal                   | —                                    |  1   |     n/a      |       1       | implied               |
+| P-display-name         | Display name                           | S-account                            |  1   |      1       |       1       | built                 |
+| P-theme                | Theme (System / Light / Dark)          | S-account                            |  1   |      1       |       1       | built                 |
+| S-heap-settings        | Heap settings                          | —                                    |  1   |      1       |       1       | designed              |
+| M-pwa-install          | Install the app                        | shell (local build)                  |  1   |      1       |      n/a      | designed (later)      |
+| P-param-tags           | Linked tags                            | P-param-card                         |  1   |      1       |       1       | built                 |
+| P-tag-new              | New tag                                | S-tags                               |  1   |      1       |       1       | built                 |
+| M-pwa-update           | New version available                  | shell (local build)                  |  1   |      1       |      n/a      | designed (later)      |
+| P-param-history        | Parameter history                      | P-param-card                         |  1   |      1       |       1       | built                 |
+| P-tag-history          | Tag history                            | P-tag-row                            |  1   |      1       |       1       | built                 |
+| S-team-activity        | Team activity                          | —                                    |  1   |      1       |       1       | built                 |
+| P-team-name            | Team name and slug                     | S-team                               |  1   |     n/a      |       1       | built (slug designed) |
+| P-view-history         | View history                           | P-saved-views                        |  1   |      1       |       1       | built                 |
 
 ## First design and build set
 
 What to design and build first: every entry rated 4 or 5 in either install, plus the entries rated 4 or 5 for
-frequency that the workflow does use, marked *(frequency)* with the reason. Grouped by screen. Tablet is out of
+frequency that the workflow does use, marked _(frequency)_ with the reason. Grouped by screen. Tablet is out of
 scope for now; "browser" is 1024 px and up, "phone" under 640 px.
 
 ### Shell
 
 G-shell-wide, G-shell-phone, M-more, M-heap-switcher, G-storage-note (local), G-session-expired (server), and
-E-loading *(frequency: every screen shows it, and a blank page reads as broken)*.
+E-loading _(frequency: every screen shows it, and a blank page reads as broken)_.
 
 - **Browser:** the sidebar with every heap (grouped by team when there are several), the open heap's Open and
   Closed, then Team (server), Account, Sign out (server) and the storage note (local). The sidebar is the heap
@@ -255,9 +256,9 @@ E-loading *(frequency: every screen shows it, and a blank page reads as broken)*
 
 ### S-heap: Heap list
 
-S-heap, P-row, P-search, P-hidden-count, G-toast *(frequency: shown after every state change from the list; Undo
-is the cheap fix for a mis-tap)*, and P-saved-views *(frequency: used daily, and its chips sit at the top of the
-list at both widths, so leaving them out of the first design would mean laying the list out twice)*.
+S-heap, P-row, P-search, P-hidden-count, G-toast _(frequency: shown after every state change from the list; Undo
+is the cheap fix for a mis-tap)_, and P-saved-views _(frequency: used daily, and its chips sit at the top of the
+list at both widths, so leaving them out of the first design would mean laying the list out twice)_.
 
 - **Browser:** heap name; the saved view chips; the Add field; search; the Pinned and Up next groups; rows with the
   state circle, position, title, due chip, tags, contributors, and effort and impact at the right edge; the
@@ -268,8 +269,8 @@ list at both widths, so leaving them out of the first design would mean laying t
 
 ### M-item: Item
 
-M-item, P-due, P-tag-picker *(frequency: used on most adds and edits, and it shares the pane and the Add dialog
-with P-due)*, E-conflict (server).
+M-item, P-due, P-tag-picker _(frequency: used on most adds and edits, and it shares the pane and the Add dialog
+with P-due)_, E-conflict (server).
 
 - **Browser:** a pane beside the list: "#3 · Up next" and ✕; title; state (Open, In progress, Blocked, Done, and
   Won't do apart); "Why it's #3"; effort and impact as S M L XL; the due choices and Exact date; tags; description;
@@ -697,20 +698,20 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 ##### P-view-changed, P-view-name, M-view-archive, P-view-history
 
-| ID | Purpose | Trigger | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
-| --- | --- | --- | --- | :---: | :---: | :---: | --- |
-| P-view-changed | Keep or drop a change to the list | The open chip, once it shows the dot | Save to {name} (not for Default); Save as a new view…; Undo changes | 2 | 2 | 2 | Menu under the chip |
-| P-view-name | Name a new view, or rename one | Save as a new view…, Rename | Name field (100 chars), Save view or Rename, Cancel; Escape cancels | 2 | 2 | 2 | Inline row |
-| M-view-archive | Confirm archiving a shared view | Archive | "Archive {name} for everyone in the team?" Archive, Cancel. No unarchive | 1 | 1 | 1 | Inline confirm replacing the buttons |
-| P-view-history | Who changed the view | "History of {name}" | P-item-history's layout | 1 | 1 | 1 | Collapsed disclosure |
+| ID             | Purpose                           | Trigger                              | Contents and actions                                                     | Freq | Must (local) | Must (server) | Presentation                         |
+| -------------- | --------------------------------- | ------------------------------------ | ------------------------------------------------------------------------ | :--: | :----------: | :-----------: | ------------------------------------ |
+| P-view-changed | Keep or drop a change to the list | The open chip, once it shows the dot | Save to {name} (not for Default); Save as a new view…; Undo changes      |  2   |      2       |       2       | Menu under the chip                  |
+| P-view-name    | Name a new view, or rename one    | Save as a new view…, Rename          | Name field (100 chars), Save view or Rename, Cancel; Escape cancels      |  2   |      2       |       2       | Inline row                           |
+| M-view-archive | Confirm archiving a shared view   | Archive                              | "Archive {name} for everyone in the team?" Archive, Cancel. No unarchive |  1   |      1       |       1       | Inline confirm replacing the buttons |
+| P-view-history | Who changed the view              | "History of {name}"                  | P-item-history's layout                                                  |  1   |      1       |       1       | Collapsed disclosure                 |
 
 #### E-heap-empty, E-no-match, E-bad-view
 
-| ID | When | Shows | Freq | Must (local) | Must (server) | Status |
-| --- | --- | --- | :---: | :---: | :---: | --- |
-| E-heap-empty | No open items, nothing hidden, no filter or search | "Nothing here yet. Add the first thing on your plate." | 1 | 3 | 3 | built |
-| E-no-match | A filter, search or view leaves nothing | "No items match." | 2 | 2 | 2 | built |
-| E-bad-view | The server refuses the URL's view (`400`/`422`, such as a tag from a bookmark that's gone) | Saved views and toolbar stay; "This view can't be shown: {message}" and Reset to the default view | 1 | 2 | 2 | built |
+| ID           | When                                                                                       | Shows                                                                                             | Freq | Must (local) | Must (server) | Status |
+| ------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | ------ |
+| E-heap-empty | No open items, nothing hidden, no filter or search                                         | "Nothing here yet. Add the first thing on your plate."                                            |  1   |      3       |       3       | built  |
+| E-no-match   | A filter, search or view leaves nothing                                                    | "No items match."                                                                                 |  2   |      2       |       2       | built  |
+| E-bad-view   | The server refuses the URL's view (`400`/`422`, such as a tag from a bookmark that's gone) | Saved views and toolbar stay; "This view can't be shown: {message}" and Reset to the default view |  1   |      2       |       2       | built  |
 
 A view URL naming an archived saved view silently drops `view` (TD API saved views). Built.
 
@@ -756,15 +757,15 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
 
 #### Sub-panels of M-item
 
-| ID | Purpose | Trigger | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
-| --- | --- | --- | --- | :---: | :---: | :---: | --- |
-| P-blocker | Pick the item this one waits for (Req Items §8) | State is Blocked | "Waiting for" select: Nothing picked, then the heap's other non-closed items; a closed blocker still shows, as "(done)". Errors `blocking_cycle` ("That item already waits for this one…"), `blocker_closed` | 3 | 3 | 3 | Native select in the pane; a searchable list would suit long heaps (Gaps) |
-| P-due | Pick a due time (app-ux.md Due) | Always shown | The server's rough choices as pills (In a few days, Next week, In a few weeks, Next month, In a few months), then Exact date, which opens a date field and "An exact date can become overdue." Pressing the picked pill clears it. In the Add dialog on a tablet or wide screen, a picked "None" comes first; the phone's Add chips have none. Beside the label, how the saved one reads now ("Overdue · 12 Mar") | 4 | 5 | 5 | Inline pills; the date field is native |
-| P-tag-picker | Add and remove tags | Always shown | Chips with ×; a combobox "Type to add or create" with up to 6 matches and "Create tag “x”"; Enter picks, Backspace removes the last. Errors `tag_name_taken` | 4 | 2 | 3 | Inline, with a dropdown list under the field |
-| P-param-picker | Set a parameter value | Each parameter in use | Up to 4 short options (12 chars) as buttons, like effort; more as a menu with "Not set". Violet label | 3 | 2 | 2 | Buttons, or a native select |
-| P-item-history | What changed and who | Always at the bottom | Entries newest first: "You edited item" or "{name} …", a time label, and each change as "Field: ~~before~~ → after"; Load more; "No history you can see." | 3 | 1 | 2 | Inline section |
-| E-conflict | Someone else saved first (`version_conflict`) | A save | "Someone else changed this item meanwhile. It now shows their version." The pane re-renders from the server | 1 | 1 | 4 | Inline alert |
-| E-item-missing | Unknown item, or one in a heap the user can't see (both `404`) | Opening a link | "This item doesn't exist, or it's in a heap you can't see." in the pane | 1 | 2 | 3 | Pane body |
+| ID             | Purpose                                                        | Trigger               | Contents and actions                                                                                                                                                                                                                                                                                                                                                                                              | Freq | Must (local) | Must (server) | Presentation                                                              |
+| -------------- | -------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | ------------------------------------------------------------------------- |
+| P-blocker      | Pick the item this one waits for (Req Items §8)                | State is Blocked      | "Waiting for" select: Nothing picked, then the heap's other non-closed items; a closed blocker still shows, as "(done)". Errors `blocking_cycle` ("That item already waits for this one…"), `blocker_closed`                                                                                                                                                                                                      |  3   |      3       |       3       | Native select in the pane; a searchable list would suit long heaps (Gaps) |
+| P-due          | Pick a due time (app-ux.md Due)                                | Always shown          | The server's rough choices as pills (In a few days, Next week, In a few weeks, Next month, In a few months), then Exact date, which opens a date field and "An exact date can become overdue." Pressing the picked pill clears it. In the Add dialog on a tablet or wide screen, a picked "None" comes first; the phone's Add chips have none. Beside the label, how the saved one reads now ("Overdue · 12 Mar") |  4   |      5       |       5       | Inline pills; the date field is native                                    |
+| P-tag-picker   | Add and remove tags                                            | Always shown          | Chips with ×; a combobox "Type to add or create" with up to 6 matches and "Create tag “x”"; Enter picks, Backspace removes the last. Errors `tag_name_taken`                                                                                                                                                                                                                                                      |  4   |      2       |       3       | Inline, with a dropdown list under the field                              |
+| P-param-picker | Set a parameter value                                          | Each parameter in use | Up to 4 short options (12 chars) as buttons, like effort; more as a menu with "Not set". Violet label                                                                                                                                                                                                                                                                                                             |  3   |      2       |       2       | Buttons, or a native select                                               |
+| P-item-history | What changed and who                                           | Always at the bottom  | Entries newest first: "You edited item" or "{name} …", a time label, and each change as "Field: ~~before~~ → after"; Load more; "No history you can see."                                                                                                                                                                                                                                                         |  3   |      1       |       2       | Inline section                                                            |
+| E-conflict     | Someone else saved first (`version_conflict`)                  | A save                | "Someone else changed this item meanwhile. It now shows their version." The pane re-renders from the server                                                                                                                                                                                                                                                                                                       |  1   |      1       |       4       | Inline alert                                                              |
+| E-item-missing | Unknown item, or one in a heap the user can't see (both `404`) | Opening a link        | "This item doesn't exist, or it's in a heap you can't see." in the pane                                                                                                                                                                                                                                                                                                                                           |  1   |      2       |       3       | Pane body                                                                 |
 
 Why the 4s and 5s:
 
@@ -880,11 +881,11 @@ where they live.
 - **Freq 2:** most tags are made from P-tag-picker. **Source:** `TagsPage.tsx`. Built.
 - **Must:** local 1, server 2. Tags are made in P-tag-picker; this page renames and describes them.
 
-| ID | Purpose | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
-| --- | --- | --- | :---: | :---: | :---: | --- |
-| P-tag-new | Add a tag | Name (50 chars), Description (optional, 1,000 chars), Add tag. Error `tag_name_taken` | 1 | 1 | 1 | Inline form |
-| P-tag-row | Edit a tag | Name and description inputs; Save and Cancel appear once changed. Errors `tag_name_taken`, `version_conflict` ("Someone else changed this tag…") | 2 | 1 | 2 | Inline row |
-| P-tag-history | Tag history | Collapsed "History" | 1 | 1 | 1 | Disclosure |
+| ID            | Purpose     | Contents and actions                                                                                                                             | Freq | Must (local) | Must (server) | Presentation |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | :--: | :----------: | :-----------: | ------------ |
+| P-tag-new     | Add a tag   | Name (50 chars), Description (optional, 1,000 chars), Add tag. Error `tag_name_taken`                                                            |  1   |      1       |       1       | Inline form  |
+| P-tag-row     | Edit a tag  | Name and description inputs; Save and Cancel appear once changed. Errors `tag_name_taken`, `version_conflict` ("Someone else changed this tag…") |  2   |      1       |       2       | Inline row   |
+| P-tag-history | Tag history | Collapsed "History"                                                                                                                              |  1   |      1       |       1       | Disclosure   |
 
 ### S-parameters: Parameters
 
@@ -896,15 +897,15 @@ where they live.
 - **Freq 2** for admins, 1 for members. **Source:** `ParametersPage.tsx`. Built.
 - **Must:** local 2, server 2. Custom parameters are optional; effort, impact and due rank without them.
 
-| ID | Purpose | Contents and actions | Freq | Must (local) | Must (server) | Presentation |
-| --- | --- | --- | :---: | :---: | :---: | --- |
-| P-param-new | Add a parameter | Name (50 chars), Weight (0–100, default 10), Options one per line, highest priority first (up to 50); Add parameter. Error `parameter_name_taken` | 1 | 2 | 2 | Inline card |
-| P-param-card | Edit a parameter | Name (Save/Cancel), Weight (Save); options in priority order, each with a label input and ↑ ↓; Save options / Cancel once changed; New option + Add option. Errors `option_label_taken`, `options_mismatch`, `too_many_options`, `parameter_archived` | 1 | 2 | 2 | Card |
-| P-option-archive | Archive an option with a replacement | "Open items with {option} switch to [select]" Archive, Cancel. Offered when the parameter has another option and no unsaved changes | 1 | 1 | 1 | Inline confirm in the option row |
-| P-param-tags | Link tags, so adding one suggests the parameter | P-tag-picker; "Adding one of these tags to an item suggests this parameter." Members see "Suggested for items tagged …" | 1 | 1 | 1 | Inline |
-| P-param-archive | Archive a parameter | "Archive {name}? It stops counting in the ranking; closed items keep their values." Archive, Cancel. Error `parameter_in_use` when an open item has a value | 1 | 1 | 1 | Inline confirm |
-| P-param-history | Parameter history (admins) | Collapsed "History" | 1 | 1 | 1 | Disclosure |
-| P-param-archived | Archived parameters | "{name}: option, option", history. No unarchive | 1 | 1 | 1 | List at the bottom |
+| ID               | Purpose                                         | Contents and actions                                                                                                                                                                                                                                  | Freq | Must (local) | Must (server) | Presentation                     |
+| ---------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | -------------------------------- |
+| P-param-new      | Add a parameter                                 | Name (50 chars), Weight (0–100, default 10), Options one per line, highest priority first (up to 50); Add parameter. Error `parameter_name_taken`                                                                                                     |  1   |      2       |       2       | Inline card                      |
+| P-param-card     | Edit a parameter                                | Name (Save/Cancel), Weight (Save); options in priority order, each with a label input and ↑ ↓; Save options / Cancel once changed; New option + Add option. Errors `option_label_taken`, `options_mismatch`, `too_many_options`, `parameter_archived` |  1   |      2       |       2       | Card                             |
+| P-option-archive | Archive an option with a replacement            | "Open items with {option} switch to [select]" Archive, Cancel. Offered when the parameter has another option and no unsaved changes                                                                                                                   |  1   |      1       |       1       | Inline confirm in the option row |
+| P-param-tags     | Link tags, so adding one suggests the parameter | P-tag-picker; "Adding one of these tags to an item suggests this parameter." Members see "Suggested for items tagged …"                                                                                                                               |  1   |      1       |       1       | Inline                           |
+| P-param-archive  | Archive a parameter                             | "Archive {name}? It stops counting in the ranking; closed items keep their values." Archive, Cancel. Error `parameter_in_use` when an open item has a value                                                                                           |  1   |      1       |       1       | Inline confirm                   |
+| P-param-history  | Parameter history (admins)                      | Collapsed "History"                                                                                                                                                                                                                                   |  1   |      1       |       1       | Disclosure                       |
+| P-param-archived | Archived parameters                             | "{name}: option, option", history. No unarchive                                                                                                                                                                                                       |  1   |      1       |       1       | List at the bottom               |
 
 `parameter_in_use` leaves the admin with no way to find which open items hold a value; see Gaps.
 
@@ -947,18 +948,18 @@ where they live.
 - **Must:** local 2, server 5. Server: the only place to add members and heaps, so without it nothing is shared.
   Local: it only holds New heap.
 
-| ID | Purpose | Contents and actions | Freq | Must (local) | Must (server) | Status | Presentation |
-| --- | --- | --- | :---: | :---: | :---: | --- | --- |
-| P-team-name | Rename the team; change its link name | Rename or Link name under the ⋯ by the title turns it into an input with Save and Cancel; Escape cancels. No link name on a personal team; `invalid_handle`, `handle_taken` | 1 | n/a | 1 | built | Inline, from a menu |
-| P-heap-row | Manage a heap | Name, "14 open" (`open_count`), Archived badge, Open; ⋯ with Rename and Link name (edited in the row), Archive or Unarchive, History (shown under the row). On a phone the row opens the heap and the ⋯ opens a sheet | 1 | 2 | 2 | built | Row |
-| P-heap-new | Add a heap | + New heap opens a form: New heap name, Add heap, Cancel. Designed: optional slug | 1 | 2 | 5 | built | Inline form |
-| P-member-row | Manage a member | Initials avatar, display name with "(you)", @username, Admin or Member badge; Make admin or Make member, Remove; a quiet History button. No email. On a phone: name and role, and a ⋯ opening a sheet with the actions | 1 | n/a | 4 | built | Row |
-| M-member-remove | Confirm removal | "Remove {name} from {team}? They lose access to {heaps}. Their items stay." (the unarchived heaps by name, "to its N heaps" past three, no access sentence with none) Cancel, Remove. Focus moves to it; Escape or Cancel goes back to Remove. In the member sheet on a phone | 1 | n/a | 2 | built | Banner under the list (alertdialog) |
-| M-self-demote | Confirm demoting yourself | Make member on your own row drops your admin rights at once, with no prompt | 1 | n/a | 2 | implied | Inline confirm |
-| P-member-add | Add an existing user (Off Teams §6) | "Add a member by username, name or email" (3+ characters or a whole username; email found and shown only when typed in full), "They need an account first"; results under it with the first addable one highlighted, "↵ Add as member", arrows to move, Enter or a click to add; "Already a member"; "No one matches." | 1 | n/a | 5 | built | Combobox with a listbox under it |
-| P-leave | Leave the team | Leave team → "Leave {team}? You'll lose access to its heaps." Leave, Cancel. Goes to S-teams | 1 | n/a | 2 | built | Inline confirm |
-| P-last-admin | Explain why leave is missing | "You are the only admin, so you can't leave until someone else is one." | 1 | n/a | 2 | built | Text |
-| P-personal-team | A personal team's page | No member controls, no Leave, slug fixed, name editable (readable-ids.md Usernames §1–2; `personal_team` error). `personal` flag on `TeamDto` | 1 | n/a | 2 | designed | Variant of S-team |
+| ID              | Purpose                               | Contents and actions                                                                                                                                                                                                                                                                                                   | Freq | Must (local) | Must (server) | Status   | Presentation                        |
+| --------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | -------- | ----------------------------------- |
+| P-team-name     | Rename the team; change its link name | Rename or Link name under the ⋯ by the title turns it into an input with Save and Cancel; Escape cancels. No link name on a personal team; `invalid_handle`, `handle_taken`                                                                                                                                            |  1   |     n/a      |       1       | built    | Inline, from a menu                 |
+| P-heap-row      | Manage a heap                         | Name, "14 open" (`open_count`), Archived badge, Open; ⋯ with Rename and Link name (edited in the row), Archive or Unarchive, History (shown under the row). On a phone the row opens the heap and the ⋯ opens a sheet                                                                                                  |  1   |      2       |       2       | built    | Row                                 |
+| P-heap-new      | Add a heap                            | + New heap opens a form: New heap name, Add heap, Cancel. Designed: optional slug                                                                                                                                                                                                                                      |  1   |      2       |       5       | built    | Inline form                         |
+| P-member-row    | Manage a member                       | Initials avatar, display name with "(you)", @username, Admin or Member badge; Make admin or Make member, Remove; a quiet History button. No email. On a phone: name and role, and a ⋯ opening a sheet with the actions                                                                                                 |  1   |     n/a      |       4       | built    | Row                                 |
+| M-member-remove | Confirm removal                       | "Remove {name} from {team}? They lose access to {heaps}. Their items stay." (the unarchived heaps by name, "to its N heaps" past three, no access sentence with none) Cancel, Remove. Focus moves to it; Escape or Cancel goes back to Remove. In the member sheet on a phone                                          |  1   |     n/a      |       2       | built    | Banner under the list (alertdialog) |
+| M-self-demote   | Confirm demoting yourself             | Make member on your own row drops your admin rights at once, with no prompt                                                                                                                                                                                                                                            |  1   |     n/a      |       2       | implied  | Inline confirm                      |
+| P-member-add    | Add an existing user (Off Teams §6)   | "Add a member by username, name or email" (3+ characters or a whole username; email found and shown only when typed in full), "They need an account first"; results under it with the first addable one highlighted, "↵ Add as member", arrows to move, Enter or a click to add; "Already a member"; "No one matches." |  1   |     n/a      |       5       | built    | Combobox with a listbox under it    |
+| P-leave         | Leave the team                        | Leave team → "Leave {team}? You'll lose access to its heaps." Leave, Cancel. Goes to S-teams                                                                                                                                                                                                                           |  1   |     n/a      |       2       | built    | Inline confirm                      |
+| P-last-admin    | Explain why leave is missing          | "You are the only admin, so you can't leave until someone else is one."                                                                                                                                                                                                                                                |  1   |     n/a      |       2       | built    | Text                                |
+| P-personal-team | A personal team's page                | No member controls, no Leave, slug fixed, name editable (readable-ids.md Usernames §1–2; `personal_team` error). `personal` flag on `TeamDto`                                                                                                                                                                          |  1   |     n/a      |       2       | designed | Variant of S-team                   |
 
 Why the 4s and 5s:
 
@@ -989,12 +990,13 @@ Why the 4s and 5s:
 - **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
 - **Freq 1.** **Source:** TD API Me; `AccountPage.tsx`. Built.
 - **Must:** local 4, server 1. Local: it holds export and import, the local build's only data safety. Server: display
-  name only.
+  name and the theme.
 
-| ID | Purpose | Contents and actions | Freq | Must (local) | Must (server) | Status | Presentation |
-| --- | --- | --- | :---: | :---: | :---: | --- | --- |
-| P-display-name | Change the name teammates see (audited in each team) | Input, Save/Cancel | 1 | 1 | 1 | built | Inline |
-| P-tokens | See and revoke CLI and other client tokens (`GET /me/tokens`, `POST /me/tokens/{id}/revoke`) | A row per client: name, created, last used; Revoke (confirm) | 1 | n/a | 2 | designed | List |
+| ID             | Purpose                                                                                      | Contents and actions                                                    | Freq | Must (local) | Must (server) | Status   | Presentation |
+| -------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | :--: | :----------: | :-----------: | -------- | ------------ |
+| P-display-name | Change the name teammates see (audited in each team)                                         | Input, Save/Cancel                                                      |  1   |      1       |       1       | built    | Inline       |
+| P-theme        | Pick the colour theme for this browser, kept in localStorage                                 | Appearance card: System, Light, Dark buttons; System follows the device |  1   |      1       |       1       | built    | Inline       |
+| P-tokens       | See and revoke CLI and other client tokens (`GET /me/tokens`, `POST /me/tokens/{id}/revoke`) | A row per client: name, created, last used; Revoke (confirm)            |  1   |     n/a      |       2       | designed | List         |
 
 Not designed anywhere: changing the password or email, password reset, signing out other sessions, deleting the
 account (nothing is deleted, but a user may want to leave). See Gaps.
@@ -1010,16 +1012,16 @@ There are none. The server is configured by environment variables (`DATABASE_URL
 
 The local build runs the same app with no accounts (local-build.md). What differs:
 
-| Area | Server build | Local build |
-| --- | --- | --- |
-| S-sign-in, S-register | Shown | Never shown |
-| Sign out | In the shell and More | Hidden (`GET /me` `allowed_actions` is empty) |
-| S-teams | List and Create team | Redirects to the one team ("My heaps", slug `me`) |
-| Shell "Teams" link | "Teams" | The team's name |
-| S-team | Members and team actions by role | Heaps only; only `create_heap` on the team |
-| G-storage-note, "Your data" on S-account, S-tab-lock | Absent | Present |
-| First heap | "Personal", in the user's personal team | "Personal" in team `me` (local-build.md still says "My heap"; the code says "Personal") |
-| URLs | `/teams/…` | Under the Pages base path, `/upheap/teams/me/heaps/personal/items/k3x9a` |
+| Area                                                 | Server build                            | Local build                                                                             |
+| ---------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
+| S-sign-in, S-register                                | Shown                                   | Never shown                                                                             |
+| Sign out                                             | In the shell and More                   | Hidden (`GET /me` `allowed_actions` is empty)                                           |
+| S-teams                                              | List and Create team                    | Redirects to the one team ("My heaps", slug `me`)                                       |
+| Shell "Teams" link                                   | "Teams"                                 | The team's name                                                                         |
+| S-team                                               | Members and team actions by role        | Heaps only; only `create_heap` on the team                                              |
+| G-storage-note, "Your data" on S-account, S-tab-lock | Absent                                  | Present                                                                                 |
+| First heap                                           | "Personal", in the user's personal team | "Personal" in team `me` (local-build.md still says "My heap"; the code says "Personal") |
+| URLs                                                 | `/teams/…`                              | Under the Pages base path, `/upheap/teams/me/heaps/personal/items/k3x9a`                |
 
 ### S-tab-lock: Open in another tab
 
@@ -1068,16 +1070,16 @@ The local build runs the same app with no accounts (local-build.md). What differ
 
 ## Errors and system states
 
-| ID | When | Shows today | Freq | Must (local) | Must (server) | Status |
-| --- | --- | --- | :---: | :---: | :---: | --- |
-| E-loading | Any query in flight | "Loading…" centred on the page or in the pane; "Loading history…" in histories | 4 | 2 | 3 | built |
-| E-load-error | A page's main query fails (including `404` for a heap the user can't see) | The error message centred in red | 1 | 3 | 3 | built |
-| S-not-found | No route matches | The router's default "Not Found"; no app page | 1 | 2 | 2 | implied |
-| E-forbidden | `403`: a member tries an admin action | Controls are hidden from `allowed_actions`, so only a race (demoted meanwhile) shows it, as an inline error | 1 | n/a | 2 | implied |
-| E-conflict | `409` `version_conflict` | Inline message; the view re-renders from the server | 1 | 1 | 4 | built |
-| G-offline | Network gone, `503` | Per-page errors after two retries | 1 | n/a | 3 | implied |
-| — | `500` | The message carries only a request ID (engineering-principles.md Errors §4); nothing presents it for a bug report | 1 | 1 | 2 | implied |
-| G-session-expired | `401` | Redirect to S-sign-in | 2 | n/a | 4 | built |
+| ID                | When                                                                      | Shows today                                                                                                       | Freq | Must (local) | Must (server) | Status  |
+| ----------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | :--: | :----------: | :-----------: | ------- |
+| E-loading         | Any query in flight                                                       | "Loading…" centred on the page or in the pane; "Loading history…" in histories                                    |  4   |      2       |       3       | built   |
+| E-load-error      | A page's main query fails (including `404` for a heap the user can't see) | The error message centred in red                                                                                  |  1   |      3       |       3       | built   |
+| S-not-found       | No route matches                                                          | The router's default "Not Found"; no app page                                                                     |  1   |      2       |       2       | implied |
+| E-forbidden       | `403`: a member tries an admin action                                     | Controls are hidden from `allowed_actions`, so only a race (demoted meanwhile) shows it, as an inline error       |  1   |     n/a      |       2       | implied |
+| E-conflict        | `409` `version_conflict`                                                  | Inline message; the view re-renders from the server                                                               |  1   |      1       |       4       | built   |
+| G-offline         | Network gone, `503`                                                       | Per-page errors after two retries                                                                                 |  1   |     n/a      |       3       | implied |
+| —                 | `500`                                                                     | The message carries only a request ID (engineering-principles.md Errors §4); nothing presents it for a bug report |  1   |      1       |       2       | implied |
+| G-session-expired | `401`                                                                     | Redirect to S-sign-in                                                                                             |  2   |     n/a      |       4       | built   |
 
 E-conflict and G-session-expired (server 4) are justified in their own entries above.
 
