@@ -478,9 +478,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** A chip's look, filled once it's on, for the filters' toggles and the phone's sort choices. */
-const chipClass =
-  "inline-flex h-8 items-center rounded-full border border-line px-3 text-sm text-ink-soft hover:border-muted pointer-coarse:h-10";
-const chipOnClass = "border-ink bg-ink text-canvas hover:border-ink";
+// The pressed look is amber, like the Filters button it answers to. Off and on each set their own text color, as two
+// utilities for one property in the same class list would leave the winner to the stylesheet's order.
+const chipClass = "inline-flex h-8 items-center rounded-full border px-3 text-sm pointer-coarse:h-10";
+const chipOffClass = "border-line text-ink-soft hover:border-muted";
+const chipOnClass = "border-accent/40 bg-accent-soft font-semibold text-accent-ink";
 
 function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -488,7 +490,7 @@ function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () 
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`${chipClass} ${pressed ? chipOnClass : ""}`}
+      className={`${chipClass} ${pressed ? chipOnClass : chipOffClass}`}
     >
       {children}
     </button>
@@ -532,7 +534,7 @@ function ChipChoice<T extends string>({
             className="peer sr-only"
           />
           <span
-            className={`${chipClass} peer-checked:border-ink peer-checked:bg-ink peer-checked:text-canvas peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
+            className={`${chipClass} ${chipOffClass} peer-checked:border-accent/40 peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:text-accent-ink peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
           >
             {option.label}
           </span>

@@ -26,7 +26,7 @@ import {
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
- * page only narrows it further by the search text. Saved views are links that put their settings in the URL.
+ * page only narrows it further by the search text.
  * `itemKey` is the key of the item open over the list, if any (app-ux.md, The item).
  */
 export function HeapPage({
