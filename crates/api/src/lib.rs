@@ -164,7 +164,8 @@ fn api_router() -> OpenApiRouter<AppState> {
     let v1 = v1
         .merge(auth::routes())
         .merge(oauth::authorize_routes())
-        .merge(users::routes());
+        .merge(users::routes())
+        .merge(me::sign_ins::routes());
     let v1 = v1
         .merge(me::routes())
         .merge(due_choices::routes())

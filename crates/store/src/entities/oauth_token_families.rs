@@ -10,6 +10,7 @@ pub struct Model {
     pub client_id: String,
     pub created_at: i64,
     pub revoked_at: Option<i64>,
+    pub device_name: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

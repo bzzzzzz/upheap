@@ -1,5 +1,8 @@
 //! The signed-in user, their teams and heaps.
 
+#[cfg(feature = "accounts")]
+pub(crate) mod sign_ins;
+
 use api_types::common::HeapSummaryDto;
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
 use axum::Json;
@@ -24,7 +27,11 @@ fn to_me_dto(me: MeView, authentication: &Authentication) -> MeDto {
     let allowed_actions = if authentication.is_single_user() {
         Vec::new()
     } else {
-        vec![MeActionDto::SignOut, MeActionDto::CreateTeam]
+        vec![
+            MeActionDto::SignOut,
+            MeActionDto::CreateTeam,
+            MeActionDto::ManageSignIns,
+        ]
     };
     let team = |view: TeamView| TeamDto {
         id: *view.team.id.as_uuid(),

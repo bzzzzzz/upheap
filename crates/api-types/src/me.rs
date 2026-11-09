@@ -68,6 +68,34 @@ pub enum MeActionDto {
     SignOut,
     /// Start a new team.
     CreateTeam,
+    /// List and end the sign-ins of command-line and other clients (`/me/sign-ins`).
+    ManageSignIns,
+}
+
+/// One live sign-in of a client such as the CLI: the tokens it holds can still be used.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ClientSignIn)]
+pub struct ClientSignInDto {
+    /// Names the sign-in in `DELETE /me/sign-ins/{id}`.
+    pub id: Uuid,
+    /// The client: `upheap-cli`.
+    pub client_id: String,
+    /// What to call the client, such as "Upheap CLI".
+    pub client_name: String,
+    /// What the client called the machine, such as its hostname. The client's claim and only a label. `null` for a
+    /// sign-in that sent none.
+    pub device_name: Option<String>,
+    /// UTC milliseconds.
+    pub signed_in_at: i64,
+    /// UTC milliseconds: when the sign-in last got new tokens.
+    pub last_used_at: i64,
+}
+
+/// The caller's live sign-ins, the most recently used first.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ClientSignInList)]
+pub struct ClientSignInListDto {
+    pub sign_ins: Vec<ClientSignInDto>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
