@@ -133,7 +133,7 @@ Two terms used below: **flows** are the axum handlers and the `service` use case
 
 ### Layout
 
-1. **Source is a tree, not a flat list.** Group modules by feature or layer, and split a directory when it gets crowded. In `api`, each resource has its own module with its handlers and DTOs (`api/src/items/`).
+1. **Source is a tree, not a flat list.** Group modules by feature or layer, and split a directory when it gets crowded. In `api`, each resource has its own module with its handlers (`api/src/items/`); its request and response types are in `api-types`, in a module of the same name (`api-types/src/items.rs`), so clients written in Rust share them.
 2. **Code goes in the lowest crate that can own it.** A rule that doesn't need IO belongs in `domain`, not in a handler.
 3. **Read before you move.** Read the module you're changing end to end, and understand its layer, before moving or renaming types.
 

@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::dto::{NeedDto, SizeDto};
+use crate::common::{NeedDto, SizeDto};
 
 /// Where items in one state go in the list.
-#[derive(Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = StateMode)]
-pub(crate) enum StateModeDto {
+pub enum StateModeDto {
     Pinned,
     Shown,
     Hidden,
@@ -42,10 +42,10 @@ impl From<StateMode> for StateModeDto {
 }
 
 /// Where shown blocked items go.
-#[derive(Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = BlockedLayout)]
-pub(crate) enum BlockedLayoutDto {
+pub enum BlockedLayoutDto {
     Grouped,
     Mixed,
 }
@@ -71,10 +71,10 @@ impl From<BlockedLayout> for BlockedLayoutDto {
 /// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
 /// `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
 /// Items without the value come last.
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = ListSort)]
-pub(crate) enum SortDto {
+pub enum SortDto {
     Priority,
     Due,
     Effort,
@@ -110,9 +110,9 @@ impl From<SortKey> for SortDto {
 }
 
 /// A list view with every setting spelled out, as a saved view returns it.
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = ListView)]
-pub(crate) struct ListViewDto {
+pub struct ListViewDto {
     pub open: StateModeDto,
     pub in_progress: StateModeDto,
     pub blocked: StateModeDto,
@@ -154,10 +154,10 @@ impl From<&ListView> for ListViewDto {
 
 /// A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
 /// items hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
-#[derive(Clone, Default, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ListViewInput)]
-pub(crate) struct ListViewInputDto {
+pub struct ListViewInputDto {
     pub open: Option<StateModeDto>,
     pub in_progress: Option<StateModeDto>,
     pub blocked: Option<StateModeDto>,

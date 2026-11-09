@@ -32,13 +32,14 @@ crates/
   domain/    Pure logic, no IO: types, state machine, ranking, fuzzy due labels, validation
   store/     SeaORM entities, migrations, repositories
   service/   Use cases: authorization, transactions, audit logging, orchestration
-  api/       axum routes, request/response DTOs, OpenAPI, auth flows, sessions
+  api-types/ Request and response types (serde, utoipa) and their conversions from domain types, shared with the CLI
+  api/       axum routes, OpenAPI, auth flows, sessions, conversions from service views
   server/    Binary: config, startup, migrations, embedded web assets
   local/     WebAssembly entry point for the local build: clock, proxy database, migrations, Router
 web/         React app (TypeScript), consumes generated API types only
 ```
 
-Dependencies point one way: `server → api → service → store, domain`, and `local` sits beside `server`. `service` and `api` put what only a shared server needs behind their default `accounts` feature, which the local build leaves out ([local-build.md](local-build.md#single-user-mode)). `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
+Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it, and `local` sits beside `server`. `service` and `api` put what only a shared server needs behind their default `accounts` feature, which the local build leaves out ([local-build.md](local-build.md#single-user-mode)). `domain` depends on nothing in the workspace, so the ranking logic can be unit- and property-tested in isolation.
 
 ### Errors
 

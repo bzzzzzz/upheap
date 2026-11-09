@@ -142,13 +142,14 @@ cargo run -q -p server -- openapi > openapi.json && (cd web && npm run gen:api)
 ## Layout
 
 ```
-crates/domain   pure logic: types, state machine, ranking, due labels, permissions
-crates/store    SeaORM entities, migrations, repositories
-crates/service  use cases: authorization, transactions, audit
-crates/api      axum routes, DTOs, OpenAPI, sessions, problem+json
-crates/server   the binary: config, startup, embedded web app
-crates/local    the local build: the backend in wasm, on SQLite-wasm in the browser
-web/            React app (TypeScript), generated API types only
+crates/domain     pure logic: types, state machine, ranking, due labels, permissions
+crates/store      SeaORM entities, migrations, repositories
+crates/service    use cases: authorization, transactions, audit
+crates/api-types  request and response types, shared by the API and the CLI
+crates/api        axum routes, OpenAPI, sessions, problem+json
+crates/server     the binary: config, startup, embedded web app
+crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
+web/              React app (TypeScript), generated API types only
 ```
 
 ## License

@@ -4,25 +4,23 @@
 #[cfg(feature = "accounts")]
 mod manage;
 
+use api_types::heaps::HeapDto;
+use api_types::teams::{CreateNamedDto, MemberActionDto, MemberDto, TeamActionDto, TeamDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::handle::Handle;
-use domain::permission::{MemberAction, TeamAction};
+use domain::permission::TeamAction;
 use domain::text::Name;
 use domain::validation::Field;
-use serde::{Deserialize, Serialize};
 use service::ServiceError;
 use service::teams::{MemberView, TeamDetail};
-use utoipa::ToSchema;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
-use uuid::Uuid;
 
-use crate::dto::RoleDto;
 use crate::error::Problem;
 use crate::extract::ApiJson;
-use crate::heaps::HeapDto;
+use crate::heaps::to_heap_dto;
 use crate::paths::{TeamParams, TeamPath};
 use crate::{ApiError, AppState, Authentication};
 
@@ -37,150 +35,54 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
     routes.routes(routes!(create_heap))
 }
 
-/// An action the caller can take on a team.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = TeamAction)]
-pub(crate) enum TeamActionDto {
-    Rename,
-    /// Not offered on a personal team, whose slug is its owner's username.
-    ChangeSlug,
-    /// Not offered on a personal team.
-    AddMember,
-    CreateHeap,
-    Leave,
+fn to_member_dto(view: MemberView) -> MemberDto {
+    MemberDto {
+        user_id: *view.user.id.as_uuid(),
+        username: view.user.username.to_string(),
+        display_name: view.user.display_name.as_str().to_owned(),
+        email: view.user.email.as_str().to_owned(),
+        role: view.membership.role.into(),
+        joined_at: view.membership.joined_at.as_millis(),
+        allowed_actions: view.allowed_actions.into_iter().map(MemberActionDto::from).collect(),
+    }
 }
 
-impl From<TeamAction> for TeamActionDto {
-    fn from(action: TeamAction) -> Self {
-        match action {
-            TeamAction::Rename => Self::Rename,
-            TeamAction::ChangeSlug => Self::ChangeSlug,
-            TeamAction::AddMember => Self::AddMember,
-            TeamAction::CreateHeap => Self::CreateHeap,
-            TeamAction::Leave => Self::Leave,
+/// The team as `authentication`'s caller sees it. The local user has no one to add and only the one team, so
+/// creating heaps is the only team action offered, and no member actions are.
+pub(crate) fn to_team_dto(mut detail: TeamDetail, authentication: &Authentication) -> TeamDto {
+    if authentication.is_single_user() {
+        detail
+            .allowed_actions
+            .retain(|action| matches!(action, TeamAction::CreateHeap));
+        for member in &mut detail.members {
+            member.allowed_actions.clear();
         }
     }
-}
-
-/// An action the caller can take on one member.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = MemberAction)]
-pub(crate) enum MemberActionDto {
-    Promote,
-    Demote,
-    Remove,
-}
-
-impl From<MemberAction> for MemberActionDto {
-    fn from(action: MemberAction) -> Self {
-        match action {
-            MemberAction::Promote => Self::Promote,
-            MemberAction::Demote => Self::Demote,
-            MemberAction::Remove => Self::Remove,
-        }
+    TeamDto {
+        id: *detail.team.id.as_uuid(),
+        slug: detail.team.slug.to_string(),
+        name: detail.team.name.as_str().to_owned(),
+        personal: detail.team.is_personal(),
+        version: detail.team.version.get(),
+        role: detail.role.into(),
+        members: detail.members.into_iter().map(to_member_dto).collect(),
+        heaps: detail.heaps.into_iter().map(to_heap_dto).collect(),
+        allowed_actions: detail.allowed_actions.into_iter().map(TeamActionDto::from).collect(),
     }
 }
 
-#[derive(Serialize, ToSchema)]
-#[schema(as = TeamMember)]
-pub(crate) struct MemberDto {
-    pub user_id: Uuid,
-    /// The member's path is `/teams/{team}/members/{username}`.
-    pub username: String,
-    pub display_name: String,
-    pub email: String,
-    pub role: RoleDto,
-    /// UTC milliseconds.
-    pub joined_at: i64,
-    pub allowed_actions: Vec<MemberActionDto>,
+/// The name of a new team or heap.
+pub(crate) fn to_name(body: &CreateNamedDto) -> Result<Name, ServiceError> {
+    Ok(Name::parse(&body.name)?)
 }
 
-impl From<MemberView> for MemberDto {
-    fn from(view: MemberView) -> Self {
-        Self {
-            user_id: *view.user.id.as_uuid(),
-            username: view.user.username.to_string(),
-            display_name: view.user.display_name.as_str().to_owned(),
-            email: view.user.email.as_str().to_owned(),
-            role: view.membership.role.into(),
-            joined_at: view.membership.joined_at.as_millis(),
-            allowed_actions: view.allowed_actions.into_iter().map(MemberActionDto::from).collect(),
-        }
-    }
-}
-
-/// A team with its members and heaps, as the caller sees it.
-#[derive(Serialize, ToSchema)]
-#[schema(as = Team)]
-pub(crate) struct TeamDto {
-    pub id: Uuid,
-    /// Unique among teams and usernames; the team's path is `/teams/{slug}`.
-    pub slug: String,
-    pub name: String,
-    /// Whether this is the caller's personal team: theirs alone, with their username as its slug.
-    pub personal: bool,
-    /// Send back in `If-Match` when renaming.
-    pub version: u32,
-    /// The caller's role.
-    pub role: RoleDto,
-    /// In the order they joined.
-    pub members: Vec<MemberDto>,
-    /// By name, archived ones included.
-    pub heaps: Vec<HeapDto>,
-    pub allowed_actions: Vec<TeamActionDto>,
-}
-
-impl TeamDto {
-    /// The team as `authentication`'s caller sees it. The local user has no one to add and only the one team, so
-    /// creating heaps is the only team action offered, and no member actions are.
-    pub(crate) fn new(mut detail: TeamDetail, authentication: &Authentication) -> Self {
-        if authentication.is_single_user() {
-            detail
-                .allowed_actions
-                .retain(|action| matches!(action, TeamAction::CreateHeap));
-            for member in &mut detail.members {
-                member.allowed_actions.clear();
-            }
-        }
-        Self {
-            id: *detail.team.id.as_uuid(),
-            slug: detail.team.slug.to_string(),
-            name: detail.team.name.as_str().to_owned(),
-            personal: detail.team.is_personal(),
-            version: detail.team.version.get(),
-            role: detail.role.into(),
-            members: detail.members.into_iter().map(MemberDto::from).collect(),
-            heaps: detail.heaps.into_iter().map(HeapDto::from).collect(),
-            allowed_actions: detail.allowed_actions.into_iter().map(TeamActionDto::from).collect(),
-        }
-    }
-}
-
-/// A new team or heap.
-#[derive(Deserialize, ToSchema)]
-#[schema(as = CreateNamedRequest)]
-pub(crate) struct CreateNamedDto {
-    /// 1 to 100 characters.
-    pub name: String,
-    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
-    /// one made from the name: "My Team" gets `my-team`, or `my-team-2` if that is taken.
-    pub slug: Option<String>,
-}
-
-impl CreateNamedDto {
-    pub(crate) fn to_name(&self) -> Result<Name, ServiceError> {
-        Ok(Name::parse(&self.name)?)
-    }
-
-    pub(crate) fn to_slug(&self) -> Result<Option<Handle>, ServiceError> {
-        Ok(self
-            .slug
-            .as_deref()
-            .map(|raw| Handle::parse(raw, Field::Slug))
-            .transpose()?)
-    }
+/// The slug of a new team or heap, when one was given.
+pub(crate) fn to_slug(body: &CreateNamedDto) -> Result<Option<Handle>, ServiceError> {
+    Ok(body
+        .slug
+        .as_deref()
+        .map(|raw| Handle::parse(raw, Field::Slug))
+        .transpose()?)
 }
 
 /// The team with its members and heaps.
@@ -189,7 +91,7 @@ impl CreateNamedDto {
     responses((status = 200, body = TeamDto), (status = 404, body = Problem)))]
 async fn get_team(State(state): State<AppState>, path: TeamPath) -> Result<Json<TeamDto>, ApiError> {
     let detail = state.services.load_team(path.principal, path.team_id).await?;
-    Ok(Json(TeamDto::new(detail, &state.authentication)))
+    Ok(Json(to_team_dto(detail, &state.authentication)))
 }
 
 /// Adds a heap to the team. Admins only.
@@ -209,7 +111,7 @@ async fn create_heap(
 ) -> Result<(StatusCode, Json<HeapDto>), ApiError> {
     let view = state
         .services
-        .create_heap(path.principal, path.team_id, body.to_name()?, body.to_slug()?)
+        .create_heap(path.principal, path.team_id, to_name(&body)?, to_slug(&body)?)
         .await?;
-    Ok((StatusCode::CREATED, Json(view.into())))
+    Ok((StatusCode::CREATED, Json(to_heap_dto(view))))
 }

@@ -57,6 +57,7 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "api-types",
  "axum",
  "domain",
  "form_urlencoded",
@@ -74,6 +75,20 @@ dependencies = [
  "tracing-subscriber",
  "utoipa",
  "utoipa-axum",
+ "uuid",
+]
+
+[[package]]
+name = "api-types"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "googletest",
+ "jiff",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "utoipa",
  "uuid",
 ]
 
