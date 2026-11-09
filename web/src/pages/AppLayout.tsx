@@ -8,7 +8,6 @@ import {
   ChevronDown,
   CircleCheck,
   Ellipsis,
-  Layers,
   List,
   LogOut,
   Plus,
@@ -25,6 +24,7 @@ import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useSignOut
 import { AddItemDialog } from "../components/AddItem";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
+import { Logo } from "../components/Logo";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
@@ -131,7 +131,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       className="sticky top-0 hidden h-dvh w-20 shrink-0 flex-col gap-5 overflow-y-auto border-r border-line bg-sunken pt-[max(env(safe-area-inset-top),1rem)] pb-[max(env(safe-area-inset-bottom),1rem)] sm:flex sm:px-1.5 lg:w-60 lg:px-3"
     >
       <div className="hidden items-center gap-2 px-3 font-semibold tracking-tight lg:flex">
-        <Layers aria-hidden="true" className="size-5 text-accent" />
+        <Logo className="size-5 text-accent" />
         Upheap
       </div>
 
