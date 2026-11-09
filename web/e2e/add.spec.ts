@@ -1,4 +1,4 @@
-// Adding an item (design/ux-overview.md, Adding): where it landed, Add another remembered, the heap chosen in the
+// Adding an item (design/ux.md, Adding an item): where it landed, Add another remembered, the heap chosen in the
 // title, the list's filters as the starting point, None for due, and on a phone the chips and More fields.
 import {
   addDialog,

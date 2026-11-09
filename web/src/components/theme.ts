@@ -1,4 +1,4 @@
-// The colour theme the user picked on the Account page (design/app-ux.md, Toolkit): System, the default, follows the
+// The colour theme the user picked on the Account page (design/ux.md, Toolkit): System, the default, follows the
 // device; Light and Dark set `data-theme` on <html>, which index.css reads. Remembered per browser, in localStorage,
 // like Add another, since it's about the screen in front of the user rather than their account. The inline script in
 // index.html applies it before the first paint, so it reads the same key and sets the same attribute and colour scheme;

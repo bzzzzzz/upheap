@@ -1,4 +1,4 @@
-// The app shell at each width (design/app-ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
+// The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
 import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
@@ -231,7 +231,7 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
 }
 
 /**
- * The phone's tabs (app-ux.md, Layout): Open, Closed, Add in the middle under the thumb, Settings, and More for the
+ * The phone's tabs (ux.md, Layout): Open, Closed, Add in the middle under the thumb, Settings, and More for the
  * rest.
  */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
@@ -336,7 +336,7 @@ function MoreSheet({
 }
 
 /**
- * Every heap, by team, with a check on the one on screen (ux-overview.md, What comes first §3): a popover beside the
+ * Every heap, by team, with a check on the one on screen (ux.md, Phone details): a popover beside the
  * rail on a tablet or under the sidebar's heap button on a wide screen, a sheet of 52 px rows on a phone. It ends with a new heap in the heap's own team, where the user
  * may create one.
  */

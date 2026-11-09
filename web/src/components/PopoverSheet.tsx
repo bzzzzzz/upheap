@@ -6,7 +6,7 @@ import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
 
 /**
- * A panel that opens from a button (app-ux.md, The list §7): a popover under the button on a tablet or wide screen,
+ * A panel that opens from a button (ux.md, The list §7): a popover under the button on a tablet or wide screen,
  * and a sheet from the bottom on a phone, above the keyboard. Escape or a tap outside closes it.
  */
 export function PopoverSheet({

@@ -29,11 +29,11 @@ const CLOSE_DISTANCE = 120;
 const CLOSE_SPEED = 600;
 
 /**
- * One item over its list (app-ux.md, The item): a pane beside the list on a wide screen, a panel over the right of
+ * One item over its list (ux.md, The item): a pane beside the list on a wide screen, a panel over the right of
  * the list on a tablet, with the list still live beside it, and a sheet from the bottom on a phone. Each change saves
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
- * pane (ux-overview.md, The item §2).
+ * pane (ux.md, The item §7).
  */
 export function ItemPane({
   heapRef,
@@ -659,7 +659,7 @@ function AddedBy({ item }: { item: Item }) {
 }
 
 /**
- * Why the item ranks where it does (ux-overview.md, The item §4): each contributor, with a bar for its share of the
+ * Why the item ranks where it does (ux.md, The item §9): each contributor, with a bar for its share of the
  * item's priority.
  */
 function WhyItRanks({ entry }: { entry: RankedItem }) {
@@ -691,11 +691,10 @@ function WhyItRanks({ entry }: { entry: RankedItem }) {
 }
 
 /**
- * The item's state and the ways out of it (ux-overview.md, The item §1): the likeliest next state as the main button,
+ * The item's state and the ways out of it (ux.md, The item §6): the likeliest next state as the main button,
  * the other states beside it, and Won't do under ⋯, as it's rarely the one wanted. A closed item says when it closed,
  * and offers Reopen while it still can be. As a `bar`, for a phone, the buttons sit at the bottom of the sheet within
- * reach of the thumb, the main one wider, and the state itself is a line under the title (ux-overview.md, What comes
- * first §2).
+ * reach of the thumb, the main one wider, and the state itself is a line under the title (ux.md, The item §2).
  */
 function StateActions({
   item,

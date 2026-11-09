@@ -32,7 +32,7 @@ function toSections(items: Item[]): ClosedSection[] {
 }
 
 /**
- * Done and won't-do items, most recently closed first (screens.md, S-closed), under "Today", "This week" and
+ * Done and won't-do items, most recently closed first (ux.md, Closed), under "Today", "This week" and
  * "Earlier". Each row says who closed it, and offers Reopen while the server allows it.
  */
 export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {

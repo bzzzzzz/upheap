@@ -34,7 +34,7 @@ and architecture.md.
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps app-ux.md's layout, unreviewed |
+| Web app at every width | [ux.md](ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next
@@ -51,26 +51,38 @@ In rough order.
 6. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
 7. **Invitations** by email or link (Off Teams §6).
 8. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
-9. **Docs.** Finish the restructuring: `ux.md` from ux-overview.md and app-ux.md with screens.md's core flows;
-   `product.md` from requirements.md and offering.md. The rules are in [CLAUDE.md](../CLAUDE.md).
+9. **Docs.** Finish the restructuring: `product.md` from requirements.md and offering.md. The rules are in
+   [CLAUDE.md](../CLAUDE.md).
 
 ## Later
 
 - **Keyboard.** Shortcut hints on controls, a hint bar, `?` for help, and ⌘K across heaps, which needs a server
-  search endpoint ([ux-overview.md](ux-overview.md), Later: keyboard).
-- **Tablet.** Its own design pass. Today it keeps app-ux.md's layout.
+  search endpoint ([ux.md](ux.md#later-keyboard)).
+- **Tablet.** Its own design pass. Today it keeps ux.md's layout.
 - **First-set leftovers.** The member count beside Team in More and open counts in the heap switcher, both already
   in `GET /me`; an "Added" row among the phone item sheet's fields; a badge on More fields when a new tag asks for a
   parameter; a back button on phone pages outside a heap; a confirm before demoting yourself; an optional link name
   when adding a heap; "team · heap" over a closed item's title.
-- **Installable app.** A PWA for the local build, then store builds with Tauri ([app-ux.md](app-ux.md), Later).
+- **Not yet designed.** Onboarding beyond the empty heap's one line (how ranking works, what effort, impact and
+  loose due times mean, that nothing is deleted); a page for a `404` and one for when the local backend can't open
+  its storage; an offline banner, where today each page shows its own error; the `500` request ID shown for a bug
+  report; a searchable blocker picker for long heaps; a link from "parameter in use" to the items holding a value; a
+  nudge on a blocked item whose blocker has closed; bulk actions, which `GridList` was chosen with in mind;
+  notifications and due reminders; a countdown on a throttled sign-in; hiding Create account when registration is
+  closed, which needs the server to say so before sign-in.
+- **Password and account.** No password change, reset, email change or "sign out everywhere". The server sends no
+  email, so a reset needs an admin path or a design.
+- **Installable app.** A PWA for the local build, then store builds with Tauri ([ux.md](ux.md#later-an-installable-app)).
 - **Playwright against Postgres.** Optional; the config starts the server on in-memory SQLite.
 
 ## Open questions
 
-1. **Tablet layout.** app-ux.md and the mockups disagree on the tablet. The phone tabs and the item's state
-   buttons follow the mockups; the tablet hasn't been reviewed.
+1. **Tablet layout.** ux.md and the mockups disagree on the tablet. The phone tabs and the item's state buttons
+   follow the mockups; the tablet hasn't been reviewed.
 2. **Username suggestions** when the chosen one is taken: worth the server work?
+5. **Confirmations.** Archiving a heap and demoting yourself act at once, while archiving a view, option or
+   parameter, removing a member and leaving confirm first. The rule (ux.md, Rules §1) says Undo for the reversible
+   and a confirm for what affects others or can't be undone; the code doesn't follow it everywhere yet.
 3. **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. They are authentication
    plumbing, which may be deleted ([engineering principles](engineering-principles.md#data)), so a small cleanup on
    each exchange, as sign-in attempts have, can come with `/me/tokens`.

@@ -27,7 +27,7 @@ import {
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
  * page only narrows it further by the search text.
- * `itemKey` is the key of the item open over the list, if any (app-ux.md, The item).
+ * `itemKey` is the key of the item open over the list, if any (ux.md, The item).
  */
 export function HeapPage({
   heap: heapRef,
@@ -46,7 +46,7 @@ export function HeapPage({
   const changeState = useChangeState(heapRef, list.data);
   const closeItem = useCloseItem(heapRef, itemKey);
 
-  // The list's keys (app-ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
+  // The list's keys (ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
   // Escape closes the open item. The rows handle the arrows and `x` themselves.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -103,8 +103,8 @@ export function HeapPage({
 
 /**
  * Changes an item's state from the list, by its circle, `x`, a swipe or a row's buttons, then offers to undo it
- * (app-ux.md, The list §3). Undo puts back the state it had, and the blocker with it. After Done, when nothing else is
- * in progress, the toast also offers to start the top open item (ux-overview.md, The list §2).
+ * (ux.md, The list §3). Undo puts back the state it had, and the blocker with it. After Done, when nothing else is
+ * in progress, the toast also offers to start the top open item (ux.md, The list §10).
  */
 function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
@@ -315,7 +315,7 @@ const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => 
 ];
 
 /**
- * How many items the view hides by their state, with the fix (ux-overview.md, The list §4): Show them puts every
+ * How many items the view hides by their state, with the fix (ux.md, The list §12): Show them puts every
  * hidden state back in the list, at its default (In progress pinned, Open shown), or shown for Blocked, which is
  * hidden by default. Under the default view that's the blocked items, and the note says so.
  */

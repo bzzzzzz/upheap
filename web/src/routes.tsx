@@ -247,7 +247,7 @@ const heapRoute = createRoute({
   },
 });
 
-/** An item, by its key, open over its heap's list (app-ux.md, The item). `HeapPage` shows it. */
+/** An item, by its key, open over its heap's list (ux.md, The item). `HeapPage` shows it. */
 const itemRoute = createRoute({ getParentRoute: () => heapRoute, path: "items/$item" });
 
 const closedRoute = createRoute({
@@ -259,7 +259,7 @@ const closedRoute = createRoute({
   },
 });
 
-/** The heap's settings, a tab per child route (app-ux.md, Heap settings). */
+/** The heap's settings, a tab per child route (ux.md, Heap settings). */
 const heapSettingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/teams/$team/heaps/$heap/settings",

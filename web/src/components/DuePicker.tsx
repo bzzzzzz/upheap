@@ -10,10 +10,10 @@ const EXACT = "exact";
 const NONE = "none";
 
 /**
- * Picks a due time (app-ux.md, Due): the server's rough choices first, each a loose due time, and Exact date last,
+ * Picks a due time (ux.md, Due): the server's rough choices first, each a loose due time, and Exact date last,
  * the only one that opens a date field and the only one that can go overdue. Pressing the picked choice again clears
  * the due time. With `noneChoice`, as in the Add dialog, None comes first and is picked while there's no due time
- * (ux-overview.md, Adding §4). As `chips`, for the phone's Add sheet, the choices are one row that scrolls sideways,
+ * (ux.md, Due §5). As `chips`, for the phone's Add sheet, the choices are one row that scrolls sideways,
  * named but without a label to show.
  */
 export function DuePicker({
@@ -111,7 +111,7 @@ export function DuePicker({
 }
 
 /**
- * The due picker as a phone's sheet shows it (ux-overview.md, What comes first §3): the rough choices as 52 px rows
+ * The due picker as a phone's sheet shows it (ux.md, Phone details): the rough choices as 52 px rows
  * with a check on the picked one, Exact date with its date field, and Clear due. Picking a rough choice or clearing
  * is the whole job, so `onDone` closes the sheet then, also when the picked choice is tapped again; a date is typed
  * or picked in place.

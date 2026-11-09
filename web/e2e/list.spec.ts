@@ -1,6 +1,6 @@
 import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
 
-// One step ahead in the list and the item (design/ux-overview.md, What "one step ahead" means), with a mouse: the
+// One step ahead in the list and the item (design/ux.md, The list and The item), with a mouse: the
 // rows' hover actions don't show on a touch screen, which swipes instead.
 test.beforeEach(({ isMobile }) => {
   test.skip(isMobile, "Hover actions and the pane's ↑ ↓ are for a wide screen with a mouse.");

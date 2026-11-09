@@ -65,7 +65,7 @@ export const useToastCount = (): (() => number) => useContext(ToastContext).coun
 const SHOW_FOR_MS = 6000;
 
 /**
- * The toast after a change from the list (app-ux.md, The list §3): bottom centre, above the phone's tabs. It goes
+ * The toast after a change from the list (ux.md, The list §3): bottom centre, above the phone's tabs. It goes
  * after a few seconds, or when Undo or ✕ is pressed. Under the Add dialog and the phone's sheets, so a toast from the
  * last item added never covers the dialog's buttons.
  */
