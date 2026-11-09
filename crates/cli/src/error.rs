@@ -38,6 +38,14 @@ pub enum CliError {
         #[source]
         source: ClientError,
     },
+    /// The server refused a change to an item because it moved on or is closed. Carries the item as the user typed
+    /// it, for a hint they can paste.
+    #[error("{source}")]
+    ItemRefused {
+        name: String,
+        #[source]
+        source: ClientError,
+    },
     #[error(transparent)]
     Auth(#[from] AuthError),
     #[error(transparent)]
@@ -70,7 +78,8 @@ impl CliError {
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
             | Self::Client(err)
-            | Self::NoSuchItem { source: err, .. } => client_exit_code(err),
+            | Self::NoSuchItem { source: err, .. }
+            | Self::ItemRefused { source: err, .. } => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
             Self::Login(LoginError::Refused { .. }) => 4,
@@ -102,6 +111,10 @@ impl CliError {
                 source: ClientError::Problem { body, .. },
                 ..
             }
+            | Self::ItemRefused {
+                source: ClientError::Problem { body, .. },
+                ..
+            }
             | Self::Auth(
                 AuthError::Client(ClientError::Problem { body, .. })
                 | AuthError::Revoke(ClientError::Problem { body, .. }),
@@ -117,6 +130,10 @@ impl CliError {
                 source: ClientError::Problem { problem, .. },
                 ..
             }
+            | Self::ItemRefused {
+                source: ClientError::Problem { problem, .. },
+                ..
+            }
             | Self::Auth(
                 AuthError::Client(ClientError::Problem { problem, .. })
                 | AuthError::Revoke(ClientError::Problem { problem, .. }),
@@ -125,31 +142,36 @@ impl CliError {
         }
     }
 
-    fn hint(&self) -> Option<&'static str> {
+    fn hint(&self) -> Option<String> {
         let status = self.problem().map(|problem| problem.status);
         match (self, status) {
             (
                 Self::TokenStore(TokenStoreError::Corrupt { .. })
                 | Self::Auth(AuthError::Store(TokenStoreError::Corrupt { .. })),
                 _,
-            ) => Some("sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`"),
-            (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`"),
+            ) => Some(
+                "sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`".to_owned(),
+            ),
+            (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`".to_owned()),
             (Self::Config(ConfigError::Parse { .. }), _) => {
-                Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file")
+                Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file".to_owned())
             }
             (Self::Auth(AuthError::Revoke(_)), _) => {
-                Some("to forget the sign-in on this machine only, run `upheap auth logout --local`")
+                Some("to forget the sign-in on this machine only, run `upheap auth logout --local`".to_owned())
             }
-            (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => Some("sign in with `upheap auth login`"),
-            (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items"),
-            (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use"),
-            _ => match self.problem().map(|problem| problem.code.as_str()) {
-                Some("version_conflict") => {
-                    Some("someone else changed it since it was read; look with `upheap item show <item>` and try again")
-                }
-                Some("item_closed") => Some("reopen it first with `upheap item reopen <item>`"),
+            (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => {
+                Some("sign in with `upheap auth login`".to_owned())
+            }
+            (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items".to_owned()),
+            (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
+            (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
+                Some("version_conflict") => Some(format!(
+                    "someone else changed it since it was read; look with `upheap item show {name}` and try again"
+                )),
+                Some("item_closed") => Some(format!("reopen it first with `upheap item reopen {name}`")),
                 _ => None,
             },
+            _ => None,
         }
     }
 
@@ -212,25 +234,30 @@ mod tests {
     }
 
     fn refused(status: u16, code: &str) -> CliError {
-        CliError::Client(problem(status, code))
+        CliError::ItemRefused {
+            name: "k3x9a".to_owned(),
+            source: problem(status, code),
+        }
     }
 
     #[gtest]
     fn a_stale_edit_and_an_edit_of_a_closed_item_say_what_to_do_next() {
         let stale = refused(409, "version_conflict");
         let closed = refused(409, "item_closed");
+        let other = refused(409, "state_not_allowed");
 
         expect_that!(stale.exit_code(), eq(3));
         expect_that!(
             stale.to_message(),
             contains(eq(
-                "hint: someone else changed it since it was read; look with `upheap item show <item>` and try again"
+                "hint: someone else changed it since it was read; look with `upheap item show k3x9a` and try again"
             ))
         );
+        expect_that!(other.to_message().len(), eq(1));
         expect_that!(closed.exit_code(), eq(3));
         expect_that!(
             closed.to_message(),
-            contains(eq("hint: reopen it first with `upheap item reopen <item>`"))
+            contains(eq("hint: reopen it first with `upheap item reopen k3x9a`"))
         );
     }
 

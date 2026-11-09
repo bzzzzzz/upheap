@@ -56,17 +56,26 @@ impl HeapApi<'_> {
         Ok(self.client.post(&self.path(resource), body, self.token).await?)
     }
 
-    /// `PATCH` of `body` to the item with `key`, which is at `version`.
+    /// `PATCH` of `body` to the item with `key`, which the user typed as `typed` and which is at `version`.
     pub async fn patch_item(
         &self,
+        typed: &str,
         key: &str,
         version: u32,
         body: &(impl Serialize + ?Sized),
     ) -> Result<Fetched<ItemDto>, CliError> {
-        Ok(self
+        match self
             .client
             .patch(&self.path(&["items", key]), body, version, self.token)
-            .await?)
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_stale_or_closed(&source) => Err(CliError::ItemRefused {
+                name: typed.to_owned(),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn path<'p>(&'p self, resource: &[&'p str]) -> Vec<&'p str> {
@@ -74,6 +83,10 @@ impl HeapApi<'_> {
         path.extend_from_slice(resource);
         path
     }
+}
+
+fn is_stale_or_closed(err: &ClientError) -> bool {
+    matches!(err, ClientError::Problem { problem, .. } if matches!(problem.code.as_str(), "version_conflict" | "item_closed"))
 }
 
 fn is_not_found(err: &ClientError) -> bool {

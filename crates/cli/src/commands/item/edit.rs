@@ -132,7 +132,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         tag_ids,
         ..ItemPatchDto::default()
     };
-    let edited = api.patch_item(&at.key, item.value.version, &patch).await?;
+    let edited = api.patch_item(&args.item, &at.key, item.value.version, &patch).await?;
     match out.mode() {
         Mode::Json => out.json(&edited.body)?,
         Mode::Quiet => {}
