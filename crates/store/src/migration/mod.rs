@@ -15,6 +15,7 @@ mod m20261112_000009_handles;
 mod m20261113_000010_need;
 mod m20261114_000011_item_creator;
 mod m20261115_000012_item_closer;
+mod m20261116_000013_oauth;
 
 pub struct Migrator;
 
@@ -34,6 +35,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261113_000010_need::Migration),
             Box::new(m20261114_000011_item_creator::Migration),
             Box::new(m20261115_000012_item_closer::Migration),
+            Box::new(m20261116_000013_oauth::Migration),
         ]
     }
 }

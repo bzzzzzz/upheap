@@ -7,6 +7,21 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="color-scheme" content="light dark" />
+    <!--
+      The theme picked on the Account page (src/components/theme.ts, which owns the key), applied before the first
+      paint so a dark choice on a light device doesn't flash light while the app loads.
+    -->
+    <script>
+      try {
+        const theme = localStorage.getItem("upheap.theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+        }
+      } catch {
+        // Storage is blocked or unavailable: System, which index.css follows on its own.
+      }
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Upheap</title>
   </head>

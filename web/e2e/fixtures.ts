@@ -178,7 +178,7 @@ export async function addItem(
   fields: { need?: Need; effort?: Size; impact?: Size } = {},
   { listed = true }: { listed?: boolean } = {},
 ) {
-  await page.getByRole("button", { name: "Add an item" }).click();
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
   const dialog = addDialog(page);
   await dialog.getByLabel("Title").fill(title);
   await dialog

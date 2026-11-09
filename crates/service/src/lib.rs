@@ -18,6 +18,8 @@ pub mod handles;
 pub mod heaps;
 pub mod items;
 pub mod me;
+#[cfg(feature = "accounts")]
+pub mod oauth;
 pub mod parameters;
 mod personal;
 mod random;

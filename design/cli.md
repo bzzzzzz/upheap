@@ -182,10 +182,13 @@ not found together because the server deliberately doesn't tell them apart.
 [technical-design.md](technical-design.md#authentication-and-authorization) already describes for the CLI: it opens the
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
-file. `upheap auth logout` revokes the token on the server and removes it from the keychain.
+file. `upheap auth logout` revokes the token on the server with `POST /oauth/revoke`, which ends the whole sign-in,
+and removes it from the keychain. `POST /auth/logout` is the web app's: it ends only a session cookie, and answers `204`
+for a bearer token without revoking it.
 
-None of this exists on the server yet ([progress.md](progress.md): "CLI sign-in: OAuth with PKCE" is not started), so
-it's the first piece of work. See [Server changes](#server-changes).
+The server's half is built ([cli-tracker.md](cli-tracker.md), step 1): the client is `upheap-cli`, its redirect URI is
+`http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in
+[technical-design.md](technical-design.md#authentication-and-authorization). See [Server changes](#server-changes).
 
 ## Configuration
 
@@ -229,17 +232,17 @@ Libraries: `clap` (derive), `reqwest` with rustls, `tokio`, `serde`, `confique` 
 
 The CLI needs very little that the server doesn't already do:
 
-1. **Rename the server binary to `upheap-server`**, so the CLI can be `upheap`. The server serves both the API and the
+1. ✅ **Rename the server binary to `upheap-server`**, so the CLI can be `upheap`. Done on `main`. The server serves both the API and the
    web app, so `upheap-api` or `upheap-web` would each name only half of it, and `upheap-web` is already the web app's
    npm package. The crate stays `server`, so `cargo run -p server` in CI, Playwright and the README keeps working. What
    changes is the bin name in `crates/server/Cargo.toml`, the `Dockerfile` (build, copy and `ENTRYPOINT`), the doc
    comment in `crates/server/src/main.rs` and `CLAUDE.md`. Nothing has been released, so no one's scripts break. It's
    its own small pull request, ahead of the CLI.
-2. **OAuth with PKCE**, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, with `upheap` registered as a first-party
-   public client. Already in the technical design; not built.
-3. **Bearer tokens resolve to a `Principal`**, like session cookies do, and requests with a bearer token don't need the
-   `X-CSRF-Protection` header, since CSRF is a cookie problem.
-4. `/me/tokens`, so a user can see and revoke the CLI's tokens. Also already designed.
+2. ✅ **OAuth with PKCE**, `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, with `upheap-cli` registered as a
+   first-party public client, and the web app's consent page at `/oauth/authorize`.
+3. ✅ **Bearer tokens resolve to a `Principal`**, like session cookies do, and requests with a bearer token don't need
+   the `X-CSRF-Protection` header, since CSRF is a cookie problem.
+4. `/me/tokens`, so a user can see and revoke the CLI's tokens. Designed, not built.
 
 Everything else uses endpoints the web app uses today.
 

@@ -4,8 +4,8 @@
 //! items themselves. Errors become `application/problem+json` in one place, [`error::ApiError`].
 //!
 //! Features, both on by default:
-//! - `accounts`: registration, sign-in and session cookies, team management and user lookup. Without it, every
-//!   request is the local build's one user ([`Authentication::LocalUser`]).
+//! - `accounts`: registration, sign-in and session cookies, OAuth and bearer tokens for the CLI, team management and
+//!   user lookup. Without it, every request is the local build's one user ([`Authentication::LocalUser`]).
 //! - `trace-and-timeout`: the request span and the 30-second timeout. They need `Instant::now()` and tokio's timer,
 //!   which the browser lacks, so the local build keeps only the request IDs.
 
@@ -21,6 +21,8 @@ mod heaps;
 mod items;
 mod list_view;
 mod me;
+#[cfg(feature = "accounts")]
+mod oauth;
 mod parameters;
 mod paths;
 mod request_id;
@@ -60,7 +62,8 @@ pub struct AppState {
 /// How a request's caller is found.
 #[derive(Clone, Debug)]
 pub enum Authentication {
-    /// From the session cookie, which signing in sets as these settings say.
+    /// From the session cookie, which signing in sets as these settings say, or from an OAuth access token in an
+    /// `Authorization: Bearer` header.
     #[cfg(feature = "accounts")]
     Sessions(CookieSettings),
     /// Always this user, without asking: the local build's one user, from [`Services::open_local_user`]. There is
@@ -94,6 +97,7 @@ pub struct CookieSettings {
     components(schemas(list_view::StateModeDto, list_view::BlockedLayoutDto, list_view::SortDto)),
     tags(
         (name = "auth", description = "Registration and sign-in"),
+        (name = "oauth", description = "Signing in non-web clients, such as the CLI: OAuth 2.0 with PKCE"),
         (name = "me", description = "The signed-in user"),
         (name = "items", description = "Items and the ranked list"),
         (name = "tags", description = "A heap's tags"),
@@ -119,10 +123,47 @@ impl utoipa::Modify for SessionCookieScheme {
     }
 }
 
+/// Declares the bearer scheme, and offers it beside the session cookie wherever an operation takes the cookie,
+/// since [`extract::CurrentUser`] takes either. The OAuth operations are left as they say: approving an
+/// authorization request takes only the cookie. Run on the finished document, as the paths come from the routers.
+#[cfg(feature = "accounts")]
+fn add_bearer_scheme(openapi: &mut utoipa::openapi::OpenApi) {
+    use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityRequirement};
+    let components = openapi.components.get_or_insert_with(Default::default);
+    components.add_security_scheme(
+        "bearer",
+        SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build()),
+    );
+    let session = SecurityRequirement::new("session", Vec::<String>::new());
+    let bearer = SecurityRequirement::new("bearer", Vec::<String>::new());
+    for (path, item) in &mut openapi.paths.paths {
+        if path.starts_with("/api/v1/oauth/") {
+            continue;
+        }
+        let operations = [
+            &mut item.get,
+            &mut item.put,
+            &mut item.post,
+            &mut item.delete,
+            &mut item.patch,
+        ];
+        for operation in operations.into_iter().flatten() {
+            if let Some(security) = &mut operation.security
+                && security.contains(&session)
+            {
+                security.push(bearer.clone());
+            }
+        }
+    }
+}
+
 fn api_router() -> OpenApiRouter<AppState> {
     let v1 = OpenApiRouter::new();
     #[cfg(feature = "accounts")]
-    let v1 = v1.merge(auth::routes()).merge(users::routes());
+    let v1 = v1
+        .merge(auth::routes())
+        .merge(oauth::authorize_routes())
+        .merge(users::routes());
     let v1 = v1
         .merge(me::routes())
         .merge(due_choices::routes())
@@ -135,17 +176,29 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(audit::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
+    // After the CSRF layer: a client's token requests carry no cookie, so a forged one would have nothing to borrow,
+    // and OAuth clients don't send the header.
+    #[cfg(feature = "accounts")]
+    let v1 = v1.merge(oauth::token_routes());
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)
 }
 
 /// The OpenAPI document for the API. The checked-in `openapi.json` is generated from this.
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    api_router().split_for_parts().1
+    split_api_router().1
+}
+
+fn split_api_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
+    #[cfg_attr(not(feature = "accounts"), allow(unused_mut))]
+    let (api, mut spec) = api_router().split_for_parts();
+    #[cfg(feature = "accounts")]
+    add_bearer_scheme(&mut spec);
+    (api, spec)
 }
 
 /// The API and health routes with request IDs applied, and tracing and timeouts with `trace-and-timeout`.
 pub fn router(state: AppState) -> Router {
-    let (api, spec) = api_router().split_for_parts();
+    let (api, spec) = split_api_router();
     let spec_json = serde_json::to_string(&spec).unwrap_or_default();
     #[cfg(not(feature = "trace-and-timeout"))]
     let observed = ServiceBuilder::new()

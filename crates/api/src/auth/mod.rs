@@ -82,6 +82,9 @@ async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInReq
 }
 
 /// Ends the current session. Succeeds when there is none.
+///
+/// Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out
+/// with `POST /oauth/revoke`.
 #[utoipa::path(post, path = "/auth/logout", tag = "auth", responses((status = 204, description = "Signed out")))]
 async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
     let cookies = cookie_settings(&state)?;

@@ -34,9 +34,7 @@ impl SessionToken {
     }
 
     fn generate() -> Self {
-        let mut bytes = [0u8; 32];
-        rand::rng().fill_bytes(&mut bytes);
-        Self(URL_SAFE_NO_PAD.encode(bytes))
+        Self(random_token())
     }
 
     fn to_hash(&self) -> String {
@@ -225,7 +223,16 @@ impl Services {
     }
 }
 
-fn sha256_hex(value: &str) -> String {
+/// A new random 256-bit token, base64url without padding: the form of session tokens and of OAuth codes and tokens.
+pub(crate) fn random_token() -> String {
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// The SHA-256 of `value` in lowercase hex: what is stored in place of a token, so a leaked database can't be used
+/// to sign in.
+pub(crate) fn sha256_hex(value: &str) -> String {
     Sha256::digest(value.as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))

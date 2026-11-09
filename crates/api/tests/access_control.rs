@@ -67,6 +67,10 @@ enum Target {
     Me,
     /// A lookup text in the query string.
     UserQuery,
+    /// The CLI's authorization request in the query string.
+    AuthorizationQuery,
+    /// An authorization code the shared team's admin approved for the CLI.
+    AuthorizationCode,
 }
 
 /// The body a request carries.
@@ -98,6 +102,13 @@ enum RequestBody {
     AddMember,
     Promote,
     DisplayName,
+    /// The CLI's authorization request.
+    Authorization,
+    /// A form exchanging the code from [`Target::AuthorizationCode`], as the CLI sends it, without cookie or CSRF
+    /// header.
+    TokenExchange,
+    /// A form revoking a token, as the CLI sends it.
+    Revocation,
 }
 
 struct Endpoint {
@@ -163,6 +174,39 @@ fn endpoints() -> Vec<Endpoint> {
             Target::FreshSession,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::GET,
+            "/oauth/authorize",
+            Public,
+            Target::AuthorizationQuery,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/oauth/authorize",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Authorization,
+            StatusCode::OK,
+        ),
+        // The token endpoints take no cookie: whoever holds the code or token may use it.
+        row(
+            Method::POST,
+            "/oauth/token",
+            Public,
+            Target::AuthorizationCode,
+            RequestBody::TokenExchange,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/oauth/revoke",
+            Public,
+            Target::Nothing,
+            RequestBody::Revocation,
+            StatusCode::OK,
         ),
         row(
             Method::GET,
@@ -825,6 +869,9 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::Authorization => Some(common::cli_authorization()),
+            // Sent as forms by `call`.
+            RequestBody::TokenExchange | RequestBody::Revocation => None,
         }
     }
 
@@ -839,6 +886,7 @@ impl World {
         let mut if_match = None;
         let mut new_user = None;
         let mut parameter = Value::Null;
+        let mut code = None;
         match endpoint.target {
             Target::Nothing | Target::Heap => {}
             Target::HeapVersion => {
@@ -876,6 +924,13 @@ impl World {
                 }
             }
             Target::UserQuery => path.push_str("?query=example"),
+            Target::AuthorizationQuery => path.push_str(&format!(
+                "?response_type=code&client_id={}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&state=s",
+                common::CLI_CLIENT,
+                "http%3A%2F%2F127.0.0.1%3A53682%2Fcallback",
+                common::PKCE_CHALLENGE,
+            )),
+            Target::AuthorizationCode => code = Some(self.app.approve_cli(&self.admin.session).await?),
             Target::OpenItem | Target::ClosedItem => {
                 let (key, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item}", &key);
@@ -916,6 +971,16 @@ impl World {
             headers.push(("if-match", version));
         }
 
+        match endpoint.body {
+            RequestBody::TokenExchange => return self.app.exchange_code(code.as_deref().unwrap_or_default()).await,
+            RequestBody::Revocation => {
+                return self
+                    .app
+                    .post_form("/api/v1/oauth/revoke", &[("token", "unknown")])
+                    .await;
+            }
+            _ => {}
+        }
         if archived {
             self.app.set_heap_archived(&self.heap, true).await?;
         }

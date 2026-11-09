@@ -1,4 +1,5 @@
 use domain::item::ItemError;
+use domain::oauth::{AuthorizationError, GrantError};
 use domain::parameter::ParameterError;
 use domain::permission::Permission;
 use domain::team::TeamError;
@@ -28,6 +29,12 @@ pub enum ServiceError {
     /// Another user or team has the username or team slug, or another heap of the team has the heap slug.
     #[error("this {field} is taken")]
     HandleTaken { field: Field },
+    /// An OAuth authorization request that can't be approved, found before anything was stored.
+    #[error(transparent)]
+    Authorization(#[from] AuthorizationError),
+    /// A token request whose code or refresh token can't be exchanged.
+    #[error(transparent)]
+    InvalidGrant(#[from] GrantError),
     #[error("registration is disabled on this server")]
     RegistrationClosed,
     #[error("heap {heap_id} is archived")]

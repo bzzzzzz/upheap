@@ -6,7 +6,8 @@ import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
 import { LocalDatabaseGate } from "./components/LocalDatabase";
-import { createAppRouter, isSignInPath, signInSearch } from "./routes";
+import { followThemeAcrossTabs } from "./components/theme";
+import { createAppRouter, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
 
 /**
@@ -22,7 +23,7 @@ function onUnauthenticated(error: Error) {
   queryClient.removeQueries();
   const { location } = router.state;
   if (isSignInPath(router, location.pathname)) return;
-  void router.navigate({ to: "/login", search: signInSearch(location.href), replace: true });
+  void router.navigate({ to: "/login", search: signInSearch(pageHref(location.href)), replace: true });
 }
 
 const queryClient = new QueryClient({
@@ -45,6 +46,8 @@ const queryClient = new QueryClient({
 });
 
 const router = createAppRouter(queryClient);
+
+followThemeAcrossTabs();
 
 const root = document.getElementById("root");
 if (root) {

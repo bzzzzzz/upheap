@@ -34,6 +34,15 @@ const MESSAGES: Record<string, string> = {
   password_too_long: "That password is too long.",
   invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
+  // Connecting a client such as the CLI (the consent page). The client built the link, so the fix is to run its
+  // sign-in again, or to use one this server knows.
+  client_unknown: "This app isn't one this server knows, so it can't be connected.",
+  redirect_uri_invalid:
+    "This app asked to send your sign-in somewhere other than this computer, so it can't be connected.",
+  response_type_unsupported: "This sign-in link asks for something this server doesn't do. Start the sign-in again.",
+  code_challenge_invalid: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
+  code_challenge_method_unsupported: "This sign-in link uses a check this server doesn't accept. Update the app.",
+  state_missing: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
 };
 
 export function problemMessage(error: Error): string {

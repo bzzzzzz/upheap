@@ -26,6 +26,25 @@ use tower::ServiceExt;
 /// The header every write from the app carries.
 pub const CSRF: (&str, &str) = ("x-csrf-protection", "1");
 
+/// The CLI's client ID, and a loopback redirect URI it might listen on.
+pub const CLI_CLIENT: &str = "upheap-cli";
+pub const CLI_REDIRECT: &str = "http://127.0.0.1:53682/callback";
+/// A PKCE code verifier and its S256 challenge, from RFC 7636 Appendix B.
+pub const PKCE_VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+pub const PKCE_CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+/// The CLI's authorization request, as the consent page sends it to approve.
+pub fn cli_authorization() -> Value {
+    serde_json::json!({
+        "response_type": "code",
+        "client_id": CLI_CLIENT,
+        "redirect_uri": CLI_REDIRECT,
+        "code_challenge": PKCE_CHALLENGE,
+        "code_challenge_method": "S256",
+        "state": "af0ifjsldkj",
+    })
+}
+
 /// 2027-01-01T12:00:00Z.
 pub const START: i64 = 1_798_804_800_000;
 
@@ -54,6 +73,7 @@ pub struct TestResponse {
     pub session_cookie: Option<String>,
     /// The `Retry-After` header, in seconds.
     pub retry_after: Option<String>,
+    pub headers: axum::http::HeaderMap,
 }
 
 impl TestApp {
@@ -146,6 +166,26 @@ impl TestApp {
                 .body(Body::from(body.to_string()))?,
             None => request.body(Body::empty())?,
         };
+        self.dispatch(request).await
+    }
+
+    /// Posts `form` to `path` as `application/x-www-form-urlencoded`, as an OAuth client does: no cookie and no CSRF
+    /// header.
+    pub async fn post_form(&self, path: &str, form: &[(&str, &str)]) -> Result<TestResponse> {
+        let body = form
+            .iter()
+            .map(|(name, value)| format!("{name}={}", form_escape(value)))
+            .collect::<Vec<_>>()
+            .join("&");
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Body::from(body))?;
+        self.dispatch(request).await
+    }
+
+    async fn dispatch(&self, request: Request<Body>) -> Result<TestResponse> {
         let response = self.router.clone().oneshot(request).await?;
         let status = response.status();
         let session_cookie = response
@@ -161,6 +201,7 @@ impl TestApp {
             .get(header::RETRY_AFTER)
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
+        let headers = response.headers().clone();
         let bytes = response.into_body().collect().await?.to_bytes();
         let body = if bytes.is_empty() {
             Value::Null
@@ -172,6 +213,7 @@ impl TestApp {
             body,
             session_cookie,
             retry_after,
+            headers,
         })
     }
 
@@ -266,6 +308,70 @@ impl TestApp {
             .context("no heap")?
             .to_owned();
         Ok((session, heap))
+    }
+
+    /// Approves the CLI's authorization request as the user of `session`, and returns the code its redirect URI gets.
+    pub async fn approve_cli(&self, session: &str) -> Result<String> {
+        let approved = self
+            .send(
+                Method::POST,
+                "/api/v1/oauth/authorize",
+                Some(session),
+                Some(cli_authorization()),
+            )
+            .await?;
+        anyhow::ensure!(approved.status == StatusCode::OK, "approve failed: {}", approved.body);
+        let redirect = approved.body["redirect_to"].as_str().context("no redirect_to")?;
+        let query = redirect
+            .strip_prefix(&format!("{CLI_REDIRECT}?"))
+            .context("redirect_to isn't the redirect URI")?;
+        let code = query
+            .split('&')
+            .find_map(|pair| pair.strip_prefix("code="))
+            .context("no code in redirect_to")?;
+        Ok(code.to_owned())
+    }
+
+    /// Exchanges `code` for tokens as the CLI does, whatever the outcome.
+    pub async fn exchange_code(&self, code: &str) -> Result<TestResponse> {
+        self.post_form(
+            "/api/v1/oauth/token",
+            &[
+                ("grant_type", "authorization_code"),
+                ("code", code),
+                ("redirect_uri", CLI_REDIRECT),
+                ("client_id", CLI_CLIENT),
+                ("code_verifier", PKCE_VERIFIER),
+            ],
+        )
+        .await
+    }
+
+    /// Signs the CLI in as the user of `session` and returns its access and refresh tokens.
+    pub async fn sign_in_cli(&self, session: &str) -> Result<(String, String)> {
+        let code = self.approve_cli(session).await?;
+        let tokens = self.exchange_code(&code).await?;
+        anyhow::ensure!(
+            tokens.status == StatusCode::OK,
+            "token exchange failed: {}",
+            tokens.body
+        );
+        let access = tokens.body["access_token"].as_str().context("no access token")?;
+        let refresh = tokens.body["refresh_token"].as_str().context("no refresh token")?;
+        Ok((access.to_owned(), refresh.to_owned()))
+    }
+
+    /// Sends a request authenticated by `token` alone, as the CLI does: no cookie and no CSRF header.
+    pub async fn send_bearer(
+        &self,
+        method: Method,
+        path: &str,
+        token: &str,
+        body: Option<Value>,
+    ) -> Result<TestResponse> {
+        let authorization = format!("Bearer {token}");
+        self.send_with(method, path, None, body, &[("authorization", &authorization)])
+            .await
     }
 
     /// Makes a team called "Shared" with a heap called "Shared" as the user of `session`, who is its admin, and returns
@@ -406,6 +512,20 @@ impl TestApp {
             .context("set heap archived")?;
         Ok(())
     }
+}
+
+/// `value` percent-encoded for a form body: everything but unreserved characters is escaped.
+fn form_escape(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                char::from(b).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 /// The username tests register with `email` under: its local part, lowercased, with anything but letters and digits
