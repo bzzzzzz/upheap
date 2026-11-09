@@ -204,11 +204,11 @@ function ListPage({
       onSearch={onSearch}
       panel={panel}
       onPanel={onPanel}
+      // None while the previous view stands in for this one, so the panel never shows its counts as this view's.
       counts={
-        list.data && {
-          listed: everyEntry(list.data).length,
-          total: list.isPlaceholderData ? undefined : list.data.unfiltered_count,
-        }
+        list.data && !list.isPlaceholderData
+          ? { listed: everyEntry(list.data).length, total: list.data.unfiltered_count }
+          : undefined
       }
     />
   );

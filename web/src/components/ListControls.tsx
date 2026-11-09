@@ -9,6 +9,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import {
   DEFAULT_MODES,
   filterCount,
+  isBlockedShown,
   joinList,
   MODE_LABELS,
   SHOWN_STATES,
@@ -25,8 +26,8 @@ import {
 
 export type Panel = "filters" | null;
 
-/** How many items the view lists (`listed`) and would list without its filters (`total`, unknown while loading). */
-export type ListCounts = { listed: number; total: number | undefined };
+/** How many items the view lists (`listed`) and would list without its filters (`total`). */
+export type ListCounts = { listed: number; total: number };
 
 /**
  * Search, sort, and one Filters panel for the filters and what the list shows (app-ux.md, The list §7). Everything
@@ -50,6 +51,7 @@ export function ListControls({
   onSearch: (text: string) => void;
   panel: Panel;
   onPanel: (panel: Panel) => void;
+  /** `undefined` while the view loads. */
   counts: ListCounts | undefined;
 }) {
   const phone = useMedia(PHONE);
@@ -58,6 +60,9 @@ export function ListControls({
   const filtersRef = useRef<HTMLButtonElement>(null);
 
   const changes = filterCount(view) + viewChanges(view).length;
+  // On a phone the sort lives in the panel too, so the button counts a sort other than priority; on a wider screen
+  // the sort select shows it. Reset all leaves the sort as it is either way.
+  const badge = changes + (phone && sortValue(view) !== "priority" ? 1 : 0);
   const close = () => onPanel(null);
 
   useEffect(() => {
@@ -111,26 +116,25 @@ export function ListControls({
           onClick={() => onPanel(panel === "filters" ? null : "filters")}
           aria-expanded={panel === "filters"}
           aria-haspopup="dialog"
+          // A label rather than hidden text: screen-reader-only spans are laid out as blocks, which puts a stray space
+          // in the name ("Filters , 2 on").
+          aria-label={`${phone ? "Filters and sort" : "Filters"}${badge > 0 ? `, ${badge} on` : ""}`}
           className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium max-sm:relative max-sm:size-11 max-sm:px-0 pointer-coarse:h-11 ${
-            changes > 0
+            badge > 0
               ? "border-accent/40 bg-accent-soft text-accent-ink"
               : "border-line bg-surface text-ink-soft hover:bg-sunken"
           }`}
         >
           <SlidersHorizontal aria-hidden="true" className="size-4 shrink-0" />
-          {/* The phone's button is the icon alone, and opens the sort too. */}
-          <span className="max-sm:sr-only">Filters</span>
-          <span className="sr-only sm:hidden"> and sort</span>
-          {changes > 0 && (
-            <>
-              <span className="sr-only">, {changes} on</span>
-              <span
-                aria-hidden="true"
-                className="min-w-5 rounded-full bg-accent px-1.5 text-xs leading-5 font-semibold text-surface tabular-nums max-sm:absolute max-sm:-top-1.5 max-sm:-right-1.5"
-              >
-                {changes}
-              </span>
-            </>
+          {/* The phone's button is the icon alone, and opens the sort too, which its name says. */}
+          <span className="max-sm:hidden">Filters</span>
+          {badge > 0 && (
+            <span
+              aria-hidden="true"
+              className="min-w-5 rounded-full bg-accent px-1.5 text-xs leading-5 font-semibold text-surface tabular-nums max-sm:absolute max-sm:-top-1.5 max-sm:-right-1.5"
+            >
+              {badge}
+            </span>
           )}
         </button>
       </div>
@@ -291,7 +295,7 @@ function SortSection({
 
 /** Where each state goes, and where shown blocked items go. A dot marks a state changed from the default. */
 function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: ListSearch) => void }) {
-  const blockedShown = (view.blocked ?? DEFAULT_MODES.blocked) === "shown";
+  const blockedShown = isBlockedShown(view);
   const modes = STATE_MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }));
   return (
     <Section title="Show">
@@ -309,7 +313,7 @@ function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: Li
       ))}
       <Segmented
         label="Shown blocked"
-        changed={view.blocked_layout !== undefined}
+        changed={viewChanges(view).includes("blocked_layout")}
         options={BLOCKED_LAYOUTS.map((layout) => ({ value: layout, label: LAYOUT_LABELS[layout] }))}
         value={view.blocked_layout ?? "grouped"}
         disabled={!blockedShown}

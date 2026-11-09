@@ -50,6 +50,22 @@ test("one panel sets what the list shows and filters it, with a chip for each ch
   await expect(on).toHaveCount(0);
 });
 
+test("the blocked layout goes with shown blocked items", async ({ page, heapPath }) => {
+  await page.goto(`${heapPath}?blocked=shown&blocked_layout=mixed`);
+  const on = page.getByRole("group", { name: "Filters on" });
+  await expect(on.getByRole("button", { name: "Remove view setting Blocked mixed in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Filters.*, 2 on$/ })).toBeVisible();
+
+  await on.getByRole("button", { name: "Remove view setting Blocked shown" }).click();
+  await expect(on).toHaveCount(0);
+  await expect(page).not.toHaveURL(/blocked_layout/);
+
+  // A layout without shown blocked items does nothing, so a link's is dropped.
+  await page.goto(`${heapPath}?blocked_layout=mixed`);
+  await expect(page.getByRole("button", { name: /^Filters/ })).toBeVisible();
+  await expect(on).toHaveCount(0);
+});
+
 test("the need filter comes from the link, as the server applies it", async ({ page, heapPath }) => {
   await addItem(page, "Fix the outage", { need: "Critical" });
   await addItem(page, "Answer the customer", { need: "Expected" });
@@ -83,4 +99,22 @@ test("the sort sits in the toolbar, and on a phone at the top of the panel", asy
   }
   await expect(page).toHaveURL(/sort=impact/);
   await expect(page.getByRole("group", { name: "Filters on" })).toHaveCount(0);
+  // On a phone the sort is out of sight in the panel, so the button counts it; wider, the select shows it.
+  const button = page.getByRole("button", { name: /^Filters/ });
+  if (isPhone(page)) {
+    await expect(button).toHaveAccessibleName("Filters and sort, 1 on");
+  } else {
+    await expect(button).toHaveAccessibleName("Filters");
+  }
+});
+
+test("on a phone, a sort from the link shows on the Filters button", async ({ page, heapPath }) => {
+  test.skip(!isPhone(page), "Wider screens show the sort in the toolbar.");
+  await page.goto(`${heapPath}?sort=due`);
+  const button = page.getByRole("button", { name: /^Filters/ });
+  await expect(button).toHaveAccessibleName("Filters and sort, 1 on");
+  await expect(button).toContainText("1");
+  // Reset all keeps the sort, so it isn't offered for the sort alone.
+  const panel = await openFilters(page);
+  await expect(panel.getByRole("button", { name: "Reset all" })).toHaveCount(0);
 });

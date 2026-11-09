@@ -46,9 +46,17 @@ export const MODE_LABELS: Record<StateMode, string> = { pinned: "Pinned", shown:
 export type ViewSetting = ShownState | "blocked_layout";
 export const VIEW_SETTINGS: readonly ViewSetting[] = [...SHOWN_STATES, "blocked_layout"];
 
-/** The view settings changed from the server's defaults (the URL leaves defaults out). */
+/** Whether blocked items are in the list on their own, the one case where their layout matters. */
+export const isBlockedShown = (search: ListSearch) => (search.blocked ?? DEFAULT_MODES.blocked) === "shown";
+
+/**
+ * The view settings changed from the server's defaults (the URL leaves defaults out). The blocked layout counts only
+ * while blocked items are shown, as it has no effect otherwise.
+ */
 export const viewChanges = (search: ListSearch): ViewSetting[] =>
-  VIEW_SETTINGS.filter((setting) => search[setting] !== undefined);
+  VIEW_SETTINGS.filter(
+    (setting) => search[setting] !== undefined && (setting !== "blocked_layout" || isBlockedShown(search)),
+  );
 
 /** The same view with every state and the blocked layout back at the defaults. */
 export const withoutViewChanges = (search: ListSearch): ListSearch => ({
@@ -96,14 +104,16 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
         .sort((a, b) => values.indexOf(a) - values.indexOf(b)),
     );
   const sizes = (value: unknown) => known(SIZES, value);
-  const blockedLayout = layout(raw.blocked_layout);
+  const blocked = modeOf("blocked");
+  // The layout only applies to shown blocked items, so a layout left over from them is dropped with them.
+  const blockedLayout = isBlockedShown({ blocked }) ? layout(raw.blocked_layout) : undefined;
   const sortParameter = list(raw.sort_parameter);
   // A parameter sort needs its parameter, and no other sort takes one, so a half of the pair alone is dropped.
   const sortBy = sort(raw.sort) === "parameter" && sortParameter === undefined ? undefined : sort(raw.sort);
   const search: ListSearch = {
     open: modeOf("open"),
     in_progress: modeOf("in_progress"),
-    blocked: modeOf("blocked"),
+    blocked,
     blocked_layout: blockedLayout === "grouped" ? undefined : blockedLayout,
     sort: sortBy === "priority" ? undefined : sortBy,
     sort_parameter: sortBy === "parameter" ? sortParameter : undefined,
