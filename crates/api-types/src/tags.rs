@@ -64,11 +64,12 @@ pub struct TagListDto {
     pub allowed_actions: Vec<TagListActionDto>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateTagRequest)]
 pub struct CreateTagDto {
     /// 1 to 50 characters, unique in the heap ignoring case.
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
@@ -88,11 +89,12 @@ impl CreateTagDto {
 }
 
 /// A partial edit. Leave a field out to keep it; send `null` to clear the description.
-#[derive(Deserialize, ToSchema)]
+#[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = TagPatchRequest)]
 pub struct TagPatchDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub description: Option<Option<String>>,
 }
@@ -108,5 +110,37 @@ impl TagPatchDto {
                 Some(Some(raw)) => Some(TagDescription::parse(raw)?),
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn tag_patch_leaves_out_what_is_unset_and_writes_clearing_as_null() -> googletest::Result<()> {
+        let rename = TagPatchDto {
+            name: Some("Platform".to_owned()),
+            ..TagPatchDto::default()
+        };
+        let clear = TagPatchDto {
+            description: Some(None),
+            ..TagPatchDto::default()
+        };
+
+        verify_that!(serde_json::to_string(&rename)?, eq(r#"{"name":"Platform"}"#))?;
+        verify_that!(serde_json::to_string(&clear)?, eq(r#"{"description":null}"#))
+    }
+
+    #[gtest]
+    fn create_tag_leaves_out_a_missing_description() -> googletest::Result<()> {
+        let tag = CreateTagDto {
+            name: "Ops".to_owned(),
+            description: None,
+        };
+
+        verify_that!(serde_json::to_string(&tag)?, eq(r#"{"name":"Ops"}"#))
     }
 }
