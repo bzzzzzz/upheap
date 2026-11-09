@@ -17,6 +17,7 @@ import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
 import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
+import { teamName } from "./teamName";
 import { useToast, useToastCount } from "./UndoToast";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
@@ -731,14 +732,18 @@ function HeapChooser({
       >
         <div className="-mx-1 flex flex-col">
           {teams.map(({ team, heaps }) => (
-            <section key={team.id} aria-label={teams.length > 1 ? team.name : undefined} className="flex flex-col">
+            <section
+              key={team.id}
+              aria-label={teams.length > 1 && me ? teamName(team, me) : undefined}
+              className="flex flex-col"
+            >
               {teams.length > 1 && (
                 <h3 className="px-3 pt-2.5 pb-0.5 text-xs font-semibold tracking-wide text-muted uppercase">
-                  {team.name}
+                  {me && teamName(team, me)}
                 </h3>
               )}
               <ToggleButtonGroup
-                aria-label={teams.length > 1 ? `Heaps of ${team.name}` : "Heaps"}
+                aria-label={teams.length > 1 && me ? `Heaps of ${teamName(team, me)}` : "Heaps"}
                 selectionMode="single"
                 orientation="vertical"
                 selectedKeys={team.slug === value.team ? [value.heap] : []}

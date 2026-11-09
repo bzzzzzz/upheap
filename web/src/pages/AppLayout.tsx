@@ -4,6 +4,7 @@
 import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
 import {
   Activity,
+  Building2,
   Check,
   ChevronDown,
   CircleCheck,
@@ -27,6 +28,7 @@ import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
+import { teamName } from "../components/teamName";
 import { ToastProvider } from "../components/UndoToast";
 
 export function AppLayout() {
@@ -66,17 +68,19 @@ export function AppLayout() {
   );
 }
 
-/** Where the shell's links go, for the signed-in user and the heap on screen. */
+/** Where the shell's links go, for the signed-in user, the heap on screen and the team in the URL. */
 function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
+  const { team: teamSlug } = useParams({ strict: false });
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
-  // With one team and no Teams list, as in the local build, the team link goes straight to it, so the heap's own
-  // Team link would repeat it.
+  const urlTeam = me.teams.find((team) => team.slug === teamSlug);
+  // With one team and no Teams list, as in the local build, the team link goes straight to it, so a link to the
+  // team in the URL would repeat it.
   const onlyTeam = soleTeam(me);
   return {
     heap: heapTeam?.heaps.find((heap) => heap.slug === heapRef?.heap),
-    heapTeam: onlyTeam ? undefined : heapTeam,
+    team: onlyTeam || !urlTeam ? undefined : { slug: urlTeam.slug, label: teamName(urlTeam, me) },
     teams: onlyTeam
-      ? ({ to: "/teams/$team", params: { team: onlyTeam.slug }, label: onlyTeam.name } as const)
+      ? ({ to: "/teams/$team", params: { team: onlyTeam.slug }, label: teamName(onlyTeam, me) } as const)
       : ({ to: "/teams", label: "Teams" } as const),
   };
 }
@@ -176,7 +180,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
                   <>
                     <span className="font-semibold text-ink">{links.heap.name}</span>
                     {links.heap.archived && <span className="text-muted"> (archived)</span>}
-                    {heapTeam && <span className="text-muted"> · {heapTeam.name}</span>}
+                    {heapTeam && <span className="text-muted"> · {teamName(heapTeam, me)}</span>}
                   </>
                 ) : (
                   <span className="text-ink-soft">Choose a heap</span>
@@ -198,6 +202,16 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       )}
 
       <div className="mt-auto flex flex-col gap-1 lg:gap-0.5">
+        {links.team && (
+          <NavLink
+            to="/teams/$team"
+            params={{ team: links.team.slug }}
+            // Not marked from the heap's own pages, which sit under the team's path.
+            activeOptions={{ exact: true }}
+            icon={Building2}
+            label={links.team.label}
+          />
+        )}
         <NavLink {...links.teams} activeOptions={{ exact: true }} icon={Users} />
         <NavLink to="/account" icon={User} label="Account" />
         <div className="hidden lg:block">
@@ -211,6 +225,9 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
 /** The heap name on a phone, which switches heap. */
 function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
   const { heap } = useShellLinks(me, heapRef);
+  const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
+  // A shared team's heap names its team, as the sidebar's button does; a personal heap is the heap name alone.
+  const team = heapTeam && !heapTeam.personal ? teamName(heapTeam, me) : undefined;
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
       <HeapSwitcher me={me} heapRef={heapRef}>
@@ -218,10 +235,13 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
           <button
             type="button"
             {...props}
-            aria-label={`Switch heap${heap ? `: ${heap.name}` : ""}`}
+            aria-label={`Switch heap${heap ? `: ${heap.name}${team ? ` · ${team}` : ""}` : ""}`}
             className="-ml-1 flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg px-1 text-xl font-semibold tracking-tight outline-none focus-visible:outline-2 focus-visible:outline-accent"
           >
-            <span className="truncate">{heap?.name ?? "Upheap"}</span>
+            <span className="truncate">
+              {heap?.name ?? "Upheap"}
+              {heap && team && <span className="font-normal text-muted"> · {team}</span>}
+            </span>
             <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-soft" />
           </button>
         )}
@@ -312,16 +332,16 @@ function MoreSheet({
         <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
           {row("Activity")}
         </Link>
-        {links.heapTeam && (
+        {links.team && (
           <Link
             to="/teams/$team"
-            params={{ team: links.heapTeam.slug }}
+            params={{ team: links.team.slug }}
             // Not marked from the heap's own pages, which sit under the team's path.
             activeOptions={{ exact: true }}
             onClick={onClose}
             className={sheetRowClass}
           >
-            {row("Team", links.heapTeam.name)}
+            {row(links.team.label, "Team")}
           </Link>
         )}
         <Link {...links.teams} activeOptions={{ exact: true }} onClick={onClose} className={sheetRowClass}>
@@ -367,10 +387,10 @@ function HeapSwitcher({
       <PopoverSheet title="Heaps" triggerRef={trigger} isOpen={open} onClose={close} placement={placement}>
         <nav aria-label="Heaps" className="-mx-1 flex flex-col">
           {me.teams.map((t) => (
-            <section key={t.id} aria-label={t.name} className="flex flex-col">
+            <section key={t.id} aria-label={teamName(t, me)} className="flex flex-col">
               {me.teams.length > 1 && (
                 <h3 className="px-3 pt-2.5 pb-0.5 text-xs font-semibold tracking-wide text-muted uppercase">
-                  {t.name}
+                  {teamName(t, me)}
                 </h3>
               )}
               {t.heaps.map((heap) => {
@@ -398,14 +418,15 @@ function HeapSwitcher({
             </section>
           ))}
         </nav>
-        {team && <NewHeap team={team} onCreated={close} />}
+        {team && <NewHeap me={me} team={team} onCreated={close} />}
       </PopoverSheet>
     </>
   );
 }
 
 /** "New heap in <team>", which becomes a name field, for those the team lets create heaps. */
-function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: () => void }) {
+function NewHeap({ me, team, onCreated }: { me: Me; team: Me["teams"][number]; onCreated: () => void }) {
+  const label = teamName(team, me);
   const { data } = useTeam(team.slug);
   const create = useCreateHeap(team.slug);
   const navigate = useNavigate();
@@ -431,7 +452,7 @@ function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: ()
       {naming ? (
         <form onSubmit={submit} className="flex flex-col gap-2">
           <input
-            aria-label={`Name of the new heap in ${team.name}`}
+            aria-label={`Name of the new heap in ${label}`}
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -456,7 +477,7 @@ function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: ()
       ) : (
         <button type="button" onClick={() => setNaming(true)} className={buttonClass + " w-full"}>
           <Plus aria-hidden="true" className="size-4" />
-          New heap in {team.name}
+          New heap in {label}
         </button>
       )}
     </div>

@@ -2,7 +2,7 @@
 // than the screen.
 import type { Locator, Page } from "@playwright/test";
 
-import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
+import { addItem, createTeam, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
 const pages: AppPage[] = ["Closed", "Activity", "Settings", "Tags", "Parameters", "Open", "Account"];
@@ -201,4 +201,68 @@ test("on a phone, More shows as active on the pages it holds", async ({ page }) 
   await expectToStandOut(more, bar);
   await goTo(page, "Closed");
   await expect(more).not.toHaveAttribute("data-status");
+});
+
+test("the heap's team shows in its title and links from the navigation", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The local build has one personal team.");
+  await createTeam(page, "Acme");
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Launch");
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await page
+    .getByRole("region", { name: "Heaps" })
+    .getByRole("link", { name: /Launch/ })
+    .click();
+  await expect(page).toHaveURL(/\/heaps\/launch$/);
+
+  // The title names the team; on a phone the heap switcher at the top carries it and the heading is for readers.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Launch · Acme");
+  if (isPhone(page)) {
+    await expect(page.getByRole("button", { name: "Switch heap: Launch · Acme" })).toBeVisible();
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    await page.getByRole("navigation", { name: "More" }).getByRole("link", { name: "Acme Team" }).click();
+  } else {
+    // Above Teams in the bottom group, and active only on the team's own page.
+    const bar = page.getByRole("complementary", { name: "Heaps and views" });
+    const team = bar.getByRole("link", { name: "Acme", exact: true });
+    const teams = bar.getByRole("link", { name: "Teams", exact: true });
+    const [teamBox, teamsBox] = [await team.boundingBox(), await teams.boundingBox()];
+    if (!teamBox || !teamsBox) throw new Error("the team or Teams entry is not laid out");
+    expect(teamBox.y).toBeLessThan(teamsBox.y);
+    await expect(team).not.toHaveAttribute("aria-current", "page");
+    await team.click();
+    await expect(team).toHaveAttribute("aria-current", "page");
+  }
+  await expect(page.getByRole("heading", { name: "Acme", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/teams\/acme(-\d+)?$/);
+});
+
+test("the personal team reads as the user's team, and its heap's title is the heap name alone", async ({
+  page,
+  localBuild,
+}) => {
+  test.skip(localBuild, "The local build has no Teams list.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^[^·]+$/);
+  // The sidebar's button names the team on every heap, being the switcher; the phone's top bar doesn't for this one.
+  if (isPhone(page)) await expect(page.getByRole("button", { name: /^Switch heap/ })).toHaveAccessibleName(/^[^·]+$/);
+
+  // Everywhere the app names a team, the personal one is "Tester's team"; the sidebar's entry opens it.
+  if (isPhone(page)) {
+    await page.goto("/teams");
+    await page.getByRole("link", { name: "Open Tester's team" }).click();
+  } else {
+    await page
+      .getByRole("complementary", { name: "Heaps and views" })
+      .getByRole("link", { name: "Tester's team", exact: true })
+      .click();
+  }
+  await expect(page.getByRole("heading", { name: "Tester's team", level: 1 })).toBeVisible();
+  // Its stored name isn't shown, so there's nothing to rename.
+  await page.getByRole("button", { name: "More for Tester's team" }).click();
+  await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Activity" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.goto("/teams");
+  await expect(page.getByRole("link", { name: "Open Tester's team" })).toBeVisible();
 });

@@ -3,7 +3,7 @@ import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
-import { useRankedList, useUpdateItem } from "../api/queries";
+import { useMe, useRankedList, useUpdateItem } from "../api/queries";
 import { AddItem } from "../components/AddItem";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
@@ -11,6 +11,7 @@ import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
+import { teamName } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
@@ -189,6 +190,10 @@ function ListPage({
   onPanel: (panel: Panel) => void;
   onChangeState: ChangeState;
 }) {
+  const { data: me } = useMe();
+  // The title names a shared team, not a personal one (the heap switcher and the team page name that).
+  const heapTeam = me?.teams.find((t) => t.slug === heapRef.team);
+  const team = me && heapTeam && !heapTeam.personal ? teamName(heapTeam, me) : undefined;
   const filters = filterCount(view);
   const changed = filters > 0 || viewChanges(view).length > 0;
   if (list.isPending) {
@@ -256,7 +261,10 @@ function ListPage({
     <main>
       <div className="flex items-center justify-between gap-4 sm:mt-6 sm:mb-4">
         {/* On a phone the heap name is already at the top, as the heap switcher. */}
-        <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight max-sm:sr-only">{heap.name}</h1>
+        <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight max-sm:sr-only">
+          {heap.name}
+          {team && <span className="font-normal text-muted"> · {team}</span>}
+        </h1>
         <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
       </div>
 

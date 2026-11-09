@@ -2,7 +2,7 @@
 // and members. Teams with others are the server's, so most of these skip the local build.
 import type { APIRequestContext, Page } from "@playwright/test";
 
-import { addItem, expect, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
+import { addItem, createTeam, expect, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
 
 const SERVER_ONLY = "The local build has one user and one team.";
 
@@ -15,16 +15,6 @@ async function registerOther(request: APIRequestContext, display_name: string) {
   });
   expect(registered.status()).toBe(201);
   return user;
-}
-
-/** Creates a team from the Teams page and waits for its page. */
-async function createTeam(page: Page, name: string, linkName?: string) {
-  await page.goto("/teams");
-  await page.getByRole("button", { name: "+ Create team" }).click();
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  if (linkName) await page.getByLabel("Link name").fill(linkName);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
 
 /** The member search, by its exact name: the hint describes it without being part of it. */

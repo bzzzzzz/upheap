@@ -7,6 +7,7 @@ import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { useReturnFocus } from "../components/useConfirmation";
+import { teamName } from "../components/teamName";
 import { plural } from "../components/words";
 
 /** The caller's teams, and Create team, which opens a form for a new one (S-teams, WideTeams). */
@@ -45,7 +46,7 @@ export function TeamsPage() {
       {me.teams.length > 0 && (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface p-1">
           {me.teams.map((team) => (
-            <TeamRow key={team.id} team={team} />
+            <TeamRow key={team.id} team={team} label={teamName(team, me)} />
           ))}
         </ul>
       )}
@@ -54,14 +55,14 @@ export function TeamsPage() {
 }
 
 /** "Admin · 4 members · 2 heaps", or for a personal team "Only you · 1 heap". */
-function TeamRow({ team }: { team: Me["teams"][number] }) {
+function TeamRow({ team, label }: { team: Me["teams"][number]; label: string }) {
   const who = team.personal
     ? "Only you"
     : `${team.role === "admin" ? "Admin" : "Member"} · ${plural(team.member_count, "member")}`;
   return (
     <li className="flex items-center gap-3 px-2 py-2.5 max-sm:min-h-13 max-sm:py-1">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-        <span className="min-w-0 font-medium break-words sm:flex-1">{team.name}</span>
+        <span className="min-w-0 font-medium break-words sm:flex-1">{label}</span>
         <span className="text-[13px] text-muted">
           {who} · {plural(team.heaps.length, "heap")}
         </span>
@@ -69,7 +70,7 @@ function TeamRow({ team }: { team: Me["teams"][number] }) {
       <Link
         to="/teams/$team"
         params={{ team: team.slug }}
-        aria-label={`Open ${team.name}`}
+        aria-label={`Open ${label}`}
         className="flex shrink-0 items-center rounded-lg px-2 py-1 text-[13px] text-ink-soft hover:bg-sunken hover:text-ink max-sm:min-h-11 max-sm:px-3"
       >
         Open
