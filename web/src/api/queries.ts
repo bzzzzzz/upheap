@@ -26,14 +26,17 @@ import {
   type NewParameter,
   type NewTag,
   type Parameter,
+  type ParameterList,
   type ParameterOption,
   type RankedList,
   type ParameterPatch,
+  type RankingPreviewRequest,
   type Role,
   type Tag,
   type TagPatch,
   type Team,
   type User,
+  type WeightsPatch,
 } from "./client";
 
 export const meQuery = queryOptions({
@@ -687,5 +690,58 @@ export function useSetHeapArchived(team: string) {
       );
     },
     onSettled: (_data, _error, { heap }) => invalidateHeapRecord(queryClient, { team, heap: heap.slug }),
+  });
+}
+
+/**
+ * Saves the heap's weights and its parameters' weights in one request, sent with the heap's version, which guards
+ * them all. The answer holds the heap and its parameters in use, which replace the cached ones, so the next save
+ * has the new versions even before the refetch.
+ */
+export function useUpdateWeights(heapRef: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, body }: { heap: Heap; body: WeightsPatch }) =>
+      unwrap(
+        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/weights", {
+          params: { path: heapRef, header: { "If-Match": `"${heap.version}"` } },
+          body,
+        }),
+      ),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(heapKey(heapRef), saved.heap);
+      queryClient.setQueryData<ParameterList>(
+        parametersKey(heapRef),
+        (list) => list && { ...list, parameters: saved.parameters },
+      );
+    },
+    // Also after a conflict, so the page shows the weights and versions someone else saved. The list, the items'
+    // contributors and the preview all move with the weights.
+    onSettled: () => invalidateHeapRecord(queryClient, heapRef),
+  });
+}
+
+/** How many items the Ranking tab's preview lists. */
+const PREVIEW_ITEMS = 5;
+
+/** The weights a preview ranks with in place of the saved ones. */
+export type RankingPreviewDraft = Omit<RankingPreviewRequest, "limit">;
+
+/**
+ * The top of the heap's list with the draft weights, none saved. Only the weights that differ from the saved ones go
+ * in `draft`, so no draft is the current top of the list. While a new draft loads, the last result stays. It sits
+ * under the heap's key, so saving or refetching the heap refreshes it.
+ */
+export function useRankingPreview(heapRef: HeapRef, draft: RankingPreviewDraft) {
+  return useQuery({
+    queryKey: [...heapKey(heapRef), "ranking-preview", draft],
+    queryFn: async () =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", {
+          params: { path: heapRef },
+          body: { ...draft, limit: PREVIEW_ITEMS },
+        }),
+      ),
+    placeholderData: keepPreviousData,
   });
 }

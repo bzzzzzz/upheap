@@ -1,5 +1,5 @@
-// The heap's settings (design/ux.md, Heap settings): General, Tags and Parameters as tabs, each at its own path.
-import { expect, goTo, test } from "./fixtures";
+// The heap's settings (design/ux.md, Heap settings): General, Tags, Parameters and Ranking as tabs, each at its own path.
+import { addItem, expect, expectOrder, goTo, test } from "./fixtures";
 
 test("General renames the heap, changes its link name and archives it", async ({ page, heapPath }) => {
   await goTo(page, "Settings");
@@ -94,4 +94,95 @@ test("a tag reads as a row, and its edit button turns it into a form", async ({ 
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("alert")).toHaveText("This heap already has a tag with that name.");
   await expect(page.getByLabel("Name of tag frontend")).toBeVisible();
+});
+
+test("Ranking edits the heap's weights and saves them together", async ({ page, heapPath }) => {
+  await goTo(page, "Ranking");
+  await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/ranking$`));
+  const tabs = page.getByRole("navigation", { name: "Settings" });
+  await expect(tabs.getByRole("link", { name: "Ranking" })).toHaveAttribute("aria-current", "page");
+
+  // Four built-in factors at 10, so each has a quarter of the total.
+  const need = page.getByLabel("Need weight, 0 to 100");
+  for (const name of ["Need", "Age", "Deadline", "Value per effort"]) {
+    await expect(page.getByLabel(`${name} weight, 0 to 100`)).toHaveValue("10");
+  }
+  await expect(page.getByText("25%", { exact: true })).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Save weights" })).toHaveCount(0);
+
+  await need.fill("40");
+  await expect(page.getByText("was 10", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 unsaved")).toBeVisible();
+  await expect(page.getByText("57%", { exact: true })).toBeVisible();
+  await expect(page.getByText("14%", { exact: true })).toHaveCount(3);
+
+  // Enter in a weight saves, as the button does; the status takes the focus the button had.
+  await need.press("Enter");
+  const saved = page.getByRole("status").filter({ hasText: "Weights saved." });
+  await expect(saved).toBeVisible();
+  await expect(saved).toBeFocused();
+  await expect(page.getByRole("button", { name: "Save weights" })).toHaveCount(0);
+  await expect(page.getByText("was 10", { exact: true })).toHaveCount(0);
+
+  await page.reload();
+  await expect(need).toHaveValue("40");
+
+  await goTo(page, "Settings");
+  await page.locator("summary", { hasText: "History" }).click();
+  await expect(page.getByText("Need weight")).toBeVisible();
+});
+
+test("Cancel puts the weights back", async ({ page }) => {
+  await goTo(page, "Ranking");
+  const need = page.getByLabel("Need weight, 0 to 100");
+  const age = page.getByLabel("Age weight, 0 to 100");
+  await need.fill("40");
+  await age.fill("0");
+  await expect(page.getByText("2 unsaved")).toBeVisible();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(need).toHaveValue("10");
+  await expect(age).toHaveValue("10");
+  await expect(page.getByRole("button", { name: "Save weights" })).toHaveCount(0);
+  await expect(need).toBeFocused();
+
+  // Escape in a weight does the same, and Reset all to 10 only draws weights back to the default.
+  await age.fill("30");
+  await age.press("Escape");
+  await expect(age).toHaveValue("10");
+  await expect(page.getByRole("button", { name: "Reset all to 10" })).toBeDisabled();
+  await age.fill("30");
+  await page.getByRole("button", { name: "Reset all to 10" }).click();
+  await expect(age).toHaveValue("10");
+  await expect(page.getByRole("button", { name: "Reset all to 10" })).toBeDisabled();
+  await expect(page.getByText("1 unsaved")).toHaveCount(0);
+});
+
+test("the preview shows how the top of the list would move", async ({ page }) => {
+  await addItem(page, "Urgent", { need: "Critical" });
+  await addItem(page, "Quick win", { effort: "S", impact: "L" });
+  await expectOrder(page, ["Urgent", "Quick win"]);
+
+  await goTo(page, "Ranking");
+  const preview = page.getByRole("complementary", { name: "Top of the list" });
+  await expect(preview.getByText("Move a weight to see how the top of the list would change.")).toBeVisible();
+  await expect(preview.getByRole("listitem")).toHaveText([/Urgent/, /Quick win/]);
+
+  await page.getByLabel("Value per effort weight, 0 to 100").fill("100");
+  await expect(preview.getByText("With your changes. Nothing moves until you save.")).toBeVisible();
+  await expect(preview.getByRole("listitem")).toHaveText([/Quick win.*↑1/, /Urgent.*↓1/]);
+  await expect(preview.getByRole("img", { name: "up 1" })).toBeVisible();
+  await expect(preview.getByRole("img", { name: "down 1" })).toBeVisible();
+
+  // Nothing moved in the list itself, until it is saved.
+  await goTo(page, "Open");
+  await expectOrder(page, ["Urgent", "Quick win"]);
+  await goTo(page, "Ranking");
+  await page.getByLabel("Value per effort weight, 0 to 100").fill("100");
+  await page.getByRole("button", { name: "Save weights" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Weights saved." })).toBeVisible();
+  await expect(preview.getByRole("listitem")).toHaveText([/Quick win/, /Urgent/]);
+  await expect(preview.getByRole("img")).toHaveCount(0);
+  await goTo(page, "Open");
+  await expectOrder(page, ["Quick win", "Urgent"]);
 });
