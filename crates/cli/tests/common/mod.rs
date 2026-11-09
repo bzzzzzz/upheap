@@ -384,6 +384,7 @@ impl TestCli {
                 stderr_is_terminal: false,
                 time_zone: Some("Europe/Berlin".to_owned()),
                 config_dir: Some(config_dir.path().to_path_buf()),
+                hostname: Some("ada-laptop".to_owned()),
                 now: jiff::Timestamp::now(),
             },
             config_dir,

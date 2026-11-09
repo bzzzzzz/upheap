@@ -8,6 +8,7 @@ import { choiceButtonClass } from "../components/ChoiceButtons";
 import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
+import { SignInsSection } from "../components/SignIns";
 import { useTheme, type Theme } from "../components/theme";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
@@ -25,7 +26,8 @@ const themes: readonly { id: Theme; label: string }[] = [
 ];
 
 /**
- * The signed-in user's display name, which teammates see, this browser's theme, and in the local build their data.
+ * The signed-in user's display name, which teammates see, this browser's theme, where the CLI is signed in as them (server
+ * build), and in the local build their data.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
 export function AccountPage() {
@@ -65,6 +67,7 @@ export function AccountPage() {
           </dl>
         </section>
         <AppearanceSection />
+        {me.allowed_actions.includes("manage_sign_ins") && <SignInsSection />}
         <LocalDataSection />
         {me.allowed_actions.includes("sign_out") && (
           <div className="flex flex-wrap items-center gap-3">

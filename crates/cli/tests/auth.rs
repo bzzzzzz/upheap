@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use cli::{StoredTokens, TokenStore};
 use common::{ConsentBrowser, TestCli, TestServer};
 use googletest::prelude::*;
+use serde_json::{Value, json};
 
 #[gtest]
 #[tokio::test]
@@ -39,6 +40,45 @@ async fn login_signs_in_through_the_browser_and_keeps_the_server() -> Result<()>
     expect_that!(cli.stored(&server)?, some(anything()));
     expect_that!(heaps.stdout, eq("ada/personal\n"));
     expect_that!(heaps.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn login_names_the_sign_in_after_the_machine() -> Result<()> {
+    // Arrange: a hostname with a newline and spaces, as a badly set machine might have.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada Lovelace").await?;
+    let mut cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
+    cli.env.hostname = Some(" ada\n-laptop ".to_owned());
+
+    // Act
+    let login = cli.run(&["auth", "login"]).await;
+    let listed = server.send(&ada, "GET", "/me/sign-ins", None).await?;
+
+    // Assert
+    expect_that!(login.exited(0), eq(true));
+    let sign_ins = listed["sign_ins"].as_array().context("sign_ins")?;
+    expect_that!(sign_ins.len(), eq(1));
+    expect_that!(sign_ins[0]["device_name"], eq(&json!("ada-laptop")));
+    expect_that!(sign_ins[0]["client_id"], eq(&json!("upheap-cli")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn login_without_a_readable_hostname_signs_in_without_a_name() -> Result<()> {
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada Lovelace").await?;
+    let mut cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
+    cli.env.hostname = None;
+
+    let login = cli.run(&["auth", "login"]).await;
+    let listed = server.send(&ada, "GET", "/me/sign-ins", None).await?;
+
+    expect_that!(login.exited(0), eq(true));
+    expect_that!(listed["sign_ins"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(listed["sign_ins"][0]["device_name"], eq(&Value::Null));
     Ok(())
 }
 

@@ -4,7 +4,7 @@ mod common;
 
 use anyhow::Result;
 use axum::http::{Method, StatusCode, header};
-use common::{CLI_CLIENT, CLI_REDIRECT, CSRF, PKCE_VERIFIER, TestApp, TestResponse, cli_authorization};
+use common::{CLI_CLIENT, CLI_REDIRECT, CSRF, PKCE_VERIFIER, START, TestApp, TestResponse, cli_authorization};
 use domain::Duration;
 use googletest::prelude::*;
 use serde_json::{Value, json};
@@ -754,5 +754,367 @@ async fn a_revocation_racing_a_refresh_ends_the_new_pair_too() -> Result<()> {
     } else {
         expect_that!(is_invalid_grant(&refreshed), eq(true), "{}", refreshed.body);
     }
+    Ok(())
+}
+
+// The user's list of sign-ins, and ending one.
+
+/// Approves the CLI for the user of `session` and exchanges the code, sending `device_name` when given.
+async fn sign_in_named(app: &TestApp, session: &str, device_name: Option<&str>) -> Result<TestResponse> {
+    let code = app.approve_cli(session).await?;
+    exchange_named(app, &code, device_name).await
+}
+
+async fn exchange_named(app: &TestApp, code: &str, device_name: Option<&str>) -> Result<TestResponse> {
+    let mut form = vec![
+        ("grant_type", "authorization_code"),
+        ("code", code),
+        ("redirect_uri", CLI_REDIRECT),
+        ("client_id", CLI_CLIENT),
+        ("code_verifier", PKCE_VERIFIER),
+    ];
+    if let Some(name) = device_name {
+        form.push(("device_name", name));
+    }
+    app.post_form("/api/v1/oauth/token", &form).await
+}
+
+async fn list_sign_ins(app: &TestApp, session: &str) -> Result<Vec<Value>> {
+    let listed = app
+        .send(Method::GET, "/api/v1/me/sign-ins", Some(session), None)
+        .await?;
+    anyhow::ensure!(listed.status == StatusCode::OK, "list failed: {}", listed.body);
+    Ok(listed.body["sign_ins"].as_array().cloned().unwrap_or_default())
+}
+
+fn device_names(list: &[Value]) -> Vec<Value> {
+    list.iter().map(|sign_in| sign_in["device_name"].clone()).collect()
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_sign_in_is_listed_with_the_name_its_client_gave() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+
+    // Act
+    let tokens = sign_in_named(&app, &session, Some(" ada-laptop ")).await?;
+    let listed = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(tokens.status, eq(StatusCode::OK));
+    expect_that!(listed.len(), eq(1));
+    expect_that!(listed[0]["device_name"], eq(&json!("ada-laptop")));
+    expect_that!(listed[0]["client_id"], eq(&json!("upheap-cli")));
+    expect_that!(listed[0]["client_name"], eq(&json!("Upheap CLI")));
+    expect_that!(listed[0]["signed_in_at"], eq(&json!(START)));
+    expect_that!(listed[0]["last_used_at"], eq(&json!(START)));
+    expect_that!(listed[0]["label"], eq(&json!("ada-laptop")));
+    expect_that!(listed[0]["signed_in_label"], eq(&json!("today")));
+    expect_that!(listed[0]["last_used_label"], eq(&json!("today")));
+    expect_that!(
+        listed[0]["id"].as_str(),
+        some(matches_regex(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        ))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_sign_in_without_a_name_or_with_a_blank_one_is_listed_unnamed() -> Result<()> {
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+
+    let without = sign_in_named(&app, &session, None).await?;
+    let blank = sign_in_named(&app, &session, Some("   ")).await?;
+    let listed = list_sign_ins(&app, &session).await?;
+
+    expect_that!(without.status, eq(StatusCode::OK));
+    expect_that!(blank.status, eq(StatusCode::OK));
+    expect_that!(device_names(&listed), elements_are![eq(&Value::Null), eq(&Value::Null)]);
+    expect_that!(
+        listed
+            .iter()
+            .map(|sign_in| sign_in["label"].clone())
+            .collect::<Vec<_>>(),
+        elements_are![eq(&json!("Upheap CLI")), eq(&json!("Upheap CLI"))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sign_in_labels_are_worded_in_the_requests_timezone() -> Result<()> {
+    // Arrange: START is 12:00 UTC on 1 Jan 2027. Signing in at 23:30 UTC is already 2 Jan in Berlin, the zone the
+    // test requests send. Three days on, a refresh moves last use.
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    app.clock.advance(Duration::from_minutes(11 * 60 + 30));
+    let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
+    app.clock.advance(Duration::from_hours(24 * 3));
+    let refreshed = app
+        .post_form(
+            "/api/v1/oauth/token",
+            &[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &text(&tokens.body["refresh_token"])),
+                ("client_id", CLI_CLIENT),
+            ],
+        )
+        .await?;
+    app.clock.advance(Duration::from_hours(24 * 3));
+
+    // Act
+    let listed = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(refreshed.status, eq(StatusCode::OK));
+    expect_that!(listed[0]["signed_in_label"], eq(&json!("2 Jan")));
+    expect_that!(listed[0]["last_used_label"], eq(&json!("3 days ago")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_bad_device_name_is_refused_and_leaves_the_code_unused() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let code = app.approve_cli(&session).await?;
+
+    // Act
+    let too_long = exchange_named(&app, &code, Some(&"x".repeat(65))).await?;
+    let with_newline = exchange_named(&app, &code, Some("ada\nlaptop")).await?;
+    let longest = exchange_named(&app, &code, Some(&"é".repeat(64))).await?;
+
+    // Assert
+    for refused in [&too_long, &with_newline] {
+        expect_that!(refused.status, eq(StatusCode::BAD_REQUEST));
+        expect_that!(refused.body["error"], eq(&json!("invalid_request")));
+        expect_that!(
+            refused.body["error_description"],
+            eq(&json!(
+                "device_name must be at most 64 characters, without control characters"
+            ))
+        );
+    }
+    expect_that!(longest.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn refreshing_moves_last_used_on_and_keeps_the_name() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
+    app.clock.advance(Duration::from_minutes(20));
+
+    // Act: a refresh form carrying another name changes nothing.
+    let refreshed = app
+        .post_form(
+            "/api/v1/oauth/token",
+            &[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &text(&tokens.body["refresh_token"])),
+                ("client_id", CLI_CLIENT),
+                ("device_name", "somewhere-else"),
+            ],
+        )
+        .await?;
+    let listed = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(refreshed.status, eq(StatusCode::OK));
+    expect_that!(listed.len(), eq(1));
+    expect_that!(listed[0]["device_name"], eq(&json!("ada-laptop")));
+    expect_that!(listed[0]["signed_in_at"], eq(&json!(START)));
+    expect_that!(listed[0]["last_used_at"], eq(&json!(START + 20 * 60 * 1000)));
+    expect_that!(listed[0]["label"], eq(&json!("ada-laptop")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn ended_and_expired_sign_ins_are_not_listed() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let revoked = sign_in_named(&app, &session, Some("revoked")).await?;
+    let reused = sign_in_named(&app, &session, Some("reused")).await?;
+    sign_in_named(&app, &session, Some("kept")).await?;
+    let spent_refresh = text(&reused.body["refresh_token"]);
+
+    // Act
+    revoke(&app, &text(&revoked.body["refresh_token"])).await?;
+    refresh(&app, &spent_refresh).await?;
+    refresh(&app, &spent_refresh).await?;
+    let listed = list_sign_ins(&app, &session).await?;
+    // Past the refresh token's 30 days, and the session's: sign in to the web app again to look.
+    app.clock.advance(Duration::from_days(31));
+    let login = app
+        .send(
+            Method::POST,
+            "/api/v1/auth/login",
+            None,
+            Some(json!({ "email": "ada@example.test", "password": "a long test password" })),
+        )
+        .await?;
+    let listed_late = list_sign_ins(&app, &login.session_cookie.unwrap_or_default()).await?;
+
+    // Assert
+    expect_that!(device_names(&listed), elements_are![eq(&json!("kept"))]);
+    expect_that!(listed_late.len(), eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sign_ins_are_listed_by_last_use_newest_first() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let old = sign_in_named(&app, &session, Some("old")).await?;
+    app.clock.advance(Duration::from_minutes(5));
+    sign_in_named(&app, &session, Some("new")).await?;
+    app.clock.advance(Duration::from_minutes(5));
+
+    // Act: the older one is used again, so it is then the newer by use.
+    let before = list_sign_ins(&app, &session).await?;
+    refresh(&app, &text(&old.body["refresh_token"])).await?;
+    let after = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(
+        device_names(&before),
+        elements_are![eq(&json!("new")), eq(&json!("old"))]
+    );
+    expect_that!(
+        device_names(&after),
+        elements_are![eq(&json!("old")), eq(&json!("new"))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn ending_a_sign_in_revokes_it_and_is_idempotent() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
+    let id = text(&list_sign_ins(&app, &session).await?[0]["id"]);
+    let path = format!("/api/v1/me/sign-ins/{id}");
+
+    // Act
+    let ended = app.send(Method::DELETE, &path, Some(&session), None).await?;
+    let again = app.send(Method::DELETE, &path, Some(&session), None).await?;
+    let listed = list_sign_ins(&app, &session).await?;
+
+    // Assert
+    expect_that!(ended.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(again.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(listed.len(), eq(0));
+    expect_dead(&app, &tokens).await?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn another_users_sign_in_is_not_listed_and_not_found_to_end() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register("ada@example.test").await?;
+    let (bob, _) = app.register("bob@example.test").await?;
+    let adas = sign_in_named(&app, &ada, Some("ada-laptop")).await?;
+    let adas_id = text(&list_sign_ins(&app, &ada).await?[0]["id"]);
+
+    // Act
+    let bobs_list = list_sign_ins(&app, &bob).await?;
+    let by_bob = app
+        .send(
+            Method::DELETE,
+            &format!("/api/v1/me/sign-ins/{adas_id}"),
+            Some(&bob),
+            None,
+        )
+        .await?;
+    let unknown = app
+        .send(
+            Method::DELETE,
+            "/api/v1/me/sign-ins/7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40",
+            Some(&bob),
+            None,
+        )
+        .await?;
+    let malformed = app
+        .send(Method::DELETE, "/api/v1/me/sign-ins/not-an-id", Some(&bob), None)
+        .await?;
+    let adas_me = app
+        .send_bearer(Method::GET, "/api/v1/me", &text(&adas.body["access_token"]), None)
+        .await?;
+
+    // Assert
+    expect_that!(bobs_list.len(), eq(0));
+    for refused in [&by_bob, &unknown, &malformed] {
+        expect_that!(refused.status, eq(StatusCode::NOT_FOUND));
+        expect_that!(refused.body["code"], eq(&json!("not_found")));
+    }
+    expect_that!(adas_me.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_bearer_token_lists_and_ends_sign_ins_and_a_cookie_write_needs_the_csrf_header() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (access, _) = app.sign_in_cli(&session).await?;
+
+    // Act
+    let listed = app
+        .send_bearer(Method::GET, "/api/v1/me/sign-ins", &access, None)
+        .await?;
+    let id = text(&listed.body["sign_ins"][0]["id"]);
+    let path = format!("/api/v1/me/sign-ins/{id}");
+    let by_cookie = app.send_with(Method::DELETE, &path, Some(&session), None, &[]).await?;
+    let by_bearer = app.send_bearer(Method::DELETE, &path, &access, None).await?;
+    let next = app.send_bearer(Method::GET, "/api/v1/me", &access, None).await?;
+
+    // Assert
+    expect_that!(listed.status, eq(StatusCode::OK));
+    expect_that!(listed.body["sign_ins"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(by_cookie.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(by_cookie.body["code"], eq(&json!("csrf_header_missing")));
+    expect_that!(by_bearer.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(next.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sign_ins_need_a_signed_in_caller_and_the_local_build_has_none() -> Result<()> {
+    let app = TestApp::start().await?;
+    let local = TestApp::start_local().await?;
+
+    let anonymous = app.send(Method::GET, "/api/v1/me/sign-ins", None, None).await?;
+    let in_local = local.send(Method::GET, "/api/v1/me/sign-ins", None, None).await?;
+    let delete_in_local = local
+        .send(
+            Method::DELETE,
+            "/api/v1/me/sign-ins/7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40",
+            None,
+            None,
+        )
+        .await?;
+
+    expect_that!(anonymous.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(in_local.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(delete_in_local.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

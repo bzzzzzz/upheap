@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::oauth::{
     ACCESS_TOKEN_LIFETIME, AUTHORIZATION_CODE_LIFETIME, AuthorizationError, AuthorizationParams, AuthorizationRequest,
-    GrantError, REFRESH_TOKEN_LIFETIME, TokenKind, find_client, is_code_verifier,
+    DeviceName, GrantError, REFRESH_TOKEN_LIFETIME, TokenKind, find_client, is_code_verifier,
 };
 use domain::{Duration, Timestamp, TokenFamilyId, ValidationError};
 use sha2::{Digest, Sha256};
@@ -63,6 +63,8 @@ pub struct CodeExchange<'a> {
     pub redirect_uri: &'a str,
     /// Secret like the code: with it, a leaked code can be exchanged. Left out of `Debug`.
     pub code_verifier: &'a str,
+    /// What the client calls the machine, kept on the sign-in for the user's list of them.
+    pub device_name: Option<&'a DeviceName>,
 }
 
 impl std::fmt::Debug for CodeExchange<'_> {
@@ -72,8 +74,22 @@ impl std::fmt::Debug for CodeExchange<'_> {
             .field("code", &self.code)
             .field("redirect_uri", &self.redirect_uri)
             .field("code_verifier", &"<redacted>")
+            .field("device_name", &self.device_name)
             .finish()
     }
+}
+
+/// One of the user's live sign-ins by a client.
+#[derive(Debug)]
+pub struct ClientSignIn {
+    /// The token family's id.
+    pub id: TokenFamilyId,
+    pub client_id: &'static str,
+    /// What the client is called, such as "Upheap CLI".
+    pub client_name: &'static str,
+    pub device_name: Option<String>,
+    pub signed_in_at: Timestamp,
+    pub last_used_at: Timestamp,
 }
 
 /// A new access token and the refresh token to get the next one with.
@@ -153,7 +169,15 @@ impl Services {
             return Err(GrantError::VerifierMismatch.into());
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));
-        store::oauth::insert_token_family(&txn, family_id, code.user_id, exchange.client_id, now).await?;
+        store::oauth::insert_token_family(
+            &txn,
+            family_id,
+            code.user_id,
+            exchange.client_id,
+            exchange.device_name,
+            now,
+        )
+        .await?;
         if !store::oauth::use_auth_code(&txn, &code_hash, now, family_id).await? {
             // Another exchange of this code got there first. It's read again outside this transaction: on MySQL a
             // read inside it would still see the snapshot from before the other exchange committed.
@@ -233,6 +257,39 @@ impl Services {
         }
         let revoked = store::oauth::revoke_token_family(&self.db, family.id, self.now()).await?;
         tracing::info!(user_id = %family.user_id, family_id = %family.id, revoked, "token family revoked");
+        Ok(())
+    }
+
+    /// The caller's live sign-ins by clients, the most recently used first: not revoked, and with a refresh token that
+    /// is unused and unexpired. A sign-in of a client no longer registered is left out.
+    pub async fn list_sign_ins(&self, principal: Principal) -> Result<Vec<ClientSignIn>, ServiceError> {
+        let families = store::oauth::list_live_token_families(&self.db, principal.user_id, self.now()).await?;
+        Ok(families
+            .into_iter()
+            .filter_map(|family| {
+                let client = find_client(&family.client_id)?;
+                Some(ClientSignIn {
+                    id: family.id,
+                    client_id: client.id,
+                    client_name: client.display_name,
+                    device_name: family.device_name,
+                    signed_in_at: family.created_at,
+                    last_used_at: family.last_used_at,
+                })
+            })
+            .collect())
+    }
+
+    /// Ends one of the caller's sign-ins by revoking its token family, as [`Services::revoke_token`] does. Succeeds
+    /// when it was ended already. Fails with [`ServiceError::NotFound`] for a family that doesn't exist or isn't the
+    /// caller's, which the answer doesn't tell apart.
+    pub async fn end_sign_in(&self, principal: Principal, family_id: TokenFamilyId) -> Result<(), ServiceError> {
+        let family = store::oauth::find_token_family(&self.db, family_id)
+            .await?
+            .filter(|family| family.user_id == principal.user_id)
+            .ok_or(ServiceError::NotFound)?;
+        let revoked = store::oauth::revoke_token_family(&self.db, family.id, self.now()).await?;
+        tracing::info!(user_id = %principal.user_id, family_id = %family.id, revoked, "sign-in ended");
         Ok(())
     }
 
@@ -360,6 +417,7 @@ mod tests {
             code: &secret,
             redirect_uri: "http://127.0.0.1:1/",
             code_verifier: "secret verifier",
+            device_name: None,
         };
 
         expect_that!(format!("{secret:?}"), not(contains_substring("very secret")));

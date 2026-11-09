@@ -391,3 +391,18 @@ saves, moving on also when one changes only parameter weights, and each paramete
 parameter PATCH still sets a weight alone, from the Parameters tab, guarded by the parameter's version only: it
 doesn't move the heap's version, so a weights save made meanwhile against other parameters still succeeds. Making
 every parameter edit move the heap's version would close that gap but make renames conflict with parameter edits.
+
+## 29. The device name is the client's claim, sent at code exchange
+
+**Context.** A user with the CLI on two machines can't tell their sign-ins apart on Account unless each has a name.
+Only the machine knows it.
+
+**Decision.** The CLI sends its hostname as `device_name` with the code exchange, where the token family is made. The
+server validates it as text (trimmed, at most 64 characters, no control characters) and keeps it as a label. The
+consent page doesn't show it.
+
+**Instead of.** Sending it in the authorization request, so the consent page could name the machine.
+
+**Consequences.** Anything can claim any name, so the consent page, where a familiar name could make a phishing
+request look legitimate, never shows it, and nothing decides by it. A client that sends a name the server refuses
+is refused before its code is used; the CLI cleans the name first, so it never is.

@@ -81,6 +81,8 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 # Opens the browser for `upheap auth login`.
 webbrowser = "1"
+# The machine's hostname, which `upheap auth login` names the sign-in with.
+whoami = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

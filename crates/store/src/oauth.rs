@@ -5,9 +5,12 @@
 //! committed row whatever the transaction read before. Of two requests racing to use one code or refresh token,
 //! exactly one marks it used. Revocation is per family: a token is good only while its family isn't revoked.
 
-use domain::oauth::{CodeChallenge, TokenKind};
+use std::collections::HashMap;
+
+use domain::oauth::{CodeChallenge, DeviceName, TokenKind};
 use domain::{Timestamp, TokenFamilyId, UserId};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::sea_query::Query;
+use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db};
@@ -53,6 +56,19 @@ pub struct TokenFamily {
     pub revoked_at: Option<Timestamp>,
 }
 
+/// A sign-in that can still be used: its family isn't revoked and it holds a refresh token that is unused and
+/// unexpired.
+#[derive(Debug)]
+pub struct LiveTokenFamily {
+    pub id: TokenFamilyId,
+    pub client_id: String,
+    /// What the client called the machine, when it did.
+    pub device_name: Option<String>,
+    pub created_at: Timestamp,
+    /// When the family's newest token was issued: the sign-in, or its latest refresh.
+    pub last_used_at: Timestamp,
+}
+
 /// A token to store.
 #[derive(Debug)]
 pub struct NewToken<'a> {
@@ -78,6 +94,7 @@ pub async fn insert_token_family(
     id: TokenFamilyId,
     user_id: UserId,
     client_id: &str,
+    device_name: Option<&DeviceName>,
     created_at: Timestamp,
 ) -> Result<(), StoreError> {
     let row = oauth_token_families::ActiveModel {
@@ -86,6 +103,7 @@ pub async fn insert_token_family(
         client_id: Set(client_id.to_owned()),
         created_at: Set(created_at.as_millis()),
         revoked_at: Set(None),
+        device_name: Set(device_name.map(|name| name.as_str().to_owned())),
     };
     oauth_token_families::Entity::insert(row)
         .exec_without_returning(db)
@@ -106,6 +124,76 @@ pub async fn lock_token_family(
         .one(db)
         .await?;
     row.map(to_family).transpose()
+}
+
+/// The family, revoked or not.
+pub async fn find_token_family(
+    db: &impl ConnectionTrait,
+    id: TokenFamilyId,
+) -> Result<Option<TokenFamily>, StoreError> {
+    let row = oauth_token_families::Entity::find_by_id(id_to_db(id.as_uuid()))
+        .one(db)
+        .await?;
+    row.map(to_family).transpose()
+}
+
+/// The user's live sign-ins at `now`, most recently used first, then by id. Two queries however many there are: the
+/// families, then the newest token of each. A user has a handful (one per machine signed in), so neither is paged.
+/// The scans rely on `idx_oauth_token_families_user` and `idx_oauth_tokens_family`: SQLite and Postgres don't index
+/// a foreign key by themselves.
+pub async fn list_live_token_families(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<Vec<LiveTokenFamily>, StoreError> {
+    let live_refresh_tokens = Query::select()
+        .column(oauth_tokens::Column::FamilyId)
+        .from(oauth_tokens::Entity)
+        .and_where(oauth_tokens::Column::Kind.eq(kind_to_db(TokenKind::Refresh)))
+        .and_where(oauth_tokens::Column::UsedAt.is_null())
+        .and_where(oauth_tokens::Column::ExpiresAt.gt(now.as_millis()))
+        .to_owned();
+    let families = oauth_token_families::Entity::find()
+        .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(oauth_token_families::Column::RevokedAt.is_null())
+        .filter(oauth_token_families::Column::Id.in_subquery(live_refresh_tokens))
+        .order_by_asc(oauth_token_families::Column::Id)
+        .all(db)
+        .await?;
+    let ids: Vec<&str> = families.iter().map(|family| family.id.as_str()).collect();
+    let newest: HashMap<String, i64> = oauth_tokens::Entity::find()
+        .select_only()
+        .column(oauth_tokens::Column::FamilyId)
+        .column_as(oauth_tokens::Column::CreatedAt.max(), "last_used_at")
+        .filter(oauth_tokens::Column::FamilyId.is_in(ids))
+        .group_by(oauth_tokens::Column::FamilyId)
+        .into_tuple::<(String, i64)>()
+        .all(db)
+        .await?
+        .into_iter()
+        .collect();
+    let mut live = Vec::with_capacity(families.len());
+    for family in families {
+        let read = RowReader {
+            table: FAMILIES,
+            id: &family.id,
+        };
+        let created_at = read.timestamp(family.created_at)?;
+        // A family with a live refresh token has tokens, and the newest is at least as late as the family.
+        let last_used_at = newest
+            .get(&family.id)
+            .map_or(Ok(created_at), |millis| read.timestamp(*millis))?;
+        live.push(LiveTokenFamily {
+            id: TokenFamilyId::from_uuid(read.uuid(&family.id)?),
+            client_id: family.client_id,
+            device_name: family.device_name,
+            created_at,
+            last_used_at,
+        });
+    }
+    // Stable, so the order by id above settles ties.
+    live.sort_by_key(|family| std::cmp::Reverse(family.last_used_at));
+    Ok(live)
 }
 
 /// Revokes the family at `now`, which ends every token in it, and returns whether this call did (`false` when it

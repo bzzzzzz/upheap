@@ -36,7 +36,8 @@ The design docs are indexed in [design/README.md](design/README.md).
   team.
 - Sign-in rate limiting: each email address gets 5 attempts per 15 minutes.
 - Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the
-  `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint.
+  `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint. Account lists the CLI's
+  sign-ins by machine and ends them.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
   items with the web app's filters and saved views, add, show, edit and move items between states, and list, add and edit

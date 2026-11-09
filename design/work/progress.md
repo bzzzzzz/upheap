@@ -28,7 +28,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | Heaps | Product Teams §4, 9, Heaps | ✅ | Create from the Team page; rename, change the link name, archive and unarchive there or in the heap's Settings. An archived heap is read-only, with an Unarchive banner for admins |
 | Audit log | Product Audit log | ✅ | Written in every write's transaction. Each entity's history where it's edited. Heap and team Activity pages |
 | OIDC sign-in | Product Accounts §3 | ⬜ | |
-| CLI | [cli.md](cli.md) | 🟡 | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Not started: `/me/tokens`, release packaging |
+| CLI | [cli.md](cli.md) | 🟡 | Server: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. `crates/api-types` shared by `api` and `crates/cli`. Commands: `auth login` and `logout` with the sign-in in the OS keychain, `heap list` and `use`, `item list` with the list flags, `--view`, `--closed`, `--json` and `--quiet`, `item add`, `show` (with `--history`), `edit` and the state verbs `start`, `block`, `done`, `wontdo` and `reopen`, and `tag list`, `add` and `edit`. Login names the sign-in after the machine, and Account's Command line card lists the CLI's sign-ins and ends them (`/me/sign-ins`). Not started: release packaging |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
@@ -39,8 +39,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 
 In rough order.
 
-1. **The rest of the CLI** ([cli.md](cli.md)): `/me/tokens` on the server and its
-   Account card. Release packaging for the binary too.
+1. **The rest of the CLI** ([cli.md](cli.md)): release packaging for the binary.
 2. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
 3. **Phone width** for Activity, in the design tokens.
 4. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
@@ -84,6 +83,6 @@ Ideas, not commitments. product.md holds the commitments.
    and a confirm for what affects others or can't be undone; the code doesn't follow it everywhere yet.
 4. **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. They are authentication
    plumbing, which may be deleted ([engineering principles](../engineering-principles.md#nothing-is-deleted)), so a small cleanup on
-   each exchange, as sign-in attempts have, can come with `/me/tokens`.
+   each exchange, as sign-in attempts have, is still to do.
 5. **An exported local database on a server.** Is moving one there worth building? The local user has no
    password, so an import would need a way to claim the account.

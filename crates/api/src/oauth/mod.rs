@@ -21,7 +21,7 @@ use axum::extract::rejection::FormRejection;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
-use domain::oauth::AuthorizationError;
+use domain::oauth::{AuthorizationError, DeviceName};
 use service::ServiceError;
 use service::oauth::{CodeExchange, OAuthSecret, TokenPair};
 use utoipa_axum::router::OpenApiRouter;
@@ -214,8 +214,14 @@ async fn issue_token(
     let client_id = form.client_id.as_deref().ok_or(OAuthRefusal::missing("client_id"))?;
     let pair = match form.grant_type.as_str() {
         "authorization_code" => {
+            // Before the exchange starts, so a bad name doesn't use the code up.
+            let device_name = match form.device_name.as_deref() {
+                Some(raw) => DeviceName::parse(raw).map_err(|err| OAuthRefusal::invalid_request(err.to_string()))?,
+                None => None,
+            };
             let code = OAuthSecret::from_client(form.code.ok_or(OAuthRefusal::missing("code"))?);
             let exchange = CodeExchange {
+                device_name: device_name.as_ref(),
                 client_id,
                 code: &code,
                 redirect_uri: form
@@ -270,7 +276,7 @@ async fn revoke_token(
 }
 
 /// A server whose one user needs no signing in issues no tokens either, so it has no such routes.
-fn require_accounts(state: &AppState) -> Result<(), ApiError> {
+pub(crate) fn require_accounts(state: &AppState) -> Result<(), ApiError> {
     match state.authentication {
         Authentication::Sessions(_) => Ok(()),
         Authentication::LocalUser(_) => Err(ApiError::NoSuchRoute),

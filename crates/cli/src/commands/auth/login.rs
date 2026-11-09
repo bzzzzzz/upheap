@@ -57,7 +57,8 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let callback = loopback.wait(&state, LOGIN_TIMEOUT).await.map_err(LoginError::from)?;
     let code = read_callback(callback)?;
 
-    let issued = auth::exchange_code(&client, code, &redirect_uri, pkce.verifier).await?;
+    let device_name = app.env.hostname.as_deref().and_then(auth::device_name);
+    let issued = auth::exchange_code(&client, code, &redirect_uri, pkce.verifier, device_name).await?;
     let tokens = StoredTokens::issued(issued, app.env.now.as_second());
     let signed_in = match keep(&args, app, &client, &key, &tokens).await {
         Ok(signed_in) => signed_in,

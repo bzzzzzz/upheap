@@ -59,6 +59,8 @@ pub struct Environment {
     /// Where the config file and the token lock are: `upheap` in the platform's config directory. `None` on a
     /// platform without one.
     pub config_dir: Option<PathBuf>,
+    /// The machine's hostname, which names the sign-in. `None` when it can't be read, and the sign-in has no name.
+    pub hostname: Option<String>,
     /// When the command started.
     pub now: jiff::Timestamp,
 }
@@ -78,7 +80,7 @@ impl Browser for SystemBrowser {
 }
 
 impl Environment {
-    /// Reads the process's environment, the system timezone, the clock and the config directory.
+    /// Reads the process's environment, the system timezone and hostname, the clock and the config directory.
     pub fn read() -> Self {
         let var = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
         Self {
@@ -89,6 +91,7 @@ impl Environment {
             stderr_is_terminal: std::io::stderr().is_terminal(),
             time_zone: jiff::tz::TimeZone::system().iana_name().map(str::to_owned),
             config_dir: dirs::config_dir().map(|dir| dir.join("upheap")),
+            hostname: whoami::hostname().ok(),
             now: jiff::Timestamp::now(),
         }
     }

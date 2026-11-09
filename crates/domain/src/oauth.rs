@@ -243,11 +243,74 @@ impl AuthorizationRequest {
     }
 }
 
+/// Why a device name was refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("device_name must be at most {max} characters, without control characters", max = DeviceName::MAX_CHARS)]
+pub struct DeviceNameError;
+
+/// The name a client gives the machine it signs in on, such as its hostname: shown to the user in their list of
+/// sign-ins. It is the client's claim and only a label, so nothing is decided by it.
+///
+/// Trimmed, at most 64 characters and without control characters. A blank one is no name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceName(String);
+
+impl DeviceName {
+    pub const MAX_CHARS: usize = 64;
+
+    /// `Ok(None)` for a name that is blank once trimmed.
+    pub fn parse(raw: &str) -> Result<Option<Self>, DeviceNameError> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        if trimmed.chars().count() > Self::MAX_CHARS || trimmed.chars().any(char::is_control) {
+            return Err(DeviceNameError);
+        }
+        Ok(Some(Self(trimmed.to_owned())))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn a_device_name_is_trimmed() {
+        expect_that!(
+            DeviceName::parse("  ada-laptop \t").map(|n| n.map(|n| n.as_str().to_owned())),
+            ok(some(eq("ada-laptop")))
+        );
+    }
+
+    #[gtest]
+    fn a_blank_device_name_is_no_name() {
+        for raw in ["", "   ", " \t "] {
+            expect_that!(DeviceName::parse(raw), ok(none()), "{raw:?}");
+        }
+    }
+
+    #[gtest]
+    fn a_device_name_is_limited_in_characters_not_bytes() {
+        let longest = "é".repeat(DeviceName::MAX_CHARS);
+        let too_long = "é".repeat(DeviceName::MAX_CHARS + 1);
+
+        expect_that!(DeviceName::parse(&longest), ok(some(anything())));
+        expect_that!(DeviceName::parse(&too_long), err(eq(&DeviceNameError)));
+    }
+
+    #[gtest]
+    fn a_device_name_with_a_control_character_is_refused() {
+        for raw in ["ada\nlaptop", "ada\u{7}", "a\u{9f}b"] {
+            expect_that!(DeviceName::parse(raw), err(eq(&DeviceNameError)), "{raw:?}");
+        }
+    }
 
     #[gtest]
     fn loopback_redirect_uris_with_any_port_and_path_are_accepted() {

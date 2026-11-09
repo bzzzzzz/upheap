@@ -327,6 +327,113 @@
         ]
       }
     },
+    "/api/v1/me/sign-ins": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "The caller's live sign-ins by clients such as the CLI, the most recently used first. A sign-in is live while its\nrefresh token can still be used; ended and expired ones aren't listed.",
+        "operationId": "list_sign_ins",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSignInList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/sign-ins/{id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it was\nended already. A bearer token may end its own sign-in; its next request is then refused as signed out.",
+        "operationId": "end_sign_in",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The sign-in's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Ended, or ended already"
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such sign-in, or it isn't the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/oauth/authorize": {
       "get": {
         "tags": [
@@ -4501,6 +4608,79 @@
           "mixed"
         ]
       },
+      "ClientSignIn": {
+        "type": "object",
+        "description": "One live sign-in of a client such as the CLI: the tokens it holds can still be used.",
+        "required": [
+          "id",
+          "client_id",
+          "client_name",
+          "label",
+          "signed_in_at",
+          "signed_in_label",
+          "last_used_at",
+          "last_used_label"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "description": "The client: `upheap-cli`."
+          },
+          "client_name": {
+            "type": "string",
+            "description": "What to call the client, such as \"Upheap CLI\"."
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the client called the machine, such as its hostname. The client's claim and only a label. `null` for a\nsign-in that sent none."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Names the sign-in in `DELETE /me/sign-ins/{id}`."
+          },
+          "label": {
+            "type": "string",
+            "description": "What to call this sign-in: the device name, else the client's `client_name`."
+          },
+          "last_used_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: when the sign-in last got new tokens."
+          },
+          "last_used_label": {
+            "type": "string",
+            "description": "How long ago it last got new tokens, in calendar days in the request's timezone: \"today\", \"2 days ago\"."
+          },
+          "signed_in_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "signed_in_label": {
+            "type": "string",
+            "description": "The day it was signed in, in the request's timezone: \"today\", \"yesterday\", \"3 Nov\", or \"3 Nov 2025\"."
+          }
+        }
+      },
+      "ClientSignInList": {
+        "type": "object",
+        "description": "The caller's live sign-ins, the most recently used first.",
+        "required": [
+          "sign_ins"
+        ],
+        "properties": {
+          "sign_ins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientSignIn"
+            }
+          }
+        }
+      },
       "ClosedGroup": {
         "type": "string",
         "description": "Which part of the closed list a closed item belongs in, in the request's timezone: `today` for the same calendar\nday, `this_week` for 1 to 6 days before, and `earlier` for anything older.",
@@ -5698,7 +5878,8 @@
         "description": "An action the caller can take on their account.",
         "enum": [
           "sign_out",
-          "create_team"
+          "create_team",
+          "manage_sign_ins"
         ]
       },
       "MePatchRequest": {
@@ -5875,6 +6056,13 @@
               "null"
             ],
             "description": "With `authorization_code`: the PKCE code verifier the challenge was made from."
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: a name for the machine, shown in the user's list of sign-ins. Trimmed; at most 64\ncharacters, no control characters. A client's claim, only a label. Ignored with `refresh_token`."
           },
           "grant_type": {
             "type": "string",

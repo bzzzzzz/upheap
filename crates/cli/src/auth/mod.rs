@@ -94,12 +94,27 @@ pub async fn access_token(
     Ok(fresh.access_token)
 }
 
-/// Exchanges the code the redirect URI received for tokens.
+/// The name to give the sign-in for a machine called `hostname`, which is what the server accepts: control characters
+/// removed, trimmed, and cut to 64 characters. `None` when nothing is left. The server refuses a name that isn't
+/// clean, so the CLI makes sure it is rather than fail a sign-in over a label.
+pub fn device_name(hostname: &str) -> Option<String> {
+    let printable: String = hostname.chars().filter(|c| !c.is_control()).collect();
+    let cut: String = printable.trim().chars().take(DEVICE_NAME_MAX_CHARS).collect();
+    let name = cut.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+/// The longest device name the server accepts (`domain::oauth::DeviceName`), in characters.
+const DEVICE_NAME_MAX_CHARS: usize = 64;
+
+/// Exchanges the code the redirect URI received for tokens. `device_name` names the machine in the user's list of
+/// sign-ins.
 pub async fn exchange_code(
     client: &ApiClient,
     code: String,
     redirect_uri: &str,
     verifier: String,
+    device_name: Option<String>,
 ) -> Result<TokenResponseDto, ClientError> {
     let form = TokenRequestForm {
         grant_type: "authorization_code".to_owned(),
@@ -108,6 +123,7 @@ pub async fn exchange_code(
         redirect_uri: Some(redirect_uri.to_owned()),
         code_verifier: Some(verifier),
         refresh_token: None,
+        device_name,
     };
     client.request_tokens(&form).await
 }
@@ -172,4 +188,42 @@ async fn blocking<T: Send + 'static>(
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|err| TokenStoreError::Unavailable(Box::new(err)))?
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn a_hostname_is_trimmed() {
+        expect_that!(device_name("  ada-laptop.local \t"), some(eq("ada-laptop.local")));
+    }
+
+    #[gtest]
+    fn control_characters_are_removed() {
+        expect_that!(device_name("ada\nlaptop"), some(eq("adalaptop")));
+        expect_that!(device_name("\u{7}ada\u{1b}[31m"), some(eq("ada[31m")));
+    }
+
+    #[gtest]
+    fn a_long_hostname_is_cut_to_64_characters() {
+        let name = device_name(&"é".repeat(100));
+
+        expect_that!(name, some(eq(&"é".repeat(64))));
+    }
+
+    #[gtest]
+    fn the_cut_is_trimmed_again() {
+        let hostname = format!("{} tail", "a".repeat(63));
+
+        expect_that!(device_name(&hostname), some(eq(&"a".repeat(63))));
+    }
+
+    #[gtest]
+    fn a_blank_hostname_is_no_name() {
+        expect_that!(device_name(""), none());
+        expect_that!(device_name(" \n\t "), none());
+    }
 }

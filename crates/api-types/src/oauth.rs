@@ -84,6 +84,9 @@ pub struct TokenRequestForm {
     pub code_verifier: Option<String>,
     /// With `refresh_token`: the refresh token, which this request uses up.
     pub refresh_token: Option<String>,
+    /// With `authorization_code`: a name for the machine, shown in the user's list of sign-ins. Trimmed; at most 64
+    /// characters, no control characters. A client's claim, only a label. Ignored with `refresh_token`.
+    pub device_name: Option<String>,
 }
 
 /// A token revocation request (RFC 7009 §2.1), form-encoded.
@@ -142,6 +145,7 @@ impl std::fmt::Debug for TokenRequestForm {
             .field("redirect_uri", &self.redirect_uri)
             .field("code_verifier", &redacted(self.code_verifier.as_ref()))
             .field("refresh_token", &redacted(self.refresh_token.as_ref()))
+            .field("device_name", &self.device_name)
             .finish()
     }
 }
@@ -182,6 +186,7 @@ mod tests {
             redirect_uri: Some("http://127.0.0.1:5000/callback".to_owned()),
             code_verifier: Some("the-verifier".to_owned()),
             refresh_token: None,
+            device_name: Some("ada-laptop".to_owned()),
         };
         let revoke = RevokeRequestForm {
             token: Some("the-token".to_owned()),
