@@ -8,7 +8,7 @@ trap 'rm -f "$JAR"' EXIT
 req() { curl -sf -H 'X-CSRF-Protection: 1' -H 'Content-Type: application/json' -c "$JAR" -b "$JAR" "$@"; }
 
 req "$BASE/api/v1/auth/register" -d '{"email":"dev@example.test","display_name":"Dev","username":"dev","password":"dev-password-123"}' >/dev/null \
-  || req "$BASE/api/v1/auth/login" -d '{"email":"dev@example.test","password":"dev-password-123"}' >/dev/null
+  || req "$BASE/api/v1/auth/login" -d '{"login":"dev","password":"dev-password-123"}' >/dev/null
 HEAP=$(req "$BASE/api/v1/me" | python3 -c 'import json,sys; t=json.load(sys.stdin)["teams"][0]; print(t["slug"] + "/heaps/" + t["heaps"][0]["slug"])')
 in_days() { python3 -c "import datetime; print(datetime.date.today() + datetime.timedelta(days=$1))"; }
 add() { req "$BASE/api/v1/teams/$HEAP/items" -d "$1" >/dev/null; }

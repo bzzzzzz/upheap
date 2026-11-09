@@ -8,11 +8,11 @@ import { problemMessage } from "../components/ProblemText";
 
 type Mode = "sign_in" | "register";
 /** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
-type FieldName = "display_name" | "username" | "email" | "password";
+type FieldName = "display_name" | "username" | "email" | "login" | "password";
 type Values = Record<FieldName, string>;
 
 const FIELDS: Record<Mode, readonly FieldName[]> = {
-  sign_in: ["email", "password"],
+  sign_in: ["login", "password"],
   register: ["display_name", "username", "email", "password"],
 };
 
@@ -23,7 +23,13 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
 export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: () => void }) {
   const [mode, setMode] = useState<Mode>("sign_in");
   // Kept across the switch, so an email typed under Sign in stays for Create account; the password isn't.
-  const [values, setValues] = useState<Values>({ display_name: "", username: "", email: "", password: "" });
+  const [values, setValues] = useState<Values>({
+    display_name: "",
+    username: "",
+    email: "",
+    login: "",
+    password: "",
+  });
   // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
   const signIn = useSignIn();
   const register = useRegister();
@@ -34,8 +40,16 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
       mutation={formMode === "sign_in" ? signIn : register}
       onSubmit={() =>
         formMode === "sign_in"
-          ? signIn.mutate({ email: values.email, password: values.password }, { onSuccess: onSignedIn })
-          : register.mutate(values, { onSuccess: onSignedIn })
+          ? signIn.mutate({ login: values.login, password: values.password }, { onSuccess: onSignedIn })
+          : register.mutate(
+              {
+                display_name: values.display_name,
+                username: values.username,
+                email: values.email,
+                password: values.password,
+              },
+              { onSuccess: onSignedIn },
+            )
       }
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
@@ -58,7 +72,15 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
           onSelectionChange={(key) => {
             setMode(key === "register" ? "register" : "sign_in");
             // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
-            setValues((current) => ({ ...current, password: "" }));
+            // An email address carries over between Sign in's "Email or username" and Create account's Email.
+            setValues((current) => ({
+              ...current,
+              password: "",
+              ...(key === "register" &&
+                current.email === "" &&
+                current.login.includes("@") && { email: current.login }),
+              ...(key === "sign_in" && current.login === "" && { login: current.email }),
+            }));
             signIn.reset();
             register.reset();
           }}
@@ -167,16 +189,28 @@ function AuthForm({
           required
         />
       )}
-      <Field
-        label="Email"
-        {...field("email")}
-        type="email"
-        autoComplete="email"
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        required
-      />
+      {mode === "sign_in" ? (
+        <Field
+          label="Email or username"
+          {...field("login")}
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
+      ) : (
+        <Field
+          label="Email"
+          {...field("email")}
+          type="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+        />
+      )}
       <Field
         label="Password"
         {...field("password")}

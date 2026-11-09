@@ -107,23 +107,18 @@ impl Services {
     /// [`ServiceError::TooManySignInAttempts`] before the password is checked. An empty email or password fails
     /// with [`ValidationError::Empty`] before anything is counted, so a form sent before a password manager filled
     /// it doesn't use up an attempt.
-    pub async fn sign_in(&self, email: &str, password: &str) -> Result<SessionGrant, ServiceError> {
-        if email.trim().is_empty() {
-            return Err(ValidationError::Empty { field: Field::Email }.into());
+    pub async fn sign_in(&self, login: &str, password: &str) -> Result<SessionGrant, ServiceError> {
+        let login = login.trim();
+        if login.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Login }.into());
         }
         if password.is_empty() {
             return Err(ValidationError::Empty { field: Field::Password }.into());
         }
-        let email = Email::parse(email).ok();
-        // Only a well-formed address can have an account, so only those are counted.
-        let attempts_key = email.as_ref().map(|email| sha256_hex(email.as_str()));
+        let (user, attempts_key) = self.find_sign_in_user(login).await?;
         if let Some(key) = &attempts_key {
             self.count_sign_in_attempt(key).await?;
         }
-        let user = match &email {
-            Some(email) => store::users::find_user_by_email(&self.db, email).await?,
-            None => None,
-        };
         let stored_hash = match &user {
             Some(user) => store::users::find_password_hash(&self.db, user.id).await?,
             None => None,
@@ -149,6 +144,29 @@ impl Services {
         }
         tracing::info!(user_id = %grant.user.id, "user signed in");
         Ok(grant)
+    }
+
+    /// The account `login` names, by email address when it has an `@` (a username can't) and by username otherwise,
+    /// and the key its attempts are counted under. An account's attempts count under its email address whichever way
+    /// it's named, so switching between the two gets no more tries. A name no account has is counted too, under the
+    /// address or `@` and the username, which no address can be; one that can't be an address or username at all
+    /// can't have an account, so it isn't.
+    async fn find_sign_in_user(&self, login: &str) -> Result<(Option<User>, Option<String>), ServiceError> {
+        let (user, unknown_key) = if login.contains('@') {
+            let Ok(email) = Email::parse(login) else {
+                return Ok((None, None));
+            };
+            let user = store::users::find_user_by_email(&self.db, &email).await?;
+            (user, email.as_str().to_owned())
+        } else {
+            let Ok(username) = Handle::parse(&login.to_ascii_lowercase(), Field::Login) else {
+                return Ok((None, None));
+            };
+            let user = store::users::find_user_by_username(&self.db, &username).await?;
+            (user, format!("@{}", username.as_str()))
+        };
+        let key = user.as_ref().map_or(unknown_key, |user| user.email.as_str().to_owned());
+        Ok((user, Some(sha256_hex(&key))))
     }
 
     /// Counts a sign-in attempt for the address with this key, and refuses it when the address has used up its

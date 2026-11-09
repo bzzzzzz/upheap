@@ -442,7 +442,7 @@ export function useArchiveSavedView(heap: HeapRef) {
 export function useSignIn() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { email: string; password: string }) =>
+    mutationFn: async (body: { login: string; password: string }) =>
       unwrap(await api.POST("/api/v1/auth/login", { body })),
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.

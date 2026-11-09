@@ -50,6 +50,8 @@ pub enum Field {
     /// A team's or heap's slug.
     Slug,
     Email,
+    /// What sign-in takes: an email address or a username.
+    Login,
     Password,
 }
 
@@ -66,6 +68,7 @@ impl Field {
             Self::Username => "username",
             Self::Slug => "slug",
             Self::Email => "email",
+            Self::Login => "login",
             Self::Password => "password",
         }
     }

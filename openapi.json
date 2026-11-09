@@ -15,8 +15,8 @@
         "tags": [
           "auth"
         ],
-        "summary": "Signs in with email and password.",
-        "description": "Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts\nfail with `429` until the window ends, and a successful sign-in starts the count over.",
+        "summary": "Signs in with an email address or a username, and a password.",
+        "description": "Each account gets a few attempts per time window, counted together whether it's named by email address or by\nusername, and so does each address or username without an account. Past that, attempts fail with `429` until\nthe window ends, and a successful sign-in starts the count over.",
         "operationId": "sign_in",
         "requestBody": {
           "content": {
@@ -50,7 +50,7 @@
             }
           },
           "422": {
-            "description": "`field_empty` (`field` `email` or `password`); not counted as an attempt",
+            "description": "`field_empty` (`field` `login` or `password`); not counted as an attempt",
             "content": {
               "application/json": {
                 "schema": {
@@ -67,7 +67,7 @@
                   "type": "integer",
                   "format": "int64"
                 },
-                "description": "Seconds until the address may try again"
+                "description": "Seconds until the account may try again"
               }
             },
             "content": {
@@ -5498,12 +5498,13 @@
       "SignInRequest": {
         "type": "object",
         "required": [
-          "email",
+          "login",
           "password"
         ],
         "properties": {
-          "email": {
-            "type": "string"
+          "login": {
+            "type": "string",
+            "description": "An email address, or a username. `email` is still accepted in its place."
           },
           "password": {
             "type": "string"

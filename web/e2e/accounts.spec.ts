@@ -36,18 +36,25 @@ test("a new user registers, signs out and signs back in", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
   // Sent empty, as before a password manager fills it: the server says which input, and counts no attempt.
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByLabel("Email")).toHaveAccessibleDescription("Enter your email address.");
-  await expect(page.getByLabel("Email")).toBeFocused();
+  await expect(page.getByLabel("Email or username")).toHaveAccessibleDescription("Enter your email or username.");
+  await expect(page.getByLabel("Email or username")).toBeFocused();
   await page.getByLabel("Password").fill("not the password");
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email or username").fill(email);
   await page.getByRole("button", { name: "Sign in" }).click();
   // A wrong password isn't about one input, so it shows above the button.
-  await expect(page.getByRole("alert")).toHaveText("That email and password don't match an account.");
+  await expect(page.getByRole("alert")).toHaveText("That email or username and password don't match an account.");
 
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(HEAP_URL);
   await expect(page.getByRole("heading", { name: "Personal" })).toBeVisible();
+
+  // The username signs in as well as the email address does.
+  await signOut(page);
+  await page.getByLabel("Email or username").fill(username);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(HEAP_URL);
 });
 
 test("a taken email and a short password show their errors under the field", async ({ page }) => {
