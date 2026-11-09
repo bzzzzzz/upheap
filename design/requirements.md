@@ -76,7 +76,7 @@ It answers questions like:
 4. Each item shows its biggest score contributors (Priority §9).
 5. The user can instead sort by any single parameter that has an order (for example deadline, effort, impact, or a custom parameter).
 6. The user can search items by text and filter by state, tag, and parameter values. Filtering preserves the relative priority order of matching items.
-7. The user can edit an item's title, effort, impact, due time, and state directly in the list.
+7. The user can change an item's state directly in the list. Everything else is edited in the item.
 8. The user can open any item in the edit view, and add a new item with a shortcut.
 
 **Closed items.**

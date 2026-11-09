@@ -1,4 +1,4 @@
-// The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
+// The app shell at each width (design/ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
 import type { Locator, Page } from "@playwright/test";
 

@@ -30,7 +30,7 @@ export type Panel = "filters" | null;
 export type ListCounts = { listed: number; total: number };
 
 /**
- * Search, sort, and one Filters panel for the filters and what the list shows (app-ux.md, The list §7). Everything
+ * Search, sort, and one Filters panel for the filters and what the list shows (ux.md, The list §7). Everything
  * but the search text is a URL param that the server applies; `onChange` gets the whole new view. On a phone the
  * sort moves into the panel. `/` focuses the search box.
  */
@@ -168,7 +168,7 @@ export function ListControls({
 
 /**
  * The filters that are on and the view settings changed from the defaults, as chips that each take one off, so the
- * user always sees why the list looks as it does (ux-overview.md, The list §3). `shown` of `total` says how much the
+ * user always sees why the list looks as it does (ux.md, The list §11). `shown` of `total` says how much the
  * filters leave out; `total` is the view's count without them, `undefined` until it has loaded.
  */
 export function FilterChips({

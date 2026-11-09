@@ -18,7 +18,7 @@ export function ParameterChips({ parameters, className }: { parameters: ItemPara
   );
 }
 
-/** Up to this many short options show as buttons; more, or longer labels, as a menu (app-ux.md, The item §3). */
+/** Up to this many short options show as buttons; more, or longer labels, as a menu (ux.md, The item §3). */
 const MAX_BUTTONS = 4;
 const MAX_BUTTON_LABEL = 12;
 

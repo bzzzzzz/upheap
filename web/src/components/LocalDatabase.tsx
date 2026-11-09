@@ -34,7 +34,7 @@ function Gate({ database, children }: { database: LocalDatabase; children: React
 }
 
 /**
- * Where the data lives (screens.md, G-storage-note), whether the browser may clear it, and a nudge when no copy was
+ * Where the data lives (ux.md, Your data), whether the browser may clear it, and a nudge when no copy was
  * downloaded in two weeks. Asks the browser to keep the data.
  */
 export function StorageNote({ className }: { className: string }) {
@@ -118,7 +118,7 @@ function useCurrentCounts(database: LocalDatabase) {
   return useQuery({ queryKey: ["local-database", "count"], queryFn: () => database.count() });
 }
 
-/** The Account page's Your data card (screens.md, S-account): download a copy, or open one in place of the data. */
+/** The Account page's Your data card (ux.md, Your data): download a copy, or open one in place of the data. */
 export function LocalDataSection() {
   if (!localDatabase) return null;
   return <DataSection database={localDatabase} />;
@@ -196,7 +196,7 @@ function DataSection({ database }: { database: LocalDatabase }) {
 }
 
 /**
- * Asks before a copy replaces everything (screens.md, M-local-import-confirm), saying what the copy holds and what
+ * Asks before a copy replaces everything (ux.md, Your data), saying what the copy holds and what
  * goes: a modal on a wide screen and a sheet on a phone. A file that isn't an Upheap database is refused here,
  * before anything changes.
  */

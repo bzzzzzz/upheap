@@ -1,4 +1,4 @@
-// The Teams and Team pages (design/screens.md, S-teams and S-team): making a team, sharing it, and managing its heaps
+// The Teams and Team pages (design/ux.md, Teams and Team): making a team, sharing it, and managing its heaps
 // and members. Teams with others are the server's, so most of these skip the local build.
 import type { APIRequestContext, Page } from "@playwright/test";
 

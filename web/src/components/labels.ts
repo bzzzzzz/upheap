@@ -56,7 +56,7 @@ export function changeLabel(from: ItemState, to: ItemState): string {
 }
 
 /**
- * The likeliest next state of a non-closed item, for the item's main button (ux-overview.md, The item §1), then the
+ * The likeliest next state of a non-closed item, for the item's main button (ux.md, The item §6), then the
  * other states it can move to besides Won't do, which sits apart.
  */
 export const NEXT_STATES: Record<Exclude<ItemState, "done" | "wont_do">, readonly [ItemState, ...ItemState[]]> = {

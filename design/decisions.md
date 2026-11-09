@@ -297,3 +297,81 @@ of this repository (matched by numeric id), can assume. The deploy job's actions
 
 **Consequences.** No key to leak or rotate. A renamed or recreated repository can't deploy. The one-time setup is a
 script in [operations.md](operations.md#one-time-setup).
+
+## 22. One React app for every width
+
+**Context.** The web app has to work on phones as well as laptops, in both the server and the local build.
+
+**Decision.** One React app whose layout changes with the width: bottom tabs and sheets on a phone, a rail and a
+panel on a tablet, a sidebar and a pane on a wide screen. Installing comes later as a PWA of the same site, and
+store builds, if ever, by wrapping it in Tauri.
+
+**Instead of.** A separate mobile UI, or React Native.
+
+**Consequences.** Components don't fork; only presentation differs. React Native was ruled out because it would mean
+rebuilding every screen without the DOM, and its JavaScript engine can't run the local build's WebAssembly backend.
+The Playwright golden paths run at three widths.
+
+## 23. Editing lives in the item; rows only change state
+
+**Context.** The first list put effort, impact, due and state controls in every row. On a phone a row was five lines
+tall, and the list read as a form rather than a ranking.
+
+**Decision.** A row is for reading, ordering and changing state: the state circle, a swipe, and on hover Start and
+⋯. Everything else is edited in the item, which opens over or beside the list.
+
+**Instead of.** Inline editing of every field in the list, which the requirements first asked for.
+
+**Consequences.** Compact rows that show the ranking and its reasons. requirements.md's list view rule was changed
+to match. An edit means one tap more, but the item saves each change as it's made, so it costs no round trip.
+
+## 24. React Aria Components rather than a copied component library
+
+**Context.** Dialogs, sheets, menus, toggle groups, a date picker and a keyboard-navigable list all need accessible,
+touch-safe behaviour.
+
+**Decision.** React Aria Components, unstyled, with our Tailwind classes on top.
+
+**Instead of.** shadcn/ui, which copies a component library's worth of Radix-based code into the tree.
+
+**Consequences.** One dependency instead of owned code; touch handled properly (a scroll doesn't fire a press,
+focus survives the on-screen keyboard); `GridList` gives the list keyboard navigation and, later, selection for
+bulk actions.
+
+## 25. The colour theme is kept per browser, not on the account
+
+**Context.** A light, dark or system theme has to be applied without a flash on reload.
+
+**Decision.** The Account page's Appearance setting is stored in `localStorage` and applied by an inline script in
+`index.html` before the first paint. The design tokens live in Tailwind's `@theme`, so both modes come from one place.
+
+**Instead of.** A theme field on the user, read after sign-in.
+
+**Consequences.** No API change and no flash; the theme is about the screen, so a user's devices can differ.
+`dark:` pairs on elements are avoided in favour of tokens.
+
+## 26. The due picker offers rough choices the server owns
+
+**Context.** Most due times are loose ("next week"), and a loose due time must read back with the term it was
+picked by, never as a date.
+
+**Decision.** The picker offers rough choices first and Exact date last. The server lists the choices
+(`GET /due-choices`) with their dates and labels in the request's timezone, and the client only shows them.
+
+**Instead of.** A date picker everywhere, or rough choices computed in the client.
+
+**Consequences.** "Next week" can never come back as "in a few days", because the server's fuzzy bands leave room
+around each choice. The CLI's `--due next-week` uses the same list. Only an exact due time can be overdue.
+
+## 27. Saved views are hidden in the web app until they fit the Filters panel
+
+**Context.** The views bar at the top of the list duplicated what the one Filters panel does, and the first design
+set had no place for saving a view.
+
+**Decision.** The web app shows no saved views for now and ignores `view=` in the URL. The API keeps them, shared by
+the team, for clients that use them (the CLI's `--view`).
+
+**Instead of.** Keeping the views bar, or removing saved views from the API.
+
+**Consequences.** One place shapes the list. When saved views return, "Save as view…" goes in the Filters panel,
+where the user finishes shaping the list.

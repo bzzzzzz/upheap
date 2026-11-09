@@ -1,4 +1,4 @@
-// Whether the Add dialog stays open for the next item (ux-overview.md, Adding §3): remembered per device, in this
+// Whether the Add dialog stays open for the next item (ux.md, Adding an item §4): remembered per device, in this
 // browser's storage, so it's as the user left it whichever way they open the dialog, also after a reload.
 import { useState } from "react";
 

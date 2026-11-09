@@ -22,9 +22,9 @@ import { useToast, useToastCount } from "./UndoToast";
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
 /**
- * The way in to adding an item (app-ux.md, Adding an item): the Add item button beside the heap name, or `N`, opens
+ * The way in to adding an item (ux.md, Adding an item): the Add item button beside the heap name, or `N`, opens
  * the Add dialog. It's a modal over the list on a wide screen and a tablet, and a sheet from the bottom on a phone, where the
- * + in the middle of the tabs opens it instead of this button (ux-overview.md, What comes first §1). `view` is the
+ * + in the middle of the tabs opens it instead of this button (ux.md, Layout). `view` is the
  * list's, for the dialog to start from, and `search` the text the list is narrowed by.
  */
 export function AddItem({
@@ -148,7 +148,7 @@ function changedSince(edits: Partial<Draft>, sent: Partial<Draft>): Partial<Draf
  * clears for the next item instead of closing. Closing with a title typed asks first, so a stray tap outside doesn't
  * lose it.
  *
- * It starts from the list's view (ux-overview.md, Adding): the heap on screen, and the tags, effort, impact and
+ * It starts from the list's view (ux.md, Adding an item §3): the heap on screen, and the tags, effort, impact and
  * parameter options the filters pick out one of, without a label to say so. The heap can be changed from the title.
  * Once added, it says where the item landed in the list, from the list as the server ranks it.
  */
@@ -771,7 +771,7 @@ const chipClass = (filled: boolean) =>
   }`;
 
 /**
- * Effort, impact and the tags as one row of chips that scrolls sideways (ux-overview.md, What comes first §3). Effort
+ * Effort, impact and the tags as one row of chips that scrolls sideways (ux.md, Adding an item §2). Effort
  * and impact each open a sheet of S M L XL; a tag chip takes its tag off, and + Tag opens the tag picker in a sheet.
  */
 function PhoneChips({

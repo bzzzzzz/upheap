@@ -41,13 +41,13 @@ export function focusRowOf(key: string) {
 }
 
 /**
- * One ranked item, for reading and ordering (app-ux.md, The list): the state circle, the position, the title, the due
+ * One ranked item, for reading and ordering (ux.md, The list): the state circle, the position, the title, the due
  * chip and tags, and below them why it ranks where it does. The whole row opens the item; editing happens there.
  * `selected` marks the open item's row, and `itemOpen` makes opening another one replace it in the history, so Back
  * still closes the item instead of stepping through every row looked at.
  *
- * With a finger, a row swipes (app-ux.md, The list §5): right marks it done, left shows two other states to pick.
- * With a mouse, hovering an open row shows Start and ⋯ for the other states (ux-overview.md, The list §1).
+ * With a finger, a row swipes (ux.md, The list §5): right marks it done, left shows two other states to pick.
+ * With a mouse, hovering an open row shows Start and ⋯ for the other states (ux.md, The list §9).
  */
 export function ItemRow({
   entry,

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay, ToggleButton, type Key } from "react-aria-components";
 
 /**
- * A sheet from the bottom of a phone's screen, over a dimmed page (ux-overview.md: overlays on the phone are bottom
+ * A sheet from the bottom of a phone's screen, over a dimmed page (ux.md, Principles §2: overlays on the phone are bottom
  * sheets). It sits above the on-screen keyboard, or with `aboveTabs` above the phone's tabs as a card, for More.
  * Escape, ✕ or a tap on the dimmed page closes it. Without `showTitle` the title only names the dialog. `role` is
  * `alertdialog` for a confirm that needs an answer.
@@ -84,7 +84,7 @@ export function Sheet({
 }
 
 /**
- * A row of a list in a sheet (ux-overview.md, What comes first §3): 52 px tall, with what it is on the left, a note or
+ * A row of a list in a sheet (ux.md, Phone details): 52 px tall, with what it is on the left, a note or
  * value on the right, and a check on the current choice.
  */
 export const sheetRowClass =

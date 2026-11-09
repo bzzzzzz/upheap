@@ -1,5 +1,5 @@
 // Which layout and input the screen has, for the few behaviours CSS can't switch on its own: gestures, and whether
-// a panel is a popover or a sheet. Breakpoints are Tailwind's (app-ux.md, Layout).
+// a panel is a popover or a sheet. Breakpoints are Tailwind's (ux.md, Layout).
 import { useEffect, useSyncExternalStore, type RefObject } from "react";
 
 export const PHONE = "(max-width: 639.98px)";

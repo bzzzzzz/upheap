@@ -1,4 +1,4 @@
-// The list's one Filters panel (design/app-ux.md, The list §7), at each width: what the list shows and the filters
+// The list's one Filters panel (design/ux.md, The list §7), at each width: what the list shows and the filters
 // together, with chips for both, and on a phone the sort inside it.
 import { addItem, expect, isPhone, row, test } from "./fixtures";
 import type { Page } from "@playwright/test";
