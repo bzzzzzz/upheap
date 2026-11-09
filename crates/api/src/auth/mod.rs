@@ -34,7 +34,9 @@ pub(crate) struct RegisterRequest {
 
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct SignInRequest {
-    pub email: String,
+    /// An email address, or a username. `email` is still accepted in its place.
+    #[serde(alias = "email")]
+    pub login: String,
     pub password: String,
 }
 
@@ -60,21 +62,22 @@ async fn register(
     Ok(signed_in(StatusCode::CREATED, &grant, cookies))
 }
 
-/// Signs in with email and password.
+/// Signs in with an email address or a username, and a password.
 ///
-/// Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts
-/// fail with `429` until the window ends, and a successful sign-in starts the count over.
+/// Each account gets a few attempts per time window, counted together whether it's named by email address or by
+/// username, and so does each address or username without an account. Past that, attempts fail with `429` until
+/// the window ends, and a successful sign-in starts the count over.
 #[utoipa::path(post, path = "/auth/login", tag = "auth", request_body = SignInRequest,
     responses(
         (status = 200, description = "Signed in; sets the session cookie", body = UserDto),
         (status = 401, description = "`invalid_credentials`", body = Problem),
-        (status = 422, description = "`field_empty` (`field` `email` or `password`); not counted as an attempt", body = Problem),
+        (status = 422, description = "`field_empty` (`field` `login` or `password`); not counted as an attempt", body = Problem),
         (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
-            headers(("Retry-After" = i64, description = "Seconds until the address may try again"))),
+            headers(("Retry-After" = i64, description = "Seconds until the account may try again"))),
     ))]
 async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInRequest>) -> Result<Response, ApiError> {
     let cookies = cookie_settings(&state)?;
-    let grant = state.services.sign_in(&body.email, &body.password).await?;
+    let grant = state.services.sign_in(&body.login, &body.password).await?;
     Ok(signed_in(StatusCode::OK, &grant, cookies))
 }
 

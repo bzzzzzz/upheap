@@ -111,7 +111,7 @@ The full URL is easy to read but long to paste in chat, so `/h/` gives a short f
 
 Each position means one thing (team, then heap, then item), so the short form needs no reserved names either. The web
 app's router replaces a short link with the full URL as it opens, so it works the same in the local build, which has
-no server to redirect. Items, heaps and teams offer "Copy link" with the short form. The API has no short form.
+no server to redirect. Items offer "Copy link" with the short form, as a link sign beside the title. The API has no short form.
 
 The CLI takes an item as its key within the default heap (`k3x9a`) or as a full path
 (`my-team/backlog/k3x9a`), which is a short link without its `/h/`, so a pasted link works too. That

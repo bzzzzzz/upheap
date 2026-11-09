@@ -214,7 +214,7 @@ A display name change is audited once in each of the user's teams, since the aud
    - The CLI receives a short-lived access token and a rotating refresh token.
    - Only registered first-party public clients are allowed.
 3. **External identity providers:** generic OIDC, configured per deployment, for example Okta, Google or Keycloak. A first sign-in creates the user. An identity is matched by `(provider, subject)`, never by email alone.
-4. **Local accounts:** passwords are hashed with argon2id, and sign-in attempts are rate-limited per email address (`domain::sign_in`).
+4. **Local accounts:** passwords are hashed with argon2id, and sign-in takes an email address or a username, and attempts are rate-limited per account, keyed by its email address whichever was typed, or per unknown address or username (`domain::sign_in`).
    - An address gets five attempts per 15-minute window, opened by its first attempt. Later attempts get `429` `too_many_attempts`, with `Retry-After` in seconds, until the window ends. They are refused before any password is checked, so they cost no argon2 work.
    - Addresses without an account are counted the same way, so a refusal doesn't reveal whether an account exists. Malformed addresses can't have an account and aren't counted.
    - A successful sign-in clears the count. Refused attempts don't extend the window. Someone who knows an address can still keep its owner out, by using up its attempts at the start of every window; that is the price of a limit per address.

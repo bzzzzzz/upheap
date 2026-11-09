@@ -14,9 +14,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Signs in with email and password.
-         * @description Each email address gets a few attempts per time window, whether or not it has an account. Past that, attempts
-         *     fail with `429` until the window ends, and a successful sign-in starts the count over.
+         * Signs in with an email address or a username, and a password.
+         * @description Each account gets a few attempts per time window, counted together whether it's named by email address or by
+         *     username, and so does each address or username without an account. Past that, attempts fail with `429` until
+         *     the window ends, and a successful sign-in starts the count over.
          */
         post: operations["sign_in"];
         delete?: never;
@@ -1263,7 +1264,8 @@ export interface components {
             view?: null | components["schemas"]["ListViewInput"];
         };
         SignInRequest: {
-            email: string;
+            /** @description An email address, or a username. `email` is still accepted in its place. */
+            login: string;
             password: string;
         };
         /**
@@ -1454,7 +1456,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `field_empty` (`field` `email` or `password`); not counted as an attempt */
+            /** @description `field_empty` (`field` `login` or `password`); not counted as an attempt */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1466,7 +1468,7 @@ export interface operations {
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {
-                    /** @description Seconds until the address may try again */
+                    /** @description Seconds until the account may try again */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

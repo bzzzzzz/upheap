@@ -460,14 +460,77 @@ async fn sessions_expire_and_sign_out_ends_them() -> Result<()> {
     Ok(())
 }
 
-async fn sign_in(app: &TestApp, email: &str, password: &str) -> Result<common::TestResponse> {
+async fn sign_in(app: &TestApp, login: &str, password: &str) -> Result<common::TestResponse> {
     app.send(
         Method::POST,
         "/api/v1/auth/login",
         None,
-        Some(json!({ "email": email, "password": password })),
+        Some(json!({ "login": login, "password": password })),
     )
     .await
+}
+
+#[gtest]
+#[tokio::test]
+async fn users_sign_in_by_username_or_by_email() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+
+    // Act
+    let by_username = sign_in(&app, "ada", "a long test password").await?;
+    let capitalised = sign_in(&app, " Ada ", "a long test password").await?;
+    let wrong_password = sign_in(&app, "ada", "not the password").await?;
+    let unknown = sign_in(&app, "nobody", "a long test password").await?;
+    let not_a_username = sign_in(&app, "ada lovelace", "a long test password").await?;
+    // Clients written before usernames send `email`, which still works.
+    let old_field = app
+        .send(
+            Method::POST,
+            "/api/v1/auth/login",
+            None,
+            Some(json!({ "email": "ada@example.test", "password": "a long test password" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(by_username.status, eq(StatusCode::OK));
+    expect_that!(by_username.body["username"], eq(&json!("ada")));
+    expect_that!(by_username.session_cookie, some(anything()));
+    expect_that!(capitalised.status, eq(StatusCode::OK));
+    expect_that!(wrong_password.body["code"], eq(&json!("invalid_credentials")));
+    expect_that!(unknown.body["code"], eq(&json!("invalid_credentials")));
+    expect_that!(not_a_username.body["code"], eq(&json!("invalid_credentials")));
+    expect_that!(old_field.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_account_has_one_count_of_attempts_by_username_and_email_together() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    app.register("ada@example.test").await?;
+    for _ in 0..3 {
+        sign_in(&app, "ada", "not the password").await?;
+    }
+    for _ in 0..2 {
+        sign_in(&app, "ada@example.test", "not the password").await?;
+    }
+    for _ in 0..5 {
+        sign_in(&app, "nobody", "whatever it is").await?;
+    }
+
+    // Act
+    let by_username = sign_in(&app, "ada", "a long test password").await?;
+    let by_email = sign_in(&app, "ada@example.test", "a long test password").await?;
+    let unknown = sign_in(&app, "nobody", "whatever it is").await?;
+
+    // Assert
+    expect_that!(by_username.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(by_email.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(unknown.body["code"], eq(&json!("too_many_attempts")));
+    Ok(())
 }
 
 #[gtest]
@@ -551,7 +614,7 @@ async fn empty_sign_in_fields_are_rejected_without_counting_an_attempt() -> Resu
     expect_that!(statuses, each(eq(&StatusCode::UNPROCESSABLE_ENTITY)));
     expect_that!(codes, each(eq(&json!("field_empty"))));
     expect_that!(fields.first(), some(eq(&json!("password"))));
-    expect_that!(fields.get(1), some(eq(&json!("email"))));
+    expect_that!(fields.get(1), some(eq(&json!("login"))));
     expect_that!(real.status, eq(StatusCode::OK));
     Ok(())
 }

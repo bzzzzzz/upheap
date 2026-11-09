@@ -176,7 +176,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | P-tag-picker | Tag picker | M-item, M-add-item, P-param-card | 4 | 2 | 3 | built |
 | M-filters | Filters | S-heap | 3 | 2 | 3 | built |
 | P-blocker | Waiting for (blocker picker) | M-item | 3 | 3 | 3 | built |
-| G-copy-link | Copy link | M-item, S-heap, S-team | 2 | 1 | 3 | designed |
+| G-copy-link | Copy link | M-item | 2 | 1 | 3 | built |
 | G-offline | Can't reach the server | shell | 1 | n/a | 3 | implied |
 | E-heap-empty | Empty heap | S-heap | 1 | 3 | 3 | built |
 | E-item-missing | Item not found | M-item | 1 | 2 | 3 | built |
@@ -192,7 +192,7 @@ Sorted by the higher of the two must-have ratings, then by frequency, then by na
 | P-view-name | Name a view (new or rename) | P-saved-views | 2 | 2 | 2 | built |
 | E-no-match | No items match | S-heap | 2 | 2 | 2 | built |
 | S-parameters | Parameters | — | 2 | 2 | 2 | built |
-| P-refresh | Refresh order | S-heap | 2 | 2 | 2 | built |
+| P-refresh | Refresh order | S-heap | 2 | 2 | 2 | removed |
 | P-tag-row | Tag row (inline edit) | S-tags | 2 | 1 | 2 | built |
 | S-tags | Tags | — | 2 | 1 | 2 | built |
 | M-view-settings | View settings | S-heap | 2 | 2 | 2 | built |
@@ -446,10 +446,9 @@ overlays are the same components.
 ### G-copy-link: Copy link
 
 - **Purpose:** share a short link (`/h/my-team/backlog/k3x9a`).
-- **Where:** "Items, heaps and teams offer Copy link with the short form." Placement isn't decided: an item pane
-  header button, a heap header menu and the team page are the obvious homes. Copying wants a confirmation toast
-  ("Link copied").
-- **Freq 2.** **Source:** readable-ids.md Short links. Designed.
+- **Where:** only the item: a link sign beside its title copies the short link, with a check and "Link copied"
+  for screen readers. Heaps and teams have no Copy link; the address bar does.
+- **Freq 2.** **Source:** readable-ids.md Short links. Built.
 - **Must:** local 1, server 3. Server: links are how teammates point at an item; the address bar is a workable
   fallback on a wide screen, less so on a phone.
 - `/h/…` short links have no screen: the router replaces them with the full URL as it opens.
@@ -512,7 +511,7 @@ order §4–5). See Gaps.
 - **Empty inputs:** an empty email or password gets `field_empty` with that field before the server counts the
   attempt, so a form sent before a password manager fills it doesn't use one up.
 - **Designed additions:** a button per configured OIDC provider ("Sign in with Okta"), Off Auth §1, TD Auth §3.
-  The phone board's "Email or username" waits on signing in by username, which the server doesn't do.
+  Sign in takes "Email or username", as on the phone board.
 - **Phone:** the bare form at full width (PhoneSignIn): 48 px inputs with 16 px text, a 52 px button, and the
   keyboard each input wants (`type=email`, no autocapitalise or autocorrect for email and username).
 - **Freq 2.** **Source:** `AuthPage.tsx`. Built.
@@ -601,7 +600,7 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 - **Purpose:** "what should I work on?" The app opens here (Req Views: List items §1). **Who:** every team member;
   read-only in an archived heap.
 - **Shows, top to bottom:**
-  1. Heap name (hidden on a phone, where the top bar has it) and Refresh order (P-refresh).
+  1. Heap name (hidden on a phone, where the top bar has it).
   2. P-saved-views.
   3. "Add an item" field with an `N` hint: the way into M-add-item. Disabled in an archived heap.
   4. Toolbar: P-search, P-sort, Filters (with a count, M-filters), View (M-view-settings).
@@ -680,10 +679,9 @@ yet. Add the first thing on your plate." (E-heap-empty). See Gaps.
 
 #### P-refresh: Refresh order
 
-- "Refresh order" re-ranks at the current time (drops `as_of`). The list otherwise keeps its order for the session,
-  apart from edited items, which move at once.
-- **Freq 2.** **Source:** Req Priority §6, TD Session-stable order §6. Built.
-- **Must:** local 2, server 2. Reloading the page does the same.
+- Removed: reloading the page re-ranks at the current time (drops `as_of`), for everyone, so no button is needed.
+  The list otherwise keeps its order for the session, apart from edited items, which move at once.
+- **Freq 2.** **Source:** Req Priority §6, TD Session-stable order §6. Removed.
 
 #### P-saved-views: Saved views bar
 
@@ -724,7 +722,7 @@ A view URL naming an archived saved view silently drops `view` (TD API saved vie
   does, and read its history (Req Views: Edit item). **Who:** every member; read-only when the heap is archived or
   the item is closed (only state, via reopen).
 - **Header:** "#3 · Up next" (position and group, when the item is in the list on screen); ↑ ↓ to open the row above
-  or below without closing the pane (wide and tablet); the key (`k3x9a`) as the copy-link button; ✕.
+  or below without closing the pane (wide and tablet); the key (`k3x9a`); ✕. The link sign beside the title copies the short link.
 - **Body, top to bottom:**
   1. Title (inline, saves on blur; Enter saves, Escape reverts). Max 300 characters.
   2. State: the current state, then the likeliest next one as the main button (Start for open, Done for in
@@ -934,7 +932,7 @@ where they live.
 - **Who:** every member; controls by `allowed_actions` (team: `rename`, `change_slug`, `add_member`, `create_heap`,
   `leave`; member: `promote`, `demote`, `remove`; heap: `rename`, `archive`, `unarchive`, `view_history`).
 - **Shows:** "Teams · you're an admin" (or "you're a member", "your personal team"; no Teams link in the local
-  build), the name with a ⋯ for Rename and Link name (P-team-name), Copy link and Activity (S-team-activity), and
+  build), the name with a ⋯ for Rename and Link name (P-team-name) and Activity (S-team-activity), and
   "Everyone here can see and edit every heap in the team. Admins manage heaps and members." (for a personal team:
   "It's yours alone, and its link uses your username."). Then **Heaps** with + New heap (P-heap-new, P-heap-row each),
   **Members · N** (P-member-add above the list, P-member-row each, M-member-remove under it), and P-leave or
@@ -1098,7 +1096,8 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 4. **CLI tokens.** `/me/tokens` and P-tokens are designed but have no layout, and the OAuth consent step is
    undecided (S-oauth-authorize).
 5. **Invitations.** Planned for later; S-invite and an Invite panel on S-team are placeholders.
-6. **Item key and Copy link.** Settled: the key is the copy-link button in the item's header.
+6. **Item key and Copy link.** Settled: the key shows in the item's header, and a link sign beside the title copies
+   the link. Nothing else has Copy link.
 7. **Finding what blocks archiving a parameter.** `parameter_in_use` doesn't say which open items hold a value. A
    link to the list filtered by that parameter's options would answer it.
 8. **New heap from the switcher.** Settled: the switcher ends with "New heap in \<team\>" for the heap's own team.

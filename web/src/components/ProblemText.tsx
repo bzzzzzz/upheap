@@ -27,11 +27,12 @@ const MESSAGES: Record<string, string> = {
   email_taken: "There's already an account with this email. Sign in instead.",
   email_invalid: "That doesn't look like an email address.",
   "field_empty.email": "Enter your email address.",
+  "field_empty.login": "Enter your email or username.",
   "field_empty.password": "Enter your password.",
   "field_too_long.display_name": "That name is too long.",
   password_too_short: "Use at least 10 characters.",
   password_too_long: "That password is too long.",
-  invalid_credentials: "That email and password don't match an account.",
+  invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
 };
 

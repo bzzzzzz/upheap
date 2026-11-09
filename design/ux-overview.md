@@ -51,7 +51,8 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    other states are next to it, and Won't do is under ⋯.
 2. **In the browser, ↑ ↓ in the pane header walk the list** without closing the pane, so triage is open, change,
    next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
-3. **The key is the copy-link button** (`k3x9a`) in the pane header. This answers screens.md gap 6.
+3. **A link sign beside the item's title copies its link**, and the key (`k3x9a`) shows in the pane header. Nothing
+   else has Copy link. This answers screens.md gap 6.
 4. **"Why it's #3"** shows the contributors with their `share_percent` as bars, and nothing more.
 5. **The item says when it was created and by whom** ("Added by Sam 4 days ago"), next to a History link.
 6. **A blocked item whose blocker has closed** shows "Waiting for X (done 2 days ago)" with an Unblock button

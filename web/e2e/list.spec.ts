@@ -48,7 +48,7 @@ test("a hovered row starts its item, and Done offers to start the next one", asy
   await expect(row(page, "Slog")).toHaveCount(0);
 });
 
-test("the item pane walks the list, and its key copies the link", async ({ page, heapPath }) => {
+test("the item pane walks the list, and the link sign by its title copies the link", async ({ page, heapPath }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
   const pane = itemPane(page);
@@ -63,7 +63,8 @@ test("the item pane walks the list, and its key copies the link", async ({ page,
   await expect(pane.getByRole("link", { name: "Next item" })).toBeFocused();
 
   const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
-  await expect(pane.getByRole("button", { name: key, exact: true })).toBeVisible();
+  await expect(pane.getByText(key, { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: `Copy the link to ${key}` })).toBeVisible();
 
   // Walking replaces the item rather than adding to the history, so it still closes in one step.
   await pane.getByRole("link", { name: "Previous item" }).click();
