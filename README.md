@@ -79,9 +79,12 @@ than SQLite. For Cloud Run with Neon, see [design/cloud-run-postgres.md](design/
 # API server on :8137 with a throwaway database
 DATABASE_URL="sqlite://data/dev.db?mode=rwc" BASE_URL=http://localhost:5173 BIND_ADDR=127.0.0.1:8137 \
   LOG_FORMAT=pretty cargo run -p server
-scripts/seed-dev.sh             # test account dev@example.test and sample items (BASE=http://localhost:8137)
 (cd web && npm run dev)         # http://localhost:5173, proxies /api to :8137
 ```
+
+Or start the API server on sample data instead: `scripts/seed-dev.py` deletes `data/dev.db`, starts the server on a
+fresh one, and adds three test accounts (alex, blair, casey; password `dev-password-123`) in two shared teams with
+items in every state. It keeps the server running until Ctrl-C; `--no-serve` stops it once the data is in.
 
 Checks:
 
