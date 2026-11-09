@@ -84,3 +84,52 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await goTo(page, "Open");
   await expect(row(page, "Water the plants")).toBeVisible();
 });
+
+test("the theme picked on Account holds over a reload and in other tabs, and System follows the device", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const html = page.locator("html");
+  // The canvas token, as the page's background shows it.
+  const canvasOf = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const light = "rgb(250, 250, 249)";
+  const dark = "rgb(12, 10, 9)";
+  await goTo(page, "Account");
+  const theme = page.getByRole("radiogroup", { name: "Theme" });
+  await expect(theme.getByRole("radio", { name: "System" })).toBeChecked();
+  await expect(html).not.toHaveAttribute("data-theme");
+  expect(await canvasOf()).toBe(light);
+  const other = await page.context().newPage();
+  await other.emulateMedia({ colorScheme: "light" });
+  await other.goto(page.url());
+
+  await theme.getByRole("radio", { name: "Dark" }).click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await canvasOf()).toBe(dark);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+  // Pressing the picked theme again keeps it: there's always one.
+  await theme.getByRole("radio", { name: "Dark" }).click();
+  await expect(theme.getByRole("radio", { name: "Dark" })).toBeChecked();
+  await expect(other.locator("html")).toHaveAttribute("data-theme", "dark");
+  await other.close();
+
+  // Dark before the app runs, so a reload doesn't flash light first.
+  await page.route("**/assets/*.js", (route) => route.abort());
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await canvasOf()).toBe(dark);
+  await page.unrouteAll();
+  await page.reload();
+  await expect(theme.getByRole("radio", { name: "Dark" })).toBeChecked();
+
+  // Light holds on a dark device, and System follows the device again.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await theme.getByRole("radio", { name: "Light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  expect(await canvasOf()).toBe(light);
+  await theme.getByRole("radio", { name: "System" }).click();
+  await expect(html).not.toHaveAttribute("data-theme");
+  expect(await canvasOf()).toBe(dark);
+  await page.emulateMedia({ colorScheme: "light" });
+  expect(await canvasOf()).toBe(light);
+});
