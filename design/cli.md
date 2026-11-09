@@ -17,7 +17,7 @@ side we took.
 
 Goals:
 
-1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --effort s --due next-week`.
+1. Adding an item is one short line: `upheap item add "Rotate the staging certs" --need expected --effort s --due next-week`.
 2. `upheap item list` answers "what should I work on?" the way the web app's list does, with the same order and the same
    reasons.
 3. Every command works in scripts: stable exit codes, `--json` with the server's own response, and IDs on stdout
@@ -44,7 +44,7 @@ upheap <category> <verb> [<required-input>...] [--<option> ...]
 Every command is a category and a verb: `item`, `tag`, `heap` or `auth`, then what to do. The same verb means the
 same thing in every category, so `upheap item list` and `upheap tag list` both list. It's more typing than top-level
 item commands, but the tree stays the same everywhere. Shorter forms or aliases can come later, once usage shows which
-are worth it; until then, a shell alias (`uh`) already helps.
+are worth it.
 
 | Command | What it does | API |
 | --- | --- | --- |
@@ -82,9 +82,9 @@ state reads better than `upheap item edit --state done`, and there's only one wa
 
 - Moving to the state an item is already in changes nothing, so repeating a command is safe. The CLI reports "already
   done" and exits 0.
-- `reopen` on a closed item is how a closed item comes back; the one-week window is the server's
+- `item reopen` on a closed item is how a closed item comes back; the one-week window is the server's
   (`reopen_window_expired`).
-- `done` on a won't-do item fails with `item_closed`. The CLI shows the server's message and the hint to reopen first.
+- `item done` on a won't-do item fails with `item_closed`. The CLI shows the server's message and the hint to reopen first.
 - `item block --by <item>` sets `blocked_by_item_id` in the same request. Cycles and blockers from other heaps are refused
   by the server, as in the web app.
 
@@ -212,7 +212,7 @@ crates/cli/src/
   output/          human and JSON rendering
 ```
 
-Each command file holds its args struct (`AddArgs`) and its `run`, as the guideline asks. Shared flags (`--heap`,
+Each command file holds its args struct (`item::AddArgs`) and its `run`, as the guideline asks. Shared flags (`--heap`,
 `--json`, `--quiet`, `--server`) are one struct flattened into every command.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
