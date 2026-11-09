@@ -28,6 +28,8 @@ http-body-util = "0.1"
 jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
 js-sys = "0.3"
 mime_guess = "2"
+# The server's allocator: musl's own, which the Alpine image would otherwise use, is slow under many threads.
+mimalloc = "0.1"
 proptest = "1"
 rand = "0.9"
 rust-embed = "8"

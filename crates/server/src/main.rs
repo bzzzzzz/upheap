@@ -15,6 +15,11 @@ use service::{Services, Settings, SystemClock};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
+/// mimalloc instead of the system allocator. The Docker image links against musl, whose allocator serialises
+/// threads on a lock and makes a busy multi-threaded server markedly slower.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     if std::env::args().nth(1).as_deref() == Some("openapi") {
