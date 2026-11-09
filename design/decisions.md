@@ -452,5 +452,6 @@ there is nothing to tell it from.
 have kept Rename working. The owner chose the label.
 
 **Consequences.** A personal team someone renamed before this shows the label again, and its stored name is
-hidden. The label follows a display-name change. The server still offers `rename` on a personal team
+hidden. The label follows a display-name change. Activity entries still name the team by its stored name, as
+the server writes them. The server still offers `rename` on a personal team
 ([progress.md](work/progress.md#open-questions)).
