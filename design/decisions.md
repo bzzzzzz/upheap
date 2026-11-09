@@ -268,7 +268,7 @@ build. The date of the last download is kept in `localStorage` and worded by the
 
 **Consequences.** The server build holds none of this code and the API stays what a server can do. Whether the
 feature exists is a fact about the build, not a permission, so it bypasses `allowed_actions`. The storage note is
-the one exception to thin clients (Thin clients §4 of the principles).
+the one exception to thin clients (Thin clients §2 of the principles).
 
 ## 20. Production runs on Cloud Run with Neon Postgres
 

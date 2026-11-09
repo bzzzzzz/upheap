@@ -4,12 +4,12 @@ Draft. A command-line client for the everyday work in a heap: add items, edit th
 what's in a heap, list heaps, and add and edit tags. Admin work (teams, members, heap settings, parameters) stays in
 the web app for now.
 
-The CLI is another client of the API, like the web app. It follows the [thin clients](engineering-principles.md#thin-clients)
+The CLI is another client of the API, like the web app. It follows the [thin clients](../engineering-principles.md#thin-clients)
 rules, so it never ranks, never checks permissions and never works out due labels. The server already returns all of
 that.
 
 Command shape, errors, output and code layout follow [Conventions](#conventions) below, where this repo's
-[engineering principles](engineering-principles.md) don't already decide.
+[engineering principles](../engineering-principles.md) don't already decide.
 
 ## Goals and non-goals
 
@@ -110,7 +110,7 @@ pointing to the web app when there are more. With `--json --history` the output 
 ### Naming an item
 
 `<item>` is the item's key, the five characters the server gives every item and the web app shows in its links
-([architecture.md](architecture.md#handles)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
+([architecture.md](../architecture.md#handles)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
 item in another heap; it's a short link without its `/h/`, so a pasted link works too: any `http` or `https` URL
 ending in `/h/team/heap/key`, or in the long form the browser's address bar shows after the web app redirects,
 `/teams/team/heaps/heap/items/key`. The host is ignored and requests go to the configured server. The path beats
@@ -123,7 +123,7 @@ A key that isn't in the heap is the server's `404`. The CLI says so and suggests
 ### Due times
 
 `--due` takes either a rough choice or a date, matching the two kinds of due time in the
-[product.md](product.md#items):
+[product.md](../product.md#items):
 
 - **A rough choice** such as `next-week` or `"in a few weeks"`. The CLI fetches `GET /due-choices` and matches the
   label, ignoring case and treating `-` as a space. It sends the choice's date with `firm: false`, so the item reads
@@ -202,7 +202,7 @@ not found together because the server deliberately doesn't tell them apart.
 ## Signing in
 
 `upheap auth login [--server <url>]` runs the OAuth authorization code flow with PKCE that
-[architecture.md](architecture.md#authentication-and-authorization) already describes for the CLI: it opens the
+[architecture.md](../architecture.md#authentication-and-authorization) already describes for the CLI: it opens the
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
 file. `upheap auth logout` revokes the token on the server with `POST /oauth/revoke`, which ends the whole sign-in,
@@ -213,7 +213,7 @@ for a bearer token without revoking it.
 
 The server's half is built ([progress.md](progress.md)): the client is `upheap-cli`, its redirect URI is
 `http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in
-[architecture.md](architecture.md#authentication-and-authorization). See [Server changes](#server-changes).
+[architecture.md](../architecture.md#authentication-and-authorization). See [Server changes](#server-changes).
 
 How the CLI keeps the sign-in:
 
@@ -289,13 +289,13 @@ in-memory store, a browser that answers the consent page itself, and buffers. Sh
 that work in a heap (every item command), so it doesn't show where it would mean nothing.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
-truth](engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO
+truth](../engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO
 and depends on nothing in the workspace but `domain`, so it keeps the conversions between the types and domain types; conversions from the
 service layer's views stay in `api` as plain functions. The move was a refactor with no behaviour change, its own
 commit before the CLI's.
 
 **Values a later server adds.** Adding a value is an additive change ([engineering
-principles](engineering-principles.md#api), 3), so a CLI built before it must still read the response. The
+principles](../engineering-principles.md#the-contract), API, The contract §4), so a CLI built before it must still read the response. The
 `allowed_actions` lists of every response type skip values the client doesn't know (`deserialize_with`), and
 `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant marked
 `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent. The CLI prints the

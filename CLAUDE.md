@@ -32,16 +32,17 @@ Rules for the docs:
 1. **One home per fact.** What code or a generated file states, no doc repeats: endpoints are in `openapi.json`,
    error codes in `crates/api/src/error.rs`, the schema in the migrations, configuration in README.md. Docs explain
    mechanisms and reasons, and link to the rest.
-2. **Status lives in [design/progress.md](design/progress.md) only,** as state, not history: one line per area, no
-   changelogs, no test counts. Update the row for the area you changed. The pull requests are the history.
-3. **A design doc for unbuilt work is temporary.** It lives in `design/` while the work is built. Once built, the
+2. **Status lives in [design/work/progress.md](design/work/progress.md) only,** as state, not history: one line
+   per area, no changelogs, no test counts. Update the row for the area you changed. The pull requests are the
+   history.
+3. **A design doc for unbuilt work is temporary.** It lives in `design/work/` while the work is built. Once built, the
    mechanisms worth keeping move into architecture.md or the module docs, the choices into decisions.md, its status
    into progress.md, and the file goes. Git remembers it.
 4. **Open questions** about built things go in progress.md's one list. A design doc for unbuilt work keeps its own
    until it's built.
 
-When asked to write a "doc", write it as a Markdown file in `design/` and add it to `design/README.md`, not as an
-external document (Claude Docs, Notion, Google Docs).
+When asked to write a "doc", write it as a Markdown file in `design/`, or in `design/work/` for unbuilt work, and
+add it to `design/README.md`, not as an external document (Claude Docs, Notion, Google Docs).
 
 ## Git
 

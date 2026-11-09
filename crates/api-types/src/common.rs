@@ -438,8 +438,8 @@ impl From<&Heap> for HeapSummaryDto {
 
 /// Deserializes a list of a closed set, such as `allowed_actions`, leaving out the values this client doesn't know.
 ///
-/// Adding an action is an additive change (design/engineering-principles.md, API 3), so a client built before the
-/// action existed reads the list without it, and offers only what it knows.
+/// Adding an action is an additive change (design/engineering-principles.md, API, The contract §4), so a client
+/// built before the action existed reads the list without it, and offers only what it knows.
 /// Responses only: the server never reads these lists, so what it accepts doesn't change.
 pub(crate) fn known_values<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where

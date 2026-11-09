@@ -78,7 +78,7 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 
 ## The CLI
 
-`upheap` talks to a running server over its API ([design/cli.md](design/cli.md)). Build it with
+`upheap` talks to a running server over its API ([design/work/cli.md](design/work/cli.md)). Build it with
 `cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
 
 ```sh

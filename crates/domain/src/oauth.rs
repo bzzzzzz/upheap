@@ -31,7 +31,7 @@ pub struct Client {
     pub display_name: &'static str,
 }
 
-/// The `upheap` command-line client (design/cli.md).
+/// The `upheap` command-line client (design/work/cli.md).
 pub const CLI_CLIENT: Client = Client {
     id: "upheap-cli",
     display_name: "Upheap CLI",

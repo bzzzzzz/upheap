@@ -2,7 +2,7 @@
 //! and sign in.
 //!
 //! It is a thin client of the HTTP API, like the web app: it never ranks, checks permissions or works out labels,
-//! and it reads and writes the API's own types from `api_types`. See design/cli.md.
+//! and it reads and writes the API's own types from `api_types`. See design/work/cli.md.
 //!
 //! The binary gathers its environment once ([`Deps::system`]) and calls [`run`]; tests call [`run`] with their own
 //! [`Deps`]: an in-memory token store, a browser that answers the consent page itself, and buffers for the output.

@@ -504,7 +504,7 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
    A `count` message reads a file in memory, never in an OPFS slot, so the replace confirm can say what the copy
    holds and what goes.
 3. **The last download is kept per browser** in `localStorage`. It is a fact about this browser that no server ever
-   sees, so the web app words it itself, the one exception to thin clients (Thin clients §4 of the principles).
+   sees, so the web app words it itself, the one exception to thin clients (Thin clients §2 of the principles).
 
 ### Build and publish
 
