@@ -248,6 +248,35 @@ export async function signOut(page: Page) {
 /** The calendar day `days` from today, in the browser's timezone (UTC, as the config sets it). */
 export const dayFromToday = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
+/**
+ * Adds heaps named `names` to the team of the heap on screen and returns to that heap, reloaded so the switcher
+ * lists them. On the server this goes through the API; the local build has none, so it uses the switcher's New heap.
+ */
+export async function addHeaps(page: Page, names: string[], localBuild = false) {
+  const start = new URL(page.url()).pathname;
+  const team = /\/teams\/([^/]+)\//.exec(start)?.[1];
+  if (!team) throw new Error(`not on a heap: ${start}`);
+  for (const name of names) {
+    if (localBuild) {
+      await page.getByRole("button", { name: /^Switch heap/ }).click();
+      const heaps = page.getByRole("dialog", { name: "Heaps" });
+      await heaps.getByRole("button", { name: /^New heap in / }).click();
+      await heaps.getByLabel(/^Name of the new heap in /).fill(name);
+      await heaps.getByRole("button", { name: "Add heap" }).click();
+      await expect(heaps).toHaveCount(0);
+      await expect(page.getByRole("button", { name: new RegExp(`^Switch heap: ${name}`) })).toBeVisible();
+    } else {
+      const created = await page.request.post(`/api/v1/teams/${team}/heaps`, {
+        headers: { "x-csrf-protection": "1" },
+        data: { name },
+      });
+      expect(created.status()).toBe(201);
+    }
+  }
+  await page.goto(start);
+  await expect(page).toHaveURL(HEAP_URL);
+}
+
 /** Creates a team from the Teams page and waits for its page. */
 export async function createTeam(page: Page, name: string, linkName?: string) {
   await page.goto("/teams");

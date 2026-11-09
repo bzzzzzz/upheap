@@ -1,7 +1,8 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider } from "@tanstack/react-router";
+import { RouterProvider, type NavigateOptions, type ToOptions } from "@tanstack/react-router";
 import { MotionConfig } from "motion/react";
 import { StrictMode } from "react";
+import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
@@ -47,6 +48,15 @@ const queryClient = new QueryClient({
 
 const router = createAppRouter(queryClient);
 
+// A React Aria link's `href` is a typed route, as a TanStack `<Link>`'s is, so a renamed route or param fails the
+// type check rather than shipping a broken link.
+declare module "react-aria-components" {
+  interface RouterConfig {
+    href: ToOptions;
+    routerOptions: Omit<NavigateOptions, keyof ToOptions>;
+  }
+}
+
 followThemeAcrossTabs();
 
 const root = document.getElementById("root");
@@ -56,7 +66,14 @@ if (root) {
       <QueryClientProvider client={queryClient}>
         <MotionConfig reducedMotion="user">
           <LocalDatabaseGate>
-            <RouterProvider router={router} />
+            {/* Links in React Aria components (heap rows) navigate through the router, under its base path. */}
+            <AriaRouterProvider
+              navigate={(to, options) => void router.navigate({ ...to, ...options })}
+              // React Aria asks for an href for every item, with "" where it has none; only links need building.
+              useHref={(to) => (to ? router.buildLocation(to).href : "")}
+            >
+              <RouterProvider router={router} />
+            </AriaRouterProvider>
           </LocalDatabaseGate>
         </MotionConfig>
       </QueryClientProvider>

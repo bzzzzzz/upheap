@@ -17,6 +17,7 @@ export function Sheet({
   role = "dialog",
   describedBy,
   aside,
+  scrollBody = false,
   children,
 }: {
   title: string;
@@ -29,6 +30,8 @@ export function Sheet({
   describedBy?: string;
   /** Beside the title: what the sheet is for, such as the item's title, or an action on all of it, such as Reset all. */
   aside?: ReactNode;
+  /** The body scrolls itself, so its own sticky parts stay put and the title bar stays too; the body is a flex column. */
+  scrollBody?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -43,7 +46,7 @@ export function Sheet({
       }`}
     >
       <Modal
-        className={`max-h-full w-full overflow-y-auto bg-surface text-ink shadow-xl outline-none ${
+        className={`max-h-full w-full ${scrollBody ? "flex flex-col overflow-hidden" : "overflow-y-auto"} bg-surface text-ink shadow-xl outline-none ${
           aboveTabs ? "mx-2 rounded-2xl p-2" : "rounded-t-2xl px-4 pt-2.5 pb-[max(env(safe-area-inset-bottom),1rem)]"
         }`}
       >
@@ -51,7 +54,7 @@ export function Sheet({
           aria-label={title}
           aria-describedby={describedBy}
           role={role}
-          className="flex flex-col gap-1 outline-none"
+          className={`flex flex-col gap-1 outline-none ${scrollBody ? "min-h-0 flex-1" : ""}`}
         >
           {!aboveTabs && <span aria-hidden="true" className="mx-auto h-1 w-10 rounded-full bg-line" />}
           {showTitle && (

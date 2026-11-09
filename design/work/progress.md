@@ -32,7 +32,7 @@ Status: ✅ done · 🟡 partial · ⬜ not started. In the Spec column, Product
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
 | Deployment | Arch Configuration, [operations.md](../operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
 | Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
-| Web app at every width | [ux.md](../ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings (General, Tags, Parameters, Ranking) fitted to phones and wide screens in the design tokens. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
+| Web app at every width | [ux.md](../ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams, Team and heap Settings (General, Tags, Parameters, Ranking) fitted to phones and wide screens in the design tokens. The heap switcher searches, folds teams and archived heaps, and remembers recent heaps. Left: Activity at phone width. The tablet keeps ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
 ## Next

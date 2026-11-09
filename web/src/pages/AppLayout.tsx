@@ -1,11 +1,10 @@
 // The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import { Link, Outlet, useMatch, useNavigate, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
+import { Link, Outlet, useMatch, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
 import {
   Activity,
   Building2,
-  Check,
   ChevronDown,
   CircleCheck,
   Ellipsis,
@@ -16,16 +15,17 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useTeam } from "../api/queries";
+import { soleTeam, useHeap, useMe, useSetHeapArchived } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
+import { recordRecentHeap } from "../components/heapSwitcherStorage";
+import { HeapSwitcher } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
 import { Logo } from "../components/Logo";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
-import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
@@ -38,6 +38,11 @@ export function AppLayout() {
   const heapRef = team !== undefined && heap !== undefined ? { team, heap } : undefined;
   // The heap's list, also with an item open over it.
   const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
+  // The heap on screen counts as opened once per visit, for the switcher's Recent.
+  const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
+  useEffect(() => {
+    if (heapId !== undefined) recordRecentHeap(heapId);
+  }, [heapId]);
 
   return (
     // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
@@ -351,135 +356,6 @@ function MoreSheet({
         </Link>
       </nav>
     </Sheet>
-  );
-}
-
-/**
- * Every heap, by team, with a check on the one on screen (ux.md, Phone details): a popover beside the
- * rail on a tablet or under the sidebar's heap button on a wide screen, a sheet of 52 px rows on a phone. It ends with a new heap in the heap's own team, where the user
- * may create one.
- */
-function HeapSwitcher({
-  me,
-  heapRef,
-  placement = "bottom end",
-  children,
-}: {
-  me: Me;
-  heapRef: HeapRef | undefined;
-  placement?: "bottom end" | "bottom start" | "end top";
-  children: (props: {
-    ref: RefObject<HTMLButtonElement | null>;
-    onClick: () => void;
-    "aria-expanded": boolean;
-    "aria-haspopup": "dialog";
-  }) => ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const close = () => setOpen(false);
-  const team = me.teams.find((t) => t.slug === heapRef?.team);
-
-  return (
-    <>
-      {children({ ref: trigger, onClick: () => setOpen(true), "aria-expanded": open, "aria-haspopup": "dialog" })}
-      <PopoverSheet title="Heaps" triggerRef={trigger} isOpen={open} onClose={close} placement={placement}>
-        <nav aria-label="Heaps" className="-mx-1 flex flex-col">
-          {me.teams.map((t) => (
-            <section key={t.id} aria-label={teamName(t, me)} className="flex flex-col">
-              {me.teams.length > 1 && (
-                <h3 className="px-3 pt-2.5 pb-0.5 text-xs font-semibold tracking-wide text-muted uppercase">
-                  {teamName(t, me)}
-                </h3>
-              )}
-              {t.heaps.map((heap) => {
-                const current = t.slug === heapRef?.team && heap.slug === heapRef.heap;
-                return (
-                  <Link
-                    key={heap.id}
-                    to="/teams/$team/heaps/$heap"
-                    params={{ team: t.slug, heap: heap.slug }}
-                    // The heap on screen, on any of its pages.
-                    activeOptions={{ includeSearch: false }}
-                    onClick={close}
-                    className={sheetRowClass}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {heap.name}
-                      {heap.archived && <span className="font-normal text-muted"> (archived)</span>}
-                    </span>
-                    <span aria-hidden="true" className="w-5 text-accent-ink">
-                      {current && <Check className="size-4" strokeWidth={3} />}
-                    </span>
-                  </Link>
-                );
-              })}
-            </section>
-          ))}
-        </nav>
-        {team && <NewHeap me={me} team={team} onCreated={close} />}
-      </PopoverSheet>
-    </>
-  );
-}
-
-/** "New heap in <team>", which becomes a name field, for those the team lets create heaps. */
-function NewHeap({ me, team, onCreated }: { me: Me; team: Me["teams"][number]; onCreated: () => void }) {
-  const label = teamName(team, me);
-  const { data } = useTeam(team.slug);
-  const create = useCreateHeap(team.slug);
-  const navigate = useNavigate();
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState("");
-  if (!data?.allowed_actions.includes("create_heap")) return null;
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (name.trim() === "") return;
-    create.mutate(name.trim(), {
-      onSuccess: (heap) => {
-        onCreated();
-        void navigate({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
-      },
-    });
-  };
-
-  const buttonClass =
-    "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:opacity-50";
-  return (
-    <div className="border-t border-line pt-3">
-      {naming ? (
-        <form onSubmit={submit} className="flex flex-col gap-2">
-          <input
-            aria-label={`Name of the new heap in ${label}`}
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={100}
-            placeholder="Heap name"
-            className="h-12 rounded-xl border border-line bg-surface px-3 text-base"
-          />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setNaming(false)} className={buttonClass}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={create.isPending || name.trim() === ""}
-              className={`${buttonClass} border-ink bg-ink font-medium text-canvas`}
-            >
-              Add heap
-            </button>
-          </div>
-          <ProblemText error={create.error} />
-        </form>
-      ) : (
-        <button type="button" onClick={() => setNaming(true)} className={buttonClass + " w-full"}>
-          <Plus aria-hidden="true" className="size-4" />
-          New heap in {label}
-        </button>
-      )}
-    </div>
   );
 }
 

@@ -484,3 +484,21 @@ writes 3.1, and sharing the types the spec is generated from is simpler anyway.
 
 **Consequences.** The CLI links `domain` but never the services, the store or the database drivers. A response type
 both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §7).
+
+## 34. Recent heaps and folded teams are kept in the browser
+
+**Context.** With dozens of heaps the switcher needs Recent and teams that fold, and both depend on what this person
+did on this device.
+
+**Decision.** The ids of the last five heaps opened and of the folded teams are kept in localStorage
+([`heapSwitcherStorage.ts`](../web/src/components/heapSwitcherStorage.ts)), and the switcher shows Recent (the last
+four, not the one on screen) only for heaps still in `GET /me`. Below 8 unarchived heaps across a user's teams
+the switcher has no search, no Recent and no folding, since they would only cost attention on every visit
+([engineering-principles.md](engineering-principles.md), User interface, Only where it pays). Archived heaps fold
+per team at every size.
+
+**Instead of.** A server-side "last opened" per membership, which would follow the user across devices but needs an
+API, a migration and a write on every heap visit, and would not work in the local build.
+
+**Consequences.** Recent and folds don't follow the user to another browser or device. Ids the user can't see are
+skipped, so nothing leaks between accounts in one browser.

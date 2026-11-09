@@ -16,6 +16,8 @@ export function PopoverSheet({
   onClose,
   placement = "bottom end",
   action,
+  size = "default",
+  scrollBody = false,
   children,
 }: {
   title: string;
@@ -25,13 +27,17 @@ export function PopoverSheet({
   placement?: "bottom end" | "bottom start" | "end top";
   /** Beside the title, before ✕: an action on the whole panel, such as Reset all. */
   action?: ReactNode;
+  /** `narrow` is 24 rem wide on a tablet or wide screen, for a list of short rows. */
+  size?: "default" | "narrow";
+  /** The body scrolls itself, so its own sticky parts stay put; the title bar stays too. The body is a flex column. */
+  scrollBody?: boolean;
   children: ReactNode;
 }) {
   const phone = useMedia(PHONE);
   if (phone) {
     return (
-      <Sheet title={title} isOpen={isOpen} onClose={onClose} aside={action}>
-        <div className="flex flex-col gap-3 pt-1">{children}</div>
+      <Sheet title={title} isOpen={isOpen} onClose={onClose} aside={action} scrollBody={scrollBody}>
+        <div className={`flex flex-col gap-3 pt-1 ${scrollBody ? "min-h-0 flex-1" : ""}`}>{children}</div>
       </Sheet>
     );
   }
@@ -44,9 +50,13 @@ export function PopoverSheet({
       }}
       placement={placement}
       offset={6}
-      className="max-h-[70dvh] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-line bg-surface p-4 text-ink shadow-lg outline-none"
+      className={`max-h-[70dvh] ${
+        size === "narrow" ? "w-[min(24rem,calc(100vw-2rem))]" : "w-[min(34rem,calc(100vw-2rem))]"
+      } rounded-xl border border-line bg-surface p-4 text-ink shadow-lg outline-none ${
+        scrollBody ? "flex flex-col overflow-hidden" : "overflow-y-auto"
+      }`}
     >
-      <Dialog aria-label={title} className="flex flex-col gap-3 outline-none">
+      <Dialog aria-label={title} className={`flex flex-col gap-3 outline-none ${scrollBody ? "min-h-0 flex-1" : ""}`}>
         <div className="flex items-center justify-between gap-2">
           <Heading slot="title" className="text-sm font-semibold">
             {title}
