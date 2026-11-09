@@ -1,10 +1,12 @@
 //! Authorization codes and tokens for non-web clients (OAuth 2.0 with PKCE). As with sessions, only the SHA-256 of
 //! each code and token is stored, so a leaked database can't be used to sign in.
 //!
-//! Every token belongs to a family: the access and refresh tokens of one sign-in and all the pairs refreshed from it.
-//! Revoking a token, or presenting a refresh token that was already used, revokes the whole family, which
-//! `idx_oauth_tokens_family` finds. A code records the family it was exchanged for, so a code presented twice revokes
-//! what the first exchange issued while the code is within its lifetime (RFC 6749 §4.1.2).
+//! A token family is one sign-in by a client: the access and refresh tokens a code was exchanged for and every pair
+//! refreshed from them. It has a row of its own, and revoking is setting its `revoked_at`: every token of the family
+//! is checked against it. One row also gives refreshing and revoking a single row to lock, so a revocation that
+//! races a refresh can't miss the pair the refresh is issuing. A code records the family it was exchanged for, so a
+//! code presented twice revokes what the first exchange issued while the code is within its lifetime
+//! (RFC 6749 §4.1.2).
 //!
 //! `client_id` names a client of the registry in code (`domain::oauth`), so it has no foreign key.
 
@@ -16,6 +18,16 @@ pub struct Migration;
 
 const ID_LEN: u32 = 36;
 const HASH_LEN: u32 = 64;
+
+#[derive(DeriveIden)]
+enum OauthTokenFamilies {
+    Table,
+    Id,
+    UserId,
+    ClientId,
+    CreatedAt,
+    RevokedAt,
+}
 
 #[derive(DeriveIden)]
 enum OauthAuthCodes {
@@ -37,12 +49,9 @@ enum OauthTokens {
     TokenHash,
     FamilyId,
     Kind,
-    UserId,
-    ClientId,
     CreatedAt,
     ExpiresAt,
     UsedAt,
-    RevokedAt,
 }
 
 #[derive(DeriveIden)]
@@ -51,11 +60,15 @@ enum Users {
     Id,
 }
 
-fn user_fk(name: &str, from: (impl IntoIden, impl IntoIden)) -> ForeignKeyCreateStatement {
+fn restrict(
+    name: &str,
+    from: (impl IntoIden, impl IntoIden),
+    to: (impl IntoIden, impl IntoIden),
+) -> ForeignKeyCreateStatement {
     ForeignKey::create()
         .name(name)
         .from(from.0, from.1)
-        .to(Users::Table, Users::Id)
+        .to(to.0, to.1)
         .on_delete(ForeignKeyAction::Restrict)
         .on_update(ForeignKeyAction::Restrict)
         .to_owned()
@@ -64,6 +77,24 @@ fn user_fk(name: &str, from: (impl IntoIden, impl IntoIden)) -> ForeignKeyCreate
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(OauthTokenFamilies::Table)
+                    .col(char_len(OauthTokenFamilies::Id, ID_LEN).primary_key())
+                    .col(char_len(OauthTokenFamilies::UserId, ID_LEN))
+                    .col(string_len(OauthTokenFamilies::ClientId, 64))
+                    .col(big_integer(OauthTokenFamilies::CreatedAt))
+                    .col(big_integer_null(OauthTokenFamilies::RevokedAt))
+                    .foreign_key(&mut restrict(
+                        "fk_oauth_token_families_user",
+                        (OauthTokenFamilies::Table, OauthTokenFamilies::UserId),
+                        (Users::Table, Users::Id),
+                    ))
+                    .to_owned(),
+            )
+            .await?;
+
         manager
             .create_table(
                 Table::create()
@@ -78,9 +109,15 @@ impl MigrationTrait for Migration {
                     // Set, with the family, when the code is exchanged; a code is good once.
                     .col(big_integer_null(OauthAuthCodes::UsedAt))
                     .col(char_len_null(OauthAuthCodes::FamilyId, ID_LEN))
-                    .foreign_key(&mut user_fk(
+                    .foreign_key(&mut restrict(
                         "fk_oauth_auth_codes_user",
                         (OauthAuthCodes::Table, OauthAuthCodes::UserId),
+                        (Users::Table, Users::Id),
+                    ))
+                    .foreign_key(&mut restrict(
+                        "fk_oauth_auth_codes_family",
+                        (OauthAuthCodes::Table, OauthAuthCodes::FamilyId),
+                        (OauthTokenFamilies::Table, OauthTokenFamilies::Id),
                     ))
                     .to_owned(),
             )
@@ -94,26 +131,16 @@ impl MigrationTrait for Migration {
                     .col(char_len(OauthTokens::FamilyId, ID_LEN))
                     // `access` or `refresh`.
                     .col(string_len(OauthTokens::Kind, 16))
-                    .col(char_len(OauthTokens::UserId, ID_LEN))
-                    .col(string_len(OauthTokens::ClientId, 64))
                     .col(big_integer(OauthTokens::CreatedAt))
                     .col(big_integer(OauthTokens::ExpiresAt))
                     // Refresh tokens only: set when it was exchanged for the next pair.
                     .col(big_integer_null(OauthTokens::UsedAt))
-                    .col(big_integer_null(OauthTokens::RevokedAt))
-                    .foreign_key(&mut user_fk(
-                        "fk_oauth_tokens_user",
-                        (OauthTokens::Table, OauthTokens::UserId),
+                    // The user and client are the family's.
+                    .foreign_key(&mut restrict(
+                        "fk_oauth_tokens_family",
+                        (OauthTokens::Table, OauthTokens::FamilyId),
+                        (OauthTokenFamilies::Table, OauthTokenFamilies::Id),
                     ))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_oauth_tokens_family")
-                    .table(OauthTokens::Table)
-                    .col(OauthTokens::FamilyId)
                     .to_owned(),
             )
             .await

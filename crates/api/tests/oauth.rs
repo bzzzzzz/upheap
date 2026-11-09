@@ -665,3 +665,94 @@ async fn the_local_build_has_no_oauth() -> Result<()> {
     expect_that!(token.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
+
+/// Whether `response` is a refusal of the grant.
+fn is_invalid_grant(response: &TestResponse) -> bool {
+    response.status == StatusCode::BAD_REQUEST && response.body["error"] == json!("invalid_grant")
+}
+
+/// Expects the access and refresh tokens of `tokens`, a token response, to be dead.
+async fn expect_dead(app: &TestApp, tokens: &TestResponse) -> Result<()> {
+    let me = app
+        .send_bearer(Method::GET, "/api/v1/me", &text(&tokens.body["access_token"]), None)
+        .await?;
+    let refreshed = refresh(app, &text(&tokens.body["refresh_token"])).await?;
+    expect_that!(me.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(is_invalid_grant(&refreshed), eq(true), "{}", refreshed.body);
+    Ok(())
+}
+
+// The races below run for real on MySQL and Postgres. In-memory SQLite has one connection, so there the two requests
+// take turns, which is the order either race can end in. The assertions hold whichever side wins.
+
+#[gtest]
+#[tokio::test]
+async fn of_two_exchanges_of_one_code_at_most_one_wins_and_its_tokens_end() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let code = app.approve_cli(&session).await?;
+
+    // Act
+    let (first, second) = tokio::join!(app.exchange_code(&code), app.exchange_code(&code));
+    let (first, second) = (first?, second?);
+
+    // Assert: the loser presented a used code within its lifetime, so the winner's family is revoked too.
+    let (winner, loser) = if first.status == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    expect_that!(winner.status, eq(StatusCode::OK), "{}", winner.body);
+    expect_that!(is_invalid_grant(&loser), eq(true), "{}", loser.body);
+    expect_dead(&app, &winner).await
+}
+
+#[gtest]
+#[tokio::test]
+async fn of_two_refreshes_with_one_token_at_most_one_wins_and_every_token_ends() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (access, refresh_token) = app.sign_in_cli(&session).await?;
+
+    // Act
+    let (first, second) = tokio::join!(refresh(&app, &refresh_token), refresh(&app, &refresh_token));
+    let (first, second) = (first?, second?);
+    let me = app.send_bearer(Method::GET, "/api/v1/me", &access, None).await?;
+
+    // Assert
+    let (winner, loser) = if first.status == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    expect_that!(winner.status, eq(StatusCode::OK), "{}", winner.body);
+    expect_that!(is_invalid_grant(&loser), eq(true), "{}", loser.body);
+    expect_that!(me.status, eq(StatusCode::UNAUTHORIZED));
+    expect_dead(&app, &winner).await
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_revocation_racing_a_refresh_ends_the_new_pair_too() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (access, refresh_token) = app.sign_in_cli(&session).await?;
+
+    // Act
+    let (refreshed, revoked) = tokio::join!(refresh(&app, &refresh_token), revoke(&app, &refresh_token));
+    let (refreshed, revoked) = (refreshed?, revoked?);
+    let me = app.send_bearer(Method::GET, "/api/v1/me", &access, None).await?;
+
+    // Assert: whichever went first, nothing of the family works afterwards.
+    expect_that!(revoked.status, eq(StatusCode::OK));
+    expect_that!(me.status, eq(StatusCode::UNAUTHORIZED));
+    if refreshed.status == StatusCode::OK {
+        expect_dead(&app, &refreshed).await?;
+    } else {
+        expect_that!(is_invalid_grant(&refreshed), eq(true), "{}", refreshed.body);
+    }
+    Ok(())
+}

@@ -16,7 +16,14 @@ const secondaryClass = `h-[52px] w-full rounded-[14px] text-base font-medium dis
  * redirect URI are good. Allow has the server approve it and sends the browser on with the code; Cancel sends it on
  * with `access_denied`, as RFC 6749 §4.1.2.1 has the page do for a request the server accepted.
  */
-export function AuthorizePage({ request }: { request: AuthorizationRequest }) {
+export function AuthorizePage({
+  request,
+  onUseAnotherAccount,
+}: {
+  request: AuthorizationRequest;
+  /** Signs out and goes to sign-in, which comes back here. */
+  onUseAnotherAccount: () => void;
+}) {
   const check = useAuthorizationCheck(request);
   const { data: me } = useMe();
   const approve = useApproveAuthorization();
@@ -58,6 +65,15 @@ export function AuthorizePage({ request }: { request: AuthorizationRequest }) {
       <p className="text-sm text-ink-soft">
         Signed in as {me.user.display_name} · @{me.user.username}
       </p>
+      {!answered && (
+        <button
+          type="button"
+          onClick={onUseAnotherAccount}
+          className="self-start text-sm text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+        >
+          Use another account
+        </button>
+      )}
       {answered ? (
         <p role="status" className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">
           You can close this tab and go back to the terminal.

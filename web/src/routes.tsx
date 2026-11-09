@@ -8,12 +8,13 @@ import {
   Link,
   Outlet,
   redirect,
+  useLocation,
   useParams,
   useRouter,
 } from "@tanstack/react-router";
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
-import { meQuery, soleTeam, useAuthorizationCheck, useMe } from "./api/queries";
+import { meQuery, soleTeam, useAuthorizationCheck, useMe, useSignOut } from "./api/queries";
 import { parseListSearch } from "./components/listView";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -37,6 +38,22 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ c
  */
 export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
+}
+
+/** The app's base path without its trailing slash: empty on the server, `/upheap` for the local build on Pages. */
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+/**
+ * `href`, the router's address of the page the browser shows, as the browser has it, when the browser does show
+ * that page. The router reads each query value as JSON and writes it back, so `state=1e3` comes back as
+ * `state=1000` and `state="abc"` as `state=abc`. An OAuth client's `state` has to come back exactly as it sent it.
+ * While a navigation is pending, the browser still shows the page it's leaving, so `href` stays as it is.
+ */
+export function pageHref(href: string): string {
+  const { pathname, search, hash } = window.location;
+  const path = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
+  const routerPath = href.split(/[?#]/)[0];
+  return path === routerPath ? path + search + hash : href;
 }
 
 /** Whether `pathname` is sign-in's, by the router's matching, so `/LOGIN` counts too. */
@@ -109,10 +126,13 @@ const loginRoute = createRoute({
     let notice: string | undefined;
     if (connecting) notice = `Sign in to connect ${client?.display_name ?? "the app"}.`;
     else if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
-    // With `href`, the router takes the whole location from it; without, it goes to `to`.
-    return (
-      <AuthPage notice={notice} onSignedIn={() => void router.navigate({ to: "/", href: page?.href, replace: true })} />
-    );
+    const onSignedIn = () => {
+      // The consent page is loaded afresh, so its query arrives exactly as the client wrote it (see `pageHref`).
+      if (connecting && page) window.location.replace(BASE + page.href);
+      // With `href`, the router takes the whole location from it; without, it goes to `to`.
+      else void router.navigate({ to: "/", href: page?.href, replace: true });
+    };
+    return <AuthPage notice={notice} onSignedIn={onSignedIn} />;
   },
 });
 
@@ -123,17 +143,29 @@ const loginRoute = createRoute({
 const authorizeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/oauth/authorize",
-  validateSearch: toAuthorizationRequest,
   beforeLoad: async ({ context, location }) => {
     try {
       await context.queryClient.ensureQueryData(meQuery);
     } catch (error) {
-      if (isUnauthenticated(error)) throw redirect({ to: "/login", search: signInSearch(location.href) });
+      if (isUnauthenticated(error)) throw redirect({ to: "/login", search: signInSearch(pageHref(location.href)) });
       throw error;
     }
   },
   component: function AuthorizeRoute() {
-    return <AuthorizePage request={authorizeRoute.useSearch()} />;
+    const router = useRouter();
+    const signOut = useSignOut();
+    // Re-rendered on every change of the address, but read from the browser's, as the router's isn't exact.
+    useLocation();
+    const request = toAuthorizationRequest(Object.fromEntries(new URLSearchParams(window.location.search)));
+    // Signing out drops the whole cache while this page's queries still watch it, so sign-in is loaded afresh
+    // rather than reached in place, as the way back here is.
+    const toSignIn = `${BASE}/login?${new URLSearchParams(signInSearch(pageHref(router.state.location.href))).toString()}`;
+    return (
+      <AuthorizePage
+        request={request}
+        onUseAnotherAccount={() => signOut.mutate(undefined, { onSuccess: () => window.location.replace(toSignIn) })}
+      />
+    );
   },
 });
 

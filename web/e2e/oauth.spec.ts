@@ -108,3 +108,47 @@ test("a request the server refuses shows why and offers nothing", async ({ page 
   );
   await expect(page.getByRole("button")).toHaveCount(0);
 });
+
+test("a state that reads as JSON comes back exactly as sent, through sign-in too", async ({ page }) => {
+  const { email } = await registerThroughApi(page);
+  await page.context().clearCookies();
+  const { challenge } = pkce();
+
+  // Signed out: the request goes through sign-in and back.
+  let redirected = catchRedirect(page);
+  await page.goto(authorizePath(challenge, "123456"));
+  await expect(page).toHaveURL(/\/login\?redirect=/);
+  await page.getByLabel("Email or username").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  expect((await redirected).get("state")).toBe("123456");
+
+  // Signed in, values the router would rewrite: 1e3 as 1000, "abc" without its quotes.
+  for (const state of ["1e3", '"abc"']) {
+    await page.unrouteAll();
+    redirected = catchRedirect(page);
+    await page.goto(authorizePath(challenge, state));
+    await page.getByRole("button", { name: "Allow" }).click();
+    expect((await redirected).get("state")).toBe(state);
+  }
+});
+
+test("Use another account signs out and comes back as the other user", async ({ page }) => {
+  const other = await registerThroughApi(page);
+  await page.context().clearCookies();
+  await registerThroughApi(page);
+  const { challenge, state } = pkce();
+
+  await page.goto(authorizePath(challenge, state));
+  await expect(page.getByText(`@${other.username}`)).toHaveCount(0);
+  await page.getByRole("button", { name: "Use another account" }).click();
+  await expect(page).toHaveURL(/\/login\?redirect=/);
+  await expect(page.getByText("Sign in to connect Upheap CLI.")).toBeVisible();
+  await page.getByLabel("Email or username").fill(other.email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByText(`Signed in as Tester · @${other.username}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
+});

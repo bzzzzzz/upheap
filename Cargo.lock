@@ -2577,6 +2577,7 @@ dependencies = [
  "api",
  "axum",
  "domain",
+ "googletest",
  "mimalloc",
  "mime_guess",
  "rust-embed",

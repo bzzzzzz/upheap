@@ -14,7 +14,7 @@ use domain::oauth::{
     ACCESS_TOKEN_LIFETIME, AUTHORIZATION_CODE_LIFETIME, AuthorizationError, AuthorizationParams, AuthorizationRequest,
     GrantError, REFRESH_TOKEN_LIFETIME, TokenKind, find_client, is_code_verifier,
 };
-use domain::{Duration, Timestamp, TokenFamilyId, UserId, ValidationError};
+use domain::{Duration, Timestamp, TokenFamilyId, ValidationError};
 use sha2::{Digest, Sha256};
 use store::{DatabaseTransaction, StoreError, TransactionTrait};
 
@@ -57,12 +57,23 @@ pub struct Approval {
 }
 
 /// What a token request for `grant_type=authorization_code` carries.
-#[derive(Debug)]
 pub struct CodeExchange<'a> {
     pub client_id: &'a str,
     pub code: &'a OAuthSecret,
     pub redirect_uri: &'a str,
+    /// Secret like the code: with it, a leaked code can be exchanged. Left out of `Debug`.
     pub code_verifier: &'a str,
+}
+
+impl std::fmt::Debug for CodeExchange<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CodeExchange")
+            .field("client_id", &self.client_id)
+            .field("code", &self.code)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("code_verifier", &"<redacted>")
+            .finish()
+    }
 }
 
 /// A new access token and the refresh token to get the next one with.
@@ -142,6 +153,7 @@ impl Services {
             return Err(GrantError::VerifierMismatch.into());
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));
+        store::oauth::insert_token_family(&txn, family_id, code.user_id, exchange.client_id, now).await?;
         if !store::oauth::use_auth_code(&txn, &code_hash, now, family_id).await? {
             // Another exchange of this code got there first. It's read again outside this transaction: on MySQL a
             // read inside it would still see the snapshot from before the other exchange committed.
@@ -154,7 +166,7 @@ impl Services {
                 None => Err(GrantError::CodeUsed.into()),
             };
         }
-        let pair = issue_pair(&txn, family_id, code.user_id, exchange.client_id, now).await?;
+        let pair = issue_pair(&txn, family_id, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(user_id = %code.user_id, %family_id, client_id = exchange.client_id, "authorization code exchanged");
         Ok(pair)
@@ -177,25 +189,30 @@ impl Services {
             .await?
             .filter(|token| token.kind == TokenKind::Refresh)
             .ok_or(GrantError::RefreshTokenUnknown)?;
-        if token.client_id != client_id {
+        if token.family.client_id != client_id {
             return Err(GrantError::ClientMismatch.into());
         }
-        if token.revoked_at.is_some() {
+        // The family's row lock, held until commit, puts this refresh and a revocation of the family one after the
+        // other: either the revocation waits and ends the pair issued here too, or it went first and is seen here.
+        let family = store::oauth::lock_token_family(&txn, token.family.id)
+            .await?
+            .ok_or(GrantError::RefreshTokenUnknown)?;
+        if family.revoked_at.is_some() {
             return Err(GrantError::RefreshTokenRevoked.into());
         }
         if token.used_at.is_some() {
-            return revoke_after_reuse(txn, token.family_id, now, GrantError::RefreshTokenUsed).await;
+            return revoke_after_reuse(txn, family.id, now, GrantError::RefreshTokenUsed).await;
         }
         if token.expires_at <= now {
             return Err(GrantError::RefreshTokenExpired.into());
         }
         if !store::oauth::use_refresh_token(&txn, &token_hash, now).await? {
-            // Another refresh with this token got there first, or a revocation did; either way it's spent.
-            return revoke_after_reuse(txn, token.family_id, now, GrantError::RefreshTokenUsed).await;
+            // Another refresh with this token got there first.
+            return revoke_after_reuse(txn, family.id, now, GrantError::RefreshTokenUsed).await;
         }
-        let pair = issue_pair(&txn, token.family_id, token.user_id, client_id, now).await?;
+        let pair = issue_pair(&txn, family.id, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
-        tracing::info!(user_id = %token.user_id, family_id = %token.family_id, "tokens refreshed");
+        tracing::info!(user_id = %family.user_id, family_id = %family.id, "tokens refreshed");
         Ok(pair)
     }
 
@@ -210,11 +227,12 @@ impl Services {
         let Some(found) = store::oauth::find_token(&self.db, &token.to_hash()).await? else {
             return Ok(());
         };
-        if client_id.is_some_and(|client_id| client_id != found.client_id) {
+        let family = found.family;
+        if client_id.is_some_and(|client_id| client_id != family.client_id) {
             return Ok(());
         }
-        let revoked = store::oauth::revoke_token_family(&self.db, found.family_id, self.now()).await?;
-        tracing::info!(user_id = %found.user_id, family_id = %found.family_id, revoked, "token family revoked");
+        let revoked = store::oauth::revoke_token_family(&self.db, family.id, self.now()).await?;
+        tracing::info!(user_id = %family.user_id, family_id = %family.id, revoked, "token family revoked");
         Ok(())
     }
 
@@ -267,8 +285,6 @@ async fn revoke_after_reuse(
 async fn issue_pair(
     txn: &DatabaseTransaction,
     family_id: TokenFamilyId,
-    user_id: UserId,
-    client_id: &str,
     now: Timestamp,
 ) -> Result<TokenPair, ServiceError> {
     let access_token = OAuthSecret::generate();
@@ -281,8 +297,6 @@ async fn issue_pair(
             token_hash: &token.to_hash(),
             family_id,
             kind,
-            user_id,
-            client_id,
             created_at: now,
             expires_at: later(now, lifetime)?,
         };
@@ -341,7 +355,15 @@ mod tests {
     #[gtest]
     fn secrets_are_redacted_in_debug_output() {
         let secret = OAuthSecret::from_client("very secret".to_owned());
+        let exchange = CodeExchange {
+            client_id: "upheap-cli",
+            code: &secret,
+            redirect_uri: "http://127.0.0.1:1/",
+            code_verifier: "secret verifier",
+        };
 
         expect_that!(format!("{secret:?}"), not(contains_substring("very secret")));
+        expect_that!(format!("{exchange:?}"), not(contains_substring("secret verifier")));
+        expect_that!(format!("{exchange:?}"), not(contains_substring("very secret")));
     }
 }

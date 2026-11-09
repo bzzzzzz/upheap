@@ -8,12 +8,9 @@ pub struct Model {
     pub token_hash: String,
     pub family_id: String,
     pub kind: String,
-    pub user_id: String,
-    pub client_id: String,
     pub created_at: i64,
     pub expires_at: i64,
     pub used_at: Option<i64>,
-    pub revoked_at: Option<i64>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
