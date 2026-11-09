@@ -16,9 +16,6 @@ pub enum LoginError {
     Cancelled,
     #[error("the server refused the sign-in: {error}")]
     Refused { error: String },
-    /// The redirect carried another `state` than the request: it isn't the answer to this sign-in.
-    #[error("the browser came back with an answer to another sign-in; try again")]
-    StateMismatch,
     #[error("the browser came back without a code; try again")]
     NoCode,
 }
@@ -36,12 +33,8 @@ pub fn authorization_request(redirect_uri: &str, pkce: &Pkce, state: &str) -> Au
     }
 }
 
-/// The code in `callback`, once it's known to answer the request with `state`. A cancel on the consent page comes
-/// back as `error=access_denied`.
-pub fn read_callback(callback: Callback, state: &str) -> Result<String, LoginError> {
-    if callback.state.as_deref() != Some(state) {
-        return Err(LoginError::StateMismatch);
-    }
+/// The code in `callback`. A cancel on the consent page comes back as `error=access_denied`.
+pub fn read_callback(callback: Callback) -> Result<String, LoginError> {
     match (callback.error, callback.code) {
         (Some(error), _) if error == "access_denied" => Err(LoginError::Cancelled),
         (Some(error), _) => Err(LoginError::Refused { error }),
@@ -56,45 +49,32 @@ mod tests {
 
     use super::*;
 
-    fn callback(code: Option<&str>, state: Option<&str>, error: Option<&str>) -> Callback {
+    fn callback(code: Option<&str>, error: Option<&str>) -> Callback {
         Callback {
             code: code.map(str::to_owned),
-            state: state.map(str::to_owned),
             error: error.map(str::to_owned),
         }
     }
 
     #[gtest]
-    fn the_code_comes_back_with_the_requests_state() -> googletest::Result<()> {
-        verify_that!(read_callback(callback(Some("c0de"), Some("s"), None), "s")?, eq("c0de"))
-    }
-
-    #[gtest]
-    fn another_state_is_refused_even_with_a_code() {
-        expect_that!(
-            read_callback(callback(Some("c0de"), Some("other"), None), "s"),
-            err(matches_pattern!(LoginError::StateMismatch))
-        );
-        expect_that!(
-            read_callback(callback(Some("c0de"), None, None), "s"),
-            err(matches_pattern!(LoginError::StateMismatch))
-        );
+    fn the_code_comes_back() -> googletest::Result<()> {
+        verify_that!(read_callback(callback(Some("c0de"), None))?, eq("c0de"))
     }
 
     #[gtest]
     fn cancel_and_other_errors_say_what_happened() {
         expect_that!(
-            read_callback(callback(None, Some("s"), Some("access_denied")), "s"),
+            read_callback(callback(None, Some("access_denied"))),
             err(matches_pattern!(LoginError::Cancelled))
         );
         expect_that!(
-            read_callback(callback(None, Some("s"), Some("server_error")), "s"),
+            read_callback(callback(None, Some("server_error"))),
             err(matches_pattern!(LoginError::Refused {
                 error: eq("server_error")
             }))
         );
         expect_that!(
-            read_callback(callback(None, Some("s"), None), "s"),
+            read_callback(callback(None, None)),
             err(matches_pattern!(LoginError::NoCode))
         );
     }

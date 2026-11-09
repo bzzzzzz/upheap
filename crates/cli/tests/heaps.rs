@@ -134,3 +134,33 @@ async fn heap_use_refuses_a_heap_the_caller_doesnt_have() -> Result<()> {
     expect_that!(cli.config_text(), eq(""));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn heap_use_with_another_server_saves_the_server_with_the_heap() -> Result<()> {
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let mut cli = TestCli::signed_in(&server, &ada).await?;
+    cli.env.server = None;
+
+    let used = cli.run(&["heap", "use", "ops", "--server", &server.url]).await;
+    let again = cli.run(&["heap", "use", "ada/personal", "--server", &server.url]).await;
+
+    expect_that!(
+        used.stdout,
+        eq(&format!(
+            "Commands now work in infra/ops unless told otherwise.\nThe default server is now {} too, the server infra/ops is on.\n",
+            server.url
+        ))
+    );
+    expect_that!(
+        again.stdout,
+        eq("Commands now work in ada/personal unless told otherwise.\n")
+    );
+    expect_that!(
+        cli.config_text(),
+        contains_substring(format!("server = \"{}\"", server.url))
+    );
+    expect_that!(cli.config_text(), contains_substring("heap = \"ada/personal\""));
+    Ok(())
+}

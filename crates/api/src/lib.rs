@@ -1,7 +1,8 @@
 //! The HTTP API of Upheap, served under `/api/v1`, plus the health probes.
 //!
 //! The request and response types are in `api_types`, which clients share. Handlers translate HTTP to use-case
-//! calls and back; they never check permissions or compute anything about items themselves. Errors become `application/problem+json` in one place, [`error::ApiError`].
+//! calls and back; they never check permissions or compute anything about items themselves. Errors become
+//! `application/problem+json` in one place, [`error::ApiError`].
 //!
 //! Features, both on by default:
 //! - `accounts`: registration, sign-in and session cookies, OAuth and bearer tokens for the CLI, team management and

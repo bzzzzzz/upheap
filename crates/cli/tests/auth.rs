@@ -13,11 +13,7 @@ async fn login_signs_in_through_the_browser_and_keeps_the_server() -> Result<()>
     // Arrange
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada Lovelace").await?;
-    let mut cli = TestCli::new(&server)?.with_browser(ConsentBrowser {
-        server: server.url.clone(),
-        session: ada.session.clone(),
-        allow: true,
-    });
+    let mut cli = TestCli::new(&server)?.with_browser(ConsentBrowser::allowing(&server, &ada));
     cli.env.server = None;
 
     // Act
@@ -55,6 +51,7 @@ async fn cancelling_on_the_consent_page_signs_nothing_in() -> Result<()> {
         server: server.url.clone(),
         session: ada.session.clone(),
         allow: false,
+        wrong_state_first: false,
     });
 
     let login = cli.run(&["auth", "login"]).await;
@@ -222,5 +219,153 @@ async fn without_a_server_a_command_says_how_to_set_one() -> Result<()> {
 
     expect_that!(heaps.stderr, contains_substring("no server set"));
     expect_that!(heaps.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn two_commands_refreshing_at_once_dont_sign_the_user_out() -> Result<()> {
+    // Arrange: refresh tokens are good once, and a spent one presented again revokes the whole sign-in.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let stored = cli.stored(&server)?.context("signed in")?;
+    cli.tokens.save(
+        &server.url,
+        &StoredTokens {
+            access_expires_at: 0,
+            ..stored
+        },
+    )?;
+
+    // Act
+    let (first, second) = tokio::join!(
+        cli.run(&["heap", "list", "--quiet"]),
+        cli.run(&["heap", "list", "--quiet"])
+    );
+
+    // Assert
+    expect_that!(first.stderr, eq(""));
+    expect_that!(first.exited(0), eq(true));
+    expect_that!(second.stderr, eq(""));
+    expect_that!(second.exited(0), eq(true));
+    let kept = cli.stored(&server)?.context("still signed in")?;
+    let (status, _) = server
+        .token_request(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", "upheap-cli"),
+            ("refresh_token", &kept.refresh_token),
+        ])
+        .await?;
+    expect_that!(status, eq(200));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn login_replaces_an_earlier_sign_in_and_ends_it_on_the_server() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada)
+        .await?
+        .with_browser(ConsentBrowser::allowing(&server, &ada));
+    let earlier = cli.stored(&server)?.context("signed in")?;
+
+    // Act
+    let login = cli.run(&["auth", "login"]).await;
+
+    // Assert
+    expect_that!(login.exited(0), eq(true));
+    let now = cli.stored(&server)?.context("signed in again")?;
+    expect_that!(now.refresh_token, not(eq(&earlier.refresh_token)));
+    let (status, body) = server
+        .token_request(&[
+            ("grant_type", "refresh_token"),
+            ("client_id", "upheap-cli"),
+            ("refresh_token", &earlier.refresh_token),
+        ])
+        .await?;
+    expect_that!(status, eq(400));
+    expect_that!(body["error"].as_str(), some(eq("invalid_grant")));
+    expect_that!(server.me_status(&now.access_token).await?, eq(200));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn login_ignores_a_redirect_for_another_sign_in_and_waits_for_its_own() -> Result<()> {
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::new(&server)?.with_browser(ConsentBrowser {
+        wrong_state_first: true,
+        ..ConsentBrowser::allowing(&server, &ada)
+    });
+
+    let login = cli.run(&["auth", "login"]).await;
+
+    expect_that!(login.stdout, contains_substring("Signed in to"));
+    expect_that!(login.exited(0), eq(true));
+    expect_that!(cli.stored(&server)?, some(anything()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn logout_keeps_a_sign_in_the_server_couldnt_end_and_local_forgets_it() -> Result<()> {
+    // Arrange: a server that's gone, at an address nothing listens on.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let mut cli = TestCli::new(&server)?;
+    let gone = "http://127.0.0.1:1";
+    cli.env.server = Some(gone.to_owned());
+    cli.tokens.save(gone, &server.sign_in_cli(&ada).await?)?;
+
+    // Act
+    let refused = cli.run(&["auth", "logout"]).await;
+    let kept = cli.tokens.load(gone)?;
+    let local = cli.run(&["auth", "logout", "--local"]).await;
+
+    // Assert
+    expect_that!(
+        refused.stderr,
+        contains_substring("can't end the sign-in on the server, so it's kept")
+    );
+    expect_that!(refused.stderr, contains_substring("`upheap auth logout --local`"));
+    expect_that!(refused.exited(5), eq(true));
+    expect_that!(kept, some(anything()));
+    expect_that!(local.stdout, eq(&format!("Signed out of {gone}.\n")));
+    expect_that!(local.stderr, contains_substring("may stay open on the server"));
+    expect_that!(local.exited(0), eq(true));
+    expect_that!(cli.tokens.load(gone)?, none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_plain_http_server_elsewhere_is_refused() -> Result<()> {
+    let server = TestServer::start().await?;
+    let cli = TestCli::new(&server)?;
+
+    let heaps = cli
+        .run(&["heap", "list", "--server", "http://upheap.example.test"])
+        .await;
+
+    expect_that!(heaps.stderr, contains_substring("is plain http"));
+    expect_that!(heaps.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_heap_flag_is_only_for_commands_that_work_in_a_heap() -> Result<()> {
+    let server = TestServer::start().await?;
+    let cli = TestCli::new(&server)?;
+
+    let login = cli.run(&["auth", "login", "--heap", "ada/personal"]).await;
+    let logout = cli.run(&["auth", "logout", "--heap", "ada/personal"]).await;
+
+    expect_that!(login.exited(2), eq(true));
+    expect_that!(logout.exited(2), eq(true));
     Ok(())
 }

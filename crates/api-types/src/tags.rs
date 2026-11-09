@@ -50,6 +50,7 @@ pub struct TagDto {
     pub description: Option<String>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TagActionDto>,
 }
 
@@ -59,6 +60,7 @@ pub struct TagListDto {
     pub heap: HeapSummaryDto,
     /// By name.
     pub tags: Vec<TagDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TagListActionDto>,
 }
 

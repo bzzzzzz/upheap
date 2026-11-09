@@ -83,6 +83,7 @@ pub struct ParameterDto {
     pub archived_at: Option<i64>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ParameterActionDto>,
 }
 
@@ -94,6 +95,7 @@ pub struct ParameterListDto {
     pub parameters: Vec<ParameterDto>,
     /// Archived parameters, by name. Closed items may still show their values.
     pub archived: Vec<ParameterDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ParameterListActionDto>,
 }
 

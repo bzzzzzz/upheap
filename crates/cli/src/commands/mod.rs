@@ -8,13 +8,18 @@ pub mod item;
 use clap::Args;
 use serde::de::DeserializeOwned;
 
+/// The flag of the commands that work in a heap.
+#[derive(Args, Clone, Debug)]
+pub struct HeapArgs {
+    /// The heap to work in: team/heap, or a heap slug only one of your teams has. Beats UPHEAP_HEAP and the
+    /// default from `upheap heap use`
+    #[arg(long = "heap", value_name = "HEAP")]
+    pub name: Option<String>,
+}
+
 /// The flags every command takes.
 #[derive(Args, Clone, Debug)]
 pub struct SharedArgs {
-    /// The heap to work in: team/heap, or a heap slug only one of your teams has. Beats UPHEAP_HEAP and the
-    /// default from `upheap heap use`
-    #[arg(long, value_name = "HEAP")]
-    pub heap: Option<String>,
     /// Print the server's response body as it came, and a refusal's problem body on stderr
     #[arg(long, conflicts_with = "quiet")]
     pub json: bool,

@@ -34,7 +34,7 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
         Mode::Human => {
             // A default that names no heap of the caller's marks nothing; commands that use it say why.
             let default = app
-                .heap_name(&args.shared)
+                .heap_name(None)
                 .and_then(|name| HeapName::parse(name).ok())
                 .and_then(|name| resolve_heap(name, &me.value).ok());
             render(&me.value, default.as_ref(), out)?;

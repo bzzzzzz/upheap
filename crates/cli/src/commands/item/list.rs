@@ -10,7 +10,7 @@ use api_types::views::SavedViewListDto;
 use clap::Args;
 
 use crate::client::{ApiClient, NO_QUERY};
-use crate::commands::{SharedArgs, parse_api_value};
+use crate::commands::{HeapArgs, SharedArgs, parse_api_value};
 use crate::config::SettingError;
 use crate::lookup::{HeapHandle, HeapName, find_view, matches_text, resolve_heap, resolve_parameter, resolve_tags};
 use crate::output::{Cell, Mode, Output, Tone};
@@ -65,11 +65,13 @@ pub struct ListArgs {
     #[arg(long, value_name = "LAYOUT", value_parser = parse_api_value::<BlockedLayoutDto>)]
     pub blocked_layout: Option<BlockedLayoutDto>,
     #[command(flatten)]
+    pub heap: HeapArgs,
+    #[command(flatten)]
     pub shared: SharedArgs,
 }
 
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
-    let typed = app.heap_name(&args.shared).ok_or(SettingError::NoHeap)?;
+    let typed = app.heap_name(args.heap.name.as_deref()).ok_or(SettingError::NoHeap)?;
     let name = HeapName::parse(typed)?;
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
@@ -355,6 +357,7 @@ fn closed_heading(group: Option<ClosedGroupDto>) -> &'static str {
         Some(ClosedGroupDto::Today) => "Today",
         Some(ClosedGroupDto::ThisWeek) => "This week",
         Some(ClosedGroupDto::Earlier) | None => "Earlier",
+        Some(ClosedGroupDto::Unknown) => "Closed",
     }
 }
 

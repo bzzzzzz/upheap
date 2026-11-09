@@ -76,6 +76,7 @@ pub struct MeDto {
     pub user: UserDto,
     pub teams: Vec<TeamDto>,
     /// Empty for the local build's one user, who can't sign out and has only the one team.
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<MeActionDto>,
 }
 

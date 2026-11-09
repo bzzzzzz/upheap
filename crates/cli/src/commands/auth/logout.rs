@@ -1,8 +1,8 @@
-//! `upheap auth logout`: ends the sign-in on the server and forgets it.
+//! `upheap auth logout [--local]`: ends the sign-in on the server and forgets it.
 
 use clap::Args;
 
-use crate::auth;
+use crate::auth::{self, AuthError};
 use crate::commands::SharedArgs;
 use crate::config::server_key;
 use crate::output::{Mode, Output};
@@ -10,13 +10,17 @@ use crate::{App, CliError};
 
 #[derive(Args, Debug)]
 pub struct LogoutArgs {
+    /// Only forget the sign-in on this machine, without asking the server to end it: for a server that's gone. The
+    /// sign-in stays usable, by whoever holds a copy of its tokens, until they expire
+    #[arg(long)]
+    pub local: bool,
     #[command(flatten)]
     pub shared: SharedArgs,
 }
 
 /// Revokes the stored refresh token, which ends every token of the sign-in, then removes it from the keychain. Not
-/// being signed in is nothing to do. When the server can't be reached the token is kept, so trying again later
-/// still revokes it.
+/// being signed in is nothing to do. When the server can't revoke it the token is kept, so trying again later
+/// still revokes it; `--local` forgets it without asking.
 pub async fn run(args: LogoutArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let server = app.server(&args.shared)?;
     let key = server_key(&server);
@@ -29,10 +33,20 @@ pub async fn run(args: LogoutArgs, app: &App, out: &mut Output) -> Result<(), Cl
         }
         return Ok(());
     };
-    auth::revoke(&client, &tokens.refresh_token).await?;
+    if !args.local {
+        auth::revoke(&client, &tokens.refresh_token)
+            .await
+            .map_err(AuthError::Revoke)?;
+    }
     auth::delete_tokens(&app.tokens, &key).await?;
     if out.mode() == Mode::Human {
         out.line(&format!("Signed out of {key}."))?;
+    }
+    if args.local {
+        out.note(
+            "The sign-in was forgotten here only: it may stay open on the server until its tokens expire, up to 30 \
+             days from their last use.",
+        )?;
     }
     Ok(())
 }

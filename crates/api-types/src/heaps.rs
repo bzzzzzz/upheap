@@ -42,6 +42,7 @@ pub struct HeapDto {
     pub open_count: u32,
     /// Send back in `If-Match` when renaming.
     pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<HeapActionDto>,
 }
 

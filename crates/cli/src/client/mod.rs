@@ -42,6 +42,14 @@ pub enum ClientError {
     /// The token endpoints' refusal (RFC 6749 §5.2).
     #[error("{} ({})", refusal.error_description, refusal.error)]
     OAuthRefused { status: StatusCode, refusal: OAuthErrorDto },
+    /// The server sent the request elsewhere. The CLI doesn't follow redirects, so its tokens go only where it was
+    /// told to send them.
+    #[error("{server} answered with a redirect ({status}) to {location}; set the server to the address it's served at")]
+    Redirected {
+        server: String,
+        status: StatusCode,
+        location: String,
+    },
     #[error("the server answered {status} with a body the CLI doesn't understand")]
     Unreadable { status: StatusCode, body: String },
 }
@@ -53,6 +61,8 @@ impl ApiClient {
         let http = reqwest::Client::builder()
             .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
+            // A redirect could carry a form with a refresh token or a code verifier to another host.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(ClientError::Setup)?;
         Ok(Self {
@@ -113,10 +123,24 @@ impl ApiClient {
             Some(zone) => request.header("Time-Zone", zone),
             None => request,
         };
-        request.send().await.map_err(|source| ClientError::Unreachable {
+        let response = request.send().await.map_err(|source| ClientError::Unreachable {
             server: self.server.to_string(),
             source,
-        })
+        })?;
+        if response.status().is_redirection() {
+            let location = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("nowhere")
+                .to_owned();
+            return Err(ClientError::Redirected {
+                server: self.server.to_string(),
+                status: response.status(),
+                location,
+            });
+        }
+        Ok(response)
     }
 
     fn api_url(&self, path: &[&str]) -> Url {

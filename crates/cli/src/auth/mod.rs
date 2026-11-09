@@ -34,6 +34,9 @@ pub enum AuthError {
     },
     #[error(transparent)]
     Client(#[from] ClientError),
+    /// Signing out couldn't end the sign-in on the server, so it's kept, to try again.
+    #[error("can't end the sign-in on the server, so it's kept")]
+    Revoke(#[source] ClientError),
 }
 
 /// An access token for `server` (its [`crate::config::server_key`]) at `now`, in seconds since the Unix epoch: the

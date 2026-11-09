@@ -289,3 +289,20 @@ async fn a_refusal_prints_the_servers_message_and_code() -> Result<()> {
     expect_that!(mismatch_json.stdout, eq(""));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_reader_that_stops_early_isnt_an_error() -> Result<()> {
+    // As `upheap item list -q | head -1`: the pipe closes after the first line.
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    let listed = cli
+        .run_into(&["item", "list", "-q"], Box::new(common::ClosedPipe))
+        .await;
+
+    expect_that!(listed.stderr, eq(""));
+    expect_that!(listed.exited(0), eq(true));
+    Ok(())
+}

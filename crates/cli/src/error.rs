@@ -56,11 +56,11 @@ impl CliError {
             ) => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. }) => 6,
-            Self::Auth(AuthError::Client(err)) | Self::Client(err) => client_exit_code(err),
+            Self::Auth(AuthError::Client(err) | AuthError::Revoke(err)) | Self::Client(err) => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
             Self::Login(LoginError::Refused { .. }) => 4,
-            Self::Login(LoginError::Random(_) | LoginError::StateMismatch | LoginError::NoCode) => 1,
+            Self::Login(LoginError::Random(_) | LoginError::NoCode) => 1,
             Self::Output(_) => 1,
         }
     }
@@ -84,7 +84,10 @@ impl CliError {
     pub fn problem_body(&self) -> Option<&str> {
         match self {
             Self::Client(ClientError::Problem { body, .. })
-            | Self::Auth(AuthError::Client(ClientError::Problem { body, .. })) => Some(body),
+            | Self::Auth(
+                AuthError::Client(ClientError::Problem { body, .. })
+                | AuthError::Revoke(ClientError::Problem { body, .. }),
+            ) => Some(body),
             _ => None,
         }
     }
@@ -92,7 +95,10 @@ impl CliError {
     fn problem(&self) -> Option<&api_types::problem::Problem> {
         match self {
             Self::Client(ClientError::Problem { problem, .. })
-            | Self::Auth(AuthError::Client(ClientError::Problem { problem, .. })) => Some(problem),
+            | Self::Auth(
+                AuthError::Client(ClientError::Problem { problem, .. })
+                | AuthError::Revoke(ClientError::Problem { problem, .. }),
+            ) => Some(problem),
             _ => None,
         }
     }
@@ -100,6 +106,9 @@ impl CliError {
     fn hint(&self) -> Option<&'static str> {
         let status = self.problem().map(|problem| problem.status);
         match (self, status) {
+            (Self::Auth(AuthError::Revoke(_)), _) => {
+                Some("to forget the sign-in on this machine only, run `upheap auth logout --local`")
+            }
             (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => Some("sign in with `upheap auth login`"),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use"),
             _ => None,
@@ -125,6 +134,7 @@ fn client_exit_code(err: &ClientError) -> u8 {
     match err {
         ClientError::Setup(_) => 6,
         ClientError::Unreachable { .. } => 5,
+        ClientError::Redirected { .. } => 2,
         ClientError::Problem { problem, .. } => status_exit_code(problem.status),
         ClientError::OAuthRefused { .. } => 4,
         ClientError::Unreadable { status, .. } => status_exit_code(status.as_u16()),

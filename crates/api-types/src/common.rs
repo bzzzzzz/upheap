@@ -132,6 +132,10 @@ pub enum ClosedGroupDto {
     Today,
     ThisWeek,
     Earlier,
+    /// A group this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<ClosedGroup> for ClosedGroupDto {
@@ -348,6 +352,7 @@ pub struct ItemDto {
     pub closed_group: Option<ClosedGroupDto>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,
 }
 
@@ -374,6 +379,10 @@ pub enum FactorDto {
     Parameter,
     /// Priority taken on from an item this one blocks.
     Blocks,
+    /// A factor this client doesn't know: one the server added later. Clients show the contributor's `label`, which
+    /// the server writes, so they needn't know every factor. Only read, never sent, so it isn't in the API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<Contributor> for ContributorDto {
@@ -427,6 +436,32 @@ impl From<&Heap> for HeapSummaryDto {
     }
 }
 
+/// Deserializes a list of a closed set, such as `allowed_actions`, leaving out the values this client doesn't know.
+///
+/// Adding an action is an additive change (design/engineering-principles.md, API 3), so a client built before the
+/// action existed reads the list without it, and offers only what it knows.
+/// Responses only: the server never reads these lists, so what it accepts doesn't change.
+pub(crate) fn known_values<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Value<T> {
+        Known(T),
+        Unknown(serde::de::IgnoredAny),
+    }
+    let values = Vec::<Value<T>>::deserialize(deserializer)?;
+    Ok(values
+        .into_iter()
+        .filter_map(|value| match value {
+            Value::Known(known) => Some(known),
+            Value::Unknown(_) => None,
+        })
+        .collect())
+}
+
 /// Deserializes a field that can be absent (leave unchanged) or a value, and refuses `null`, for fields where
 /// "clear" is spelled differently (an empty list). Without this, `null` would silently mean "unchanged".
 pub(crate) fn non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -466,4 +501,77 @@ where
     T: Deserialize<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+    use serde_json::json;
+
+    use super::*;
+    use crate::me::{MeActionDto, MeDto};
+
+    /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
+    fn ranked_item_from_a_later_server() -> serde_json::Value {
+        json!({
+            "position": 1,
+            "contributors": [
+                { "factor": "momentum", "label": "Picked up again", "share_percent": 60 },
+                { "factor": "need", "label": "Critical", "share_percent": 40 },
+            ],
+            "item": {
+                "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
+                "description": null, "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
+                "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
+                "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
+            },
+        })
+    }
+
+    #[gtest]
+    fn values_a_later_server_added_dont_stop_a_client_reading_the_list() -> googletest::Result<()> {
+        let ranked: RankedItemDto = serde_json::from_value(ranked_item_from_a_later_server())?;
+
+        expect_that!(
+            ranked.item.allowed_actions,
+            elements_are![eq(&ItemActionDto::Edit), eq(&ItemActionDto::Reopen)]
+        );
+        expect_that!(ranked.contributors[0].factor, eq(FactorDto::Unknown));
+        expect_that!(ranked.contributors[0].label, eq("Picked up again"));
+        expect_that!(ranked.contributors[1].factor, eq(FactorDto::Need));
+        expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
+        Ok(())
+    }
+
+    #[gtest]
+    fn an_account_action_a_later_server_added_is_left_out() -> googletest::Result<()> {
+        let me: MeDto = serde_json::from_value(json!({
+            "user": { "id": Uuid::nil(), "username": "ada", "email": "ada@example.test", "display_name": "Ada", "version": 1 },
+            "teams": [],
+            "allowed_actions": ["sign_out", "export_data", "create_team"],
+        }))?;
+
+        expect_that!(
+            me.allowed_actions,
+            elements_are![eq(&MeActionDto::SignOut), eq(&MeActionDto::CreateTeam)]
+        );
+        Ok(())
+    }
+
+    #[gtest]
+    fn values_a_client_doesnt_know_are_never_sent() {
+        // The server never makes one, and a client that read one can't send it back as if it were a real value.
+        expect_that!(serde_json::to_value(FactorDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(ClosedGroupDto::Unknown), err(anything()));
+    }
+
+    #[gtest]
+    fn a_request_still_refuses_a_value_it_doesnt_know() {
+        // Leniency is for reading responses: the enums the server reads from requests stay strict.
+        expect_that!(serde_json::from_value::<NeedDto>(json!("urgent")), err(anything()));
+        expect_that!(serde_json::from_value::<SizeDto>(json!("xxl")), err(anything()));
+        expect_that!(serde_json::from_value::<StateDto>(json!("archived")), err(anything()));
+        expect_that!(serde_json::from_value::<RoleDto>(json!("owner")), err(anything()));
+    }
 }

@@ -78,13 +78,18 @@ pub enum SettingError {
     #[error("`{url}` isn't a server address: give one such as https://upheap.example.com")]
     BadServer { url: String },
     #[error(
+        "`{url}` is plain http, which would send the sign-in's tokens unencrypted: use https, or http only to this machine (localhost, 127.0.0.1, ::1)"
+    )]
+    PlaintextServer { url: String },
+    #[error(
         "no heap set: pick one with `upheap heap use <team/heap>`, or pass --heap or set UPHEAP_HEAP (`upheap heap list` lists them)"
     )]
     NoHeap,
 }
 
 /// The server to talk to: `flag`, then `env`, then `file`. The URL keeps any path the server is served under, without
-/// a trailing slash, so it names the same sign-in however it was typed.
+/// a trailing slash, so it names the same sign-in however it was typed. Plain `http` is refused unless the server is
+/// on this machine, as tokens would cross the network in the clear.
 pub fn resolve_server(flag: Option<&str>, env: Option<&str>, file: Option<&str>) -> Result<Url, SettingError> {
     let raw = flag.or(env).or(file).ok_or(SettingError::NoServer)?;
     let bad = || SettingError::BadServer { url: raw.to_owned() };
@@ -92,10 +97,20 @@ pub fn resolve_server(flag: Option<&str>, env: Option<&str>, file: Option<&str>)
     if !matches!(url.scheme(), "http" | "https") || url.host().is_none() || url.query().is_some() {
         return Err(bad());
     }
+    if url.scheme() == "http" && !is_loopback(&url) {
+        return Err(SettingError::PlaintextServer { url: raw.to_owned() });
+    }
     url.set_fragment(None);
     let path = url.path().trim_end_matches('/').to_owned();
     url.set_path(&path);
     Ok(url)
+}
+
+/// Whether `url`'s host is this machine: `localhost`, `127.0.0.0/8` or `::1`.
+fn is_loopback(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or_default();
+    let ip = host.trim_start_matches('[').trim_end_matches(']');
+    host.eq_ignore_ascii_case("localhost") || ip.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
 /// The heap a command works in, as typed: `flag`, then `env`, then `file`.
@@ -171,6 +186,29 @@ mod tests {
             verify_that!(
                 resolve_server(Some(raw), None, None),
                 err(matches_pattern!(SettingError::BadServer { .. }))
+            )?;
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    fn plain_http_is_only_for_this_machine() -> googletest::Result<()> {
+        for raw in [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://127.1.2.3",
+            "http://[::1]:8080",
+        ] {
+            verify_that!(resolve_server(Some(raw), None, None), ok(anything()))?;
+        }
+        for raw in [
+            "http://upheap.example.test",
+            "http://192.168.1.10:8080",
+            "http://localhost.example.test",
+        ] {
+            verify_that!(
+                resolve_server(Some(raw), None, None),
+                err(matches_pattern!(SettingError::PlaintextServer { .. }))
             )?;
         }
         Ok(())

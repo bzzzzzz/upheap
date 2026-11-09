@@ -203,6 +203,8 @@ where
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
+        // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
+        Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
             report(&err, &mut out);
             ExitCode::from(err.exit_code())
@@ -270,14 +272,9 @@ impl App {
         )
     }
 
-    /// The heap `shared` names, or the environment or config file does, as typed.
-    pub fn heap_name<'a>(&'a self, shared: &'a SharedArgs) -> Option<&'a str> {
-        config::resolve_heap(
-            shared.heap.as_deref(),
-            self.env.heap.as_deref(),
-            self.config.heap.as_deref(),
-        )
-        .ok()
+    /// The heap `flag` names, or the environment or config file does, as typed.
+    pub fn heap_name<'a>(&'a self, flag: Option<&'a str>) -> Option<&'a str> {
+        config::resolve_heap(flag, self.env.heap.as_deref(), self.config.heap.as_deref()).ok()
     }
 
     pub fn client(&self, server: Url) -> Result<ApiClient, ClientError> {

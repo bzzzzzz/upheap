@@ -65,6 +65,7 @@ pub struct MemberDto {
     pub role: RoleDto,
     /// UTC milliseconds.
     pub joined_at: i64,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<MemberActionDto>,
 }
 
@@ -86,6 +87,7 @@ pub struct TeamDto {
     pub members: Vec<MemberDto>,
     /// By name, archived ones included.
     pub heaps: Vec<HeapDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TeamActionDto>,
 }
 

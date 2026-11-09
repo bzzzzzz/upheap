@@ -7,7 +7,7 @@ About 70% of the golden path is built: local accounts, teams with members and ro
 renamed and archived, the ranked list with add, edit, close and reopen, the item pane, tags, blockers, the
 list view controls (state modes, sort, filters, search), saved views, custom parameters, the audit log and sign-in
 rate limiting, readable handles in every URL, need with ranking formula `V2`, CLI sign-in (OAuth with PKCE and bearer
-tokens) and the `upheap` CLI's first commands. OIDC is not started. All 350 Rust tests pass
+tokens) and the `upheap` CLI's first commands. OIDC is not started. All 364 Rust tests pass
 (`cargo test --workspace`), the store and API suites also pass on MySQL 8.4 and Postgres 17, the 57 Playwright tests run at each of
 three widths (a few skip at widths they don't apply to), and 46 against the local build (those that need accounts or
 request routing skip there), and the web typecheck and lint are clean. CI

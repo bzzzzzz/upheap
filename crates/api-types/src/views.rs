@@ -58,6 +58,7 @@ pub struct SavedViewDto {
     pub archived_at: Option<i64>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<SavedViewActionDto>,
 }
 
@@ -67,6 +68,7 @@ pub struct SavedViewListDto {
     pub heap: HeapSummaryDto,
     /// The views in use, by name. Archived views are left out.
     pub views: Vec<SavedViewDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<SavedViewListActionDto>,
 }
 

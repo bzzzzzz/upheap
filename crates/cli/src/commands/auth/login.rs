@@ -30,8 +30,9 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let server = app.server(&args.shared)?;
     let key = server_key(&server);
     let client = app.client(server)?;
-    // Reading it first proves the keychain works before the user goes to the browser.
-    let previous = auth::load_tokens(&app.tokens, &key).await?;
+    // Reading the keychain first proves it works before the user goes to the browser.
+    auth::load_tokens(&app.tokens, &key).await?;
+    let lock_dir = app.config_dir()?;
 
     let loopback = Loopback::bind().await.map_err(LoginError::from)?;
     let pkce = Pkce::generate().map_err(LoginError::Random)?;
@@ -45,11 +46,14 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
         tracing::warn!(error = %err, "can't open the browser");
     }
     let redirect_uri = loopback.redirect_uri().to_owned();
-    let callback = loopback.wait(LOGIN_TIMEOUT).await.map_err(LoginError::from)?;
-    let code = read_callback(callback, &state)?;
+    let callback = loopback.wait(&state, LOGIN_TIMEOUT).await.map_err(LoginError::from)?;
+    let code = read_callback(callback)?;
 
     let issued = auth::exchange_code(&client, code, &redirect_uri, pkce.verifier).await?;
     let tokens = StoredTokens::issued(issued, app.env.now.as_second());
+    // Another `upheap` may be refreshing the earlier sign-in; replace and revoke it only once that's done.
+    let _lock = auth::lock_tokens(lock_dir).await?;
+    let previous = auth::load_tokens(&app.tokens, &key).await?;
     if let Err(err) = auth::save_tokens(&app.tokens, &key, &tokens).await {
         // Not kept means not usable, so don't leave the sign-in open on the server.
         if let Err(revoke) = auth::revoke(&client, &tokens.refresh_token).await {

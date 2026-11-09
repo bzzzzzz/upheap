@@ -319,18 +319,26 @@ impl TestCli {
 
     /// Runs `upheap <args>`.
     pub async fn run(&self, args: &[&str]) -> Outcome {
-        let (stdout, stderr) = (Buffer::default(), Buffer::default());
+        let stdout = Buffer::default();
+        let mut outcome = self.run_into(args, Box::new(stdout.clone())).await;
+        outcome.stdout = stdout.take();
+        outcome
+    }
+
+    /// Runs `upheap <args>` with its stdout going to `stdout`. The outcome's `stdout` is empty.
+    pub async fn run_into(&self, args: &[&str], stdout: Box<dyn Write + Send>) -> Outcome {
+        let stderr = Buffer::default();
         let deps = Deps {
             env: self.env.clone(),
             tokens: self.tokens.clone(),
             browser: Box::new(SharedBrowser(self.browser.clone())),
-            stdout: Box::new(stdout.clone()),
+            stdout,
             stderr: Box::new(stderr.clone()),
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
         Outcome {
             code,
-            stdout: stdout.take(),
+            stdout: String::new(),
             stderr: stderr.take(),
         }
     }
@@ -354,6 +362,19 @@ impl Browser for SharedBrowser {
     }
 }
 
+/// A pipe whose reader has gone, as `upheap … | head -1` leaves it after the first line.
+pub struct ClosedPipe;
+
+impl Write for ClosedPipe {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+}
+
 /// A machine with no browser: login has to be finished by visiting the printed address.
 struct NoBrowser;
 
@@ -368,14 +389,29 @@ pub struct ConsentBrowser {
     pub server: String,
     pub session: String,
     pub allow: bool,
+    /// Comes back to the redirect URI first with another sign-in's `state`, as a stale tab might.
+    pub wrong_state_first: bool,
+}
+
+impl ConsentBrowser {
+    /// A browser where `user` allows the CLI.
+    pub fn allowing(server: &TestServer, user: &TestUser) -> Self {
+        Self {
+            server: server.url.clone(),
+            session: user.session.clone(),
+            allow: true,
+            wrong_state_first: false,
+        }
+    }
 }
 
 impl Browser for ConsentBrowser {
     fn open(&self, url: &str) -> std::io::Result<()> {
-        let (server, session, allow, url) = (self.server.clone(), self.session.clone(), self.allow, url.to_owned());
+        let (server, session, url) = (self.server.clone(), self.session.clone(), url.to_owned());
+        let (allow, wrong_state_first) = (self.allow, self.wrong_state_first);
         // The CLI is waiting on its loopback port by the time the browser comes back, as with a real browser.
         tokio::spawn(async move {
-            if let Err(err) = consent(&server, &session, allow, &url).await {
+            if let Err(err) = consent(&server, &session, allow, wrong_state_first, &url).await {
                 tracing::error!(error = %err, "the consent page failed");
             }
         });
@@ -385,11 +421,24 @@ impl Browser for ConsentBrowser {
 
 /// What the consent page does: check the request, then approve it and follow `redirect_to`, or send the browser to
 /// the redirect URI with `error=access_denied`.
-async fn consent(server: &str, session: &str, allow: bool, url: &str) -> Result<()> {
+async fn consent(server: &str, session: &str, allow: bool, wrong_state_first: bool, url: &str) -> Result<()> {
     let page = format!("{server}/oauth/authorize?");
     let query = url.strip_prefix(&page).context("not the consent page")?;
     let request: std::collections::BTreeMap<String, String> = serde_urlencoded::from_str(query)?;
     let http = reqwest::Client::new();
+    if wrong_state_first {
+        let redirect_uri = request.get("redirect_uri").context("no redirect_uri")?;
+        let turned_away = http
+            .get(format!("{redirect_uri}?code=not-this-one&state=another-sign-in"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        anyhow::ensure!(
+            turned_away.contains("wasn't signed in"),
+            "wrong state accepted: {turned_away}"
+        );
+    }
     let checked = http
         .get(format!("{server}/api/v1/oauth/authorize?{query}"))
         .send()
