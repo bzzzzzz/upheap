@@ -4,7 +4,7 @@ mod common;
 
 use anyhow::Result;
 use cli::TokenStore;
-use common::{HEAP, TestServer, ada_with_items, cli_in_heap, key};
+use common::{HEAP, TestCli, TestServer, ada_with_items, cli_in_heap, key};
 use domain::Duration;
 use googletest::prelude::*;
 use serde_json::Value;
@@ -101,7 +101,7 @@ async fn closing_a_wont_do_item_as_done_says_to_reopen_it_first() -> Result<()> 
     expect_that!(done.stderr, contains_substring("(item_closed)"));
     expect_that!(
         done.stderr,
-        ends_with("hint: reopen it first with `upheap item reopen <item>`\n")
+        ends_with(format!("hint: reopen it first with `upheap item reopen {key}`\n"))
     );
     let problem: Value = serde_json::from_str(&as_json.stderr)?;
     expect_that!(problem["code"], eq("item_closed"));
@@ -139,6 +139,25 @@ async fn blocking_names_the_blocker_and_changes_it_on_request() -> Result<()> {
     expect_that!(same_blocker.stdout, eq(&format!("{a} is already blocked.\n")));
     expect_that!(other.exited(0), eq(true));
     expect_that!(blocked_by_c["blocked_by"]["key"], eq(c));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_bare_blocker_key_is_in_the_heap_of_the_item_named_by_path() -> Result<()> {
+    // Arrange: no default heap, so only the item's own path says where anything is
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let (a, b) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let blocked = cli.run(&["item", "block", &format!("{HEAP}/{a}"), "--by", b]).await;
+
+    // Assert
+    expect_that!(blocked.stderr, eq(""));
+    expect_that!(blocked.exited(0), eq(true));
+    expect_that!(server.read_item(&ada, HEAP, a).await?["blocked_by"]["key"], eq(b));
     Ok(())
 }
 

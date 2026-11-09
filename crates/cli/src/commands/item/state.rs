@@ -7,7 +7,7 @@ use api_types::common::{ItemDto, StateDto};
 use api_types::items::ItemPatchDto;
 use clap::Args;
 
-use super::common::{HeapApi, locate_item, state_text};
+use super::common::{HeapApi, ItemLocation, locate_item, state_text};
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
 use crate::output::{Mode, Output};
@@ -80,6 +80,14 @@ pub async fn run_block(args: BlockArgs, app: &App, out: &mut Output) -> Result<(
     change_state(StateVerb::Block, &args.state, args.by.as_deref(), app, out).await
 }
 
+/// Where the item a block waits for is.
+enum BlockerSpot<'a> {
+    /// A bare key: in the heap of the item being blocked.
+    SameHeap(String),
+    /// A path or link, which names its heap.
+    Located(ItemLocation<'a>),
+}
+
 async fn change_state(
     verb: StateVerb,
     args: &StateArgs,
@@ -89,10 +97,14 @@ async fn change_state(
 ) -> Result<(), CliError> {
     let name = ItemName::parse(&args.item)?;
     let at = locate_item(&args.item, name, args.heap.name.as_deref(), app)?;
+    // A bare key is in the item's own heap, however that was found; a path or link names its own.
     let blocker_at = match by {
         Some(typed) => Some((
             typed,
-            locate_item(typed, ItemName::parse(typed)?, args.heap.name.as_deref(), app)?,
+            match ItemName::parse(typed)? {
+                ItemName::Key(key) => BlockerSpot::SameHeap(key),
+                name => BlockerSpot::Located(locate_item(typed, name, args.heap.name.as_deref(), app)?),
+            },
         )),
         None => None,
     };
@@ -107,7 +119,8 @@ async fn change_state(
     let item = api.get_item(&args.item, &at.key).await?;
     // The blocker may be in another heap, which the server then refuses; it needs the blocker's ID to say so.
     let blocker = match blocker_at {
-        Some((typed, at)) => {
+        Some((typed, BlockerSpot::SameHeap(key))) => Some(api.get_item(typed, &key).await?.value),
+        Some((typed, BlockerSpot::Located(at))) => {
             let blocker_heap = at.heap.resolve(&client, &token).await?;
             let blocker_api = HeapApi {
                 client: &client,
@@ -135,7 +148,7 @@ async fn change_state(
         blocked_by_item_id: blocker_id.map(Some),
         ..ItemPatchDto::default()
     };
-    let moved = api.patch_item(&at.key, item.value.version, &patch).await?;
+    let moved = api.patch_item(&args.item, &at.key, item.value.version, &patch).await?;
     match out.mode() {
         Mode::Json => out.json(&moved.body)?,
         Mode::Quiet => {}
