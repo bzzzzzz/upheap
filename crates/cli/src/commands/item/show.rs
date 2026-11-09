@@ -79,9 +79,10 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
-        // One line at a time, so the newlines stay and anything else that moves the cursor doesn't.
-        for line in description.split('\n') {
-            out.line(line)?;
+        // One line at a time, so the newlines stay and anything else that moves the cursor doesn't. `lines` also
+        // drops the `\r` of CRLF text, and a tab becomes spaces, as the output would otherwise show it as U+FFFD.
+        for line in description.lines() {
+            out.line(&line.replace('\t', "    "))?;
         }
     }
     Ok(())

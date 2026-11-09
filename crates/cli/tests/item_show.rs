@@ -58,6 +58,24 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn item_show_prints_crlf_and_tabs_in_a_description_as_text() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+    server
+        .edit_item(&ada, HEAP, key, json!({ "description": "one\r\n\ttwo\r\nthree" }))
+        .await?;
+
+    let shown = cli.run(&["item", "show", key]).await;
+
+    expect_that!(shown.exited(0), eq(true));
+    expect_that!(shown.stdout, ends_with("\n\none\n    two\nthree\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_show_finds_an_item_by_path_or_pasted_link_without_a_heap() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
