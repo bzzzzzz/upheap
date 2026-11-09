@@ -1,5 +1,5 @@
-//! Request extractors and middleware: session cookie, CSRF header, timezone, `If-Match`, and body/query/path
-//! wrappers whose rejections are problem responses.
+//! Request extractors and middleware: session cookie, bearer token, CSRF header, timezone, `If-Match`, and
+//! body/query/path wrappers whose rejections are problem responses.
 
 use axum::extract::{FromRequest, FromRequestParts, Request};
 use axum::http::request::Parts;
@@ -15,6 +15,8 @@ use service::Principal;
 use service::ServiceError;
 #[cfg(feature = "accounts")]
 use service::auth::SessionToken;
+#[cfg(feature = "accounts")]
+use service::oauth::OAuthSecret;
 use utoipa::IntoParams;
 
 #[cfg(feature = "accounts")]
@@ -40,27 +42,81 @@ pub(crate) struct ApiQuery<T>(pub T);
 #[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub(crate) struct ApiPath<T>(pub T);
 
-/// The caller, from the session cookie or the local user (see [`Authentication`]). Records `user_id` on the
-/// request span.
+/// The caller, from a bearer token, the session cookie or the local user (see [`Authentication`]). Records
+/// `user_id` on the request span.
+///
+/// A request with an `Authorization` header is authenticated by it alone, and any cookie is ignored. That is what
+/// lets such requests skip the CSRF check ([`require_csrf_header`]): a forged cross-site request can carry the
+/// victim's cookie but can't set this header, so it either has no header and needs the CSRF one, or has one and
+/// gets nothing from the cookie.
 pub(crate) struct CurrentUser(pub Principal);
 
 impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = ApiError;
 
-    // Only sessions read the request.
+    // Only sessions and tokens read the request.
     #[cfg_attr(not(feature = "accounts"), allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
         let principal = match &state.authentication {
             #[cfg(feature = "accounts")]
-            Authentication::Sessions(_) => {
-                let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;
-                state.services.authenticate_session(&token).await?
+            Authentication::Sessions(_) if parts.headers.contains_key(header::AUTHORIZATION) => {
+                let token = bearer_token(&parts.headers).ok_or(ApiError::BearerRejected)?;
+                state
+                    .services
+                    .authenticate_access_token(&token)
+                    .await
+                    .map_err(|err| match err {
+                        ServiceError::Unauthenticated => ApiError::BearerRejected,
+                        other => ApiError::Service(other),
+                    })?
             }
+            #[cfg(feature = "accounts")]
+            Authentication::Sessions(_) => session_principal(parts, state).await?,
             Authentication::LocalUser(principal) => *principal,
         };
         tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
         Ok(Self(principal))
     }
+}
+
+/// The caller from the session cookie alone, for what only the user in their browser may do: approving a client's
+/// access. A request with an `Authorization` header is refused, so a client holding a token can't approve more
+/// access for itself, and so the request can't have skipped the CSRF check.
+#[cfg(feature = "accounts")]
+pub(crate) struct SessionUser(pub Principal);
+
+#[cfg(feature = "accounts")]
+impl FromRequestParts<AppState> for SessionUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let principal = match &state.authentication {
+            Authentication::Sessions(_) if parts.headers.contains_key(header::AUTHORIZATION) => {
+                return Err(ServiceError::Unauthenticated.into());
+            }
+            Authentication::Sessions(_) => session_principal(parts, state).await?,
+            // There is no signing in, so nothing to approve.
+            Authentication::LocalUser(_) => return Err(ApiError::NoSuchRoute),
+        };
+        tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
+        Ok(Self(principal))
+    }
+}
+
+#[cfg(feature = "accounts")]
+async fn session_principal(parts: &Parts, state: &AppState) -> Result<Principal, ApiError> {
+    let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;
+    Ok(state.services.authenticate_session(&token).await?)
+}
+
+/// The token from an `Authorization: Bearer <token>` header (RFC 6750 §2.1), if that's what the header holds.
+#[cfg(feature = "accounts")]
+fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.split_once(' ')?;
+    let token = token.trim();
+    let valid = scheme.eq_ignore_ascii_case("bearer") && !token.is_empty() && !token.contains(' ');
+    valid.then(|| OAuthSecret::from_client(token.to_owned()))
 }
 
 /// The session token from the `Cookie` header, if there is one.
@@ -157,9 +213,13 @@ impl<S: Send + Sync> FromRequestParts<S> for IfMatch {
 /// Browsers only let same-origin scripts set custom headers (cross-origin ones need a CORS preflight, which
 /// this server never approves), so the header proves the request came from the app. Together with
 /// `SameSite=Lax` cookies this blocks cross-site request forgery, including on sign-in.
+///
+/// Requests with an `Authorization` header don't need it: they are authenticated by that header and never by a
+/// cookie ([`CurrentUser`]), and a cross-site page can't set it either. CSRF is a cookie problem.
 pub(crate) async fn require_csrf_header(request: Request, next: Next) -> Response {
     let safe = matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
-    if !safe && !request.headers().contains_key(CSRF_HEADER) {
+    let exempt = safe || request.headers().contains_key(header::AUTHORIZATION);
+    if !exempt && !request.headers().contains_key(CSRF_HEADER) {
         return ApiError::CsrfHeaderMissing.into_response();
     }
     next.run(request).await

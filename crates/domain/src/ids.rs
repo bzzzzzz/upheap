@@ -36,3 +36,7 @@ id_type!(TagId);
 id_type!(SavedViewId);
 id_type!(ParameterId);
 id_type!(OptionId);
+id_type!(
+    /// The OAuth tokens of one sign-in by a client, and every pair refreshed from them (`domain::oauth`).
+    TokenFamilyId
+);

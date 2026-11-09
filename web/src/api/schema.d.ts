@@ -95,6 +95,75 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Checks an authorization request without approving it.
+         * @description The consent page calls this before it shows anything, so it never asks about, or sends the browser to, a request
+         *     the server would refuse. Once this succeeds, the client and the redirect URI are good, so a user who declines is
+         *     sent to the redirect URI with `error=access_denied` and the `state`, which the page adds itself.
+         */
+        get: operations["check_authorization"];
+        put?: never;
+        /**
+         * Approves an authorization request for the signed-in user, from the consent page.
+         * @description Takes the session cookie only, never a bearer token: approving is the user's decision in their browser, not
+         *     something a client holding a token can do for itself. The code in `redirect_to` is good once, for ten minutes.
+         */
+        post: operations["approve_authorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revokes a token, and with it every token of the sign-in it came from.
+         * @description Answers `200` for a token the server doesn't know too, as RFC 7009 asks, so the answer says nothing about which
+         *     tokens exist and revoking twice is fine.
+         */
+        post: operations["revoke_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchanges an authorization code, or a refresh token, for an access token and a new refresh token.
+         * @description A refresh token is good once. Presenting one that was used already revokes every token of the sign-in it came
+         *     from, as someone else must hold a copy; so does presenting a code a second time.
+         */
+        post: operations["issue_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams": {
         parameters: {
             query?: never;
@@ -1081,6 +1150,80 @@ export interface components {
          * @enum {string}
          */
         Need: "idea" | "nice_to_have" | "expected" | "critical";
+        /** @description Where to send the browser now that the user allowed the request. */
+        OAuthApproval: {
+            /** @description The request's redirect URI with `code` and `state` added. */
+            redirect_to: string;
+        };
+        /**
+         * @description An authorization request, as the client put it in the consent page's address (RFC 6749 §4.1.1, RFC 7636 §4.3).
+         *     Every value is checked on the server; a missing one is refused with the problem for that value.
+         */
+        OAuthAuthorizationRequest: {
+            /** @description A registered client: `upheap-cli`. */
+            client_id?: string;
+            /** @description The S256 challenge of the client's PKCE code verifier. */
+            code_challenge?: string;
+            /** @description Must be `S256`. */
+            code_challenge_method?: string;
+            /** @description `http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`, with no query or fragment. */
+            redirect_uri?: string;
+            /** @description Must be `code`. */
+            response_type?: string;
+            /** @description The client's value, sent back to the redirect URI with the code. */
+            state?: string;
+        };
+        /** @description The client an authorization request is from, once the request is known to be good. */
+        OAuthClient: {
+            client_id: string;
+            /** @description What to call the client when asking the user, such as "Upheap CLI". */
+            display_name: string;
+        };
+        /** @description A refused token or revocation request (RFC 6749 §5.2). The token endpoints answer with this, not a `Problem`. */
+        OAuthError: {
+            /** @description `invalid_request`, `invalid_client`, `invalid_grant` or `unsupported_grant_type`. */
+            error: string;
+            /** @description What was wrong, for people. May change; branch on `error`. */
+            error_description: string;
+        };
+        /** @description A token revocation request (RFC 7009 §2.1), form-encoded. */
+        OAuthRevokeRequest: {
+            /** @description When given, a token of another client is left alone. */
+            client_id?: string | null;
+            /** @description An access or refresh token. Either ends the client's sign-in. */
+            token?: string | null;
+            /** @description `access_token` or `refresh_token`. Accepted and not needed: the server finds the token either way. */
+            token_type_hint?: string | null;
+        };
+        /** @description A token request (RFC 6749 §4.1.3 and §6), form-encoded. */
+        OAuthTokenRequest: {
+            /** @description A registered client: `upheap-cli`. Required with either grant, as the client is public. */
+            client_id?: string | null;
+            /** @description With `authorization_code`: the code the redirect URI received. */
+            code?: string | null;
+            /** @description With `authorization_code`: the PKCE code verifier the challenge was made from. */
+            code_verifier?: string | null;
+            /** @description `authorization_code` or `refresh_token`. */
+            grant_type: string;
+            /** @description With `authorization_code`: the redirect URI the code was issued for, exactly. */
+            redirect_uri?: string | null;
+            /** @description With `refresh_token`: the refresh token, which this request uses up. */
+            refresh_token?: string | null;
+        };
+        /** @description A successful token response (RFC 6749 §5.1). */
+        OAuthTokens: {
+            /** @description Send as `Authorization: Bearer <access_token>`. */
+            access_token: string;
+            /**
+             * Format: int64
+             * @description Seconds until the access token expires.
+             */
+            expires_in: number;
+            /** @description Good for one refresh, within 30 days. */
+            refresh_token: string;
+            /** @description Always `Bearer`. */
+            token_type: string;
+        };
         /** @description One option of a new arrangement. */
         OptionArrangement: {
             /** Format: uuid */
@@ -1657,6 +1800,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    check_authorization: {
+        parameters: {
+            query?: {
+                /** @description Must be `code`. */
+                response_type?: string;
+                /** @description A registered client: `upheap-cli`. */
+                client_id?: string;
+                /** @description `http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`, with no query or fragment. */
+                redirect_uri?: string;
+                /** @description The S256 challenge of the client's PKCE code verifier. */
+                code_challenge?: string;
+                /** @description Must be `S256`. */
+                code_challenge_method?: string;
+                /** @description The client's value, sent back to the redirect URI with the code. */
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request can be approved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthClient"];
+                };
+            };
+            /** @description `client_unknown` (`field` `client_id`), `redirect_uri_invalid`, `response_type_unsupported`, `code_challenge_invalid`, `code_challenge_method_unsupported` or `state_missing`, each naming its `field` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    approve_authorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Approved; send the browser to `redirect_to` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthApproval"];
+                };
+            };
+            /** @description `unauthenticated`: no session cookie, or the request carried a bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description As for `GET /oauth/authorize` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["OAuthRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Revoked, or nothing to revoke */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_request`: no `token` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthError"];
+                };
+            };
+            /** @description `invalid_client`: no client with this `client_id` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthError"];
+                };
+            };
+        };
+    };
+    issue_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["OAuthTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Issued; `Cache-Control: no-store` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthTokens"];
+                };
+            };
+            /** @description `invalid_request`, `invalid_grant` or `unsupported_grant_type` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthError"];
+                };
+            };
+            /** @description `invalid_client`: no client with this `client_id` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthError"];
                 };
             };
         };
