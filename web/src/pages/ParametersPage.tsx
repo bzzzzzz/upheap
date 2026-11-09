@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import type { HeapRef, ItemTag, Parameter, ParameterOption } from "../api/client";
@@ -10,10 +11,17 @@ import {
   useTags,
 } from "../api/queries";
 import { HistoryDisclosure } from "../components/AuditHistory";
-import { inputClass, NameForm, primaryButtonClass, quietButtonClass } from "../components/NameForm";
+import { compactButtonClass } from "../components/buttons";
+import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
-import { useConfirmation } from "../components/useConfirmation";
+import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
+import { cardClass, cardTitleClass, inputClass, introClass, labelClass, nameFormClasses } from "./settingsForm";
+
+const problemClass = "text-overdue-ink";
+/** An option's place in the list, in the parameter colour. */
+const rankClass =
+  "inline-flex size-[22px] shrink-0 items-center justify-center rounded-md bg-param-soft text-xs font-semibold text-param-ink max-sm:size-6";
 
 /**
  * Manage parameters (Req Views: Manage parameters). Every member sees the parameters, since they set their values on
@@ -21,45 +29,73 @@ import { useConfirmation } from "../components/useConfirmation";
  */
 export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   const parameters = useParameters(heapRef);
+  const [adding, setAdding] = useState(false);
+  const { ref: newButton, returnFocus } = useReturnFocus<HTMLButtonElement>(adding);
 
   if (parameters.isPending) {
-    return <p className="py-16 text-center text-stone-500">Loading…</p>;
+    return <p className="py-16 text-center text-muted">Loading…</p>;
   }
   if (parameters.isError) {
     return (
-      <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
+      <p role="alert" className="py-16 text-center text-overdue-ink">
         {parameters.error.message}
       </p>
     );
   }
 
   const { heap, allowed_actions, archived } = parameters.data;
+  const canCreate = allowed_actions.includes("create");
+  const closeForm = () => {
+    returnFocus();
+    setAdding(false);
+  };
   return (
-    <section>
+    <section className="flex flex-col gap-4 sm:gap-5">
       <h2 className="sr-only">Parameters</h2>
-      <p className="mb-4 text-sm text-stone-500">
-        Parameters rank the items of {heap.name} next to age, deadline and value. An item's option counts more the
-        higher it is in the list, and the weight sets how much the parameter counts overall.
-      </p>
-      {allowed_actions.includes("create") && <NewParameterForm heapRef={heapRef} />}
+      <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+        <p className={`${introClass} sm:max-w-[520px]`}>
+          Parameters rank the items of {heap.name} next to need, age, deadline and value. Order each parameter's options
+          from highest priority to lowest; the weight sets how much the parameter counts overall.
+        </p>
+        {canCreate && !adding && (
+          <button
+            ref={newButton}
+            type="button"
+            onClick={() => setAdding(true)}
+            className={`${compactButtonClass.bordered} max-sm:w-full`}
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            New parameter
+          </button>
+        )}
+      </div>
+      {canCreate && adding && <NewParameterForm heapRef={heapRef} onClose={closeForm} />}
       {parameters.data.parameters.length === 0 ? (
-        <p className="py-12 text-center text-stone-500">No parameters yet.</p>
+        <p className="py-12 text-center text-muted">No parameters yet.</p>
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-4 sm:gap-5">
           {parameters.data.parameters.map((parameter) => (
             <ParameterCard key={parameter.id} parameter={parameter} heapRef={heapRef} />
           ))}
         </ul>
       )}
       {archived.length > 0 && (
-        <section className="mt-8">
-          <h3 className="mb-2 text-sm font-medium text-stone-500">Archived</h3>
-          <ul className="text-sm text-stone-500">
+        <section aria-labelledby="archived-parameters" className="mt-2">
+          <h3 id="archived-parameters" className="mb-2 text-sm font-medium text-muted">
+            Archived
+          </h3>
+          <ul className="flex flex-col gap-2">
             {archived.map((parameter) => (
-              <li key={parameter.id}>
-                {parameter.name}: {parameter.options.map((option) => option.label).join(", ")}
+              <li
+                key={parameter.id}
+                className="rounded-xl border border-line px-3.5 py-2 text-sm text-ink-soft sm:px-4"
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2 py-1.5">
+                  <span className="font-medium text-ink">{parameter.name}</span>
+                  <span>{parameter.options.map((option) => option.label).join(", ")}</span>
+                </div>
                 {parameter.allowed_actions.includes("view_history") && (
-                  <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} />
+                  <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} className="" />
                 )}
               </li>
             ))}
@@ -70,7 +106,7 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   );
 }
 
-function NewParameterForm({ heapRef }: { heapRef: HeapRef }) {
+function NewParameterForm({ heapRef, onClose }: { heapRef: HeapRef; onClose: () => void }) {
   const create = useCreateParameter(heapRef);
   const [name, setName] = useState("");
   const [weight, setWeight] = useState(10);
@@ -83,55 +119,72 @@ function NewParameterForm({ heapRef }: { heapRef: HeapRef }) {
       .split("\n")
       .map((label) => label.trim())
       .filter(Boolean);
-    create.mutate(
-      { name, weight, options: labels },
-      {
-        onSuccess: () => {
-          setName("");
-          setWeight(10);
-          setOptions("");
-        },
-      },
-    );
+    create.mutate({ name, weight, options: labels }, { onSuccess: onClose });
   };
 
   return (
-    <form
-      onSubmit={submit}
-      className="mb-6 flex flex-col gap-2 rounded-lg border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          aria-label="New parameter name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Parameter name, such as Customer"
-          maxLength={50}
-          className={`${inputClass} min-w-0 flex-1`}
-        />
-        <WeightInput value={weight} onChange={setWeight} label="Weight of the new parameter" />
-      </div>
-      <textarea
-        aria-label="Options of the new parameter, one per line, highest priority first"
-        value={options}
-        onChange={(e) => setOptions(e.target.value)}
-        placeholder={"Options, one per line, highest priority first\nEnterprise\nPro\nFree"}
-        rows={3}
-        className={inputClass}
-      />
-      <div className="flex items-center gap-2">
-        <button type="submit" disabled={create.isPending || name.trim() === ""} className={primaryButtonClass}>
-          Add parameter
-        </button>
-        <ProblemText error={create.error} />
-      </div>
-    </form>
+    <section aria-labelledby="new-parameter" className={cardClass}>
+      <h3 id="new-parameter" className={`${cardTitleClass} mb-3`}>
+        New parameter
+      </h3>
+      <form
+        onSubmit={submit}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          onClose();
+        }}
+        className="flex flex-col gap-3"
+      >
+        <div className="flex flex-wrap items-end gap-2.5">
+          <label className="flex min-w-0 flex-[1_1_220px] flex-col gap-1.5 text-sm font-medium">
+            Name
+            <input
+              aria-label="New parameter name"
+              value={name}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Customer"
+              maxLength={50}
+              className={`${inputClass} font-normal`}
+            />
+          </label>
+          <WeightInput value={weight} onChange={setWeight} label="Weight of the new parameter" />
+        </div>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          <span>
+            Options <span className="font-normal text-muted">one per line, highest priority first</span>
+          </span>
+          <textarea
+            aria-label="Options of the new parameter, one per line, highest priority first"
+            value={options}
+            onChange={(e) => setOptions(e.target.value)}
+            placeholder={"Enterprise\nPro\nFree"}
+            rows={3}
+            className={`${inputClass} font-normal`}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="submit"
+            disabled={create.isPending || name.trim() === ""}
+            className={`${compactButtonClass.primary} max-sm:flex-1`}
+          >
+            Add parameter
+          </button>
+          <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
+            Cancel
+          </button>
+          <ProblemText error={create.error} className={problemClass} />
+        </div>
+      </form>
+    </section>
   );
 }
 
 function WeightInput({ value, onChange, label }: { value: number; onChange: (value: number) => void; label: string }) {
   return (
-    <label className="inline-flex items-center gap-1 text-xs text-stone-500">
+    <label className="flex flex-col gap-1.5 text-sm font-medium">
       Weight
       <input
         type="number"
@@ -140,54 +193,115 @@ function WeightInput({ value, onChange, label }: { value: number; onChange: (val
         aria-label={label}
         value={value}
         onChange={(e) => onChange(Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))))}
-        className={`${inputClass} w-16`}
+        className={`${inputClass} w-20 font-normal`}
       />
     </label>
   );
 }
 
+/**
+ * One parameter: its name with Rename, its weight, its options, the tags that suggest it, and at the foot its history
+ * and Archive parameter. Those without `edit` read the name, weight, options and tags.
+ */
 function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: HeapRef }) {
-  const change = useChangeParameter(heapRef);
+  const rename = useChangeParameter(heapRef);
+  const weigh = useChangeParameter(heapRef);
   const canEdit = parameter.allowed_actions.includes("edit");
+  const [renaming, setRenaming] = useState(false);
+  const { ref: renameButton, returnFocus } = useReturnFocus<HTMLButtonElement>(renaming);
+  const stopRenaming = () => {
+    returnFocus();
+    setRenaming(false);
+  };
+  const headingId = `parameter-${parameter.id}`;
+  const canArchive = parameter.allowed_actions.includes("archive");
+  const canViewHistory = parameter.allowed_actions.includes("view_history");
 
   return (
-    <li className="rounded-lg border border-stone-200 bg-white p-3 dark:border-stone-800 dark:bg-stone-900">
-      {canEdit ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <NameForm
-            label={`Name of parameter ${parameter.name}`}
-            value={parameter.name}
-            version={parameter.version}
-            maxLength={50}
-            pending={change.isPending}
-            error={null}
-            onSave={(name) => change.mutate({ parameter, change: { kind: "patch", patch: { name } } })}
-            className="font-medium"
-          />
-          <WeightForm
-            parameter={parameter}
-            onSave={(weight) => change.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
-          />
-        </div>
-      ) : (
-        <h2 className="font-medium">
-          {parameter.name} <span className="text-xs font-normal text-stone-500">weight {parameter.weight}</span>
-        </h2>
-      )}
-      <ProblemText error={change.error} />
+    <li aria-labelledby={headingId} className={cardClass}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {renaming && canEdit ? (
+          <>
+            <h3 id={headingId} className="sr-only">
+              {parameter.name}
+            </h3>
+            <NameForm
+              label={`Name of parameter ${parameter.name}`}
+              value={parameter.name}
+              version={parameter.version}
+              maxLength={50}
+              pending={rename.isPending}
+              error={rename.error}
+              onSave={(name) =>
+                rename.mutate({ parameter, change: { kind: "patch", patch: { name } } }, { onSuccess: stopRenaming })
+              }
+              onCancel={stopRenaming}
+              autoFocus
+              className="font-semibold"
+              classes={nameFormClasses}
+            />
+          </>
+        ) : (
+          <>
+            <h3 id={headingId} className="min-w-0 text-[17px] font-semibold break-words max-sm:flex-1 sm:text-base">
+              {parameter.name}
+            </h3>
+            <div className="max-sm:order-last max-sm:basis-full">
+              {canEdit ? (
+                <WeightForm
+                  parameter={parameter}
+                  pending={weigh.isPending}
+                  onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
+                />
+              ) : (
+                <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
+                  Weight {parameter.weight}
+                </span>
+              )}
+            </div>
+            <span className="flex-1 max-sm:hidden" />
+            {canEdit && (
+              <button
+                ref={renameButton}
+                type="button"
+                onClick={() => setRenaming(true)}
+                className={compactButtonClass.quiet}
+              >
+                Rename
+              </button>
+            )}
+          </>
+        )}
+      </div>
+      <ProblemText error={weigh.error} className={problemClass} />
 
-      <OptionsEditor parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
-      <LinkedTags parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
-      {parameter.allowed_actions.includes("archive") && <ArchiveParameter parameter={parameter} heapRef={heapRef} />}
-      {parameter.allowed_actions.includes("view_history") && (
-        <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} />
+      <div className="mt-[18px] flex flex-col gap-[18px] sm:flex-row sm:flex-wrap sm:gap-8">
+        <OptionsEditor parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
+        <LinkedTags parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
+      </div>
+
+      {(canViewHistory || canArchive) && (
+        <div className="mt-3.5 flex flex-wrap items-start gap-2 border-t border-line pt-1.5 sm:mt-[18px] sm:pt-3">
+          {canViewHistory && (
+            <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} className="min-w-0 flex-1" />
+          )}
+          {canArchive && <ArchiveParameter parameter={parameter} heapRef={heapRef} />}
+        </div>
       )}
     </li>
   );
 }
 
 /** The weight, saved on its own once it changes. A newer version from the server resets it. */
-function WeightForm({ parameter, onSave }: { parameter: Parameter; onSave: (weight: number) => void }) {
+function WeightForm({
+  parameter,
+  pending,
+  onSave,
+}: {
+  parameter: Parameter;
+  pending: boolean;
+  onSave: (weight: number) => void;
+}) {
   const [weight, setWeight] = useState(parameter.weight);
   const [shownVersion, setShownVersion] = useState(parameter.version);
   if (shownVersion !== parameter.version) {
@@ -196,17 +310,33 @@ function WeightForm({ parameter, onSave }: { parameter: Parameter; onSave: (weig
   }
   return (
     <form
-      className="flex items-center gap-1"
+      className="flex items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         if (weight !== parameter.weight) onSave(weight);
       }}
     >
-      <WeightInput value={weight} onChange={setWeight} label={`Weight of parameter ${parameter.name}`} />
+      <label className="inline-flex items-center gap-2 rounded-full bg-accent-soft py-0.5 pr-0.5 pl-2.5 text-[13px] font-medium text-accent-ink">
+        Weight
+        <input
+          type="number"
+          min={0}
+          max={100}
+          aria-label={`Weight of parameter ${parameter.name}`}
+          value={weight}
+          onChange={(e) => setWeight(Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))))}
+          className="h-7 w-16 rounded-full border border-line bg-surface px-2.5 text-sm text-ink pointer-coarse:h-10"
+        />
+      </label>
       {weight !== parameter.weight && (
-        <button type="submit" className={quietButtonClass}>
-          Save
-        </button>
+        <>
+          <button type="submit" disabled={pending} className={compactButtonClass.primary}>
+            Save
+          </button>
+          <button type="button" onClick={() => setWeight(parameter.weight)} className={compactButtonClass.quiet}>
+            Cancel
+          </button>
+        </>
       )}
     </form>
   );
@@ -241,49 +371,23 @@ function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; 
   };
 
   return (
-    <div className="mt-3">
-      <h3 className="mb-1 text-xs text-stone-500">Options, highest priority first</h3>
-      {options.length === 0 && <p className="text-sm text-stone-500">No options yet.</p>}
-      <ol className="flex flex-col gap-1">
+    <div className="min-w-0 sm:flex-[1_1_300px]">
+      <h4 className={`${labelClass} mb-1 sm:mb-1.5`}>Options, highest priority first</h4>
+      {options.length === 0 && <p className="py-1.5 text-sm text-muted">No options yet.</p>}
+      <ol className="flex flex-col max-sm:divide-y max-sm:divide-line">
         {options.map((option, index) => (
-          <li key={option.id} className="flex flex-wrap items-center gap-1">
-            {canEdit ? (
-              <>
-                <input
-                  aria-label={`Label of option ${index + 1}`}
-                  value={option.label}
-                  maxLength={50}
-                  onChange={(e) =>
-                    setOptions(options.map((o) => (o.id === option.id ? { ...o, label: e.target.value } : o)))
-                  }
-                  className={`${inputClass} w-48`}
-                />
-                <button
-                  type="button"
-                  disabled={index === 0}
-                  onClick={() => move(index, -1)}
-                  aria-label={`Move ${option.label} up`}
-                  className={quietButtonClass}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  disabled={index === options.length - 1}
-                  onClick={() => move(index, 1)}
-                  aria-label={`Move ${option.label} down`}
-                  className={quietButtonClass}
-                >
-                  ↓
-                </button>
-                {!changed && options.length > 1 && (
-                  <ArchiveOption option={option} others={options.filter((o) => o.id !== option.id)} heapRef={heapRef} />
-                )}
-              </>
-            ) : (
-              <span className="text-sm">{option.label}</span>
-            )}
-          </li>
+          <OptionRow
+            key={option.id}
+            option={option}
+            index={index}
+            canEdit={canEdit}
+            others={options.filter((o) => o.id !== option.id)}
+            canArchive={!changed && options.length > 1}
+            isLast={index === options.length - 1}
+            heapRef={heapRef}
+            onLabel={(label) => setOptions(options.map((o) => (o.id === option.id ? { ...o, label } : o)))}
+            onMove={(by) => move(index, by)}
+          />
         ))}
       </ol>
       {canEdit && changed && (
@@ -292,85 +396,150 @@ function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; 
             type="button"
             disabled={change.isPending || options.some((o) => o.label.trim() === "")}
             onClick={() => change.mutate({ parameter, change: { kind: "arrange_options", options } })}
-            className={primaryButtonClass}
+            className={`${compactButtonClass.primary} max-sm:flex-1`}
           >
             Save options
           </button>
-          <button type="button" onClick={() => setOptions(parameter.options)} className={quietButtonClass}>
+          <button type="button" onClick={() => setOptions(parameter.options)} className={compactButtonClass.quiet}>
             Cancel
           </button>
         </div>
       )}
       {canEdit && !changed && (
-        <form onSubmit={add} className="mt-2 flex items-center gap-2">
+        <form onSubmit={add} className="mt-2 flex gap-2 sm:mt-2.5">
           <input
             aria-label={`New option of ${parameter.name}`}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="New option"
+            placeholder="New option, added last"
             maxLength={50}
-            className={`${inputClass} w-48`}
+            className={`${inputClass} flex-1`}
           />
-          <button type="submit" disabled={change.isPending || newLabel.trim() === ""} className={quietButtonClass}>
+          <button
+            type="submit"
+            disabled={change.isPending || newLabel.trim() === ""}
+            className={compactButtonClass.bordered}
+          >
             Add option
           </button>
         </form>
       )}
-      <ProblemText error={change.error} />
+      <ProblemText error={change.error} className={problemClass} />
     </div>
   );
 }
 
-function ArchiveOption({
+/**
+ * An option: its place, its label (an input that reads as text, for those who may edit it), ↑ ↓ and Archive. Archive
+ * turns the row into the confirm, which asks which option open items switch to.
+ */
+function OptionRow({
   option,
+  index,
+  canEdit,
   others,
+  canArchive,
+  isLast,
   heapRef,
+  onLabel,
+  onMove,
 }: {
   option: ParameterOption;
+  index: number;
+  canEdit: boolean;
   others: ParameterOption[];
+  canArchive: boolean;
+  isLast: boolean;
   heapRef: HeapRef;
+  onLabel: (label: string) => void;
+  onMove: (by: -1 | 1) => void;
 }) {
   const archive = useArchiveOption(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   const [replacement, setReplacement] = useState(others[0]?.id ?? "");
+  const rank = <span className={rankClass}>{index + 1}</span>;
 
-  if (!confirming) {
+  if (confirming && canArchive) {
     return (
-      <button ref={buttonRef} type="button" onClick={ask} className={quietButtonClass}>
-        Archive
-      </button>
+      <li className="my-1 rounded-xl border border-overdue-ink/25 bg-overdue-soft p-3 text-sm">
+        <div className="flex items-center gap-2">
+          {rank}
+          <span className="font-medium">Archive {option.label}?</span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <label className="flex flex-wrap items-center gap-1.5 text-ink-soft max-sm:w-full max-sm:flex-col max-sm:items-stretch">
+            Open items with {option.label} switch to
+            <select
+              autoFocus
+              value={replacement}
+              onChange={(e) => setReplacement(e.target.value)}
+              className={`${inputClass} py-1.5`}
+            >
+              {others.map((other) => (
+                <option key={other.id} value={other.id}>
+                  {other.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={archive.isPending || replacement === ""}
+            onClick={() => archive.mutate({ optionId: option.id, replacementId: replacement }, { onError: cancel })}
+            className={`${compactButtonClass.danger} max-sm:flex-1`}
+          >
+            Archive
+          </button>
+          <button type="button" onClick={cancel} className={compactButtonClass.quiet}>
+            Cancel
+          </button>
+        </div>
+      </li>
+    );
+  }
+  if (!canEdit) {
+    return (
+      <li className="flex items-center gap-2 py-1.5 max-sm:py-2.5">
+        {rank}
+        <span className="text-sm font-medium">{option.label}</span>
+      </li>
     );
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-1 text-sm">
-      <label className="inline-flex items-center gap-1">
-        Open items with {option.label} switch to
-        <select
-          autoFocus
-          value={replacement}
-          onChange={(e) => setReplacement(e.target.value)}
-          className={`${inputClass} py-0.5`}
-        >
-          {others.map((other) => (
-            <option key={other.id} value={other.id}>
-              {other.label}
-            </option>
-          ))}
-        </select>
-      </label>
+    <li className="flex flex-wrap items-center gap-1 py-1 sm:gap-2">
+      {rank}
+      <input
+        aria-label={`Label of option ${index + 1}`}
+        value={option.label}
+        maxLength={50}
+        onChange={(e) => onLabel(e.target.value)}
+        className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-medium text-ink hover:border-line focus:border-line-strong focus:bg-surface pointer-coarse:min-h-11"
+      />
       <button
         type="button"
-        disabled={archive.isPending || replacement === ""}
-        onClick={() => archive.mutate({ optionId: option.id, replacementId: replacement }, { onError: cancel })}
-        className="rounded px-1.5 py-1 font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+        disabled={index === 0}
+        onClick={() => onMove(-1)}
+        aria-label={`Move ${option.label} up`}
+        className={compactButtonClass.icon}
       >
-        Archive
+        <ArrowUp aria-hidden="true" className="size-4" />
       </button>
-      <button type="button" onClick={cancel} className={quietButtonClass}>
-        Cancel
+      <button
+        type="button"
+        disabled={isLast}
+        onClick={() => onMove(1)}
+        aria-label={`Move ${option.label} down`}
+        className={compactButtonClass.icon}
+      >
+        <ArrowDown aria-hidden="true" className="size-4" />
       </button>
-      <ProblemText error={archive.error} />
-    </span>
+      {canArchive && (
+        <button ref={buttonRef} type="button" onClick={ask} className={`${compactButtonClass.quiet} px-2 text-[13px]`}>
+          Archive
+        </button>
+      )}
+      <ProblemText error={archive.error} className={problemClass} />
+    </li>
   );
 }
 
@@ -381,23 +550,44 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; hea
   const linked: ItemTag[] = (tags.data?.tags ?? [])
     .filter((tag) => parameter.tag_ids.includes(tag.id))
     .map((tag) => ({ id: tag.id, name: tag.name }));
+  const heading = <h4 className={labelClass}>Suggested by tags</h4>;
 
   if (!canEdit) {
     if (linked.length === 0) return null;
     return (
-      <p className="mt-3 text-xs text-stone-500">Suggested for items tagged {linked.map((t) => t.name).join(", ")}</p>
+      <div className="min-w-0 sm:flex-[1_1_220px]">
+        {heading}
+        <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Suggested by tags">
+          {linked.map((tag) => (
+            <li
+              key={tag.id}
+              className="inline-flex h-[26px] items-center rounded-full border border-line bg-sunken px-2.5 text-[13px] font-medium"
+            >
+              {tag.name}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[13px]/[1.45] text-muted">
+          Adding one of these tags to an item suggests {parameter.name}.
+        </p>
+      </div>
     );
   }
   return (
-    <div className="mt-3">
+    <div className="min-w-0 sm:flex-[1_1_220px]">
       <TagPicker
         heapRef={heapRef}
         value={linked}
         disabled={change.isPending}
+        label={heading}
         onChange={(next) => change.mutate({ parameter, change: { kind: "link_tags", tagIds: next.map((t) => t.id) } })}
       />
-      <p className="mt-1 text-xs text-stone-500">Adding one of these tags to an item suggests this parameter.</p>
-      <ProblemText error={change.error} />
+      <p className="mt-2 text-[13px]/[1.45] text-muted">
+        {linked.length > 0
+          ? `Adding one of these tags to an item suggests ${parameter.name}.`
+          : `No tags suggest ${parameter.name} yet.`}
+      </p>
+      <ProblemText error={change.error} className={problemClass} />
     </div>
   );
 }
@@ -406,29 +596,36 @@ function ArchiveParameter({ parameter, heapRef }: { parameter: Parameter; heapRe
   const archive = useArchiveParameter(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-stone-100 pt-2 text-sm dark:border-stone-800">
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm">
       {confirming ? (
         <>
-          <span>Archive {parameter.name}? It stops counting in the ranking; closed items keep their values.</span>
+          <span className="text-ink-soft">
+            Archive {parameter.name}? It stops counting in the ranking; closed items keep their values.
+          </span>
           <button
             type="button"
             autoFocus
             disabled={archive.isPending}
             onClick={() => archive.mutate(parameter, { onError: cancel })}
-            className="rounded px-1.5 py-1 font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+            className={compactButtonClass.danger}
           >
             Archive
           </button>
-          <button type="button" onClick={cancel} className={quietButtonClass}>
+          <button type="button" onClick={cancel} className={compactButtonClass.quiet}>
             Cancel
           </button>
         </>
       ) : (
-        <button ref={buttonRef} type="button" onClick={ask} className={quietButtonClass}>
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={ask}
+          className={`${compactButtonClass.quietDanger} max-sm:pr-0 max-sm:hover:bg-transparent`}
+        >
           Archive parameter
         </button>
       )}
-      <ProblemText error={archive.error} />
+      <ProblemText error={archive.error} className={`${problemClass} text-right`} />
     </div>
   );
 }

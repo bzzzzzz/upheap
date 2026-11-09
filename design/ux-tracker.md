@@ -90,7 +90,11 @@ Mocked up already, not in the first set: **WideCommand** (⌘K), **WideFilters**
 **MainKeyboard** (the list with shortcut hints). MainKeyboard still shows the row buttons and the toast from
 before the "only where it pays" pass, and needs that pass when it moves up.
 
-Not designed: tablet, keyboard shortcuts help, sort and view settings, saved-view editing, tags, parameters,
-activity, heap settings, history views, the remaining team and account pages, error pages, and the installable app.
+The heap Settings tabs (General, Tags, Parameters) were mocked up later, at phone and wide widths, light and dark,
+and are built to them, except the mockups' tag item counts and weight shares, which need server fields, and the
+Ranking tab.
+
+Not designed: tablet, keyboard shortcuts help, sort and view settings, saved-view editing,
+activity, history views, the remaining team and account pages, error pages, and the installable app.
 The full list is in screens.md, "Deferred".
 

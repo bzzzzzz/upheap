@@ -219,6 +219,20 @@ export async function goTo(page: Page, name: AppPage) {
   }
 }
 
+/**
+ * Adds a parameter on the Parameters tab, through its New parameter form, with `options` highest priority first, and
+ * waits for its card.
+ */
+export async function addParameter(page: Page, name: string, weight: number, options: string[]) {
+  await goTo(page, "Parameters");
+  await page.getByRole("button", { name: "New parameter" }).click();
+  await page.getByLabel("New parameter name").fill(name);
+  await page.getByLabel("Weight of the new parameter").fill(String(weight));
+  await page.getByLabel(/^Options of the new parameter/).fill(options.join("\n"));
+  await page.getByRole("button", { name: "Add parameter" }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+}
+
 /** Opens More from the phone's tabs. */
 async function openMore(page: Page) {
   await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();

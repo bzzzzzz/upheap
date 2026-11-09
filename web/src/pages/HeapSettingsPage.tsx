@@ -1,18 +1,13 @@
 import { Link, Outlet } from "@tanstack/react-router";
+import { useState } from "react";
 
 import type { HeapRef } from "../api/client";
 import { useHeap, useSetHeapArchived, useUpdateHeap } from "../api/queries";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
-import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
-
-const nameFormClasses: NameFormClasses = {
-  input: "rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink pointer-coarse:min-h-11",
-  save: compactButtonClass.primary,
-  cancel: compactButtonClass.quiet,
-  problem: "text-overdue-ink",
-};
+import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -59,6 +54,8 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
   const update = useUpdateHeap(heapRef.team);
   const setArchived = useSetHeapArchived(heapRef.team);
+  // What the link name field holds, for the new path under it while it's being changed.
+  const [slugDraft, setSlugDraft] = useState("");
 
   if (heap.isPending) return <p className="py-16 text-center text-muted">Loading…</p>;
   if (heap.isError) {
@@ -74,17 +71,19 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const archived = data.archived_at !== null;
   const archiveAction = archived ? "unarchive" : "archive";
   const save = (patch: { name: string } | { slug: string }) => update.mutate({ heap: data, patch });
+  const newSlug = can("rename") ? slugDraft.trim() : "";
+  const slugChanging = newSlug !== "" && newSlug !== data.slug;
 
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-labelledby="heap-details" className="rounded-[14px] border border-line bg-surface p-5">
-        <h2 id="heap-details" className="text-base font-semibold">
+    <div className="flex max-w-[640px] flex-col gap-4 sm:gap-6">
+      <section aria-labelledby="heap-details" className={cardClass}>
+        <h2 id="heap-details" className={cardTitleClass}>
           Details
         </h2>
-        <dl className="mt-4 flex flex-col gap-4">
+        <dl className="mt-4 flex flex-col gap-[18px]">
           <div>
             <dt className="mb-1.5 text-sm font-medium text-ink">Name</dt>
-            <dd className="flex">
+            <dd className="flex sm:max-w-[360px]">
               {can("rename") ? (
                 <NameForm
                   label="Heap name"
@@ -102,8 +101,11 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
           </div>
           <div>
             <dt className="mb-1.5 text-sm font-medium text-ink">Link name</dt>
-            <dd className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
-              <span aria-hidden="true">/heaps/</span>
+            <dd className="flex min-w-0 items-start gap-1.5 text-sm text-muted">
+              {/* Level with the input, also when Save and Cancel wrap under it on a phone. */}
+              <span aria-hidden="true" className="flex min-h-[38px] items-center pointer-coarse:min-h-11">
+                /heaps/
+              </span>
               {can("rename") ? (
                 <NameForm
                   label="Heap link name"
@@ -113,24 +115,38 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
                   pending={update.isPending}
                   error={update.variables && "slug" in update.variables.patch ? update.error : null}
                   onSave={(slug) => save({ slug: slug.trim() })}
+                  onDraftChange={setSlugDraft}
                   classes={nameFormClasses}
                 />
               ) : (
-                <span className="text-ink-soft">{data.slug}</span>
+                <span className="flex min-h-[38px] items-center text-ink-soft pointer-coarse:min-h-11">
+                  {data.slug}
+                </span>
               )}
             </dd>
-            <p className="mt-1.5 text-xs text-muted">Changing it changes the heap's links; old links stop working.</p>
+            <p className="mt-2 text-xs/normal text-muted max-sm:text-[13px]">
+              {slugChanging && (
+                <>
+                  New link:{" "}
+                  <span className="font-mono break-all text-ink-soft">
+                    /teams/{heapRef.team}/heaps/{newSlug}
+                  </span>
+                  .{" "}
+                </>
+              )}
+              Changing it changes the heap's links; old links stop working.
+            </p>
           </div>
         </dl>
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}
       </section>
 
       {can(archiveAction) && (
-        <section aria-labelledby="heap-archive" className="rounded-[14px] border border-line bg-surface p-5">
-          <h2 id="heap-archive" className="text-base font-semibold">
+        <section aria-labelledby="heap-archive" className={cardClass}>
+          <h2 id="heap-archive" className={cardTitleClass}>
             {archived ? "Archived" : "Archive"}
           </h2>
-          <p className="mt-2 text-sm text-ink-soft">
+          <p className="mt-2 text-sm/normal text-ink-soft">
             {archived
               ? "This heap is read-only. Unarchive it to add and change items again."
               : "An archived heap keeps its items but becomes read-only. It can be unarchived at any time."}
@@ -140,7 +156,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
               type="button"
               disabled={setArchived.isPending}
               onClick={() => setArchived.mutate({ heap: data, archived: !archived })}
-              className={archived ? compactButtonClass.bordered : compactButtonClass.borderedDanger}
+              className={`${archived ? compactButtonClass.bordered : compactButtonClass.borderedDanger} max-sm:w-full`}
             >
               {archived ? "Unarchive heap" : "Archive heap"}
             </button>

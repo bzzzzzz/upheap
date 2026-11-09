@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags } from "../api/queries";
@@ -17,6 +17,7 @@ export function TagPicker({
   disabled,
   inline = false,
   layout = "stack",
+  label = <span className="text-xs font-medium text-ink-soft">Tags</span>,
 }: {
   heapRef: HeapRef;
   value: ItemTag[];
@@ -25,6 +26,8 @@ export function TagPicker({
   /** The matches in the flow, under the field, rather than over what follows; for a phone's sheet, which grows. */
   inline?: boolean;
   layout?: FieldLayout;
+  /** The heading above the tags, for a page that names them otherwise, such as a parameter's "Suggested by tags". */
+  label?: ReactNode;
 }) {
   const tags = useTags(heapRef);
   const create = useCreateTag(heapRef);
@@ -97,7 +100,7 @@ export function TagPicker({
   const optionId = (index: number) => `${listId}-${index}`;
 
   return (
-    <FieldFrame layout={layout} label={<span className="text-xs font-medium text-ink-soft">Tags</span>}>
+    <FieldFrame layout={layout} label={label}>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((tag) => (
           <span
@@ -110,7 +113,8 @@ export function TagPicker({
               disabled={disabled || busy}
               onClick={() => onChange(value.filter((t) => t.id !== tag.id))}
               aria-label={`Remove tag ${tag.name}`}
-              className="flex size-5 items-center justify-center rounded-full text-muted hover:bg-line hover:text-ink"
+              // A finger gets a 44 px target around the 20 px circle.
+              className="relative flex size-5 items-center justify-center rounded-full text-muted after:absolute after:-inset-3 hover:bg-line hover:text-ink pointer-fine:after:hidden"
             >
               ×
             </button>

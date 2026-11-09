@@ -30,6 +30,7 @@ export function NameForm({
   classes = defaultClasses,
   onCancel,
   autoFocus = false,
+  onDraftChange,
 }: {
   label: string;
   value: string;
@@ -43,6 +44,8 @@ export function NameForm({
   classes?: NameFormClasses;
   onCancel?: () => void;
   autoFocus?: boolean;
+  /** Told the text in the input whenever it changes, for a note about it beside the form, such as a new link. */
+  onDraftChange?: (name: string) => void;
 }) {
   const [name, setName] = useState(value);
   const input = useRef<HTMLInputElement>(null);
@@ -64,6 +67,7 @@ export function NameForm({
     setShownVersion(version);
     setName(value);
   }
+  useEffect(() => onDraftChange?.(name), [name, onDraftChange]);
   // The server trims names, so surrounding spaces alone aren't a change.
   const changed = name.trim() !== value;
 

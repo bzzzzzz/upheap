@@ -69,7 +69,17 @@ the account pages.
 Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`), so Back steps between
 them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name and
 the link name, edited in place, a note that a new link name breaks old links, the heap's history, and Archive heap or
-Unarchive heap. Each control shows only where `allowed_actions` allows it; everyone else reads the values.
+Unarchive heap. While the link name is being changed, the new path shows under it ("New link: /teams/{team}/heaps/{slug}").
+Each control shows only where `allowed_actions` allows it; everyone else reads the values.
+
+The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
+Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
+(or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
+highlighted in the accent. **Parameters** opens its add form from a New parameter button, and gives each parameter a
+card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the row
+into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History and
+Archive parameter. Archived parameters are listed last. On a phone everything stacks in one column, main buttons span
+the width, and every control is 44 px to a finger.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
 wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens

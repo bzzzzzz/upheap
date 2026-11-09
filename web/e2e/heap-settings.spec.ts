@@ -13,6 +13,7 @@ test("General renames the heap, changes its link name and archives it", async ({
 
   // A new link name moves the page to the heap's new path.
   await page.getByLabel("Heap link name").fill("allotment");
+  await expect(page.getByText(/^New link: \/teams\/[^/]+\/heaps\/allotment\./)).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/heaps\/allotment\/settings$/);
 
@@ -28,9 +29,45 @@ test("Tags and Parameters are tabs of Settings, and their old paths lead there",
   await expect(page.getByLabel("New tag name")).toBeVisible();
   await goTo(page, "Parameters");
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/parameters$`));
-  await expect(page.getByLabel("New parameter name")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New parameter" })).toBeVisible();
 
   // `heapPath` holds the local build's base path too.
   await page.goto(`${heapPath}/tags`);
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/tags$`));
+});
+
+test("a tag reads as a row, and its edit button turns it into a form", async ({ page }) => {
+  await goTo(page, "Tags");
+  await page.getByLabel("New tag name").fill("billing");
+  await page.getByLabel("New tag description").fill("Invoices");
+  await page.getByRole("button", { name: "Add tag" }).click();
+  await expect(page.getByRole("heading", { name: "1 tag" })).toBeVisible();
+  await page.getByLabel("New tag name").fill("frontend");
+  await page.getByRole("button", { name: "Add tag" }).click();
+  await expect(page.getByRole("heading", { name: "2 tags" })).toBeVisible();
+  await expect(page.getByText("No description")).toBeVisible();
+  await expect(page.getByLabel("Name of tag billing")).toHaveCount(0);
+
+  // Cancel leaves the tag as it was, with focus back on its edit button.
+  const edit = page.getByRole("button", { name: "Edit billing" });
+  await edit.click();
+  await expect(page.getByLabel("Name of tag billing")).toBeFocused();
+  await page.getByLabel("Name of tag billing").fill("plans");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByLabel("Name of tag billing")).toHaveCount(0);
+  await expect(edit).toBeFocused();
+
+  await edit.click();
+  await page.getByLabel("Name of tag billing").fill("billing & plans");
+  await page.getByLabel("Description of tag billing").fill("Invoices and plans");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Edit billing & plans" })).toBeVisible();
+  await expect(page.getByText("Invoices and plans")).toBeVisible();
+
+  // A name another tag has is refused, and the form stays open.
+  await page.getByRole("button", { name: "Edit frontend" }).click();
+  await page.getByLabel("Name of tag frontend").fill("Billing & Plans");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("alert")).toHaveText("This heap already has a tag with that name.");
+  await expect(page.getByLabel("Name of tag frontend")).toBeVisible();
 });
