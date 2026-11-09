@@ -177,6 +177,8 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: ["item"] }),
+    // The heaps' open counts, which the sidebar shows.
+    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
   ]);
 }
 

@@ -5,12 +5,13 @@ import type {
   ItemState,
   ListSort,
   ListViewQuery,
+  Need,
   RankedItem,
   RankedList,
   Size,
   StateMode,
 } from "../api/client";
-import { SIZES } from "./labels";
+import { NEEDS, SIZES } from "./labels";
 
 export type ListSearch = {
   open?: StateMode;
@@ -22,6 +23,8 @@ export type ListSearch = {
   sort_parameter?: string;
   /** Tag IDs, comma-separated. */
   tag?: string;
+  /** Needs, comma-separated. */
+  need?: string;
   /** Sizes, comma-separated. */
   effort?: string;
   impact?: string;
@@ -38,6 +41,23 @@ export const DEFAULT_MODES: Record<ShownState, StateMode> = { open: "shown", in_
 
 export const STATE_MODES: readonly StateMode[] = ["pinned", "shown", "hidden"];
 export const MODE_LABELS: Record<StateMode, string> = { pinned: "Pinned", shown: "Shown", hidden: "Hidden" };
+
+/** The view settings besides the sort, which the Filters panel's Show section sets. */
+export type ViewSetting = ShownState | "blocked_layout";
+export const VIEW_SETTINGS: readonly ViewSetting[] = [...SHOWN_STATES, "blocked_layout"];
+
+/** The view settings changed from the server's defaults (the URL leaves defaults out). */
+export const viewChanges = (search: ListSearch): ViewSetting[] =>
+  VIEW_SETTINGS.filter((setting) => search[setting] !== undefined);
+
+/** The same view with every state and the blocked layout back at the defaults. */
+export const withoutViewChanges = (search: ListSearch): ListSearch => ({
+  ...search,
+  open: undefined,
+  in_progress: undefined,
+  blocked: undefined,
+  blocked_layout: undefined,
+});
 
 /** The sorts that need no parameter. Sorting by a parameter is offered once per parameter. */
 export const SORTS: readonly Exclude<ListSort, "parameter">[] = ["priority", "due", "effort", "impact"];
@@ -60,7 +80,7 @@ const list = (raw: unknown) => (typeof raw === "string" && raw !== "" ? raw : un
 
 /**
  * Keeps only the known list view params of a URL, and drops values that equal the server's defaults, so equal
- * views have equal URLs and query keys. Lists are sorted for the same reason. Unknown sizes are dropped too; tag IDs
+ * views have equal URLs and query keys. Lists are sorted for the same reason. Unknown sizes and needs are dropped too; tag IDs
  * go to the server, which refuses malformed or foreign ones (the page then offers to reset the view).
  */
 export function parseListSearch(raw: Record<string, unknown>): ListSearch {
@@ -68,12 +88,14 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
     const value = mode(raw[state]);
     return value === DEFAULT_MODES[state] ? undefined : value;
   };
-  const sizes = (value: unknown) =>
+  // Known values only, once each, in their own order.
+  const known = (values: readonly string[], value: unknown) =>
     joinList(
       splitList(list(value))
-        .filter((size, index, all) => SIZES.includes(size as Size) && all.indexOf(size) === index)
-        .sort((a, b) => SIZES.indexOf(a as Size) - SIZES.indexOf(b as Size)),
+        .filter((v, index, all) => values.includes(v) && all.indexOf(v) === index)
+        .sort((a, b) => values.indexOf(a) - values.indexOf(b)),
     );
+  const sizes = (value: unknown) => known(SIZES, value);
   const blockedLayout = layout(raw.blocked_layout);
   const sortParameter = list(raw.sort_parameter);
   // A parameter sort needs its parameter, and no other sort takes one, so a half of the pair alone is dropped.
@@ -86,6 +108,7 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
     sort: sortBy === "priority" ? undefined : sortBy,
     sort_parameter: sortBy === "parameter" ? sortParameter : undefined,
     tag: ids(raw.tag),
+    need: known(NEEDS, raw.need),
     effort: sizes(raw.effort),
     impact: sizes(raw.impact),
     param: ids(raw.param),
@@ -110,6 +133,7 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     sort: search.sort,
     sort_parameter: search.sort_parameter,
     tag: splitList(search.tag),
+    need: splitList(search.need) as Need[],
     effort: splitList(search.effort) as Size[],
     impact: splitList(search.impact) as Size[],
     param: splitList(search.param),
@@ -123,6 +147,7 @@ export function toListQuery(search: ListSearch): ListViewQuery {
 /** How many filters are on. */
 export const filterCount = (search: ListSearch) =>
   splitList(search.tag).length +
+  splitList(search.need).length +
   splitList(search.effort).length +
   splitList(search.impact).length +
   splitList(search.param).length;
@@ -131,10 +156,15 @@ export const filterCount = (search: ListSearch) =>
 export const withoutFilters = (search: ListSearch): ListSearch => ({
   ...search,
   tag: undefined,
+  need: undefined,
   effort: undefined,
   impact: undefined,
   param: undefined,
 });
+
+/** Reset all: no filters and the default view settings. The sort stays, as does the search text. */
+export const withoutFiltersOrViewChanges = (search: ListSearch): ListSearch =>
+  withoutFilters(withoutViewChanges(search));
 
 /**
  * The text search, the one filter the client runs: every word must appear in the title or description, ignoring

@@ -75,12 +75,14 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching every heap
    needs a server search endpoint; today's search filters only the loaded list.
 2. **The search box filters the current list.** Matches stay in ranked order.
-3. **The heap switcher shows open counts** and ends with New heap (gap 8). In the browser it's the sidebar.
+3. **The heap switcher shows open counts** and ends with New heap (gap 8). In the browser it opens from the heap
+   button at the top of the sidebar, and Open shows the heap's open count.
 
 ### Filters and views (M-filters, M-view-settings)
 
-1. **Each chip shows how many items it would match,** and the footer shows "Showing 4 of 14". The list updates
-   live behind the popover, or behind the phone sheet, whose button reads "Show 4 items".
+1. **One Filters panel** sets both what the list shows (each state pinned, shown or hidden) and the filters (tags,
+   need, effort, impact, parameters); the phone's also has the sort. The footer shows "4 of 14 items". The list
+   updates live behind the popover, or behind the phone sheet, whose button reads "Show 4 items".
 2. **"Save as view…" is in the popover**, where the user finishes shaping the list.
 
 ## Rules that settle open questions

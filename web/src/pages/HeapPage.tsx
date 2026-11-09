@@ -20,6 +20,7 @@ import {
   placeOf,
   SHOWN_STATES,
   toListQuery,
+  viewChanges,
   type ListSearch,
 } from "../components/listView";
 
@@ -189,6 +190,7 @@ function ListPage({
   onChangeState: ChangeState;
 }) {
   const filters = filterCount(view);
+  const changed = filters > 0 || viewChanges(view).length > 0;
   if (list.isPending) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
@@ -202,6 +204,12 @@ function ListPage({
       onSearch={onSearch}
       panel={panel}
       onPanel={onPanel}
+      counts={
+        list.data && {
+          listed: everyEntry(list.data).length,
+          total: list.isPlaceholderData ? undefined : list.data.unfiltered_count,
+        }
+      }
     />
   );
 
@@ -253,7 +261,7 @@ function ListPage({
 
       {controls}
 
-      {filters > 0 && (
+      {changed && (
         <FilterChips
           heapRef={heapRef}
           view={view}
