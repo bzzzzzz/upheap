@@ -38,6 +38,8 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await addItem(page, "Write the rota");
   await openItem(page, "Write the rota");
   const pane = itemPane(page);
+  // The link sign beside the title copies the item's short link.
+  await expect(pane.getByRole("button", { name: /^Copy the link to [0-9a-z]{5}$/ })).toBeVisible();
 
   // Each change saves as it's made, one after the other.
   await pick(page, "Effort", "S");
@@ -161,7 +163,7 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
 test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {
   // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
-  await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
   await page.keyboard.press("n");
   const dialog = addDialog(page);
   const due = dialog.getByRole("radiogroup", { name: "Due" });

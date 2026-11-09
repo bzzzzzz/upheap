@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
 import { useRankedList, useUpdateItem } from "../api/queries";
 import { AddItem } from "../components/AddItem";
-import { CopyLink } from "../components/CopyLink";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
@@ -251,21 +250,8 @@ function ListPage({
 
   return (
     <main>
-      <div className="mt-2 flex items-baseline justify-end sm:mt-6 sm:justify-between">
-        {/* On a phone the heap name is already at the top, as the heap switcher. */}
-        <h1 className="text-xl font-semibold tracking-tight max-sm:sr-only">{heap.name}</h1>
-        <div className="flex items-baseline gap-3">
-          <CopyLink handles={[heapRef.team, heapRef.heap]} />
-          <button
-            type="button"
-            onClick={() => void list.refresh()}
-            className="text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
-            title="Re-rank at the current time"
-          >
-            Refresh order
-          </button>
-        </div>
-      </div>
+      {/* On a phone the heap name is already at the top, as the heap switcher. */}
+      <h1 className="mt-2 text-xl font-semibold tracking-tight max-sm:sr-only sm:mt-6">{heap.name}</h1>
 
       {savedViews}
 

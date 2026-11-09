@@ -186,9 +186,6 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
           <NavLink {...views.activity} icon={Activity} label="Activity" />
           <NavLink {...views.tags} icon={Tag} label="Tags" />
           <NavLink {...views.parameters} icon={SlidersHorizontal} label="Parameters" />
-          {links.heapTeam && (
-            <NavLink to="/teams/$team" params={{ team: links.heapTeam.slug }} icon={Users} label="Team" />
-          )}
         </nav>
       )}
 

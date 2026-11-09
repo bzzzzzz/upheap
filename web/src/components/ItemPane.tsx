@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, ChevronUp, Ellipsis, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, Ellipsis, Link2, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, Menu, MenuTrigger, ToggleButtonGroup } from "react-aria-components";
@@ -8,7 +8,7 @@ import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem,
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
 import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
-import { CopyLink } from "./CopyLink";
+import { useCopyLink } from "./copyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker, DueRows } from "./DuePicker";
@@ -128,12 +128,7 @@ export function ItemPane({
               ))}
             </div>
           )}
-          {/* The key is the link's own name, so the button says what it copies (ux-overview.md, The item §3). */}
-          <CopyLink
-            handles={[heapRef.team, heapRef.heap, itemKey]}
-            label={<span className="font-mono">{itemKey}</span>}
-            description={`Copy the link to ${itemKey}`}
-          />
+          <span className="px-2 font-mono text-xs text-ink-soft">{itemKey}</span>
           <button
             type="button"
             onClick={onClose}
@@ -261,28 +256,31 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Keyed by the saved text, so a save from elsewhere shows up here. Labelled by attribute, as a wrapping label
+      <div className="flex items-start gap-1">
+        {/* Keyed by the saved text, so a save from elsewhere shows up here. Labelled by attribute, as a wrapping label
           would take the text typed in as part of its own. */}
-      <textarea
-        aria-label="Title"
-        key={item.title}
-        defaultValue={item.title}
-        disabled={!canEdit}
-        rows={1}
-        onBlur={(e) => saveText("title", e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.currentTarget.blur();
-          } else if (e.key === "Escape") {
-            // Undoes the typing, and keeps the item open.
-            e.preventDefault();
-            e.currentTarget.value = item.title;
-            e.currentTarget.blur();
-          }
-        }}
-        className="field-sizing-content resize-none bg-transparent text-lg leading-snug font-semibold outline-none disabled:opacity-100"
-      />
+        <textarea
+          aria-label="Title"
+          key={item.title}
+          defaultValue={item.title}
+          disabled={!canEdit}
+          rows={1}
+          onBlur={(e) => saveText("title", e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              // Undoes the typing, and keeps the item open.
+              e.preventDefault();
+              e.currentTarget.value = item.title;
+              e.currentTarget.blur();
+            }
+          }}
+          className="field-sizing-content min-w-0 flex-1 resize-none bg-transparent text-lg leading-snug font-semibold outline-none disabled:opacity-100"
+        />
+        <CopyItemLink heapRef={heapRef} itemKey={item.key} />
+      </div>
 
       {phone ? (
         <StateLine item={item} canReopen={canReopen} />
@@ -839,3 +837,29 @@ const barButtonClass = (main: boolean) =>
   `h-13 rounded-[14px] text-[15px] disabled:opacity-50 ${
     main ? "bg-accent font-semibold text-stone-950" : "bg-sunken font-medium text-ink"
   }`;
+
+/** The link sign beside the title: copies the item's short link, and says so for a moment. */
+function CopyItemLink({ heapRef, itemKey }: { heapRef: HeapRef; itemKey: string }) {
+  const { copied, copy } = useCopyLink();
+  // The status sits beside the button rather than in it, as a live region inside a button doesn't name it.
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => copy(heapRef.team, heapRef.heap, itemKey)}
+        aria-label={`Copy the link to ${itemKey}`}
+        title={copied ? "Copied" : "Copy link"}
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken hover:text-ink pointer-coarse:size-11"
+      >
+        {copied ? (
+          <Check aria-hidden="true" className="size-4 text-done" />
+        ) : (
+          <Link2 aria-hidden="true" className="size-4" />
+        )}
+      </button>
+      <span role="status" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
+    </>
+  );
+}

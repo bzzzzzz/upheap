@@ -228,7 +228,7 @@ test("the item goes into the heap chosen in the dialog's title", async ({ page, 
   await page.getByRole("button", { name: "Add heap" }).click();
   await expect(page.getByRole("region", { name: "Heaps" }).getByText("Garden", { exact: true })).toBeVisible();
   await page.goto(heapPath);
-  await expect(page.getByRole("button", { name: "Refresh order" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
 
   // A tag of this heap, which the list is filtered to.
   await openAdd(page);

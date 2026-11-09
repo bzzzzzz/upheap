@@ -21,7 +21,6 @@ import {
 } from "../api/queries";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
-import { useCopyLink } from "../components/CopyLink";
 import { Field } from "../components/Field";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
@@ -83,14 +82,13 @@ export function TeamPage({ team: slug }: { team: string }) {
 type TeamEdit = "name" | "slug";
 
 /**
- * "Teams · you're an admin", the name and what a team is. Rename, Link name, Copy link and Activity are rarer, so they
+ * "Teams · you're an admin", the name and what a team is. Rename, Link name and Activity are rarer, so they
  * sit under the ⋯ by the name; the name and link name are edited in place when chosen.
  */
 function TeamHeader({ team }: { team: Team }) {
   const { data: me } = useMe();
   const update = useUpdateTeam();
   const navigate = useNavigate();
-  const { copied, copy } = useCopyLink();
   const [editing, setEditing] = useState<TeamEdit | null>(null);
   const can = (action: Team["allowed_actions"][number]) => team.allowed_actions.includes(action);
   // In the local build there's no Teams list to go back to: `/teams` leads here.
@@ -106,7 +104,6 @@ function TeamHeader({ team }: { team: Team }) {
 
   const act = (key: string | number) => {
     if (key === "rename" || key === "slug") setEditing(key === "rename" ? "name" : "slug");
-    if (key === "copy") copy(team.slug);
     if (key === "activity") void navigate({ to: "/teams/$team/activity", params: { team: team.slug } });
   };
 
@@ -153,15 +150,11 @@ function TeamHeader({ team }: { team: Team }) {
               <Menu aria-label={`More for ${team.name}`} className="outline-none" onAction={act}>
                 {can("rename") ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
-                <MenuEntry id="copy">Copy link</MenuEntry>
                 <MenuEntry id="activity">Activity</MenuEntry>
               </Menu>
             </MenuPopover>
           </MenuTrigger>
         )}
-        <span role="status" className="text-xs text-muted">
-          {copied ? "Link copied" : ""}
-        </span>
       </div>
       {editing === "slug" && (
         <div className="flex items-center gap-1.5 text-sm text-muted">
