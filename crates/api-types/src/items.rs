@@ -176,19 +176,25 @@ pub struct ClosedItemsDto {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateItemRequest)]
 pub struct CreateItemDto {
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Required: every item says how much it's needed.
     pub need: NeedDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<SizeDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub impact: Option<SizeDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub due: Option<DueInputDto>,
     /// Tags of the same heap, at most 50.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tag_ids: Option<Vec<Uuid>>,
     /// An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parameter_values: Option<BTreeMap<Uuid, Uuid>>,
 }
 
@@ -219,40 +225,42 @@ impl CreateItemDto {
 }
 
 /// A partial edit. Leave a field out to keep it; send `null` to clear it.
-#[derive(Deserialize, ToSchema)]
+#[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = ItemPatchRequest)]
 pub struct ItemPatchDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub description: Option<Option<String>>,
     /// Need can be changed but not cleared; `null` is refused.
-    #[serde(default, deserialize_with = "never_null")]
+    #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = NeedDto, required = false)]
     pub need: Option<NeedDto>,
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<SizeDto>, nullable)]
     pub effort: Option<Option<SizeDto>>,
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<SizeDto>, nullable)]
     pub impact: Option<Option<SizeDto>>,
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<DueInputDto>, nullable)]
     pub due: Option<Option<DueInputDto>>,
     /// Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused.
-    #[serde(default, deserialize_with = "non_null")]
+    #[serde(default, deserialize_with = "non_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Vec<Uuid>, required = false)]
     pub tag_ids: Option<Vec<Uuid>>,
     /// Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep
     /// their values.
-    #[serde(default, deserialize_with = "non_null")]
+    #[serde(default, deserialize_with = "non_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = BTreeMap<Uuid, Option<Uuid>>, required = false)]
     pub parameter_values: Option<BTreeMap<Uuid, Option<Uuid>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<StateDto>,
     /// The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send
     /// it with `"state": "blocked"` unless the item is blocked already. `null` clears it. Leaving the blocked state
     /// clears it too.
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Uuid>, nullable)]
     pub blocked_by_item_id: Option<Option<Uuid>>,
 }
@@ -313,6 +321,55 @@ mod tests {
 
         // Assert
         verify_that!(encoded, eq("blocked=shown&effort=s%2Cxl&need=nice_to_have"))
+    }
+
+    #[gtest]
+    fn item_patch_writes_clearing_as_null_and_leaves_out_what_is_unset() -> googletest::Result<()> {
+        // Arrange
+        let patch = ItemPatchDto {
+            description: Some(None),
+            state: Some(StateDto::Done),
+            ..ItemPatchDto::default()
+        };
+
+        // Act
+        let written = serde_json::to_string(&patch)?;
+        let read: ItemPatchDto = serde_json::from_str(&written)?;
+
+        // Assert
+        verify_that!(written, eq(r#"{"description":null,"state":"done"}"#))?;
+        verify_that!(read.description, some(none()))?;
+        verify_that!(read.effort, none())?;
+        verify_that!(read.state, some(eq(StateDto::Done)))
+    }
+
+    #[gtest]
+    fn create_item_leaves_out_what_is_unset() -> googletest::Result<()> {
+        // Arrange
+        let item = CreateItemDto {
+            title: "Rotate certs".to_owned(),
+            description: None,
+            need: NeedDto::NiceToHave,
+            effort: Some(SizeDto::S),
+            impact: None,
+            due: Some(DueInputDto {
+                date: "2027-03-12".to_owned(),
+                firm: true,
+            }),
+            tag_ids: None,
+            parameter_values: None,
+        };
+
+        // Act
+        let written = serde_json::to_string(&item)?;
+
+        // Assert
+        verify_that!(
+            written,
+            eq(
+                r#"{"title":"Rotate certs","need":"nice_to_have","effort":"s","due":{"date":"2027-03-12","firm":true}}"#
+            )
+        )
     }
 
     #[gtest]
