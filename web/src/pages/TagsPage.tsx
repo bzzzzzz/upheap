@@ -19,15 +19,16 @@ const chipClass =
 export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
   const tags = useTags(heapRef);
 
-  if (tags.isPending) {
+  // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
+  if (!tags.data) {
+    if (tags.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {tags.error.message}
+        </p>
+      );
+    }
     return <p className="py-16 text-center text-muted">Loading…</p>;
-  }
-  if (tags.isError) {
-    return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {tags.error.message}
-      </p>
-    );
   }
 
   const { heap, allowed_actions } = tags.data;

@@ -32,15 +32,16 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   const [adding, setAdding] = useState(false);
   const { ref: newButton, returnFocus } = useReturnFocus<HTMLButtonElement>(adding);
 
-  if (parameters.isPending) {
+  // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
+  if (!parameters.data) {
+    if (parameters.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {parameters.error.message}
+        </p>
+      );
+    }
     return <p className="py-16 text-center text-muted">Loading…</p>;
-  }
-  if (parameters.isError) {
-    return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {parameters.error.message}
-      </p>
-    );
   }
 
   const { heap, allowed_actions, archived } = parameters.data;

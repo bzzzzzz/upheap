@@ -58,13 +58,16 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   // What the link name field holds, for the new path under it while it's being changed.
   const [slugDraft, setSlugDraft] = useState("");
 
-  if (heap.isPending) return <p className="py-16 text-center text-muted">Loading…</p>;
-  if (heap.isError) {
-    return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {heap.error.message}
-      </p>
-    );
+  // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
+  if (!heap.data) {
+    if (heap.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {heap.error.message}
+        </p>
+      );
+    }
+    return <p className="py-16 text-center text-muted">Loading…</p>;
   }
 
   const data = heap.data;
