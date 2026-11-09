@@ -102,10 +102,9 @@ To cut a release:
    `Cargo.lock`), and merge it.
 2. Tag the commit on main: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
 
-The workflow refuses a tag that isn't `vX.Y.Z`, that differs from the `cli` package's version, or that isn't on main,
-and a release that already exists. Every action in it is pinned to a commit. A pull request that changes the workflow,
-`packaging/` or `scripts/release/`, and a manual run, do the same builds, checks and cask rendering without publishing,
-so a broken workflow shows before a tag does.
+The workflow refuses a tag that doesn't match that version or isn't on main, and never replaces a published release;
+its header comment says what else it checks. Pull requests that touch the packaging or what the CLI is built from run
+it as a dry run that publishes nothing.
 
 Recovering from a failed run:
 
@@ -129,10 +128,10 @@ rm -rf $TMP
 
 ## Cautions
 
-- **The macOS binary isn't notarized.** The cask clears the quarantine flag Homebrew sets on downloads, so Gatekeeper
-  lets it run, and the binary is only ad-hoc signed, so macOS may ask once after each upgrade to let `upheap` use its
-  keychain entry. A cask's `zap` doesn't remove keychain entries; `upheap auth logout` does. Notarizing needs an Apple
-  Developer ID.
+- **The macOS binary isn't notarized**
+  ([decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow)):
+  after an upgrade, a user may be asked once to let `upheap` use its keychain entry; that's expected. A cask's `zap`
+  doesn't remove keychain entries; `upheap auth logout` does.
 - **sqlx through the pooler.** sqlx prepares statements and sets `extra_float_digits` when it connects, either of
   which PgBouncer can refuse. Neon's pooler accepted both on the first deploy. If a later Neon change breaks it, put
   the direct endpoint in the secret, or have `store::connect` stop sending the parameter

@@ -1,8 +1,9 @@
 # Releases the `upheap` CLI (design/operations.md, "Releasing the CLI"). Pushing a tag `vX.Y.Z` that matches the
 # workspace version, on a commit of main, builds static binaries for Apple silicon macOS and x86_64 and aarch64 Linux
 # on native runners, publishes them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap. A
-# pull request that changes this workflow or the packaging, and a manual run, do everything up to the release (build,
-# smoke test, package, render and style-check the cask) and publish nothing, so a broken release is found before a tag.
+# pull request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do
+# everything up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a
+# broken release, such as a new dependency that stops the musl build being static, is found before a tag.
 #
 # It ships binaries, so every action is pinned to a commit, and release builds use no cache another ref could have
 # written. The tap is pushed to with a deploy key, secret HOMEBREW_TAP_DEPLOY_KEY.
@@ -17,6 +18,12 @@ on:
       - .github/workflows/release.yml
       - packaging/**
       - scripts/release/**
+      # What the CLI is built from, so a dependency that breaks the static musl build fails its pull request.
+      - Cargo.toml
+      - Cargo.lock
+      - crates/cli/**
+      - crates/api-types/**
+      - crates/domain/**
   workflow_dispatch:
 
 permissions:
@@ -85,7 +92,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       TARGET: ${{ matrix.target }}
-      # The oldest macOS the cask accepts (Big Sur).
+      # The oldest macOS the binary runs on (Big Sur).
       MACOSX_DEPLOYMENT_TARGET: "11.0"
       # The C compiler for the musl targets' C dependencies (ring, in rustls).
       CC_x86_64_unknown_linux_musl: musl-gcc
@@ -226,9 +233,12 @@ jobs:
     name: Homebrew tap
     needs: [version, release]
     runs-on: ubuntu-24.04
+    # One tap push at a time across tags, so two releases in flight don't race on the tap's main.
+    concurrency:
+      group: homebrew-tap
+      cancel-in-progress: false
     env:
       VERSION: ${{ needs.version.outputs.version }}
-      DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -236,6 +246,8 @@ jobs:
           path: cask
 
       - name: Set up the deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
             echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in design/operations.md, section \"Releasing the CLI\", then re-run the failed jobs."
@@ -286,6 +298,8 @@ jobs:
           out=$(upheap --version)
           echo "$out"
           [ "$out" = "upheap $VERSION" ] || { echo "::error::The installed binary printed '$out', expected 'upheap $VERSION'."; exit 1; }
+          # Only proves something where the runner's brew quarantines downloads; the postflight was also checked by hand
+          # with a quarantined archive (design/decisions.md, decision 30).
           bin=$(readlink -f "$(brew --prefix)/bin/upheap")
           if xattr -p com.apple.quarantine "$bin" 2> /dev/null; then
             echo "::error::$bin still carries the quarantine attribute; the cask's postflight didn't clear it."
@@ -305,7 +319,7 @@ jobs:
           base=https://github.com/bzzzzzz/upheap/releases/latest/download
           curl -fsSLO "$base/upheap-$arch-unknown-linux-musl.tar.gz"
           curl -fsSLO "$base/SHA256SUMS"
-          sha256sum --check --ignore-missing SHA256SUMS
+          grep " upheap-$arch-unknown-linux-musl.tar.gz\$" SHA256SUMS | sha256sum -c
           mkdir -p ~/.local/bin
           tar -xzf "upheap-$arch-unknown-linux-musl.tar.gz" -C ~/.local/bin upheap
           out=$(~/.local/bin/upheap --version)
