@@ -84,9 +84,7 @@ async fn item_list_filters_by_the_api_flags_and_by_tag_name() -> Result<()> {
     expect_that!(ideas.stdout, eq(&format!("{}\n", key(&items[2])?)));
     expect_that!(
         unknown.stderr,
-        eq(
-            "error: ada/personal has no tag `ops`; it has Infra\nhint: add it with `upheap tag add ops --heap ada/personal`\n"
-        )
+        eq("error: ada/personal has no tag `ops`; it has Infra\n")
     );
     expect_that!(unknown.exited(3), eq(true));
     Ok(())

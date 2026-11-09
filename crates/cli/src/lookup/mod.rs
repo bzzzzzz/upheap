@@ -65,6 +65,8 @@ pub enum LookupError {
         known: Vec<String>,
         /// How many tags the heap has.
         total: usize,
+        /// Whether the user meant to put the tag on an item, so creating it is the likely next step.
+        offer_add: bool,
     },
     #[error("{heap} has no saved view `{name}`{}", known_list(known))]
     UnknownView {
@@ -264,14 +266,16 @@ pub fn resolve_tags(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> R
         .collect()
 }
 
-/// The tag `name` names, by name ignoring case, as the server compares them, or by ID. The first match wins. An
+/// The tag `name` names, trimmed, by name ignoring case, as the server compares them, or by ID. The first match wins. An
 /// unknown one carries the names closest to it, by edit distance, ties in the server's order.
 pub fn find_tag<'t>(name: &str, tags: &'t TagListDto, heap: &HeapHandle) -> Result<&'t TagDto, LookupError> {
+    // The server trims names, so `"ops "` is the tag Ops.
+    let trimmed = name.trim();
     tags.tags
         .iter()
-        .find(|tag| is_named(name, &tag.name, tag.id))
+        .find(|tag| is_named(trimmed, &tag.name, tag.id))
         .ok_or_else(|| {
-            let typed = name.to_lowercase();
+            let typed = trimmed.to_lowercase();
             let mut closest: Vec<(usize, &str)> = tags
                 .tags
                 .iter()
@@ -287,8 +291,32 @@ pub fn find_tag<'t>(name: &str, tags: &'t TagListDto, heap: &HeapHandle) -> Resu
                     .map(|(_, name)| name.to_owned())
                     .collect(),
                 total: tags.tags.len(),
+                offer_add: false,
             }
         })
+}
+
+impl LookupError {
+    /// An unknown tag that the user meant to put on an item, whose hint offers the command that creates it. Other
+    /// errors come back unchanged.
+    pub fn offering_add(self) -> Self {
+        match self {
+            Self::UnknownTag {
+                name,
+                heap,
+                known,
+                total,
+                ..
+            } => Self::UnknownTag {
+                name,
+                heap,
+                known,
+                total,
+                offer_add: true,
+            },
+            other => other,
+        }
+    }
 }
 
 /// The edit distance between `a` and `b`, in chars: the fewest single-char insertions, deletions and

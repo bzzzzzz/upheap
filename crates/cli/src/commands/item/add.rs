@@ -10,7 +10,7 @@ use super::common::{dedupe, resolve_due};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, parse_api_value};
-use crate::lookup::resolve_tags;
+use crate::lookup::{LookupError, resolve_tags};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -63,7 +63,9 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         None
     } else {
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
-        Some(dedupe(resolve_tags(&args.tag, &tags.value, &heap)?))
+        Some(dedupe(
+            resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?,
+        ))
     };
     let due = match &args.due {
         Some(raw) => Some(resolve_due(raw, &client, &token).await?),

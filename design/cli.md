@@ -152,9 +152,10 @@ Tags can't be deleted, so there's no `upheap tag delete`.
 
 `--tag <name>` on the item commands refers to existing tags only. The web app creates a tag when you type a new name,
 but in a terminal a typo would leave a tag nobody can delete. An unknown name fails (exit 3) with the closest existing
-names by edit distance (all of them when the heap has five or fewer) and a hint with the `upheap tag add` command that
-would create it, with the heap spelled out so it can be pasted whatever the default is. `item list --tag` and
-`tag edit` give the same hint.
+names by edit distance (all of them when the heap has five or fewer). Names are trimmed before they're compared, as
+the server trims them. When the tag was to go on an item (`--tag` on `item add` and `item edit`), a hint gives the
+`upheap tag add` command that would create it, with the heap spelled out so it can be pasted whatever the default is.
+`--untag`, `item list --tag` and `tag edit` meant a tag that exists, so they get the closest names only.
 
 ### Heaps
 

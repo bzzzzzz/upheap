@@ -3,7 +3,7 @@
 mod common;
 
 use anyhow::Result;
-use common::{HEAP, TestCli, TestServer, TestUser, ada_with_items, cli_in_heap};
+use common::{HEAP, TestCli, TestServer, TestUser, ada_with_items, cli_in_heap, key};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -245,7 +245,7 @@ async fn tag_edit_with_nothing_to_change_makes_no_request() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn tag_edit_of_an_unknown_tag_names_the_closest_and_hints_at_tag_add() -> Result<()> {
+async fn tag_edit_of_an_unknown_tag_names_the_closest_without_offering_to_add_it() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let (ada, _) = ada_with_items(&server).await?;
@@ -253,19 +253,38 @@ async fn tag_edit_of_an_unknown_tag_names_the_closest_and_hints_at_tag_add() -> 
 
     // Act
     let edited = cli.run(&["tag", "edit", "Nope", "--name", "X"]).await;
-    let spaced = cli.run(&["tag", "edit", "Big rock", "--name", "X"]).await;
 
     // Assert
     expect_that!(edited.exited(3), eq(true));
     expect_that!(
         edited.stderr,
-        eq(&format!(
-            "error: {HEAP} has no tag `Nope`; it has Infra\nhint: add it with `upheap tag add Nope --heap {HEAP}`\n"
-        ))
+        eq(&format!("error: {HEAP} has no tag `Nope`; it has Infra\n"))
     );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn only_putting_an_unknown_tag_on_an_item_offers_to_add_it() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+
+    // Act
+    let tagged = cli.run(&["item", "edit", key, "--tag", "Big rock"]).await;
+    let untagged = cli.run(&["item", "edit", key, "--untag", "infar"]).await;
+    let padded = cli.run(&["item", "edit", key, "--untag", "infra "]).await;
+
+    // Assert
+    expect_that!(tagged.exited(3), eq(true));
     expect_that!(
-        spaced.stderr,
+        tagged.stderr,
         contains_substring(format!("hint: add it with `upheap tag add 'Big rock' --heap {HEAP}`"))
     );
+    expect_that!(untagged.exited(3), eq(true));
+    expect_that!(untagged.stderr, not(contains_substring("hint:")));
+    expect_that!(padded.exited(0), eq(true));
     Ok(())
 }

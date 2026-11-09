@@ -162,10 +162,15 @@ impl CliError {
             (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => {
                 Some("sign in with `upheap auth login`".to_owned())
             }
-            (Self::Lookup(LookupError::UnknownTag { name, heap, .. }), _) => Some(format!(
-                "add it with `upheap tag add {} --heap {heap}`",
-                shell_quoted(name)
-            )),
+            (
+                Self::Lookup(LookupError::UnknownTag {
+                    name,
+                    heap,
+                    offer_add: true,
+                    ..
+                }),
+                _,
+            ) => Some(format!("add it with `{}`", tag_add_command(name, heap))),
             (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items".to_owned()),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
             (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
@@ -191,6 +196,17 @@ impl CliError {
             cause = err.source();
         }
         text
+    }
+}
+
+/// The command that adds the tag `name` to `heap`, safe to paste: the name is quoted for the shell, and comes after
+/// `--` when it starts with `-`, so it isn't read as a flag.
+fn tag_add_command(name: &str, heap: &str) -> String {
+    let name = name.trim();
+    if name.starts_with('-') {
+        format!("upheap tag add --heap {heap} -- {}", shell_quoted(name))
+    } else {
+        format!("upheap tag add {} --heap {heap}", shell_quoted(name))
     }
 }
 
@@ -300,6 +316,18 @@ mod tests {
         expect_that!(shell_quoted("Big rock"), eq("'Big rock'"));
         expect_that!(shell_quoted("it's"), eq("'it'\\''s'"));
         expect_that!(shell_quoted(""), eq("''"));
+    }
+
+    #[gtest]
+    fn the_tag_add_hint_puts_a_name_that_looks_like_a_flag_after_two_dashes() {
+        expect_that!(
+            tag_add_command(" ops ", "ada/personal"),
+            eq("upheap tag add ops --heap ada/personal")
+        );
+        expect_that!(
+            tag_add_command("-urgent", "ada/personal"),
+            eq("upheap tag add --heap ada/personal -- -urgent")
+        );
     }
 
     #[gtest]

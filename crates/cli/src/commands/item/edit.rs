@@ -10,7 +10,7 @@ use super::common::{dedupe, locate_item, resolve_due};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, read_description};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::lookup::{ItemName, resolve_tags};
+use crate::lookup::{ItemName, LookupError, resolve_tags};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -108,7 +108,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         None
     } else {
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
-        let added = resolve_tags(&args.tag, &tags.value, &heap)?;
+        let added = resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?;
         let removed = resolve_tags(&args.untag, &tags.value, &heap)?;
         if let Some(position) = added.iter().position(|id| removed.contains(id)) {
             return Err(UsageError::TagAndUntag {
