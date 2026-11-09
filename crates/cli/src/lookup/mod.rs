@@ -5,7 +5,7 @@ use api_types::common::{DueInputDto, ItemDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
-use api_types::tags::TagListDto;
+use api_types::tags::{TagDto, TagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
 use uuid::Uuid;
 
@@ -57,11 +57,14 @@ pub enum LookupError {
     UnknownHeap { name: String },
     #[error("more than one of your teams has a heap `{slug}`: say which with {}", candidates.join(" or "))]
     AmbiguousHeap { slug: String, candidates: Vec<String> },
-    #[error("{heap} has no tag `{name}`{}", known_list(known))]
+    #[error("{heap} has no tag `{name}`{}", closest_tags(known, *total))]
     UnknownTag {
         name: String,
         heap: String,
+        /// The names closest to `name`, closest first: all of the heap's tags when it has few.
         known: Vec<String>,
+        /// How many tags the heap has.
+        total: usize,
     },
     #[error("{heap} has no saved view `{name}`{}", known_list(known))]
     UnknownView {
@@ -88,6 +91,19 @@ fn known_list(known: &[String]) -> String {
         String::new()
     } else {
         format!("; it has {}", known.join(", "))
+    }
+}
+
+/// How many tags an unknown-tag error names before it says they are only the closest.
+const NAMED_TAGS: usize = 5;
+
+fn closest_tags(known: &[String], total: usize) -> String {
+    if known.is_empty() {
+        String::new()
+    } else if total <= NAMED_TAGS {
+        format!("; it has {}", known.join(", "))
+    } else {
+        format!("; the closest are {}", known.join(", "))
     }
 }
 
@@ -244,18 +260,52 @@ pub fn resolve_heap(name: HeapName<'_>, me: &MeDto) -> Result<HeapHandle, Lookup
 pub fn resolve_tags(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> Result<Vec<Uuid>, LookupError> {
     names
         .iter()
-        .map(|name| {
-            tags.tags
-                .iter()
-                .find(|tag| is_named(name, &tag.name, tag.id))
-                .map(|tag| tag.id)
-                .ok_or_else(|| LookupError::UnknownTag {
-                    name: name.clone(),
-                    heap: heap.to_string(),
-                    known: tags.tags.iter().map(|tag| tag.name.clone()).collect(),
-                })
-        })
+        .map(|name| find_tag(name, tags, heap).map(|tag| tag.id))
         .collect()
+}
+
+/// The tag `name` names, by name ignoring case, as the server compares them, or by ID. The first match wins. An
+/// unknown one carries the names closest to it, by edit distance, ties in the server's order.
+pub fn find_tag<'t>(name: &str, tags: &'t TagListDto, heap: &HeapHandle) -> Result<&'t TagDto, LookupError> {
+    tags.tags
+        .iter()
+        .find(|tag| is_named(name, &tag.name, tag.id))
+        .ok_or_else(|| {
+            let typed = name.to_lowercase();
+            let mut closest: Vec<(usize, &str)> = tags
+                .tags
+                .iter()
+                .map(|tag| (levenshtein(&typed, &tag.name.to_lowercase()), tag.name.as_str()))
+                .collect();
+            closest.sort_by_key(|(distance, _)| *distance);
+            LookupError::UnknownTag {
+                name: name.to_owned(),
+                heap: heap.to_string(),
+                known: closest
+                    .into_iter()
+                    .take(NAMED_TAGS)
+                    .map(|(_, name)| name.to_owned())
+                    .collect(),
+                total: tags.tags.len(),
+            }
+        })
+}
+
+/// The edit distance between `a` and `b`, in chars: the fewest single-char insertions, deletions and
+/// substitutions that turn one into the other.
+fn levenshtein(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (diagonal + usize::from(ca != *cb)).min(above + 1).min(row[j] + 1);
+            diagonal = above;
+        }
+    }
+    row[b.len()]
 }
 
 /// The saved view `name` names, by name ignoring case, or by ID.

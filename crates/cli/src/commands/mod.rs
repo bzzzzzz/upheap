@@ -3,7 +3,9 @@
 
 pub mod auth;
 pub mod heap;
+pub(crate) mod heap_api;
 pub mod item;
+pub mod tag;
 
 use clap::Args;
 use serde::de::DeserializeOwned;

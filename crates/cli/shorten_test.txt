@@ -1,0 +1,7 @@
+    #[gtest]
+    fn long_titles_are_cut_with_an_ellipsis() {
+        expect_that!(shorten("short", 10), eq("short"));
+        expect_that!(shorten("exactly10!", 10), eq("exactly10!"));
+        expect_that!(shorten("a bit too long", 10), eq("a bit too…"));
+    }
+

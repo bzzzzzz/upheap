@@ -212,11 +212,27 @@ fn defuse(text: &str) -> String {
         .collect()
 }
 
+/// `text` cut to `width` characters, the last one an ellipsis, when it's longer.
+pub fn shorten(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let kept: String = text.chars().take(width.saturating_sub(1)).collect();
+    format!("{kept}…")
+}
+
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn long_titles_are_cut_with_an_ellipsis() {
+        expect_that!(shorten("short", 10), eq("short"));
+        expect_that!(shorten("exactly10!", 10), eq("exactly10!"));
+        expect_that!(shorten("a bit too long", 10), eq("a bit too…"));
+    }
 
     #[gtest]
     fn columns_line_up_and_the_last_one_isnt_padded() {

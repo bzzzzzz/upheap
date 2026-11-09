@@ -6,8 +6,9 @@ use api_types::tags::TagListDto;
 use clap::Args;
 use uuid::Uuid;
 
-use super::common::{HeapApi, dedupe, locate_item, read_description, resolve_due};
+use super::common::{dedupe, locate_item, resolve_due};
 use crate::client::NO_QUERY;
+use crate::commands::heap_api::{HeapApi, read_description};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
 use crate::lookup::{ItemName, resolve_tags};
 use crate::output::{Mode, Output};

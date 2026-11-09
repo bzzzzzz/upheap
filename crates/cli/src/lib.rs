@@ -1,5 +1,5 @@
-//! `upheap`, the command-line client of Upheap: add, show, edit, move and list a heap's items, pick a default heap,
-//! and sign in.
+//! `upheap`, the command-line client of Upheap: add, show, edit, move and list a heap's items, list, add and edit its
+//! tags, pick a default heap, and sign in.
 //!
 //! It is a thin client of the HTTP API, like the web app: it never ranks, checks permissions or works out labels,
 //! and it reads and writes the API's own types from `api_types`. See design/cli.md.
@@ -112,7 +112,7 @@ impl Deps {
 #[command(
     name = "upheap",
     version,
-    about = "Upheap from the terminal: a heap's items, heaps, and signing in."
+    about = "Upheap from the terminal: a heap's items and tags, heaps, and signing in."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -124,6 +124,9 @@ enum Command {
     /// Items in a heap
     #[command(subcommand)]
     Item(ItemCommand),
+    /// Tags in a heap
+    #[command(subcommand)]
+    Tag(TagCommand),
     /// Your heaps, and the default one
     #[command(subcommand)]
     Heap(HeapCommand),
@@ -152,6 +155,16 @@ enum ItemCommand {
     Wontdo(commands::item::state::StateArgs),
     /// Move an item back to open, from any state
     Reopen(commands::item::state::StateArgs),
+}
+
+#[derive(Subcommand)]
+enum TagCommand {
+    /// The heap's tags
+    List(commands::tag::list::ListArgs),
+    /// Add a tag
+    Add(commands::tag::add::AddArgs),
+    /// Rename a tag or change its description
+    Edit(commands::tag::edit::EditArgs),
 }
 
 #[derive(Subcommand)]
@@ -184,6 +197,9 @@ impl Command {
                 | ItemCommand::Reopen(args),
             ) => &args.shared,
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
+            Self::Tag(TagCommand::List(args)) => &args.shared,
+            Self::Tag(TagCommand::Add(args)) => &args.shared,
+            Self::Tag(TagCommand::Edit(args)) => &args.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Use(args)) => &args.shared,
             Self::Auth(AuthCommand::Login(args)) => &args.shared,
@@ -276,6 +292,9 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Item(ItemCommand::Done(args)) => run_verb(StateVerb::Done, args, app, out).await,
         Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
         Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
+        Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
+        Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
+        Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Use(args)) => commands::heap::use_heap::run(args, app, out).await,
         Command::Auth(AuthCommand::Login(args)) => commands::auth::login::run(args, app, out).await,

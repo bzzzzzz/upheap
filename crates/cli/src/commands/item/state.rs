@@ -7,7 +7,8 @@ use api_types::common::{ItemDto, StateDto};
 use api_types::items::ItemPatchDto;
 use clap::Args;
 
-use super::common::{HeapApi, ItemLocation, locate_item, state_text};
+use super::common::{ItemLocation, locate_item, state_text};
+use crate::commands::heap_api::HeapApi;
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
 use crate::output::{Mode, Output};

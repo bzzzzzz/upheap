@@ -9,12 +9,13 @@ use api_types::views::SavedViewListDto;
 use clap::Args;
 
 use crate::client::NO_QUERY;
+use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
 use crate::lookup::{find_view, matches_text, resolve_parameter, resolve_tags};
-use crate::output::{Cell, Mode, Output, Tone};
+use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
 
-use super::common::{HeapApi, due_cell, named_heap, resolve_heap_handle, shorten, sizes_text, state_text, tags_text};
+use super::common::{due_cell, sizes_text, state_text, tags_text};
 
 /// Titles longer than this are cut short in the table, so the columns after them stay on screen.
 const TITLE_WIDTH: usize = 60;

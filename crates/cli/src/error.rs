@@ -162,6 +162,10 @@ impl CliError {
             (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => {
                 Some("sign in with `upheap auth login`".to_owned())
             }
+            (Self::Lookup(LookupError::UnknownTag { name, heap, .. }), _) => Some(format!(
+                "add it with `upheap tag add {} --heap {heap}`",
+                shell_quoted(name)
+            )),
             (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items".to_owned()),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
             (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
@@ -187,6 +191,20 @@ impl CliError {
             cause = err.source();
         }
         text
+    }
+}
+
+/// `text` as one shell word: unchanged when it is only ASCII letters, digits and `-_./`, otherwise in single
+/// quotes with each `'` written as `'\''`.
+fn shell_quoted(text: &str) -> String {
+    let is_plain = !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'));
+    if is_plain {
+        text.to_owned()
+    } else {
+        format!("'{}'", text.replace('\'', "'\\''"))
     }
 }
 
@@ -274,6 +292,14 @@ mod tests {
             missing.to_message(),
             contains(eq("hint: `upheap item list` lists the heap's items"))
         );
+    }
+
+    #[gtest]
+    fn names_are_quoted_for_the_shell_only_when_they_need_it() {
+        expect_that!(shell_quoted("infra-2_a.b/c"), eq("infra-2_a.b/c"));
+        expect_that!(shell_quoted("Big rock"), eq("'Big rock'"));
+        expect_that!(shell_quoted("it's"), eq("'it'\\''s'"));
+        expect_that!(shell_quoted(""), eq("''"));
     }
 
     #[gtest]
