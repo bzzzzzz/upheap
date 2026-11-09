@@ -31,11 +31,62 @@ fn init_tracing() {
     });
 }
 
+pub const HEAP: &str = "ada/personal";
+
+/// Ada's personal heap with three open items, keyed in the order they were added: a small tagged one with a
+/// description, a large one, and one without sizes.
+pub async fn ada_with_items(server: &TestServer) -> Result<(TestUser, Vec<Value>)> {
+    let ada = server.register("ada", "Ada").await?;
+    let tag = server
+        .send(
+            &ada,
+            "POST",
+            "/teams/ada/heaps/personal/tags",
+            Some(json!({ "name": "Infra" })),
+        )
+        .await?;
+    let items = vec![
+        server
+            .add_item(
+                &ada,
+                HEAP,
+                json!({
+                    "title": "Rotate the staging certs", "description": "Before they expire",
+                    "effort": "s", "impact": "l", "need": "critical", "tag_ids": [tag["id"]],
+                }),
+            )
+            .await?,
+        server
+            .add_item(
+                &ada,
+                HEAP,
+                json!({ "title": "Write the migration guide", "effort": "l", "impact": "m" }),
+            )
+            .await?,
+        server
+            .add_item(&ada, HEAP, json!({ "title": "Tidy the wiki", "need": "idea" }))
+            .await?,
+    ];
+    Ok((ada, items))
+}
+
+pub fn key(item: &Value) -> Result<&str> {
+    item["key"].as_str().context("item has a key")
+}
+
+/// The CLI signed in as `user`, working in Ada's personal heap through `UPHEAP_HEAP`.
+pub async fn cli_in_heap(server: &TestServer, user: &TestUser) -> Result<TestCli> {
+    let mut cli = TestCli::signed_in(server, user).await?;
+    cli.env.heap = Some(HEAP.to_owned());
+    Ok(cli)
+}
+
 /// The server, listening on a free localhost port until the test ends.
 pub struct TestServer {
     /// `http://127.0.0.1:<port>`.
     pub url: String,
     http: reqwest::Client,
+    clock: Arc<ManualClock>,
 }
 
 /// A registered user, signed in to the web app.
@@ -53,7 +104,7 @@ impl TestServer {
         ));
         let services = Services::new(
             db,
-            clock,
+            clock.clone(),
             Settings {
                 allow_registration: true,
                 session_ttl: Duration::from_days(30),
@@ -73,7 +124,13 @@ impl TestServer {
         Ok(Self {
             url,
             http: local_client()?,
+            clock,
         })
+    }
+
+    /// Moves the server's clock on by `by`. Tokens signed in before it may have expired by then.
+    pub fn advance(&self, by: Duration) {
+        self.clock.advance(by);
     }
 
     /// Registers `username` with the display name `display_name`, and signs them in to the web app.
@@ -150,6 +207,27 @@ impl TestServer {
         }
         self.send(user, "POST", &format!("/teams/{team}/heaps/{heap}/items"), Some(body))
             .await
+    }
+
+    /// The item with `key` in `heap` (`team/heap`), as `user` reads it.
+    pub async fn read_item(&self, user: &TestUser, heap: &str, key: &str) -> Result<Value> {
+        let (team, heap) = heap.split_once('/').context("heap is team/heap")?;
+        self.send(user, "GET", &format!("/teams/{team}/heaps/{heap}/items/{key}"), None)
+            .await
+    }
+
+    /// Changes the item with `key` in `heap` (`team/heap`) as `user`: sends `patch` with the item's current version.
+    pub async fn edit_item(&self, user: &TestUser, heap: &str, key: &str, patch: Value) -> Result<Value> {
+        let (team, heap_slug) = heap.split_once('/').context("heap is team/heap")?;
+        let version = self.read_item(user, heap, key).await?["version"].to_string();
+        self.send_with(
+            user,
+            "PATCH",
+            &format!("/teams/{team}/heaps/{heap_slug}/items/{key}"),
+            Some(patch),
+            &[("if-match", &version)],
+        )
+        .await
     }
 
     /// Moves `item` (as the API returned it) of `heap` to `state` as `user`.
@@ -287,6 +365,8 @@ pub struct TestCli {
     pub tokens: Arc<TestKeychain>,
     pub config_dir: tempfile::TempDir,
     pub env: Environment,
+    /// What the CLI reads from stdin; nothing by default.
+    pub stdin: Vec<u8>,
     browser: Arc<dyn Browser>,
 }
 
@@ -307,6 +387,7 @@ impl TestCli {
                 now: jiff::Timestamp::now(),
             },
             config_dir,
+            stdin: Vec::new(),
             browser: Arc::new(NoBrowser),
         })
     }
@@ -339,6 +420,7 @@ impl TestCli {
             env: self.env.clone(),
             tokens: self.tokens.clone(),
             browser: Box::new(SharedBrowser(self.browser.clone())),
+            stdin: Box::new(std::io::Cursor::new(self.stdin.clone())),
             stdout,
             stderr: Box::new(stderr.clone()),
         };

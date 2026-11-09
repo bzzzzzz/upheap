@@ -111,6 +111,37 @@ impl ApiClient {
         self.read_json(response).await
     }
 
+    /// `POST /api/v1/<path>` with `body` as JSON, as the holder of `token`.
+    pub async fn post<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        body: &(impl Serialize + ?Sized),
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self.http.post(self.api_url(path)).json(body).bearer_auth(token);
+        let response = self.send(request).await?;
+        self.read_json(response).await
+    }
+
+    /// `PATCH /api/v1/<path>` with `body` as JSON, for the item or other row at `version`. The server wants the
+    /// version in `If-Match`, quoted (`"3"`), and answers `409 version_conflict` if the row has moved on.
+    pub async fn patch<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        body: &(impl Serialize + ?Sized),
+        version: u32,
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self
+            .http
+            .patch(self.api_url(path))
+            .header(reqwest::header::IF_MATCH, format!("\"{version}\""))
+            .json(body)
+            .bearer_auth(token);
+        let response = self.send(request).await?;
+        self.read_json(response).await
+    }
+
     /// Exchanges an authorization code or a refresh token at `POST /api/v1/oauth/token`.
     pub async fn request_tokens(&self, form: &TokenRequestForm) -> Result<TokenResponseDto, ClientError> {
         let request = self.http.post(self.api_url(&["oauth", "token"])).form(form);

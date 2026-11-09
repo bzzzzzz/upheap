@@ -30,6 +30,22 @@ pub enum CliError {
     Usage(#[from] UsageError),
     #[error(transparent)]
     Lookup(#[from] LookupError),
+    /// The server doesn't have the item a command named. Kept apart from other `404`s to give the hint that fits.
+    #[error("no item `{name}` in {heap}")]
+    NoSuchItem {
+        name: String,
+        heap: String,
+        #[source]
+        source: ClientError,
+    },
+    /// The server refused a change to an item because it moved on or is closed. Carries the item as `team/heap/key`,
+    /// for a hint that can be pasted whatever heap is the default.
+    #[error("{source}")]
+    ItemRefused {
+        name: String,
+        #[source]
+        source: ClientError,
+    },
     #[error(transparent)]
     Auth(#[from] AuthError),
     #[error(transparent)]
@@ -48,9 +64,10 @@ impl CliError {
         match self {
             Self::Config(_) | Self::TokenStore(_) => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
-            Self::Lookup(LookupError::MalformedHeap { .. }) => 2,
+            Self::Lookup(LookupError::MalformedHeap { .. } | LookupError::MalformedItem { .. }) => 2,
             Self::Lookup(
                 LookupError::UnknownHeap { .. }
+                | LookupError::UnknownDueChoice { .. }
                 | LookupError::AmbiguousHeap { .. }
                 | LookupError::UnknownTag { .. }
                 | LookupError::UnknownView { .. }
@@ -59,7 +76,10 @@ impl CliError {
             ) => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
-            Self::Auth(AuthError::Client(err) | AuthError::Revoke(err)) | Self::Client(err) => client_exit_code(err),
+            Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
+            | Self::Client(err)
+            | Self::NoSuchItem { source: err, .. }
+            | Self::ItemRefused { source: err, .. } => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
             Self::Login(LoginError::Refused { .. }) => 4,
@@ -87,6 +107,14 @@ impl CliError {
     pub fn problem_body(&self) -> Option<&str> {
         match self {
             Self::Client(ClientError::Problem { body, .. })
+            | Self::NoSuchItem {
+                source: ClientError::Problem { body, .. },
+                ..
+            }
+            | Self::ItemRefused {
+                source: ClientError::Problem { body, .. },
+                ..
+            }
             | Self::Auth(
                 AuthError::Client(ClientError::Problem { body, .. })
                 | AuthError::Revoke(ClientError::Problem { body, .. }),
@@ -98,6 +126,14 @@ impl CliError {
     fn problem(&self) -> Option<&api_types::problem::Problem> {
         match self {
             Self::Client(ClientError::Problem { problem, .. })
+            | Self::NoSuchItem {
+                source: ClientError::Problem { problem, .. },
+                ..
+            }
+            | Self::ItemRefused {
+                source: ClientError::Problem { problem, .. },
+                ..
+            }
             | Self::Auth(
                 AuthError::Client(ClientError::Problem { problem, .. })
                 | AuthError::Revoke(ClientError::Problem { problem, .. }),
@@ -106,23 +142,35 @@ impl CliError {
         }
     }
 
-    fn hint(&self) -> Option<&'static str> {
+    fn hint(&self) -> Option<String> {
         let status = self.problem().map(|problem| problem.status);
         match (self, status) {
             (
                 Self::TokenStore(TokenStoreError::Corrupt { .. })
                 | Self::Auth(AuthError::Store(TokenStoreError::Corrupt { .. })),
                 _,
-            ) => Some("sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`"),
-            (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`"),
+            ) => Some(
+                "sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`".to_owned(),
+            ),
+            (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`".to_owned()),
             (Self::Config(ConfigError::Parse { .. }), _) => {
-                Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file")
+                Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file".to_owned())
             }
             (Self::Auth(AuthError::Revoke(_)), _) => {
-                Some("to forget the sign-in on this machine only, run `upheap auth logout --local`")
+                Some("to forget the sign-in on this machine only, run `upheap auth logout --local`".to_owned())
             }
-            (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => Some("sign in with `upheap auth login`"),
-            (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use"),
+            (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => {
+                Some("sign in with `upheap auth login`".to_owned())
+            }
+            (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items".to_owned()),
+            (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
+            (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
+                Some("version_conflict") => Some(format!(
+                    "someone else changed it since it was read; look with `upheap item show {name}` and try again"
+                )),
+                Some("item_closed") => Some(format!("reopen it first with `upheap item reopen {name}`")),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -170,6 +218,63 @@ mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    fn problem(status: u16, code: &str) -> ClientError {
+        ClientError::Problem {
+            problem: Box::new(api_types::problem::Problem {
+                code: code.to_owned(),
+                title: "Refused".to_owned(),
+                status,
+                field: None,
+                hint: None,
+                request_id: None,
+            }),
+            body: String::new(),
+        }
+    }
+
+    fn refused(status: u16, code: &str) -> CliError {
+        CliError::ItemRefused {
+            name: "k3x9a".to_owned(),
+            source: problem(status, code),
+        }
+    }
+
+    #[gtest]
+    fn a_stale_edit_and_an_edit_of_a_closed_item_say_what_to_do_next() {
+        let stale = refused(409, "version_conflict");
+        let closed = refused(409, "item_closed");
+        let other = refused(409, "state_not_allowed");
+
+        expect_that!(stale.exit_code(), eq(3));
+        expect_that!(
+            stale.to_message(),
+            contains(eq(
+                "hint: someone else changed it since it was read; look with `upheap item show k3x9a` and try again"
+            ))
+        );
+        expect_that!(other.to_message().len(), eq(1));
+        expect_that!(closed.exit_code(), eq(3));
+        expect_that!(
+            closed.to_message(),
+            contains(eq("hint: reopen it first with `upheap item reopen k3x9a`"))
+        );
+    }
+
+    #[gtest]
+    fn an_item_the_server_lacks_points_to_the_list_of_items() {
+        let missing = CliError::NoSuchItem {
+            name: "k3x9a".to_owned(),
+            heap: "ada/personal".to_owned(),
+            source: problem(404, "not_found"),
+        };
+
+        expect_that!(missing.exit_code(), eq(4));
+        expect_that!(
+            missing.to_message(),
+            contains(eq("hint: `upheap item list` lists the heap's items"))
+        );
+    }
 
     #[gtest]
     fn statuses_map_to_their_category() {
