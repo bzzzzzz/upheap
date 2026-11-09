@@ -162,9 +162,16 @@ test("a member is added from the search with the keyboard, and removing one says
     await expect(sheet).toHaveCount(0);
     await expect(members(page).getByRole("listitem").filter({ hasText: "Sam Ortiz" })).toContainText("Admin");
     await members(page).getByRole("button", { name: "Actions for Sam Ortiz" }).click();
-    await page.getByRole("dialog", { name: "Sam Ortiz" }).getByRole("button", { name: "Remove from Acme…" }).click();
+    const removeRow = page
+      .getByRole("dialog", { name: "Sam Ortiz" })
+      .getByRole("button", { name: "Remove from Acme…" });
+    await removeRow.click();
     const confirm = page.getByRole("alertdialog", { name: "Sam Ortiz" });
     await expect(confirm).toHaveAccessibleDescription(question);
+    // Cancel goes back to the row that asked.
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(removeRow).toBeFocused();
+    await removeRow.click();
     await confirm.getByRole("button", { name: "Remove", exact: true }).click();
   } else {
     const samRow = members(page).getByRole("listitem").filter({ hasText: "Sam Ortiz" });
@@ -199,8 +206,8 @@ test("a heap's ⋯ renames it, archives and unarchives it, and shows its history
     await heaps(page)
       .getByRole("button", { name: `Actions for ${heap}` })
       .click();
-    // A menu on a wider screen, a sheet of buttons on a phone.
-    await page.getByRole(isPhone(page) ? "button" : "menuitem", { name: action, exact: true }).click();
+    // A menu: a popover on a wider screen, a sheet from the bottom on a phone.
+    await page.getByRole("menuitem", { name: action, exact: true }).click();
   };
 
   await choose("Garden", "Rename");
@@ -209,6 +216,14 @@ test("a heap's ⋯ renames it, archives and unarchives it, and shows its history
   await name.fill("Allotment");
   await name.press("Enter");
   await expect(heaps(page).getByText("Allotment", { exact: true })).toBeVisible();
+  // Focus goes back to the ⋯ the editor came from, after Save and after Escape.
+  await expect(heaps(page).getByRole("button", { name: "Actions for Allotment" })).toBeFocused();
+  await choose("Allotment", "Link name");
+  const link = page.getByLabel("Link name of heap Allotment");
+  await expect(link).toBeFocused();
+  await link.press("Escape");
+  await expect(link).toHaveCount(0);
+  await expect(heaps(page).getByRole("button", { name: "Actions for Allotment" })).toBeFocused();
 
   await choose("Allotment", "Archive");
   await expect(heaps(page).getByText("Archived", { exact: true })).toBeVisible();
@@ -233,6 +248,7 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   await name.fill("Orchard Co");
   await name.press("Enter");
   await expect(page.getByRole("heading", { name: "Orchard Co", level: 1 })).toBeVisible();
+  await expect(more).toBeFocused();
 
   await more.click();
   await page.getByRole("menuitem", { name: "Link name" }).click();
@@ -241,6 +257,7 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   // Escape leaves it as it was.
   await link.press("Escape");
   await expect(link).toHaveCount(0);
+  await expect(more).toBeFocused();
   await more.click();
   await page.getByRole("menuitem", { name: "Link name" }).click();
   await link.fill(linkName);
@@ -278,4 +295,33 @@ test("leaving asks first, and the last admin is told why they can't", async ({ p
   await page.getByRole("button", { name: "Leave", exact: true }).click();
   await expect(page).toHaveURL(/\/teams$/);
   await expect(page.getByRole("link", { name: "Open Rota" })).toHaveCount(0);
+});
+
+test("Enter waits for the results of what was typed, not the ones still on screen", async ({
+  page,
+  request,
+  localBuild,
+}) => {
+  test.skip(localBuild, SERVER_ONLY);
+  const sam = await registerOther(request, "Sam Ortiz");
+  await createTeam(page, "Waiting");
+  const search = page.getByRole("combobox", { name: "Add a member by username, name or email" });
+  await search.fill(sam.username);
+  await expect(page.getByRole("option", { selected: true })).toContainText(`@${sam.username}`);
+
+  // The next query's answer is held back, so Sam's results stay on screen for text that no longer names him.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/v1/users?**", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await search.fill(`${sam.username}-nobody`);
+  await expect(page.getByRole("listbox", { name: "Matching users" })).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("option", { selected: true })).toHaveCount(0);
+  await search.press("Enter");
+  release();
+  await expect(page.getByText("No one matches.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Members · 1" })).toBeVisible();
+  await expect(members(page).getByText("Sam Ortiz")).toHaveCount(0);
 });

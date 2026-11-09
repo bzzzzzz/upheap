@@ -14,13 +14,10 @@ use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
 use crate::StoreError;
-use crate::codes::{GroupCount, RowReader, id_to_db, version_to_db};
+use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
 use crate::entities::{item_parameter_values, item_tags, items};
 
 const TABLE: &str = "items";
-
-/// Most IDs in one `IN (…)` list, well under every backend's limit on bound parameters.
-const IN_LIST_CHUNK: usize = 500;
 
 /// Position after which a page of closed items starts: the last item of the previous page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

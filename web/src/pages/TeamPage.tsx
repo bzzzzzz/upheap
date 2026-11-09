@@ -28,7 +28,7 @@ import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
-import { useConfirmation } from "../components/useConfirmation";
+import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { listOf } from "../components/words";
 
 /** Name and link name forms in the design tokens, as on Account. */
@@ -96,7 +96,10 @@ function TeamHeader({ team }: { team: Team }) {
   // In the local build there's no Teams list to go back to: `/teams` leads here.
   const listed = me !== undefined && soleTeam(me) === undefined;
   const role = team.personal ? "your personal team" : team.role === "admin" ? "you're an admin" : "you're a member";
+  // After Save, Cancel or Escape, focus goes back to the ⋯ the editor came from.
+  const { ref: moreButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing !== null);
   const close = () => {
+    returnFocus();
     setEditing(null);
     update.reset();
   };
@@ -143,7 +146,7 @@ function TeamHeader({ team }: { team: Team }) {
         )}
         {editing === null && (
           <MenuTrigger>
-            <Button aria-label={`More for ${team.name}`} className={moreButtonClass}>
+            <Button ref={moreButton} aria-label={`More for ${team.name}`} className={moreButtonClass}>
               <Ellipsis aria-hidden="true" className="size-4" />
             </Button>
             <MenuPopover placement="bottom start">
@@ -188,10 +191,10 @@ function TeamHeader({ team }: { team: Team }) {
 
 function HeapsSection({ team, phone }: { team: Team; phone: boolean }) {
   const [adding, setAdding] = useState(false);
-  const newButton = useRef<HTMLButtonElement>(null);
+  const { ref: newButton, returnFocus } = useReturnFocus<HTMLButtonElement>(adding);
   const close = () => {
+    returnFocus();
     setAdding(false);
-    window.requestAnimationFrame(() => newButton.current?.focus());
   };
 
   return (
@@ -288,10 +291,12 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
   const setArchived = useSetHeapArchived(team);
   const [editing, setEditing] = useState<TeamEdit | null>(null);
   const [history, setHistory] = useState(false);
-  const [sheet, setSheet] = useState(false);
+  // After Save, Cancel or Escape, focus goes back to the ⋯ the editor came from.
+  const { ref: moreButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing !== null);
   const archived = heap.archived_at !== null;
   const can = (action: Heap["allowed_actions"][number]) => heap.allowed_actions.includes(action);
   const close = () => {
+    returnFocus();
     setEditing(null);
     update.reset();
   };
@@ -304,7 +309,6 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
     ...(can("view_history") ? [{ id: "history", label: history ? "Hide history" : "History" } as const] : []),
   ];
   const act = (id: HeapAction) => {
-    setSheet(false);
     if (id === "rename") setEditing("name");
     if (id === "slug") setEditing("slug");
     if (id === "archive") setArchived.mutate({ heap, archived: !archived });
@@ -377,7 +381,7 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
       <div className="flex items-center gap-3 px-2 py-2.5 max-sm:gap-1 max-sm:p-0 max-sm:pr-1">
         {main}
         {actions.length > 0 && !editing && (
-          <HeapActions heap={heap} actions={actions} phone={phone} sheet={sheet} setSheet={setSheet} onAction={act} />
+          <HeapActions heap={heap} actions={actions} buttonRef={moreButton} onAction={act} />
         )}
       </div>
       <ProblemText error={setArchived.error} className="px-2 pb-2 text-overdue-ink max-sm:px-3.5" />
@@ -390,45 +394,25 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
   );
 }
 
-/** The heap's ⋯: a menu on a wide screen, a sheet of 52 px rows on a phone. */
+/**
+ * The heap's ⋯: a menu, which on a phone is a sheet from the bottom (`MenuPopover`), as the team's ⋯ is. A touch opens
+ * it on release, so lifting the finger never picks an entry.
+ */
 function HeapActions({
   heap,
   actions,
-  phone,
-  sheet,
-  setSheet,
+  buttonRef,
   onAction,
 }: {
   heap: Heap;
   actions: { id: HeapAction; label: string }[];
-  phone: boolean;
-  sheet: boolean;
-  setSheet: (open: boolean) => void;
+  buttonRef: Ref<HTMLButtonElement>;
   onAction: (id: HeapAction) => void;
 }) {
   const label = `Actions for ${heap.name}`;
-  if (phone) {
-    // A sheet rather than a menu, which would pick the row the lifting finger is over.
-    return (
-      <>
-        <button type="button" aria-label={label} onClick={() => setSheet(true)} className={moreButtonClass}>
-          <Ellipsis aria-hidden="true" className="size-4" />
-        </button>
-        <Sheet title={heap.name} isOpen={sheet} onClose={() => setSheet(false)}>
-          <div className="flex flex-col">
-            {actions.map(({ id, label }) => (
-              <button key={id} type="button" onClick={() => onAction(id)} className={sheetRowClass}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </Sheet>
-      </>
-    );
-  }
   return (
     <MenuTrigger>
-      <Button aria-label={label} className={moreButtonClass}>
+      <Button ref={buttonRef} aria-label={label} className={moreButtonClass}>
         <Ellipsis aria-hidden="true" className="size-4" />
       </Button>
       <MenuPopover placement="bottom end">
@@ -715,6 +699,7 @@ function PhoneMemberRow({
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [history, setHistory] = useState(false);
+  const { ref: removeRow, returnFocus: returnToRemoveRow } = useReturnFocus<HTMLButtonElement>(confirming);
   const questionId = useId();
   const can = (action: TeamMember["allowed_actions"][number]) => member.allowed_actions.includes(action);
   const roleChange = can("promote") ? "admin" : can("demote") ? "member" : null;
@@ -770,6 +755,8 @@ function PhoneMemberRow({
             <button
               type="button"
               onClick={() => {
+                // The confirm replaced the row that asked; focus goes back to it.
+                returnToRemoveRow();
                 setConfirming(false);
                 removing.reset();
               }}
@@ -785,9 +772,7 @@ function PhoneMemberRow({
               <button
                 type="button"
                 disabled={setRole.isPending}
-                onClick={() =>
-                  setRole.mutate({ username: member.username, role: roleChange }, { onSuccess: () => setOpen(false) })
-                }
+                onClick={() => setRole.mutate({ username: member.username, role: roleChange }, { onSuccess: close })}
                 className={sheetRowClass}
               >
                 {roleChange === "admin" ? "Make admin" : "Make member"}
@@ -808,6 +793,7 @@ function PhoneMemberRow({
             )}
             {can("remove") && (
               <button
+                ref={removeRow}
                 type="button"
                 onClick={() => setConfirming(true)}
                 className={`${sheetRowClass} rounded-t-none border-t border-line text-overdue-ink`}
@@ -841,7 +827,10 @@ function AddMember({ team }: { team: Team }) {
 
   const users = isUserQuery(query) ? (found.data?.users ?? []) : [];
   const shown = focused && isUserQuery(query) && found.data !== undefined;
-  const choices = users.filter(addable);
+  // The previous query's results, kept on screen while this one's are on their way. They're shown dimmed and can't be
+  // added, so a fast Enter never adds someone the text no longer names.
+  const stale = found.isPlaceholderData;
+  const choices = stale ? [] : users.filter(addable);
   // The one Enter adds: the one the arrows or the pointer picked, else the first that can be added.
   const highlighted = choices.find((user) => user.id === active) ?? choices[0];
   const optionId = (user: UserMatch) => `${listId}-${user.id}`;
@@ -914,11 +903,12 @@ function AddMember({ team }: { team: Team }) {
         id={listId}
         role="listbox"
         aria-label="Matching users"
-        className="mt-1.5 flex flex-col rounded-[10px] border border-line bg-surface p-1 shadow-[0_12px_32px_rgb(28_25_23/0.12)] empty:hidden"
+        aria-busy={stale}
+        className="mt-1.5 flex flex-col aria-busy:opacity-50 rounded-[10px] border border-line bg-surface p-1 shadow-[0_12px_32px_rgb(28_25_23/0.12)] empty:hidden"
       >
         {expanded &&
           users.map((user) => {
-            const canAdd = addable(user);
+            const canAdd = addable(user) && !stale;
             const selected = user === highlighted;
             return (
               <li
@@ -938,7 +928,7 @@ function AddMember({ team }: { team: Team }) {
                   <span className="text-muted">@{user.username}</span>
                   {user.email && <span className="text-muted"> {user.email}</span>}
                 </span>
-                {!canAdd ? (
+                {!addable(user) ? (
                   <span className="shrink-0 text-xs text-muted">Already a member</span>
                 ) : (
                   selected && (

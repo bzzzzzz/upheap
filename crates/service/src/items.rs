@@ -493,7 +493,6 @@ async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<I
     Ok(store::items::list_item_summaries(db, item.heap_id, [id]).await?.pop())
 }
 
-/// How many of `items` `keep` is true for.
 /// How many open items each of `heap_ids` has, in one query: those its list shows by default, before filters (the
 /// `unfiltered_count` of [`ListView::default`]). Heaps with none are left out.
 pub(crate) async fn count_open_items(
@@ -503,6 +502,7 @@ pub(crate) async fn count_open_items(
     store::items::count_items_by_heap(db, heap_ids, &ListView::default().listed_states()).await
 }
 
+/// How many of `items` `keep` is true for.
 fn count_items(items: &[Item], keep: impl Fn(&Item) -> bool) -> u32 {
     u32::try_from(items.iter().filter(|item| keep(item)).count()).unwrap_or(u32::MAX)
 }

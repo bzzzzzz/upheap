@@ -7,6 +7,9 @@ use uuid::Uuid;
 
 use crate::StoreError;
 
+/// Most IDs in one `IN (…)` list, well under every backend's limit on bound parameters.
+pub(crate) const IN_LIST_CHUNK: usize = 500;
+
 /// Reads a column as a typed value, reporting the row as corrupt if it doesn't parse.
 pub(crate) struct RowReader<'a> {
     pub table: &'static str,

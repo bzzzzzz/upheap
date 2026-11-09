@@ -6,19 +6,20 @@ import { useCreateTeam, useMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
 import { ProblemText, problemMessage } from "../components/ProblemText";
+import { useReturnFocus } from "../components/useConfirmation";
 import { plural } from "../components/words";
 
 /** The caller's teams, and Create team, which opens a form for a new one (S-teams, WideTeams). */
 export function TeamsPage() {
   const { data: me } = useMe();
   const [creating, setCreating] = useState(false);
-  const createButton = useRef<HTMLButtonElement>(null);
+  // Focus was in the form; it goes back to what opened it.
+  const { ref: createButton, returnFocus } = useReturnFocus<HTMLButtonElement>(creating);
   if (!me) return null;
 
   const close = () => {
+    returnFocus();
     setCreating(false);
-    // The form replaced nothing, but focus was in it; it goes back to what opened it.
-    window.requestAnimationFrame(() => createButton.current?.focus());
   };
 
   return (
