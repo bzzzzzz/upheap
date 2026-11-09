@@ -35,9 +35,11 @@ Rules for the docs:
 2. **Status lives in [design/work/progress.md](design/work/progress.md) only,** as state, not history: one line
    per area, no changelogs, no test counts. Update the row for the area you changed. The pull requests are the
    history.
-3. **A design doc for unbuilt work is temporary.** It lives in `design/work/` while the work is built. Once built, the
-   mechanisms worth keeping move into architecture.md or the module docs, the choices into decisions.md, its status
-   into progress.md, and the file goes. Git remembers it.
+3. **A design doc for unbuilt work is temporary.** It lives in `design/work/` while the work is built, and nothing
+   outside `work/` links into it but CLAUDE.md and the index: code and the permanent docs cite the permanent doc
+   that holds a mechanism, or nothing until one does. Once built, the mechanisms worth keeping move into
+   architecture.md or the module docs, the choices into decisions.md, its status into progress.md, and the file
+   goes. Git remembers it.
 4. **Open questions** about built things go in progress.md's one list. A design doc for unbuilt work keeps its own
    until it's built.
 

@@ -2,7 +2,7 @@
 
 How we write code here. **Must follow.** Where code and a principle disagree, fix one of them; don't leave them
 disagreeing. The shared rules are taken from the maintainer's engineering knowledge base (`engineering/` in the
-dotfiles, commit `57aacca`); every section of it applies here, so none is left out. This project's own rules, and
+dotfiles, commit `edb2c95`); every section of it applies here, so none is left out. This project's own rules, and
 the shared rules it overrides, are in the second part. [architecture.md](architecture.md) says how the code is
 built, and [CLAUDE.md](../CLAUDE.md#docs) holds the rules for the docs.
 
@@ -188,8 +188,8 @@ and use cases. **Operations** are functions that do one job and return a result.
 3. **Doc comments say what the name can't:** units, when a field is `None`, what a return value means, when a
    function fails, and what it touches outside its arguments. Skip them when they would only repeat the name.
    Public items in the core and the use-case layer are documented.
-4. **Module docs say what the module owns** and cite the design doc section they implement by name, so the
-   citation survives a doc rename.
+4. **Module docs say what the module owns** and cite, by section name, the permanent design doc that holds the
+   mechanism they implement. Never a doc in `design/work/`: it goes once the work is built.
 
 #### Structure and types
 
@@ -315,7 +315,8 @@ and use cases. **Operations** are functions that do one job and return a result.
    `dark:` pairs.
 5. **Accessibility is part of done:** semantic HTML, full keyboard support, visible focus, labelled controls,
    `prefers-reduced-motion` honoured for every animation.
-6. **A comment that cites a design doc cites it by section name,** so the citation survives a doc restructure.
+6. **A comment that cites a design doc cites a permanent one, by section name,** so the citation survives a doc
+   restructure. Never a doc in `design/work/`: it goes once the work is built.
 
 #### Tests
 

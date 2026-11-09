@@ -1,9 +1,7 @@
 # Product
 
-What Upheap does and why: the commitments the product makes, whether or not the code has caught up with them.
-[work/progress.md](work/progress.md) says what's built, and keeps the ideas that aren't commitments. How it's built is in
-[architecture.md](architecture.md), how the web app behaves in [ux.md](ux.md), and the command-line client in
-[work/cli.md](work/cli.md).
+What Upheap does and why: the commitments the product makes, whether or not the code has caught up with them. How
+it's built is in [architecture.md](architecture.md), and how the web app behaves in [ux.md](ux.md).
 
 ## Pitch
 
@@ -27,7 +25,7 @@ It answers questions like:
    keeps the data there ([architecture.md](architecture.md#local-build)). It has no accounts and no teammates, all
    its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
 4. The server exposes an API that any client can use. There are two clients, the web app and the `upheap`
-   command-line client ([work/cli.md](work/cli.md)), and the API assumes neither.
+   command-line client, and the API assumes neither.
 
 ## Accounts and sign-in
 
