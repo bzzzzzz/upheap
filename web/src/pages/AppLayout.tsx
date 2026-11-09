@@ -9,7 +9,6 @@ import {
   CircleCheck,
   Ellipsis,
   List,
-  LogOut,
   Plus,
   SlidersHorizontal,
   Tag,
@@ -20,7 +19,7 @@ import {
 import { useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useSignOut, useTeam } from "../api/queries";
+import { soleTeam, useCreateHeap, useHeap, useMe, useSetHeapArchived, useTeam } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
@@ -84,9 +83,12 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
 }
 
 // The shared look of a navigation entry: icon over a short label in the rail, icon beside the label in the sidebar,
-// and at least 44 px tall everywhere. Links get `data-status="active"` from the router.
+// and at least 44 px tall everywhere. Links get `data-status="active"` from the router. The active entry is an amber
+// pill, as the selected row of the list is amber: a surface-coloured fill vanished on the phone's tabs, which are the
+// surface, and barely showed on the dark sidebar. A tint of the accent rather than `accent-soft`, which is too close to
+// white to show on the tabs and the sidebar in light mode. Hovering it keeps the pill, so hover and active stay apart.
 const navItemClass =
-  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-surface data-[status=active]:text-ink data-[status=active]:shadow-sm lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
+  "flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-1.5 text-[11px] font-medium text-ink-soft hover:bg-line/60 hover:text-ink data-[status=active]:bg-accent/20 data-[status=active]:text-accent-ink data-[status=active]:hover:bg-accent/20 data-[status=active]:hover:text-accent-ink lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-sm";
 
 /**
  * With `current`, the link shows as active also where the router wouldn't say so. `count`, such as the heap's open
@@ -200,10 +202,6 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       <div className="mt-auto flex flex-col gap-1 lg:gap-0.5">
         <NavLink {...links.teams} activeOptions={{ exact: true }} icon={Users} />
         <NavLink to="/account" icon={User} label="Account" />
-        <SignOutButton me={me} className={navItemClass}>
-          <LogOut aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
-          <span>Sign out</span>
-        </SignOutButton>
         <div className="hidden lg:block">
           <StorageNote className="px-2 pt-1.5" />
         </div>
@@ -249,6 +247,10 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
+  // The heap's pages that only More leads to, so More shows as active on them. The tabs show only on a heap's pages.
+  const onTags = useMatch({ from: "/app/teams/$team/heaps/$heap/tags", shouldThrow: false }) !== undefined;
+  const onParameters = useMatch({ from: "/app/teams/$team/heaps/$heap/parameters", shouldThrow: false }) !== undefined;
+  const onMorePage = onTags || onParameters;
 
   return (
     <nav
@@ -271,6 +273,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       <button
         type="button"
         aria-expanded={more}
+        {...(onMorePage && { "data-status": "active", "aria-current": "true" })}
         onClick={() => setMore(true)}
         className={`${navItemClass} outline-none focus-visible:outline-2 focus-visible:outline-accent aria-expanded:text-ink`}
       >
@@ -300,8 +303,6 @@ function MoreSheet({
 }) {
   const links = useShellLinks(me, heapRef);
   const views = heapViews(heapRef, false);
-  const navigate = useNavigate();
-  const signOut = useSignOut();
   const row = (label: string, note?: string) => (
     <>
       <span className="flex-1">{label}</span>
@@ -336,16 +337,6 @@ function MoreSheet({
         <Link to="/account" onClick={onClose} className={sheetRowClass}>
           {row("Account", `@${me.user.username}`)}
         </Link>
-        {me.allowed_actions.includes("sign_out") && (
-          <button
-            type="button"
-            onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
-            className={`${sheetRowClass} mt-1 rounded-t-none border-t border-line text-overdue-ink`}
-          >
-            <LogOut aria-hidden="true" className="size-4" />
-            Sign out
-          </button>
-        )}
       </nav>
     </Sheet>
   );
@@ -476,21 +467,6 @@ function NewHeap({ team, onCreated }: { team: Me["teams"][number]; onCreated: ()
         </button>
       )}
     </div>
-  );
-}
-
-function SignOutButton({ me, className, children }: { me: Me; className: string; children: ReactNode }) {
-  const navigate = useNavigate();
-  const signOut = useSignOut();
-  if (!me.allowed_actions.includes("sign_out")) return null;
-  return (
-    <button
-      type="button"
-      onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
-      className={className}
-    >
-      {children}
-    </button>
   );
 }
 

@@ -1,6 +1,6 @@
 # Web app UX for phones and wide screens
 
-Draft. A change spec on top of [technical-design.md](technical-design.md). Status lives in [progress.md](progress.md).
+A change spec on top of [architecture.md](architecture.md). Status lives in [progress.md](progress.md).
 The mockups are in the "Upheap layouts" canvas linked from the pull request that adds this file.
 
 ## Goal
@@ -31,7 +31,10 @@ The app is one 768 px column with a top bar of text links. That works on a lapto
 ## Toolkit
 
 1. **Tailwind v4, kept**, with our design tokens in `@theme` (surface, ink, muted, accent, state colours, radii), so
-   light and dark modes come from one place instead of `dark:` pairs on every element.
+   light and dark modes come from one place instead of `dark:` pairs on every element. Which one shows is the
+   Account page's Appearance setting: System (the default) follows the device, and Light or Dark overrides it. It's
+   kept per browser in localStorage, not on the server, as it's about the screen rather than the account, and applied
+   by an inline script in `index.html` before the first paint, so a reload doesn't flash the other theme.
 2. **React Aria Components** for behaviour: dialogs and sheets, menus, radio and toggle groups, date picker, tag
    group, and the list itself (`GridList`, for keyboard navigation and selection). It is unstyled, so it takes our
    Tailwind classes, and it is one dependency rather than copied code. It handles touch properly: a scroll doesn't
@@ -51,8 +54,9 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Team, Teams, Tags, Parameters, Account (with Your data in the local build) and Sign out,
-as a card of 52 px rows above the tabs. The **+** in the middle of the tabs opens the Add dialog from any of the
+**More** on a phone holds Team, Teams, Tags, Parameters and Account (with Your data in the local build), as a card
+of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account
+page, under its cards. The **+** in the middle of the tabs opens the Add dialog from any of the
 heap's pages, so the Add field above the list shows only from a tablet up.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
@@ -168,18 +172,6 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 The Playwright golden paths run on phone (Pixel 7 emulation) and tablet (iPad emulation) projects as well as desktop
 Chromium, against both the server and the local build.
-
-## Plan
-
-1. **Foundations.** Tokens, icons, React Aria, and the app shell at each width: sidebar, rail, bottom tabs, safe
-   areas. The phone and tablet Playwright projects start here.
-2. **List and item**, in two changes:
-   1. The due picker and its choices from the server, the S M L XL buttons, and the Add dialog.
-   2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
-      keyboard navigation.
-3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
-   sheet down and swiping the tablet panel right to close them, the Filters & sort sheet, heap switcher.
-4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 
 ## Later: an installable app
 

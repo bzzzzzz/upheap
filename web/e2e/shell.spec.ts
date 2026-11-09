@@ -1,5 +1,7 @@
 // The app shell at each width (design/app-ux.md, Layout): the navigation the width calls for, and no page wider
 // than the screen.
+import type { Locator, Page } from "@playwright/test";
+
 import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
@@ -92,4 +94,111 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await addItem(page, "Water the plants", {}, { listed: false });
   await goTo(page, "Open");
   await expect(row(page, "Water the plants")).toBeVisible();
+});
+
+test("Sign out is on the Account page, not in the navigation, and only on the server", async ({ page, localBuild }) => {
+  const signOut = page.getByRole("button", { name: "Sign out", exact: true });
+  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
+  await expect(signOut).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    const more = page.getByRole("navigation", { name: "More" });
+    await expect(more.getByRole("link").last()).toHaveText(/^Account/);
+    await expect(signOut).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
+
+  await goTo(page, "Account");
+  await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(signOut).toHaveCount(localBuild ? 0 : 1);
+});
+
+test("the theme picked on Account holds over a reload and in other tabs, and System follows the device", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const html = page.locator("html");
+  // The canvas token, as the page's background shows it.
+  const canvasOf = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const light = "rgb(250, 250, 249)";
+  const dark = "rgb(12, 10, 9)";
+  await goTo(page, "Account");
+  const theme = page.getByRole("radiogroup", { name: "Theme" });
+  await expect(theme.getByRole("radio", { name: "System" })).toBeChecked();
+  await expect(html).not.toHaveAttribute("data-theme");
+  expect(await canvasOf()).toBe(light);
+  const other = await page.context().newPage();
+  await other.emulateMedia({ colorScheme: "light" });
+  await other.goto(page.url());
+
+  await theme.getByRole("radio", { name: "Dark" }).click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  expect(await canvasOf()).toBe(dark);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+  // Pressing the picked theme again keeps it: there's always one.
+  await theme.getByRole("radio", { name: "Dark" }).click();
+  await expect(theme.getByRole("radio", { name: "Dark" })).toBeChecked();
+  await expect(other.locator("html")).toHaveAttribute("data-theme", "dark");
+  await other.close();
+
+  // Dark before the app runs, so a reload doesn't flash light first.
+  await page.route("**/assets/*.js", (route) => route.abort());
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  // On <html> itself too, so the browser's own canvas is dark before the CSS loads.
+  await expect(html).toHaveCSS("color-scheme", "dark");
+  expect(await page.evaluate(() => document.documentElement.style.colorScheme)).toBe("dark");
+  expect(await canvasOf()).toBe(dark);
+  await page.unrouteAll();
+  await page.reload();
+  await expect(theme.getByRole("radio", { name: "Dark" })).toBeChecked();
+
+  // Light holds on a dark device, and System follows the device again.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await theme.getByRole("radio", { name: "Light" }).click();
+  await expect(html).toHaveAttribute("data-theme", "light");
+  expect(await canvasOf()).toBe(light);
+  await theme.getByRole("radio", { name: "System" }).click();
+  await expect(html).not.toHaveAttribute("data-theme");
+  await expect(html).not.toHaveAttribute("style", /color-scheme/);
+  expect(await canvasOf()).toBe(dark);
+  await page.emulateMedia({ colorScheme: "light" });
+  expect(await canvasOf()).toBe(light);
+});
+
+/** The bar the heap's views are in at this width: the phone's tabs, or the sidebar or rail. */
+function viewsBar(page: Page) {
+  return isPhone(page)
+    ? page.getByRole("navigation", { name: "Heap views" })
+    : page.getByRole("complementary", { name: "Heaps and views" });
+}
+
+function isPhone(page: Page) {
+  return (page.viewportSize()?.width ?? 0) < 640;
+}
+
+/** `entry` is the active one, and its fill shows against the bar it's in. */
+async function expectToStandOut(entry: Locator, bar: Locator) {
+  const backgroundOf = (target: Locator) => target.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await expect(entry).toHaveAttribute("data-status", "active");
+  expect(await backgroundOf(entry)).not.toBe(await backgroundOf(bar));
+}
+
+test("the active navigation entry stands out from its bar in either theme", async ({ page }) => {
+  const bar = viewsBar(page);
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expectToStandOut(bar.getByRole("link", { name: "Open", exact: true }), bar);
+  }
+});
+
+test("on a phone, More shows as active on the pages it holds", async ({ page }) => {
+  test.skip(!isPhone(page), "Only the phone's tabs have More.");
+  const bar = viewsBar(page);
+  await goTo(page, "Tags");
+  const more = bar.getByRole("button", { name: "More" });
+  await expect(more).toHaveAttribute("aria-current", "true");
+  await expectToStandOut(more, bar);
+  await goTo(page, "Closed");
+  await expect(more).not.toHaveAttribute("data-status");
 });
