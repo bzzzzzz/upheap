@@ -1,0 +1,340 @@
+# Releases the `upheap` CLI (design/operations.md, "Releasing the CLI"). Pushing a tag `vX.Y.Z` that matches the
+# workspace version, on a commit of main, builds static binaries for Apple silicon macOS and x86_64 and aarch64 Linux
+# on native runners, publishes them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap. A
+# pull request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do
+# everything up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a
+# broken release, such as a new dependency that stops the musl build being static, is found before a tag.
+#
+# It ships binaries, so every action is pinned to a commit, and release builds use no cache another ref could have
+# written. The tap is pushed to with a deploy key, secret HOMEBREW_TAP_DEPLOY_KEY.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - packaging/**
+      - scripts/release/**
+      # What the CLI is built from, so a dependency that breaks the static musl build fails its pull request.
+      - Cargo.toml
+      - Cargo.lock
+      - crates/cli/**
+      - crates/api-types/**
+      - crates/domain/**
+      - .cargo/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: "1.95"
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The whole history, to check that the tagged commit is on main.
+          fetch-depth: 0
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "The cli package is at version $version."
+
+      - name: Check the tag
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag $TAG isn't vX.Y.Z. Pre-releases aren't released; delete the tag and push a plain version tag."
+            exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $TAG doesn't match the cli version $VERSION; bump the workspace version in Cargo.toml first, or delete the tag and push v$VERSION."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $TAG points at a commit that isn't on main; delete it and tag the commit on main."
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TARGET: ${{ matrix.target }}
+      # The oldest macOS the binary runs on (Big Sur).
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      # The C compiler for the musl targets' C dependencies (ring, in rustls).
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "$TARGET"
+          rustup default "$RUST_TOOLCHAIN"
+
+      - name: Install musl-tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --locked -p cli --target "$TARGET"
+
+      - name: Smoke test
+        run: |
+          out=$("target/$TARGET/release/upheap" --version)
+          echo "$out"
+          if [ "$out" != "upheap $VERSION" ]; then
+            echo "::error::The binary printed '$out', expected 'upheap $VERSION'."
+            exit 1
+          fi
+
+      - name: Check the binary is static
+        if: runner.os == 'Linux'
+        run: |
+          out=$(file "target/$TARGET/release/upheap")
+          echo "$out"
+          if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
+            echo "::error::The Linux binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
+            exit 1
+          fi
+
+      - name: Package
+        run: scripts/release/package.sh "$TARGET" "target/$TARGET/release/upheap" dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: upheap-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  # The cask and the checksums are made on every run, so a dry run exercises them. brew is on the macOS runner.
+  cask:
+    name: Cask and checksums
+    needs: [version, build]
+    runs-on: macos-15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: upheap-*
+          merge-multiple: true
+          path: dist
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          shasum -a 256 upheap-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Render the cask
+        run: |
+          sha256=$(shasum -a 256 dist/upheap-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)
+          mkdir -p cask
+          scripts/release/render-cask.sh "$VERSION" "$sha256" > cask/upheap.rb
+          cat cask/upheap.rb
+
+      # `brew style` on a loose file also applies the Sorbet and frozen-string cops that casks in a tap are exempt from,
+      # and `brew audit --cask` only reads a cask in a tap, so a temporary tap holds a copy. The audit is offline: the
+      # release the url points at doesn't exist yet.
+      - name: Check the cask
+        run: |
+          brew tap-new --no-git local/upheap-check
+          trap 'brew untap local/upheap-check' EXIT
+          brew trust local/upheap-check
+          mkdir -p "$(brew --repository local/upheap-check)/Casks"
+          cp cask/upheap.rb "$(brew --repository local/upheap-check)/Casks/upheap.rb"
+          brew style local/upheap-check/upheap
+          brew audit --cask --strict local/upheap-check/upheap
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cask
+          path: cask/upheap.rb
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'push'
+    needs: [version, build, cask]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: "{upheap-*,checksums}"
+          merge-multiple: true
+          path: dist
+
+      # A published release's assets are never replaced (design/operations.md).
+      - name: Check the release doesn't exist
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::A release for $TAG already exists and its assets are never replaced. If it is bad, publish a new patch version; if this is a re-run after the release job succeeded, re-run only the failed jobs."
+            exit 1
+          fi
+
+      - name: Create the release
+        run: >-
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "upheap $VERSION" --generate-notes
+          dist/upheap-aarch64-apple-darwin.tar.gz
+          dist/upheap-x86_64-unknown-linux-musl.tar.gz
+          dist/upheap-aarch64-unknown-linux-musl.tar.gz
+          dist/SHA256SUMS
+
+  # Its own job, so re-running the failed jobs after a tap failure doesn't try to create the release again.
+  tap:
+    name: Homebrew tap
+    needs: [version, release]
+    runs-on: ubuntu-24.04
+    # One tap push at a time across tags, so two releases in flight don't race on the tap's main.
+    concurrency:
+      group: homebrew-tap
+      cancel-in-progress: false
+    outputs:
+      newest: ${{ steps.cask.outputs.newest }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cask
+          path: cask
+
+      - name: Set up the deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in design/operations.md, section \"Releasing the CLI\", then re-run the failed jobs."
+            exit 1
+          fi
+          key="$RUNNER_TEMP/tap_key"
+          known_hosts="$RUNNER_TEMP/known_hosts"
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" > "$key")
+          # GitHub's published ed25519 host key: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$known_hosts"
+          echo "GIT_SSH_COMMAND=ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" >> "$GITHUB_ENV"
+
+      # Never moves the tap back: re-running an older tag's failed jobs after a newer release leaves the newer cask.
+      - name: Update the cask
+        id: cask
+        run: |
+          git clone git@github.com:bzzzzzz/homebrew-tap.git tap
+          cd tap
+          mkdir -p Casks
+          current=$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/upheap.rb 2> /dev/null || true)
+          if [ -n "$current" ] && [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]; then
+            echo "::notice::The tap has upheap $current, newer than $VERSION; leaving it, and skipping the install checks."
+            echo "newest=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "newest=true" >> "$GITHUB_OUTPUT"
+          cp ../cask/upheap.rb Casks/upheap.rb
+          if [ -z "$(git status --porcelain Casks/upheap.rb)" ]; then
+            echo "The tap already has upheap $VERSION; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/upheap.rb
+          git commit -m "upheap $VERSION"
+          git push origin HEAD:main
+
+  verify:
+    name: Verify on ${{ matrix.name }}
+    needs: [version, tap]
+    # The install checks fetch the tap's cask and the latest release, which are this version's only when it's newest.
+    if: needs.tap.outputs.newest == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-15
+          - name: Linux
+            runner: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Install with Homebrew
+        if: runner.os == 'macOS'
+        run: |
+          brew install bzzzzzz/tap/upheap
+          out=$(upheap --version)
+          echo "$out"
+          [ "$out" = "upheap $VERSION" ] || { echo "::error::The installed binary printed '$out', expected 'upheap $VERSION'."; exit 1; }
+          # Only proves something where the runner's brew quarantines downloads.
+          bin=$(readlink -f "$(brew --prefix)/bin/upheap")
+          if xattr -p com.apple.quarantine "$bin" 2> /dev/null; then
+            echo "::error::$bin still carries the quarantine attribute; the cask's postflight didn't clear it."
+            exit 1
+          fi
+          brew uninstall --cask upheap
+          brew untap bzzzzzz/tap
+
+      # The README's Linux commands, as written, with a temporary home so ~/.local/bin is a temporary directory.
+      - name: Install from the README's commands
+        if: runner.os == 'Linux'
+        run: |
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME" "$RUNNER_TEMP/download"
+          cd "$RUNNER_TEMP/download"
+          arch=$(uname -m)   # x86_64 or aarch64
+          base=https://github.com/bzzzzzz/upheap/releases/latest/download
+          curl -fsSLO "$base/upheap-$arch-unknown-linux-musl.tar.gz"
+          curl -fsSLO "$base/SHA256SUMS"
+          grep " upheap-$arch-unknown-linux-musl.tar.gz\$" SHA256SUMS | sha256sum -c
+          mkdir -p ~/.local/bin
+          tar -xzf "upheap-$arch-unknown-linux-musl.tar.gz" -C ~/.local/bin upheap
+          out=$(~/.local/bin/upheap --version)
+          echo "$out"
+          [ "$out" = "upheap $VERSION" ] || { echo "::error::The installed binary printed '$out', expected 'upheap $VERSION'."; exit 1; }

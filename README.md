@@ -80,8 +80,33 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 
 ## The CLI
 
-`upheap` talks to a running server over its API. Build it with
-`cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
+`upheap` talks to a running server over its API.
+
+### Install
+
+On macOS with Apple silicon:
+
+```sh
+brew install bzzzzzz/tap/upheap
+```
+
+On Linux (x86_64 or aarch64), a static binary with no system dependencies:
+
+```sh
+arch=$(uname -m)   # x86_64 or aarch64
+base=https://github.com/bzzzzzz/upheap/releases/latest/download
+curl -fsSLO "$base/upheap-$arch-unknown-linux-musl.tar.gz"
+curl -fsSLO "$base/SHA256SUMS"
+grep " upheap-$arch-unknown-linux-musl.tar.gz\$" SHA256SUMS | sha256sum -c
+mkdir -p ~/.local/bin
+tar -xzf "upheap-$arch-unknown-linux-musl.tar.gz" -C ~/.local/bin upheap
+```
+
+`~/.local/bin` must be on your `PATH`; some distributions add it only if it existed when you logged in.
+
+On Linux the sign-in is kept in the Secret Service, so a desktop keyring (GNOME Keyring or KWallet) must be running.
+
+Or build it with `cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
 
 ```sh
 cargo run -p cli -- auth login --server http://localhost:8080   # opens the browser; the sign-in goes in the keychain

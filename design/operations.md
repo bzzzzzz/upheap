@@ -89,8 +89,49 @@ Send traffic to an earlier revision:
 gcloud run services update-traffic upheap --region us-west1 --to-revisions=<revision>=100
 ```
 
+## Releasing the CLI
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the `upheap` CLI for Apple silicon macOS and
+x86_64 and aarch64 Linux when a `vX.Y.Z` tag is pushed, publishes the archives and `SHA256SUMS` as a GitHub Release,
+and updates the cask in `bzzzzzz/homebrew-tap`. Why it is built this way is in
+[decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow).
+
+To cut a release:
+
+1. Bump `version` in `[workspace.package]` of `Cargo.toml` in a pull request (`cargo update -w` refreshes
+   `Cargo.lock`), and merge it.
+2. Tag the commit on main: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
+
+The workflow refuses a tag that doesn't match that version or isn't on main, and never replaces a published release;
+its steps' error messages say what else it checks and what to do. Pull requests that touch the packaging or what the CLI is built from run
+it as a dry run that publishes nothing.
+
+Recovering from a failed run:
+
+- **The tap job** (a bad key, the network): re-run the failed jobs. It leaves the tap alone if the cask is unchanged.
+- **A build or release failure before the release exists:** delete the tag (`git push origin :refs/tags/vX.Y.Z`), fix,
+  and tag again.
+- **A bad published release:** publish a new patch version. Never replace its assets.
+
+### One-time setup
+
+The tap repository, a deploy key that can write to it, and the secret that holds the key:
+
+```sh
+TMP=$(mktemp -d)
+gh repo create bzzzzzz/homebrew-tap --public --add-readme --description "Homebrew tap for Upheap"
+ssh-keygen -t ed25519 -N '' -C upheap-release -f $TMP/key
+gh repo deploy-key add $TMP/key.pub --repo bzzzzzz/homebrew-tap --allow-write --title upheap-release
+gh secret set HOMEBREW_TAP_DEPLOY_KEY --repo bzzzzzz/upheap < $TMP/key
+rm -rf $TMP
+```
+
 ## Cautions
 
+- **The macOS binary isn't notarized**
+  ([decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow)):
+  after an upgrade, a user may be asked once to let `upheap` use its keychain entry; that's expected. A cask's `zap`
+  doesn't remove keychain entries; `upheap auth logout` does.
 - **sqlx through the pooler.** sqlx prepares statements and sets `extra_float_digits` when it connects, either of
   which PgBouncer can refuse. Neon's pooler accepted both on the first deploy. If a later Neon change breaks it, put
   the direct endpoint in the secret, or have `store::connect` stop sending the parameter
