@@ -15,7 +15,7 @@ and architecture.md.
 | --- | --- | :---: | --- |
 | Local accounts | Off Auth §2–3, Arch Auth §4 | ✅ | Register, sign in by email or username, sign out. argon2id, hashed session tokens, CSRF header, five sign-in attempts per account per 15 minutes |
 | Personal team and heap | Off Teams §3 | ✅ | Made on registration and named by the username. Private, so it takes no members |
-| Readable IDs | [readable-ids.md](readable-ids.md) | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
+| Readable IDs | Arch Handles | ✅ | Usernames, slugs and item keys in every URL and API path, `/h/…` short links with Copy link, slugs editable on the team and heap pages |
 | Items | Req Items §1–4, 6–7 | ✅ | Loose and exact due times with fuzzy labels. Need is required on every item and never cleared. Reopen within 7 × 24 h |
 | Ranking | Req Priority | 🟡 | Formula `V2`: need, age scaled by need, deadline, value per effort, custom parameters, blocker inheritance. The heap's own weights can't be edited yet |
 | List view | Req Views: List items | ✅ | Each state pinned, shown or hidden. Sort by priority, due, effort, impact or a parameter. One Filters panel for tags, need, effort, impact and parameter options. Client text search (`/`). The view lives in the URL |
@@ -32,8 +32,8 @@ and architecture.md.
 | OIDC sign-in | Off Auth §1 | ⬜ | |
 | CLI | [cli.md](cli.md) | 🟡 | Server half done: OAuth with PKCE for the `upheap-cli` client, rotating refresh tokens, bearer tokens on every endpoint, the consent page. Not started: `crates/api-types`, `crates/cli`, `/me/tokens` |
 | API conventions | Arch API, Access control | ✅ | `If-Match`, problem+json with stable codes, `404` for outsiders, `409` on archived heaps |
-| Deployment | Arch Configuration, [cloud-run-postgres.md](cloud-run-postgres.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
-| Local build | [local-build.md](local-build.md) | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
+| Deployment | Arch Configuration, [operations.md](operations.md) | ✅ | One binary on SQLite, MySQL or Postgres. Docker image, `/healthz` and `/readyz`. Cloud Run with Neon in us-west1, deployed from `main`, registration off |
+| Local build | Arch Local build | ✅ | The backend in a browser worker on SQLite-wasm. Export, import and one tab at a time. Published to https://bzzzzzz.github.io/upheap/ after every merge |
 | Web app at every width | [app-ux.md](app-ux.md) | 🟡 | Shell, list, item, Add, Closed, Your data, sign-in, Teams and Team fitted to phones and wide screens in the design tokens. Left: Activity, Tags and Parameters at phone width. The tablet keeps app-ux.md's layout, unreviewed |
 | Testing and CI | Arch Testing | ✅ | Rust suites on SQLite, MySQL and Postgres. The access-control table test. Playwright golden paths at three widths and against the local build. OpenAPI and generated types checked for drift |
 
@@ -49,12 +49,11 @@ In rough order.
 3. **Need in the list.** Sort by need, and show it in the row so a critical item stands out without opening it.
 4. **Phone width** for Activity, Tags and Parameters, in the design tokens.
 5. **Saved views** back in the web app, inside the Filters panel.
-6. **OIDC sign-in**, with a username step on first sign-in ([readable-ids.md](readable-ids.md), Sign-up).
+6. **OIDC sign-in**, with a username step on first sign-in (Arch Handles §7).
 7. **Invitations** by email or link (Off Teams §6).
 8. **Backups.** Check Neon's restore window on the plan in use before real data goes in.
-9. **Docs.** Finish the restructuring: local-build.md, readable-ids.md and cloud-run-postgres.md dissolved into
-   architecture.md, decisions.md and an `operations.md`; `ux.md` from ux-overview.md and app-ux.md with screens.md's
-   core flows; `product.md` from requirements.md and offering.md. The rules are in [CLAUDE.md](../CLAUDE.md).
+9. **Docs.** Finish the restructuring: `ux.md` from ux-overview.md and app-ux.md with screens.md's core flows;
+   `product.md` from requirements.md and offering.md. The rules are in [CLAUDE.md](../CLAUDE.md).
 
 ## Later
 

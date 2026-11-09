@@ -21,7 +21,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
    triggers or stored procedures. Everything runs on SQLite, MySQL and Postgres, and CI tests all three.
 4. **Nothing is deleted, and everything is audited.** No `DELETE` of domain data. Every write and its audit entry
    commit in one transaction.
-5. **Single binary.** One executable serves the API and the embedded web app. The [local build](local-build.md) is
+5. **Single binary.** One executable serves the API and the embedded web app. The [local build](#local-build) is
    the one other deliverable: the same backend crates compiled to WebAssembly and shipped with the web app as a
    static site.
 
@@ -38,7 +38,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
-| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([cloud-run-postgres.md](cloud-run-postgres.md)); the local build on GitHub Pages |
+| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the local build on GitHub Pages |
 
 ## Workspace
 
@@ -49,17 +49,17 @@ listed in [README.md](../README.md#layout); each crate's root module says what i
 
 `service` and `api` put what only a shared server needs behind their default `accounts` feature: registration,
 sign-in and sessions, team management, user lookup, OAuth. The local build leaves it out, so that code and its
-dependencies aren't in the wasm at all ([local-build.md](local-build.md#single-user-mode)). The features are
-additive: with `accounts` on, the local user still works, which lets the native API tests cover it.
+dependencies aren't in the wasm at all ([Local build](#local-build)). The features are additive: with `accounts`
+on, the local user still works, which lets the native API tests cover it.
 
 ## Data model
 
 The tables and columns are in the migrations. These are the conventions they follow.
 
 - **IDs** are UUIDv7 in `CHAR(36)`: sortable by creation time and safe to expose.
-- **Handles** name things in URLs, API paths and the CLI ([readable-ids.md](readable-ids.md)): usernames, team
-  slugs, heap slugs (unique per team) and item keys (unique per heap). They are extra columns with unique indexes,
-  and every foreign key still points at the UUID, so a handle can change without touching references.
+- **Handles** name things in URLs, API paths and the CLI ([Handles](#handles)): usernames, team slugs, heap slugs
+  (unique per team) and item keys (unique per heap). They are extra columns with unique indexes, and every foreign
+  key still points at the UUID, so a handle can change without touching references.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -87,6 +87,63 @@ The tables and columns are in the migrations. These are the conventions they fol
   one unique index. The personal team can't take members, and its slug never changes.
 - **Archived options always name their replacement** (`archived_at` and `replaced_by_option_id` are set together),
   so a stored value can always be followed to an option in use.
+- **Portable SQL in practice.** The differences met so far, which new SQL has to respect: in `ON CONFLICT DO
+  UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
+  their columns with the table; Postgres pads `char(n)` and reads it back padded, so every `char` column holds
+  values of exactly its length; identifiers are quoted per backend; SQLite's `LOWER` lowercases ASCII only and
+  Postgres's all of Unicode, so a comparison lowercases both sides in SQL, never one side in Rust; and after any
+  failed statement Postgres rejects every later statement in the transaction, so a use case that catches a conflict
+  and carries on in the same transaction must use a savepoint (none does today).
+
+## Handles
+
+UUIDs are good keys but bad names: nobody can read `/heaps/0196f3a2-…/items/0196f3b8-…` or type it into a
+terminal. So every user, team, heap and item also has a short handle, used in URLs, API paths and the CLI, while
+the UUIDs stay the database keys.
+
+| Thing | Handle | Unique within | Example | Who sets it |
+| --- | --- | --- | --- | --- |
+| User | username | everyone, shared with teams | `eugene` | the user, once, at sign-up |
+| Team | slug | everyone, shared with users | `my-team` | admins; derived from the name if not given |
+| Heap | slug | its team | `backlog` | admins; derived from the name if not given |
+| Item | key | its heap | `k3x9a` | the server, at random |
+
+Display names, team names and heap names stay free text that can repeat. Only handles are unique.
+
+1. **A username is the slug of its user's personal team** (`teams.personal_user_id` points at the owner), so one
+   unique index covers both and `/teams/eugene` is always Eugene's personal team. The personal team is private: it
+   has exactly one member and refuses members, removal and leaving (`409 personal_team`, and its `allowed_actions`
+   don't offer them), and its slug can't change, since usernames never do. Its name can change, and it holds as
+   many heaps as the owner likes; anything shared lives in another team.
+2. **Format.** Usernames and slugs are lowercase letters, digits and single dashes, starting with a letter and not
+   ending with a dash, within the lengths `domain::handle` sets. Input is checked, never fixed silently: `My-Team`
+   is `422 invalid_handle` with a hint showing `my-team`. A team or heap created without a slug gets one derived
+   from its name, with `-2`, `-3`… where that's taken. Two creates of one name at once can both find the same slug
+   free; the one the unique index refuses starts again with the next suffix, so only a slug the caller chose is
+   ever `409 handle_taken`.
+3. **Item keys** are five characters from Crockford's base32 alphabet in lowercase (no `i`, `l`, `o` or `u`), with
+   at least one digit, so they're easy to read aloud and type and can't spell real words: about 30 million per
+   heap. They're random, so a key says nothing about when an item was made or how many a heap has. The key is drawn
+   inside the item's insert transaction, under the heap lock every item write takes, and checked against the unique
+   index on `(heap_id, key)`; a clash is retried, and with a few thousand items one happens about once in several
+   thousand inserts. `domain` turns random bytes into a key, and the service draws the bytes from the
+   `RandomSource` it's given, like its clock, so tests can script them. Items are never deleted, so a key is never
+   reused.
+4. **Nothing is reserved.** Every handle sits after a fixed word in the URL (`teams/`, `heaps/`, `items/`), so it
+   can't clash with a page the app has now or adds later. Teams start at `/teams/` rather than at the root because
+   the root holds the app's own pages and the server's paths (`/api`, `/healthz`, `/oauth`). API paths have the
+   same shape under `/api/v1`, so a web URL becomes its API call by adding the prefix.
+5. **Short links.** `/h/my-team/backlog/k3x9a` is the short form, one handle per position: team, then heap, then
+   item. The web app's router replaces it with the full URL as it opens, so it works the same in the local build,
+   which has no server to redirect. Items offer Copy link with the short form; the API has none. The CLI takes an
+   item as its key within the default heap, or as the full path `my-team/backlog/k3x9a`, a short link without its
+   `/h/`, so a pasted link works too.
+6. **Changes.** Usernames and item keys are fixed. Team and heap slugs can change, and an old link stops working
+   when they do; redirects from old handles are out of scope for now.
+7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
+   slug, and the first heap is `personal`. The local build's user is `me`, so its links read
+   `/upheap/teams/me/heaps/personal/items/k3x9a`. A first OIDC sign-in will ask for a username before creating the
+   user.
 
 ## Ranking
 
@@ -351,14 +408,108 @@ the remaining admins.
    SQLite aren't run with several instances.
 3. **Default deployment:** the Docker image with SQLite on a mounted volume.
 4. **Production:** `DATABASE_URL` points at Postgres or MySQL. TLS terminates at a reverse proxy, or at Cloud Run in
-   front of a Neon database ([cloud-run-postgres.md](cloud-run-postgres.md)).
+   front of a Neon database ([operations.md](operations.md)).
 5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations
    have finished and the database answers a ping, so orchestrators route traffic only to ready instances. Neither
    needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
 7. **Local build:** a static site with no configuration, published to GitHub Pages. One user and one team, which
-   holds every heap, with the data in the browser ([local-build.md](local-build.md)).
+   holds every heap, with the data in the browser ([Local build](#local-build)).
+
+## Local build
+
+A second way to ship Upheap: a static site on GitHub Pages that runs the whole app in one browser for one person
+and keeps the data there. Nothing to install, no server, no account. The self-hosted server stays the product for
+teams; the local build is for trying Upheap out and for people who only need a personal heap. It doesn't sync
+between devices or share with anyone, has no sign-in, and implements nothing a second time: ranking, validation,
+permissions and the API are the same Rust code in both builds.
+
+### How it runs
+
+```
+React app ── openapi-fetch ── worker fetch ─▶ Web Worker
+                                               ├─ wasm: api Router → service → store (SeaORM)
+                                               └─ SQLite-wasm, database file in OPFS
+```
+
+1. **`crates/local`** is the counterpart of `server`. Through `wasm-bindgen` it exposes `Backend`: `open()` builds
+   the clock and the database connection, runs the migrations, opens the local user and builds the `api` Router;
+   `handle(method, uri, headers, body)` turns its arguments into an `http::Request`, calls the Router as a tower
+   `Service` and returns the response. Routes, DTOs, error mapping, `If-Match` and problem+json stay as they are.
+2. **The web app swaps `fetch`, nothing else.** The API client imports `#api-fetch`, which package.json `imports`
+   resolves to the browser's `fetch`, or, under the `local-build` condition that `vite --mode local-build` sets, to
+   `src/local/fetch.ts`, which posts each request to the worker. TanStack Query, the routes and the components don't
+   change, and the server build holds neither the worker nor the wasm. `#local-database` resolves the same way to
+   the export, import and tab-lock code, or to nothing: it's about the build, not about what the user may do, so it
+   doesn't go through `allowed_actions`.
+3. **One request at a time.** The worker queues requests and finishes one before starting the next, which gives the
+   one-writer behaviour SQLite has on the server and keeps transactions from interleaving when a handler awaits. A
+   request the worker can't answer at all, as when the backend failed to start, fails like a network error.
+4. **Single-user mode.** On first start `Services::open_local_user` makes the user "Me" (username `me`), the team
+   "My heaps" and the heap "Personal" with the same code that makes a personal team on registration; later starts
+   find them. The API resolves every request to that user (`Authentication::LocalUser`), and every heap belongs to
+   that team. The web app doesn't check which build it's in: for the local user the API leaves out of
+   `allowed_actions` what one user can't do (no `sign_out` or `create_team`, only `create_heap` on the team), and
+   the web app hides the rest, linking straight to the one team where the server build lists teams. The Team page
+   stays as the place to create, rename, archive and unarchive heaps.
+5. **Features, not flags.** The `accounts` feature ([Workspace](#workspace)) and `api`'s `trace-and-timeout`
+   feature (the request span and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left
+   out, so that code, argon2 and tokio's blocking pool aren't in the wasm. What changes is which use cases exist;
+   the permission functions in `domain` don't.
+6. **Platform.** There is no tokio runtime: `wasm-bindgen-futures` drives the Router in one thread, and shared code
+   uses only tokio's task-locals (Async §1 of the principles). The clock is `Date.now()`, since `SystemTime::now()`
+   panics on `wasm32-unknown-unknown`; randomness is `getrandom`'s browser backend, chosen by a `cfg` flag in
+   `.cargo/config.toml`; migration timestamps use `time`'s wasm-bindgen feature for the same reason. `local`'s
+   dependencies are declared for the wasm target only, because SeaORM's `proxy` doesn't compile beside the sqlx
+   drivers. The time zone database is bundled, so the `Time-Zone` header works the same.
+
+### Database
+
+1. **SQLite-wasm with `opfs-sahpool`.** The database is a real SQLite file in the Origin Private File System. This
+   VFS needs no COOP and COEP headers, which GitHub Pages can't set, but works only inside a worker and allows one
+   connection per database.
+2. **SeaORM over a proxy connection,** because sqlx doesn't build for wasm. `store`'s `proxy` feature turns on
+   SeaORM's `ProxyDatabaseTrait`, `local` opens the connection as `DbBackend::Sqlite` so SeaORM generates the same
+   SQL as on the server, and the proxy calls SQLite-wasm synchronously through a JS shim in the same worker. Result
+   columns are typed from the entity column they came from, since SQLite declares every integer alike
+   (`crates/local/src/proxy.rs`); SQLite's unique-constraint codes are marked so `StoreError` still maps them to
+   `Duplicate` and `email_taken` and the like reach the client; and a failed `COMMIT`, which the proxy's `commit`
+   can't report, is rolled back and fails the request with `500`.
+3. **Same schema, same migrations,** run at worker start-up as the server's run at boot. A new version on Pages
+   migrates each user's database the next time they open the page, so the rule that released migrations are never
+   edited matters even more here: a database in someone's browser can't be repaired by hand.
+4. **One tab at a time.** Before opening the database the worker takes a Web Lock that it holds until its tab
+   closes. A second tab's worker waits, and the page says Upheap is open in another tab until it opens there.
+
+### Keeping the data
+
+Browser storage can be cleared by the user, or by the browser when the disk fills up.
+
+1. The app asks the browser to keep its data (`navigator.storage.persist()`), and a storage note says that the data
+   lives only in this browser, that the browser may clear it when it hasn't agreed to keep it, and that no copy was
+   downloaded in the last two weeks, or ever, when that's so.
+2. **Export and import** are worker messages beside the HTTP requests, in the same queue, not API endpoints: they
+   are about where this build keeps its data, which a server has no part in. The export is a normal SQLite file
+   with the server's schema, which leaves a path open to moving it onto a server later. An import can't lose the
+   data: the worker refuses a file that isn't a sound SQLite database with SeaORM's migration table, keeps a copy of
+   the current database, swaps in the file and opens it with the migrations, so an older copy is brought up to
+   date; if that fails, as for a copy from a newer version, it puts the old database back and says nothing changed.
+   A `count` message reads a file in memory, never in an OPFS slot, so the replace confirm can say what the copy
+   holds and what goes.
+3. **The last download is kept per browser** in `localStorage`. It is a fact about this browser that no server ever
+   sees, so the web app words it itself, the one exception to thin clients (Thin clients §4 of the principles).
+
+### Build and publish
+
+`wasm-pack` builds `crates/local` into `web/src/local/backend`, and `vite build --mode local-build` picks the worker
+`fetch` and takes the Pages base path from `UPHEAP_BASE`. The build writes a copy of `index.html` as `404.html`,
+which Pages serves for any path without a file, so deep links and reloads work although Pages can't rewrite paths.
+CI lints `service` and `api` without their features and `local` for wasm, builds the backend and fails it over
+1.4 MB gzipped, runs it in Node on SQLite-wasm, and runs the Playwright golden paths against the static build
+served as Pages serves it; the Pages workflow publishes the same build from `main`. The OpenAPI document is about
+0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes twice. The commands are in
+[README.md](../README.md#develop).
 
 ## Testing
 

@@ -102,7 +102,7 @@ entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `c
 ### Naming an item
 
 `<item>` is the item's key, the five characters the server gives every item and the web app shows in its links
-([readable-ids.md](readable-ids.md#item-keys)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
+([architecture.md](architecture.md#handles)): `upheap item done k3x9a`. A full path, `my-team/backlog/k3x9a`, names an
 item in another heap; it's a short link without its `/h/`, so a pasted link works too. A key names the same item for good, in any shell
 and on any machine, so the CLI keeps no cache of the last list. `upheap item list` prints each row's key beside its
 position, and `--json` and `--quiet` print keys too.

@@ -1,6 +1,6 @@
 // The local build's backend: SQLite-wasm with its database file in OPFS, and the Rust backend compiled to wasm
 // (crates/local), answering the page's API requests, and exporting, importing and counting the database
-// (design/local-build.md).
+// (design/architecture.md, Local build).
 //
 // `opfs-sahpool` keeps the database in the Origin Private File System without the COOP and COEP headers GitHub
 // Pages can't send, but only inside a worker, and only one connection at a time: a second tab's pool would fail to

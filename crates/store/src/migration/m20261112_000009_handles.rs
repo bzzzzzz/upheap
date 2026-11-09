@@ -1,4 +1,4 @@
-//! Readable handles (design/readable-ids.md): team and heap slugs, item keys, and the personal team that holds each
+//! Readable handles (design/architecture.md, Handles): team and heap slugs, item keys, and the personal team that holds each
 //! user's username as its slug.
 //!
 //! The columns are added nullable, filled, then indexed. Filling them:

@@ -6,7 +6,7 @@ Companion to [requirements.md](requirements.md).
 
 1. Upheap is free and open source.
 2. Teams self-host it. There is no hosted or paid tier.
-3. One person can also use it without hosting anything: a static, single-user build runs entirely in the browser and keeps the data there (see [local-build.md](local-build.md)). It has no accounts and no teammates, all its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
+3. One person can also use it without hosting anything: a static, single-user build runs entirely in the browser and keeps the data there (see [architecture.md](architecture.md#local-build)). It has no accounts and no teammates, all its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
 
 ## Architecture
 

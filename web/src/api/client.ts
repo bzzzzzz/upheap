@@ -52,7 +52,7 @@ export type ListViewQuery = Omit<
 >;
 
 /**
- * A heap as paths name it: its team's slug and its own (design/readable-ids.md). It is exactly the path parameters
+ * A heap as paths name it: its team's slug and its own (design/architecture.md, Handles). It is exactly the path parameters
  * of the heap's API routes, so it goes into `params.path` as it is.
  */
 export type HeapRef = { team: string; heap: string };

@@ -98,7 +98,7 @@ One unique index on `teams.slug` covers both. The personal team takes no members
 
 **Consequences.** `/teams/eugene` is always Eugene's personal team. A personal team can't be shared, so anything
 shared lives in another team. Handles in general sit beside the UUIDs rather than replacing them, so a slug can
-change without touching foreign keys ([readable-ids.md](readable-ids.md)).
+change without touching foreign keys ([architecture.md](architecture.md#handles)).
 
 ## 8. Cross-site request forgery is blocked by a custom header, not per-session tokens
 
@@ -170,8 +170,8 @@ case-insensitive uniqueness a lowercased key column, not a collation.
 **Instead of.** Native UUID, timestamp and JSON types, and each database's own search.
 
 **Consequences.** Every query works everywhere, and CI runs the suites on all three. The Postgres port needed only
-small fixes, listed in [cloud-run-postgres.md](cloud-run-postgres.md). Full-text search, if ever needed, is the one
-place a per-database path is planned.
+small fixes, listed under "Portable SQL in practice" in [architecture.md](architecture.md#data-model). Full-text
+search, if ever needed, is the one place a per-database path is planned.
 
 ## 13. Migrations run at startup, with an advisory lock on Postgres
 
@@ -198,3 +198,102 @@ and each test creates its own database there.
 
 **Consequences.** `cargo test` needs no Docker and no container start-up; the same suites run locally against any
 server the developer points them at. Tests share no data and run in parallel.
+
+## 15. Every handle follows a fixed word in the URL, and short links are expanded by the client
+
+**Context.** Handles replaced UUIDs in URLs and API paths. A readable URL invites root-level names (`/eugene`),
+which would collide with the app's own pages and the server's paths.
+
+**Decision.** Every handle sits after a word saying what it is (`/teams/{team}/heaps/{heap}/items/{item}`), and
+API paths have the same shape under `/api/v1`. Short links (`/h/team/heap/key`) carry handles alone, one per
+position, and the web app's router expands them as they open.
+
+**Instead of.** Root-level usernames and reserved-name lists, or a server redirect for short links.
+
+**Consequences.** No name is reserved and new pages can be added anywhere. A web URL becomes its API call by adding
+the prefix. Short links work in the local build, which has no server to redirect. The API has no short form.
+
+## 16. Item keys are five random base32 characters
+
+**Context.** Items need a handle people can read aloud, type into a terminal and paste into chat.
+
+**Decision.** Five lowercase characters from Crockford's base32 alphabet (no `i`, `l`, `o`, `u`) with at least one
+digit, drawn at random inside the insert transaction and retried on a clash with the heap's unique index.
+
+**Instead of.** Sequential numbers per heap, as issue trackers use, or UUIDs in URLs.
+
+**Consequences.** A key says nothing about an item's age or the heap's size. About 30 million keys per heap; a
+clash is rare and a retry settles it. Keys are fixed for life, since items are never deleted. The service draws the
+random bytes from an injected `RandomSource`, so tests can script keys.
+
+## 17. The local build is the same backend compiled to WebAssembly, with Cargo features for what it lacks
+
+**Context.** A static, single-user version of Upheap was wanted for trying it out and for personal use, without a
+server.
+
+**Decision.** The backend crates compile to wasm and run in a Web Worker; the web app swaps only its `fetch`. What
+only a shared server needs (`accounts`) and what the browser can't run (`trace-and-timeout`) are Cargo features
+the local build leaves out.
+
+**Instead of.** A second implementation in JavaScript, or a runtime "local mode" flag in one build.
+
+**Consequences.** Ranking, validation, permissions and the API are one codebase, and the native tests cover the
+local user too. Nothing left out can reach the wasm, which keeps it inside its size budget. A feature added to the
+server must be placed behind `accounts` when the local build can't offer it.
+
+## 18. SQLite in the browser through SeaORM's proxy connection, on `opfs-sahpool`
+
+**Context.** The local build needs a database in the browser that runs the same migrations and SQL as the server.
+sqlx doesn't build for wasm, and GitHub Pages can't send the COOP and COEP headers that the main OPFS VFS needs.
+
+**Decision.** The official SQLite-wasm build with the `opfs-sahpool` VFS, in a worker, reached through SeaORM's
+`ProxyDatabaseTrait` with the connection opened as SQLite so SeaORM emits the same SQL as on the server.
+
+**Instead of.** IndexedDB or a JavaScript store with its own schema, or sqlx on wasm.
+
+**Consequences.** One connection per database, so the worker holds a Web Lock and the app runs in one tab at a
+time. The proxy types result columns from the entity metadata, since SQLite declares every integer alike. Released
+migrations reach users' browsers directly and can never be edited.
+
+## 19. Export and import are worker messages, not API endpoints
+
+**Context.** The local build's data lives in one browser, which can clear it, so users need a copy and a way to
+restore it.
+
+**Decision.** The worker takes `export`, `import` and `count` messages beside the HTTP requests, in the same queue.
+The web app reaches them through a build-time import (`#local-database`) that resolves to nothing in the server
+build. The date of the last download is kept in `localStorage` and worded by the web app itself.
+
+**Instead of.** `/api/v1/export` and `/import` endpoints, or storing the date on the server.
+
+**Consequences.** The server build holds none of this code and the API stays what a server can do. Whether the
+feature exists is a fact about the build, not a permission, so it bypasses `allowed_actions`. The storage note is
+the one exception to thin clients (Thin clients §4 of the principles).
+
+## 20. Production runs on Cloud Run with Neon Postgres
+
+**Context.** A small deployment should cost close to nothing when idle. Cloud Run has no persistent disk, so SQLite
+can't hold production data there, and most serverless databases that scale to zero speak Postgres.
+
+**Decision.** Cloud Run for the app and Neon Postgres, through its pooled endpoint, for the database. Postgres
+joined the supported databases and the CI matrix.
+
+**Instead of.** A machine with SQLite or MySQL on a disk, or a serverless MySQL such as TiDB or Aiven.
+
+**Consequences.** An external database and a small pool per instance; TLS at Cloud Run with no reverse proxy; no
+background work between requests, so any timer would have to be Cloud Scheduler calling an endpoint; cold starts of
+about a second. Neon's pooler runs in transaction mode, which is why the migration lock is transaction-scoped
+(decision 13). Running the suites on Postgres found four portability fixes, listed in
+[architecture.md](architecture.md#data-model). The setup is in [operations.md](operations.md).
+
+## 21. Deploys sign in through Workload Identity Federation
+
+**Context.** The deploy workflow needs Google Cloud credentials.
+
+**Decision.** GitHub's OIDC token is exchanged for a deploy service account that only `deploy.yml`, run from `main`
+of this repository (matched by numeric id), can assume. The deploy job's actions are pinned to commits.
+
+**Instead of.** A service-account key in a repository secret.
+
+**Consequences.** No key to leak or rotate. A renamed or recreated repository can't deploy. The one-time setup is a
+script in [operations.md](operations.md#one-time-setup).

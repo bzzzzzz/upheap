@@ -1,5 +1,5 @@
-// Checking and counting an Upheap database file, for the worker's `import` and `count` (design/local-build.md,
-// Keeping the data). Apart from worker.ts so that the smoke test (scripts/local-smoke.ts) can run it in Node.
+// Checking and counting an Upheap database file, for the worker's `import` and `count` (design/architecture.md,
+// Local build). Apart from worker.ts so that the smoke test (scripts/local-smoke.ts) can run it in Node.
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
 import type { DatabaseCounts } from "./protocol.ts";

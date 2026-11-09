@@ -1,4 +1,4 @@
-// Keeping the local build's data (design/local-build.md, Keeping the data): the storage note, export, import and its
+// Keeping the local build's data (design/architecture.md, Local build): the storage note, export, import and its
 // confirm, and one tab at a time.
 import { readFile } from "node:fs/promises";
 

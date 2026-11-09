@@ -60,7 +60,7 @@ DATABASE_URL="sqlite://data/heap.db?mode=rwc" BASE_URL=http://localhost:8080 LOG
 
 In production, put a TLS-terminating reverse proxy in front, set `BASE_URL` to its `https://` address, and point
 `DATABASE_URL` at Postgres (`postgres://user:pass@host/db`) or MySQL (`mysql://user:pass@host/db`) if you want more
-than SQLite. For Cloud Run with Neon, see [design/cloud-run-postgres.md](design/cloud-run-postgres.md).
+than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operations.md).
 
 ### Configuration
 
@@ -114,7 +114,7 @@ TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433 cargo test -p stor
 docker stop upheap-test-postgres
 ```
 
-The local build ([design/local-build.md](design/local-build.md)) runs the backend in a worker in the page, on
+The local build ([design/architecture.md](design/architecture.md#local-build)) runs the backend in a worker in the page, on
 SQLite-wasm with its data in the browser. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14.
 Build the backend into the web app, then run it with Vite or check it as CI does:
 

@@ -42,7 +42,7 @@ inline panel or section on a screen, `E-` error, empty or system state.
 
 Widths are app-ux.md's: **phone** under 640 px, **tablet** 640–1023 px, **wide** 1024 px and up.
 
-Routes are today's (UUIDs). [readable-ids.md](readable-ids.md) replaces them with handles; the API on this branch
+Routes are today's (UUIDs). [architecture.md](architecture.md#handles) replaces them with handles; the API on this branch
 already uses `/teams/{team}/heaps/{heap}/items/{item}`, and the web app's API calls are being moved over, but its
 routes still take UUIDs. Each screen gives both where they differ.
 
@@ -439,7 +439,7 @@ overlays are the same components.
   downloaded 3 weeks ago." or "No copy downloaded yet." when the last download is over two weeks old or never
   happened (the date is kept in this browser's localStorage). The link goes to S-account.
 - **Where:** sidebar footer on a wide screen; under the content on a tablet and phone.
-- **Freq 5** (always visible, passive). **Source:** local-build.md Keeping the data §1; `StorageNote`. Built.
+- **Freq 5** (always visible, passive). **Source:** architecture.md Local build; `StorageNote`. Built.
 - **Must:** local 4, server n/a. The only thing that tells a user their heaps can vanish with the browser's storage,
   and where to keep a copy.
 
@@ -448,7 +448,7 @@ overlays are the same components.
 - **Purpose:** share a short link (`/h/my-team/backlog/k3x9a`).
 - **Where:** only the item: a link sign beside its title copies the short link, with a check and "Link copied"
   for screen readers. Heaps and teams have no Copy link; the address bar does.
-- **Freq 2.** **Source:** readable-ids.md Short links. Built.
+- **Freq 2.** **Source:** architecture.md Handles. Built.
 - **Must:** local 1, server 3. Server: links are how teammates point at an item; the address bar is a workable
   fallback on a wide screen, less so on a phone.
 - `/h/…` short links have no screen: the router replaces them with the full URL as it opens.
@@ -529,7 +529,7 @@ order §2). See Gaps.
 
 - **Route:** `/login`, register mode. **Who:** anyone, unless `ALLOW_REGISTRATION=false`.
 - **Shows:** Name, Username, Email, Password with the hint "At least 10 characters", Create account, and under it
-  "You'll start in your own heap. Teams come next." The Username field (readable-ids.md Sign-up): 2–39
+  "You'll start in your own heap. Teams come next." The Username field (architecture.md Handles): 2–39
   characters, lowercase letters, digits and single dashes, starting with a letter; permanent; becomes the personal
   team's slug.
 - **Exits:** to `redirect`, as S-sign-in, or else to the new personal heap "Personal"
@@ -552,7 +552,7 @@ order §2). See Gaps.
 
 - **Purpose:** "When [OIDC] is [built], a first sign-in asks for a username before creating the user."
 - **Shows:** the name and email from the provider, a username field with the format rules, Continue.
-- **Freq 1.** **Source:** readable-ids.md Sign-up. Designed.
+- **Freq 1.** **Source:** architecture.md Handles. Designed.
 - **Must:** local n/a, server 2. Becomes 5 for an OIDC deployment once OIDC is built.
 
 ### S-oauth-authorize: Sign in the CLI
@@ -585,7 +585,7 @@ order §2). See Gaps.
   start one."
 - **Freq 1.** **Source:** `routes.tsx` `NoHeaps`. Built.
 - **Must:** local 2, server 2. Only when every heap is archived; the shell still reaches Team.
-- With personal teams (readable-ids.md), a user always has a team, so only the first message can show.
+- With personal teams (architecture.md Handles), a user always has a team, so only the first message can show.
 
 ### First run
 
@@ -845,7 +845,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
 
 ### S-heap-settings: Heap settings
 
-- **Route:** `/teams/{team}/heaps/{heap}/settings` (readable-ids.md URLs). **Who:** admins (`rename`, `archive`,
+- **Route:** `/teams/{team}/heaps/{heap}/settings` (architecture.md Handles). **Who:** admins (`rename`, `archive`,
   `unarchive`, `view_history` on the heap).
 - **Purpose:** one place for a heap's configuration. Today rename and archive live in P-heap-row on S-team.
 - **Would show:** name; slug (designed: "slug fields on team and heap settings"; a slug change breaks old links,
@@ -923,7 +923,7 @@ where they live.
   while no link name is typed), Create. Escape or Cancel closes it; Create opens the new team. Problems show under
   the field they name (`handle_taken`, `invalid_handle` with its hint, `field_empty`).
 - **Link name:** optional; the server derives it from the name ("My Team" → `my-team`, `-2` on clashes) when left
-  out (readable-ids.md Format §2). The client never guesses it.
+  out (architecture.md Handles). The client never guesses it.
 - **Phone:** one column, 44 px rows and buttons.
 - **Freq 1.** **Source:** Off Teams §1–2; `TeamsPage.tsx`. Built.
 - **Must:** local n/a, server 5. Create team is the only way to make a team others can join; personal teams take no
@@ -941,7 +941,7 @@ where they live.
   **Members · N** (P-member-add above the list, P-member-row each, M-member-remove under it), and P-leave or
   P-last-admin. Empty heaps: "This team has no heaps yet."
 - **Local build:** the place to create, rename, archive and unarchive heaps; members section shows the one user
-  with nothing to do (local-build.md Single-user mode).
+  with nothing to do (architecture.md Local build).
 - **Phone (PhoneTeam):** one column under the shell's top bar. Heap rows 52 px that open the heap, "14 open ›", and a
   44 px ⋯ opening a sheet with the heap's actions. The search at full width, 48 px. Member rows 56 px with name and
   role, and a 44 px ⋯ "Actions for {name}" opening a sheet headed "{name} · @{username} · {role}" with Make admin or
@@ -961,7 +961,7 @@ where they live.
 | P-member-add    | Add an existing user (Off Teams §6)   | "Add a member by username, name or email" (3+ characters or a whole username; email found and shown only when typed in full), "They need an account first"; results under it with the first addable one highlighted, "↵ Add as member", arrows to move, Enter or a click to add; "Already a member"; "No one matches." |  1   |     n/a      |       5       | built    | Combobox with a listbox under it    |
 | P-leave         | Leave the team                        | Leave team → "Leave {team}? You'll lose access to its heaps." Leave, Cancel. Goes to S-teams                                                                                                                                                                                                                           |  1   |     n/a      |       2       | built    | Inline confirm                      |
 | P-last-admin    | Explain why leave is missing          | "You are the only admin, so you can't leave until someone else is one."                                                                                                                                                                                                                                                |  1   |     n/a      |       2       | built    | Text                                |
-| P-personal-team | A personal team's page                | No member controls, no Leave, slug fixed, name editable (readable-ids.md Usernames §1–2; `personal_team` error). `personal` flag on `TeamDto`                                                                                                                                                                          |  1   |     n/a      |       2       | designed | Variant of S-team                   |
+| P-personal-team | A personal team's page                | No member controls, no Leave, slug fixed, name editable (architecture.md Handles; `personal_team` error). `personal` flag on `TeamDto`                                                                                                                                                                          |  1   |     n/a      |       2       | designed | Variant of S-team                   |
 
 Why the 4s and 5s:
 
@@ -990,7 +990,7 @@ Why the 4s and 5s:
   a copy (primary) and Open a copy… (secondary), then "2 heaps · 41 items · last downloaded 26 Oct" (or "never
   downloaded"). At the bottom, Sign out (only with `sign_out` in `GET /me` `allowed_actions`, so not in the local
   build).
-- **Designed:** Username, shown read-only (readable-ids.md: usernames never change); P-tokens.
+- **Designed:** Username, shown read-only (architecture.md Handles: usernames never change); P-tokens.
 - **Freq 1.** **Source:** architecture.md API §7; `AccountPage.tsx`. Built.
 - **Must:** local 4, server 1. Local: it holds export and import, the local build's only data safety. Server: display
   name and the theme.
@@ -1013,7 +1013,7 @@ There are none. The server is configured by environment variables (`DATABASE_URL
 
 ## Local build
 
-The local build runs the same app with no accounts (local-build.md). What differs:
+The local build runs the same app with no accounts (architecture.md Local build). What differs:
 
 | Area                                                 | Server build                            | Local build                                                                             |
 | ---------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -1023,7 +1023,7 @@ The local build runs the same app with no accounts (local-build.md). What differ
 | Shell "Teams" link                                   | "Teams"                                 | The team's name                                                                         |
 | S-team                                               | Members and team actions by role        | Heaps only; only `create_heap` on the team                                              |
 | G-storage-note, "Your data" on S-account, S-tab-lock | Absent                                  | Present                                                                                 |
-| First heap                                           | "Personal", in the user's personal team | "Personal" in team `me` (local-build.md still says "My heap"; the code says "Personal") |
+| First heap                                           | "Personal", in the user's personal team | "Personal" in team `me`  |
 | URLs                                                 | `/teams/…`                              | Under the Pages base path, `/upheap/teams/me/heaps/personal/items/k3x9a`                |
 
 ### S-tab-lock: Open in another tab
@@ -1031,7 +1031,7 @@ The local build runs the same app with no accounts (local-build.md). What differ
 - **Shows instead of the app:** "Upheap is open in another tab. Your heaps live in one place in this browser, so
   Upheap runs in one tab at a time. Close the other tab, and Upheap opens here." Opens by itself once the other tab
   closes.
-- **Freq 1.** **Source:** local-build.md Keeping the data §3; `LocalDatabaseGate`. Built.
+- **Freq 1.** **Source:** architecture.md Local build; `LocalDatabaseGate`. Built.
 - **Must:** local 4, server n/a. A second tab can't open the database; without this page it fails with no reason
   given, and second tabs are common.
 
@@ -1039,7 +1039,7 @@ The local build runs the same app with no accounts (local-build.md). What differ
 
 - Download a copy, on the Your data card, saves `upheap-YYYY-MM-DD.sqlite3` and records the time in this
   browser for G-storage-note and the card's "last downloaded".
-- **Freq 2.** **Source:** local-build.md Keeping the data §2; `LocalDataSection`. Built.
+- **Freq 2.** **Source:** architecture.md Local build; `LocalDataSection`. Built.
 - **Must:** local 4, server n/a. The only copy outside the browser, which can clear its storage.
 
 ### P-local-import and M-local-import-confirm: Open a copy
@@ -1060,7 +1060,7 @@ The local build runs the same app with no accounts (local-build.md). What differ
 - If the worker or SQLite-wasm fails (OPFS unavailable, a private window, a failed migration), every request fails
   like a network error and each page shows its own error. A full-page "Upheap can't open its storage in this
   browser" with the reason would be clearer.
-- **Freq 1.** Implied by local-build.md Approach §4.
+- **Freq 1.** Implied by architecture.md Local build.
 - **Must:** local 3, server n/a. Each page already shows an error; one page saying why (a private window, no OPFS)
   saves a confused first open.
 
@@ -1093,7 +1093,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 1. **Heap weights.** Admins should edit age, deadline and value weights (Req Custom parameters §2, Off Roles).
    Neither the API nor the UI has them, and no doc says whether they belong on S-parameters (beside the parameter
    weights they compete with) or on S-heap-settings.
-2. **Heap settings page.** readable-ids.md gives heaps a `settings` route and slugs, while heap rename and archive
+2. **Heap settings page.** architecture.md Handles gives heaps a `settings` route and slugs, while heap rename and archive
    live on S-team today. The list "(tags, parameters, activity, closed…)" in its URL table reads as either sub-pages
    of the heap or the contents of one settings page. Decide which.
 3. **Password and account.** No password change, reset ("forgot password"), email change, or "sign out everywhere".
@@ -1129,10 +1129,9 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    phone and tablet; the code shows the main-state buttons at every width.
 3. **Add item return.** Req Add item §4: "saving takes the user back… ready to add another item." The dialog closes
    unless Add another is ticked, and that box starts unticked.
-4. **Personal team.** offering.md Teams §3 says a personal heap's team "works like any other team"; readable-ids.md
-   makes it private (no members, no leaving, fixed slug). readable-ids.md lists this as a doc fix to make.
-5. **Local build names.** local-build.md: user "Me", team "My heaps", heap "My heap". readable-ids.md and
-   `service/src/personal.rs`: team slug `me`, first heap "Personal". local-build.md is stale.
+4. ~~**Personal team.**~~ Settled: offering.md Teams §3 and architecture.md Handles both make the personal team private
+   (no members, no leaving, fixed slug).
+5. ~~**Local build names.**~~ Settled: the first heap is "Personal" (architecture.md Local build).
 6. ~~**More menu.**~~ Settled: app-ux.md lists Team, Teams, Tags, Parameters and Account, as the code does; Sign out
    is on S-account.
 7. ~~**Sign-up on this branch.**~~ Settled: S-register sends the username.
@@ -1151,5 +1150,5 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
    S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.
-6. **Slug changes.** Old links stop working with no redirect (readable-ids.md Format). The slug field should warn.
+6. **Slug changes.** Old links stop working with no redirect (architecture.md Handles). The slug field should warn.
 7. **Throttled sign-in.** Whether to count down `Retry-After` on the page.

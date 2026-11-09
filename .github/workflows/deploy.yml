@@ -1,8 +1,8 @@
-# Deploys the server to Cloud Run (design/cloud-run-postgres.md) once CI has passed on a push to main: builds the
+# Deploys the server to Cloud Run (design/operations.md) once CI has passed on a push to main: builds the
 # Docker image of that commit, pushes it to Artifact Registry tagged with it, and rolls out a new revision. CI runs on
 # main as well as on pull requests, because pull requests may merge without being rebased onto the latest main.
 # Google Cloud is reached through Workload Identity Federation, so no key is stored here; the repository variables
-# below come from the one-time setup in the design doc.
+# below come from the one-time setup in design/operations.md.
 #
 # This is the only job that holds a cloud credential, so its actions are pinned to commits, not tags.
 
