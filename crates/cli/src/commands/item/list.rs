@@ -80,6 +80,10 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
             .unwrap_or_default();
         return Err(UsageError::SortWithSortParameter { sort }.into());
     }
+    // Without a view to name the parameter, the flags must.
+    if args.sort == Some(SortDto::Parameter) && args.sort_parameter.is_none() && args.view.is_none() {
+        return Err(UsageError::SortWithoutParameter.into());
+    }
     let typed = app.heap_name(args.heap.name.as_deref()).ok_or(SettingError::NoHeap)?;
     let name = HeapName::parse(typed)?;
     let client = app.client(app.server(&args.shared)?)?;
@@ -100,6 +104,9 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
         return list_closed(&api, args.text.as_deref(), out).await;
     }
     let query = build_query(&args, &api).await?;
+    if query.sort == Some(SortDto::Parameter) && query.sort_parameter.is_none() {
+        return Err(UsageError::SortWithoutParameter.into());
+    }
     let list = api.get::<RankedListDto>(&["items"], &query).await?;
     match out.mode() {
         Mode::Json => out.json(&list.body)?,
@@ -150,8 +157,10 @@ async fn build_query(args: &ListArgs, api: &HeapApi<'_>) -> Result<RankedQuery, 
     query.blocked_layout = args.blocked_layout.or(query.blocked_layout);
     if let Some(sort) = args.sort {
         query.sort = Some(sort);
-        // A view's sort parameter goes with the view's sort.
-        query.sort_parameter = None;
+        // A view's sort parameter goes with sorting by a parameter, and only with that.
+        if sort != SortDto::Parameter {
+            query.sort_parameter = None;
+        }
     }
     if let Some(name) = &args.sort_parameter {
         let parameters = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;

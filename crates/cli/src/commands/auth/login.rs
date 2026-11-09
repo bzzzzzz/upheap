@@ -62,7 +62,7 @@ pub async fn run(args: LoginArgs, app: &App, out: &mut Output) -> Result<(), Cli
     let signed_in = match keep(&args, app, &client, &key, &tokens).await {
         Ok(signed_in) => signed_in,
         Err(err) => {
-            abandon(app, &client, &key, &tokens).await;
+            abandon(&client, &tokens).await;
             return Err(err);
         }
     };
@@ -93,8 +93,9 @@ struct SignedIn {
     dropped_heap: Option<String>,
 }
 
-/// Keeps `tokens` in place of any earlier sign-in to `key`, which is revoked, writes `--server` to the config file,
-/// and reads who signed in. Any failure leaves the new sign-in for [`abandon`].
+/// Finishes the sign-in with `tokens`: reads who signed in, writes `--server` to the config file, keeps `tokens` in
+/// place of any earlier sign-in to `key`, and revokes that one. What can fail comes first and the earlier sign-in's
+/// end last, so a failure leaves the earlier sign-in as it was and the new one for [`abandon`].
 async fn keep(
     args: &LoginArgs,
     app: &App,
@@ -102,6 +103,20 @@ async fn keep(
     key: &str,
     tokens: &StoredTokens,
 ) -> Result<SignedIn, CliError> {
+    let me = client.get::<MeDto>(&["me"], NO_QUERY, &tokens.access_token).await?;
+    // A default heap is one server's, so it goes when the server does.
+    let dropped_heap = match args.shared.server {
+        Some(_) => {
+            let key = key.to_owned();
+            config::update_config(app.config_dir()?, move |file| {
+                let moved = file.server.as_deref() != Some(key.as_str());
+                file.server = Some(key);
+                if moved { file.heap.take() } else { None }
+            })
+            .await?
+        }
+        None => None,
+    };
     // Another `upheap` may be refreshing the earlier sign-in; replace and revoke it only once that's done.
     let _lock = auth::lock_tokens(app.config_dir()?).await?;
     let previous = match auth::load_tokens(&app.tokens, key).await {
@@ -116,35 +131,14 @@ async fn keep(
     {
         tracing::warn!(error = %err, "can't revoke the earlier sign-in");
     }
-    // A default heap is one server's, so it goes when the server does.
-    let dropped_heap = match args.shared.server {
-        Some(_) => {
-            let key = key.to_owned();
-            config::update_config(app.config_dir()?, move |file| {
-                let moved = file.server.as_deref() != Some(key.as_str());
-                file.server = Some(key);
-                if moved { file.heap.take() } else { None }
-            })
-            .await?
-        }
-        None => None,
-    };
-    let me = client.get::<MeDto>(&["me"], NO_QUERY, &tokens.access_token).await?;
     Ok(SignedIn { me, dropped_heap })
 }
 
-/// Undoes a sign-in that couldn't be finished: ends it on the server, which would otherwise keep it open for 30
-/// days with nobody holding it, and takes it out of the keychain if it got there. Both are best effort, as the
+/// Ends a sign-in that couldn't be finished on the server, which would otherwise keep it open for 30 days with
+/// nobody holding it. It never reached the keychain: saving is the last step that can fail. Best effort, as the
 /// failure that led here is what gets reported.
-async fn abandon(app: &App, client: &ApiClient, key: &str, tokens: &StoredTokens) {
+async fn abandon(client: &ApiClient, tokens: &StoredTokens) {
     if let Err(err) = auth::revoke(client, &tokens.refresh_token).await {
         tracing::warn!(error = %err, "can't revoke the sign-in that couldn't be finished");
-    }
-    let kept = auth::load_tokens(&app.tokens, key).await;
-    if let Ok(Some(kept)) = kept
-        && kept.refresh_token == tokens.refresh_token
-        && let Err(err) = auth::delete_tokens(&app.tokens, key).await
-    {
-        tracing::warn!(error = %err, "can't forget the sign-in that couldn't be finished");
     }
 }

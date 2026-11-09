@@ -98,7 +98,8 @@ allow. When `hidden_count` isn't zero, the footer says how many items are hidden
 Flags given with `--view` replace that setting of the view. `<text>` doesn't go with `--json`, which prints the
 server's list unchanged; `--closed` shows the first page of closed items (the newest 50) and takes no list flags. Values
 are the API's own spellings (`nice_to_have`, `in_progress`), and `--tag` and `--sort-parameter` take names (or IDs).
-`--sort-parameter` implies `--sort parameter`; with any other `--sort` it's exit 2, before any request.
+`--sort-parameter` implies `--sort parameter`; with any other `--sort` it's exit 2, before any request. `--sort
+parameter` needs the parameter, from `--sort-parameter` or the view's own, or it's exit 2 too.
 
 **`upheap item show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
 entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`.
@@ -219,10 +220,11 @@ How the CLI keeps the sign-in (built, [cli-tracker.md](cli-tracker.md) step 3):
    `upheap`s refreshing at once would sign the user out. A refresh holds an exclusive lock on `tokens.lock` in the
    config directory and reads the tokens again once it has it; whoever waited finds the new pair. A refused refresh
    (`invalid_grant`) forgets the sign-in.
-4. **Login replaces an earlier sign-in** to the same server and revokes it, under the same lock, after reading the
-   stored tokens again, so it can't race a refresh. Any failure after the code is exchanged (the lock, the keychain,
-   the config file, reading `/me`) revokes the new tokens and takes them out of the keychain if they got there, so
-   nothing is left open on the server. Likewise a refresh whose new tokens the keychain won't take revokes them, and
+4. **Login replaces an earlier sign-in** to the same server, doing what can fail first and the destructive step
+   last: it reads `/me` with the new access token, writes the config file, saves the new tokens (under the token
+   lock, after reading the stored ones again, so it can't race a refresh), and only then revokes the earlier sign-in,
+   best effort. Any failure up to and including the save revokes the new tokens, which never reached the keychain,
+   and leaves the earlier sign-in working, so nothing new is left open on the server. Likewise a refresh whose new tokens the keychain won't take revokes them, and
    says to sign in again (exit 6). `--server` is written to the config file once signed in; when it
    changes the file's server, a `heap` set for the old one is cleared, as a heap is one server's, and login says so.
 5. **The loopback listener** reads each connection in its own task, with a 10-second limit on the request line,
@@ -259,7 +261,9 @@ but `domain`, through `api-types`, so it never links the database drivers or the
 
 ```
 crates/cli/src/
-  main.rs          parse args, build Output and the API client, dispatch, map errors to exit codes
+  main.rs          gather the environment (Deps::system), start the log, call cli::run
+  lib.rs           parse args, build Output, dispatch, report the error and its exit code
+  error.rs         every failure, its message, hint and exit code
   config.rs        config file and environment, read once at startup
   client/          the HTTP client: base URL, bearer token, Time-Zone header, problem+json errors
   auth/            the OAuth flow, keychain, token refresh

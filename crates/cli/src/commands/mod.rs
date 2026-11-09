@@ -36,6 +36,8 @@ pub struct SharedArgs {
 pub enum UsageError {
     #[error("--sort-parameter sorts by a custom parameter, so it doesn't go with --sort {sort}; leave out one of them")]
     SortWithSortParameter { sort: String },
+    #[error("--sort parameter needs the parameter to sort by: add --sort-parameter <name>")]
+    SortWithoutParameter,
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

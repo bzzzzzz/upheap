@@ -273,8 +273,7 @@ async fn a_refusal_prints_the_servers_message_and_code() -> Result<()> {
     let cli = cli_in_heap(&server, &ada).await?;
 
     let missing = cli.run(&["item", "list", "--heap", "ada/nope"]).await;
-    let mismatch = cli.run(&["item", "list", "--sort", "parameter"]).await;
-    let mismatch_json = cli.run(&["item", "list", "--sort", "parameter", "--json"]).await;
+    let missing_json = cli.run(&["item", "list", "--heap", "ada/nope", "--json"]).await;
 
     expect_that!(missing.stderr, starts_with("error: "));
     expect_that!(
@@ -282,11 +281,10 @@ async fn a_refusal_prints_the_servers_message_and_code() -> Result<()> {
         contains_substring("(not_found)\nhint: `upheap heap list`")
     );
     expect_that!(missing.exited(4), eq(true));
-    expect_that!(mismatch.stderr, contains_substring("(sort_parameter_mismatch)"));
-    expect_that!(mismatch.exited(3), eq(true));
-    let problem: Value = serde_json::from_str(&mismatch_json.stderr)?;
-    expect_that!(problem["code"].as_str(), some(eq("sort_parameter_mismatch")));
-    expect_that!(mismatch_json.stdout, eq(""));
+    let problem: Value = serde_json::from_str(&missing_json.stderr)?;
+    expect_that!(problem["code"].as_str(), some(eq("not_found")));
+    expect_that!(missing_json.stdout, eq(""));
+    expect_that!(missing_json.exited(4), eq(true));
     Ok(())
 }
 
@@ -375,5 +373,58 @@ async fn sort_parameter_doesnt_go_with_another_sort() -> Result<()> {
         )
     );
     expect_that!(listed.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn sorting_by_a_parameter_needs_one_from_the_flags_or_the_view() -> Result<()> {
+    // Arrange: a parameter whose options rank the large item first, and a view sorted by it.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let parameter = server
+        .send(
+            &ada,
+            "POST",
+            "/teams/ada/heaps/personal/parameters",
+            Some(json!({ "name": "Customer", "options": ["Big", "Small"] })),
+        )
+        .await?;
+    let big = parameter["options"][0]["id"].clone();
+    let key_of_large = key(&items[1])?;
+    let large_version = items[1]["version"].to_string();
+    server
+        .send_with(
+            &ada,
+            "PATCH",
+            &format!("/teams/ada/heaps/personal/items/{key_of_large}"),
+            Some(json!({ "parameter_values": { parameter["id"].as_str().context("id")?: big } })),
+            &[("if-match", &large_version)],
+        )
+        .await?;
+    server
+        .send(
+            &ada,
+            "POST",
+            "/teams/ada/heaps/personal/views",
+            Some(json!({ "name": "By customer", "view": { "sort": "parameter", "sort_parameter": parameter["id"] } })),
+        )
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let with_view = cli
+        .run(&["item", "list", "-q", "--view", "By customer", "--sort", "parameter"])
+        .await;
+    let alone = cli.run(&["item", "list", "--sort", "parameter"]).await;
+
+    // Assert
+    expect_that!(with_view.exited(0), eq(true));
+    expect_that!(with_view.stdout.lines().next(), some(eq(key_of_large)));
+    expect_that!(
+        alone.stderr,
+        eq("error: --sort parameter needs the parameter to sort by: add --sort-parameter <name>\n")
+    );
+    expect_that!(alone.exited(2), eq(true));
     Ok(())
 }

@@ -556,3 +556,29 @@ async fn a_refresh_that_cant_be_kept_is_ended_on_the_server() -> Result<()> {
     }
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_re_login_that_fails_leaves_the_earlier_sign_in_working() -> Result<()> {
+    // Arrange: signed in, then a second login whose tokens the keychain refuses.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada)
+        .await?
+        .with_browser(ConsentBrowser::allowing(&server, &ada));
+    let earlier = cli.stored(&server)?.context("signed in")?;
+    cli.tokens.refuse_saves();
+
+    // Act
+    let login = cli.run(&["auth", "login"]).await;
+
+    // Assert
+    expect_that!(login.exited(6), eq(true));
+    expect_that!(cli.stored(&server)?, some(eq(&earlier)));
+    for refused in cli.tokens.refused() {
+        expect_that!(refresh_works(&server, &refused.refresh_token).await?, eq(false));
+    }
+    expect_that!(server.me_status(&earlier.access_token).await?, eq(200));
+    expect_that!(refresh_works(&server, &earlier.refresh_token).await?, eq(true));
+    Ok(())
+}

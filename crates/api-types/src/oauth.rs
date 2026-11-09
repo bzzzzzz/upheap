@@ -69,7 +69,7 @@ pub struct ApprovalDto {
 }
 
 /// A token request (RFC 6749 §4.1.3 and §6), form-encoded.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = OAuthTokenRequest)]
 pub struct TokenRequestForm {
     /// `authorization_code` or `refresh_token`.
@@ -87,7 +87,7 @@ pub struct TokenRequestForm {
 }
 
 /// A token revocation request (RFC 7009 §2.1), form-encoded.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = OAuthRevokeRequest)]
 pub struct RevokeRequestForm {
     /// An access or refresh token. Either ends the client's sign-in.
@@ -99,7 +99,7 @@ pub struct RevokeRequestForm {
 }
 
 /// A successful token response (RFC 6749 §5.1).
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = OAuthTokens)]
 pub struct TokenResponseDto {
     /// Send as `Authorization: Bearer <access_token>`.
@@ -120,4 +120,86 @@ pub struct OAuthErrorDto {
     pub error: String,
     /// What was wrong, for people. May change; branch on `error`.
     pub error_description: String,
+}
+
+// The forms and the token response carry secrets: codes, verifiers and tokens. Their `Debug` says whether each is
+// there, never what it is, so a logged or printed value can't leak one.
+
+/// How a secret field shows in `Debug`.
+fn redacted(secret: Option<&String>) -> &'static str {
+    match secret {
+        Some(_) => "<redacted>",
+        None => "None",
+    }
+}
+
+impl std::fmt::Debug for TokenRequestForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenRequestForm")
+            .field("grant_type", &self.grant_type)
+            .field("client_id", &self.client_id)
+            .field("code", &redacted(self.code.as_ref()))
+            .field("redirect_uri", &self.redirect_uri)
+            .field("code_verifier", &redacted(self.code_verifier.as_ref()))
+            .field("refresh_token", &redacted(self.refresh_token.as_ref()))
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for RevokeRequestForm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RevokeRequestForm")
+            .field("token", &redacted(self.token.as_ref()))
+            .field("token_type_hint", &self.token_type_hint)
+            .field("client_id", &self.client_id)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for TokenResponseDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenResponseDto")
+            .field("access_token", &redacted(Some(&self.access_token)))
+            .field("token_type", &self.token_type)
+            .field("expires_in", &self.expires_in)
+            .field("refresh_token", &redacted(Some(&self.refresh_token)))
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn debug_never_shows_a_secret() {
+        let form = TokenRequestForm {
+            grant_type: "authorization_code".to_owned(),
+            client_id: Some(CLI_CLIENT_ID.to_owned()),
+            code: Some("the-code".to_owned()),
+            redirect_uri: Some("http://127.0.0.1:5000/callback".to_owned()),
+            code_verifier: Some("the-verifier".to_owned()),
+            refresh_token: None,
+        };
+        let revoke = RevokeRequestForm {
+            token: Some("the-token".to_owned()),
+            ..RevokeRequestForm::default()
+        };
+        let tokens = TokenResponseDto {
+            access_token: "the-access".to_owned(),
+            token_type: "Bearer".to_owned(),
+            expires_in: 900,
+            refresh_token: "the-refresh".to_owned(),
+        };
+
+        let shown = format!("{form:?} {revoke:?} {tokens:?}");
+
+        for secret in ["the-code", "the-verifier", "the-token", "the-access", "the-refresh"] {
+            expect_that!(shown, not(contains_substring(secret)));
+        }
+        expect_that!(shown, contains_substring("authorization_code"));
+        expect_that!(shown, contains_substring("expires_in: 900"));
+    }
 }

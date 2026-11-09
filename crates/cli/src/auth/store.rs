@@ -8,12 +8,23 @@ use serde::{Deserialize, Serialize};
 
 /// A sign-in to one server: the refresh token, and the access token last issued with its expiry, so most commands
 /// don't refresh. Refreshing spends the refresh token, so fewer refreshes also mean fewer chances to race one.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredTokens {
     pub refresh_token: String,
     pub access_token: String,
     /// When the access token expires, in seconds since the Unix epoch, by this machine's clock.
     pub access_expires_at: i64,
+}
+
+/// Says when the access token expires, never what either token is.
+impl std::fmt::Debug for StoredTokens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredTokens")
+            .field("refresh_token", &"<redacted>")
+            .field("access_token", &"<redacted>")
+            .field("access_expires_at", &self.access_expires_at)
+            .finish()
+    }
 }
 
 impl StoredTokens {
@@ -123,5 +134,27 @@ impl TokenStore for MemoryTokenStore {
     fn delete(&self, server: &str) -> Result<(), TokenStoreError> {
         self.tokens().remove(server);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn debug_never_shows_a_token() {
+        let tokens = StoredTokens {
+            refresh_token: "the-refresh".to_owned(),
+            access_token: "the-access".to_owned(),
+            access_expires_at: 42,
+        };
+
+        let shown = format!("{tokens:?}");
+
+        expect_that!(shown, not(contains_substring("the-refresh")));
+        expect_that!(shown, not(contains_substring("the-access")));
+        expect_that!(shown, contains_substring("access_expires_at: 42"));
     }
 }
