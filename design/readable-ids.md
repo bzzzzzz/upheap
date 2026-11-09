@@ -144,18 +144,3 @@ One forward migration, safe on a populated database, the local build's included:
 
 Usernames made this way are permanent like any other. Nothing has been released, so the only accounts are our own,
 and a bad one can be fixed by hand before the migration ships.
-
-## Order of work
-
-All done.
-
-1. `domain`: the handle type with its format, item key generation, the personal team rules.
-2. `store`: the migration, the columns, lookups by handle.
-3. `service` and `api`: handles on create and edit, the new paths, `handle_taken`, `invalid_handle`, `personal_team`.
-4. `web`: the new routes, a username field on sign-up, slug fields on team and heap settings, and no member controls
-   on a personal team.
-5. [cli.md](cli.md): item keys in place of row numbers.
-6. [offering.md](offering.md) Teams §3 says a personal team "works like any other team"; it now can't be shared.
-   [technical-design.md](technical-design.md) gets the handles in its data model and API sections.
-
-The access-control table test covers the new paths as they replace the old ones.

@@ -344,7 +344,7 @@ above.
   P-option-archive, P-param-tags, P-param-archive, P-param-history, P-param-archived.
 - **Heap settings:** S-heap-settings, P-heap-weights, P-heap-row, M-heap-archive, G-archived-banner, S-no-heaps.
 - **Team extras:** M-self-demote, P-leave, P-last-admin, P-team-name, P-personal-team, S-invite. (M-member-remove
-  was built with the first set, ux-tracker.md step 7.)
+  was built with the first set.)
 - **Account and sign-in extras:** S-account in the server build, P-display-name, P-tokens, S-oauth-authorize,
   S-oauth-done, S-oidc-username, E-throttled, E-registration-closed.
 - **Errors and system states:** E-load-error, E-forbidden, S-not-found, G-offline, S-backend-failed, the `500`

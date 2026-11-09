@@ -191,7 +191,7 @@ function invalidateOpenCounts(queryClient: QueryClient) {
 
 /**
  * Gives back a view of a heap's ranked list, the one on screen, as fetched from now on, so Add can say where an item
- * the server has just taken landed, from the list itself (ux-tracker.md, open question 4). A fetch already on
+ * the server has just taken landed, from the list itself rather than from a second request. A fetch already on
  * its way, as after the add invalidated the heap, is waited for rather than started again; if it was cancelled
  * meanwhile (another change invalidated the heap), the list is fetched once more. If fetching fails, it's the list as
  * cached, which may not have the item yet.

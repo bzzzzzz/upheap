@@ -2,7 +2,7 @@
 
 A ranked todo list for teams. Items go into a heap with a need, a rough size, impact and due date, and the server
 ranks them, explains each position, and keeps the ranking current as time passes. One binary serves the API and the
-web app, on SQLite or MySQL.
+web app, on SQLite, MySQL or Postgres. A static build runs the same backend in the browser for one person.
 
 ## Components
 
@@ -11,25 +11,32 @@ web app, on SQLite or MySQL.
 - `crates/service`: use cases. Each one runs in one transaction with its audit entry.
 - `crates/api`: axum handlers, DTOs, error mapping, OpenAPI (utoipa).
 - `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
+- `crates/local`: the backend compiled to WebAssembly, for the static single-user build.
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.
 
-## Design docs
-
-- [design/engineering-principles.md](design/engineering-principles.md): **must follow.** Read it before writing
-  code; where code and principles disagree, fix one of them.
-- [design/technical-design.md](design/technical-design.md): architecture, data model, ranking, API.
-- [design/requirements.md](design/requirements.md) and [design/offering.md](design/offering.md): what we build and why.
-- [design/local-build.md](design/local-build.md): the static, single-user build that runs in the browser.
-- [design/app-ux.md](design/app-ux.md): the web app's layout and interactions for phones and wide screens.
-- [design/cli.md](design/cli.md): the `upheap` command-line client for everyday item and tag work.
-- [design/cli-tracker.md](design/cli-tracker.md): the CLI's build, step by step, with what's done.
-- [design/cloud-run-postgres.md](design/cloud-run-postgres.md): Postgres support and deploying on Cloud Run with Neon.
-- [design/progress.md](design/progress.md): what's done and what's next. Keep it current.
-
-When asked to write a "doc", write it as a Markdown file in `design/` and add it to this list, not as an
-external document (Claude Docs, Notion, Google Docs).
-
 Build, run and check commands are in [README.md](README.md).
+
+## Docs
+
+Read [design/engineering-principles.md](design/engineering-principles.md) before writing code. **Must follow.**
+Where code and principles disagree, fix one of them. [design/technical-design.md](design/technical-design.md) is
+the architecture. [design/README.md](design/README.md) indexes every doc and says what each is for.
+
+Rules for the docs:
+
+1. **One home per fact.** What code or a generated file states, no doc repeats: endpoints are in `openapi.json`,
+   error codes in `crates/api/src/error.rs`, the schema in the migrations, configuration in README.md. Docs explain
+   mechanisms and reasons, and link to the rest.
+2. **Status lives in [design/progress.md](design/progress.md) only,** as state, not history: one line per area, no
+   changelogs, no test counts. Update the row for the area you changed. The pull requests are the history.
+3. **A design doc for unbuilt work is temporary.** It lives in `design/` while the work is built. Once built, the
+   reasons worth keeping move into the architecture or the module docs, its status into progress.md, and the file
+   goes. Git remembers it.
+4. **Open questions** about built things go in progress.md's one list. A design doc for unbuilt work keeps its own
+   until it's built.
+
+When asked to write a "doc", write it as a Markdown file in `design/` and add it to `design/README.md`, not as an
+external document (Claude Docs, Notion, Google Docs).
 
 ## Git
 

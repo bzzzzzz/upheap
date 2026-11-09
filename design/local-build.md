@@ -192,28 +192,9 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
    0.2 MB of data, and the Time-Zone header needs it. Leaving the OpenAPI document out would mean declaring the
    routes twice, which isn't worth 0.2 MB, so the budget stands as is.
 
-## Plan
-
-1. **Spike: done.** See [Spike results](#spike-results).
-2. **Features: done.** `accounts` in `service` and `api`, the local user, `trace-and-timeout` in `api`, and the CI
-   job. The server build doesn't change in behaviour, and `openapi.json` is unchanged.
-3. **`crates/local` and the worker: done.** `Backend`, the worker and its `fetch`, the `local-build` mode, and the
-   smoke test in CI. In headless Chromium the app opens on the local user's heap, migrations included, in about
-   220 ms, and items stay across a reload and a browser restart.
-4. **Single-user mode: done.** `GET /me` offers `sign_out` and `create_team` on the server only, the local user's
-   team offers only `create_heap`, and the web app hides the rest: no sign-out, and the header links straight to
-   the one team, where `/teams` also leads.
-5. **Keeping the data: done.** The footer note and the request for persistent storage, export and import on the
-   Account page, and one tab at a time. In headless Chromium a second tab waits and opens once the first closes,
-   a downloaded copy opened again replaces what was added since, and a file that isn't an Upheap database or comes
-   from a newer version is refused with the data left as it was.
-6. **Publish: done.** `404.html`, the Pages workflow, and Playwright against the static build in the "Local
-   build" job: the four golden paths without sign-up, export and import, and the tab lock.
-
 ## Spike results
 
-The spike lived in `crates/local` and `crates/local/spike` until step 3 replaced it with `Backend` and the
-worker. It ran in Node on in-memory SQLite-wasm, and in a module worker on `opfs-sahpool` driven with Playwright in
+The spike lived in `crates/local` and `crates/local/spike` until `Backend` and the worker replaced it. It ran in Node on in-memory SQLite-wasm, and in a module worker on `opfs-sahpool` driven with Playwright in
 headless Chromium.
 
 1. **The backend runs unchanged.** The real migrations, `register`, `create_item` and `list_ranked` ran on
@@ -229,9 +210,4 @@ headless Chromium.
 6. **The server build is unchanged.** All 196 native tests pass, and clippy is clean natively and for wasm.
 
 Its shortcuts are gone: inline password hashing on wasm and leaving out the trace and timeout layers by target went
-with the features in step 2, and the spike entry points with `Backend` in step 3.
-
-## Open questions
-
-1. Is moving an exported database onto a server worth building? The local user has no password, so an import there
-   would need a way to claim the account.
+with the Cargo features, and the spike entry points with `Backend`.
