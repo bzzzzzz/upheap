@@ -98,3 +98,24 @@ test("New parameter opens a form that Cancel closes, and Rename renames the para
   ).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Tags that suggest Plan" })).toBeVisible();
 });
+
+test("an option added after the first can replace it when the first is archived", async ({ page }) => {
+  await addParameter(page, "Region", 10, ["North"]);
+  await page.getByLabel("New option of Region").fill("South");
+  await page.getByRole("button", { name: "Add option" }).click();
+  await expect(page.getByLabel("Label of option 2")).toHaveValue("South");
+
+  const north = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("button", { name: "Move North up" }) })
+    .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
+  await north.getByRole("button", { name: "Archive" }).click();
+  const confirm = page
+    .getByRole("listitem")
+    .filter({ hasText: "Archive North?" })
+    .filter({ hasNot: page.getByRole("button", { name: "Archive parameter" }) });
+  await expect(confirm.getByLabel("Open items with North switch to")).toHaveValue(/.+/);
+  await confirm.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("South");
+  await expect(page.getByLabel("Label of option 2")).toHaveCount(0);
+});

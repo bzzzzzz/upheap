@@ -123,18 +123,21 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
                 </span>
               )}
             </dd>
-            <p className="mt-2 text-xs/normal text-muted max-sm:text-[13px]">
-              {slugChanging && (
-                <>
-                  New link:{" "}
-                  <span className="font-mono break-all text-ink-soft">
-                    {BASE}/teams/{heapRef.team}/heaps/{newSlug}
-                  </span>
-                  .{" "}
-                </>
-              )}
-              Changing it changes the heap's links; old links stop working.
-            </p>
+            {/* Only those who may change the link name are warned about changing it. */}
+            {can("rename") && (
+              <p className="mt-2 text-xs/normal text-muted max-sm:text-[13px]">
+                {slugChanging && (
+                  <>
+                    New link:{" "}
+                    <span className="font-mono break-all text-ink-soft">
+                      {BASE}/teams/{heapRef.team}/heaps/{newSlug}
+                    </span>
+                    .{" "}
+                  </>
+                )}
+                Changing it changes the heap&apos;s links; old links stop working.
+              </p>
+            )}
           </div>
         </dl>
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}

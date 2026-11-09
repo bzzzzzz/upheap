@@ -850,7 +850,7 @@ Other item errors shown inline: `item_closed` ("This item is closed, so only its
   every member; General's controls follow `rename`, `archive`, `unarchive` and `view_history` on the heap.
 - **Purpose:** one place for a heap's configuration. P-heap-row on S-team keeps its rename and archive too.
 - **Shows (General):** Details with the name and the link name (`/heaps/` before it), edited in place, and "Changing
-  it changes the heap's links; old links stop working.", preceded by "New link: /teams/{team}/heaps/{slug}." while a
+  it changes the heap's links; old links stop working." (only to those who may rename), preceded by "New link: /teams/{team}/heaps/{slug}." while a
   new link name is typed; the heap's history; Archive heap, or Unarchive heap on an
   archived heap. Not yet: P-heap-weights.
 - On an archived heap, G-archived-banner's Unarchive and General's Unarchive heap both show. Accepted: the banner

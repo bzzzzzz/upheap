@@ -464,7 +464,9 @@ function OptionRow({
 }) {
   const archive = useArchiveOption(heapRef);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
-  const [replacement, setReplacement] = useState(others[0]?.id ?? "");
+  const [picked, setReplacement] = useState("");
+  // Options come and go while the row stays mounted, so the pick falls back to the first other option.
+  const replacement = others.some((other) => other.id === picked) ? picked : (others[0]?.id ?? "");
   const rank = <span className={rankClass}>{index + 1}</span>;
 
   if (confirming && canArchive) {
