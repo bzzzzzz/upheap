@@ -1151,7 +1151,7 @@ E-conflict and G-session-expired (server 4) are justified in their own entries a
 2. **Inline confirms vs dialogs.** Every confirmation today replaces its button in place. On a phone a bottom-sheet
    confirmation may read better; app-ux.md doesn't say.
 3. **Pages not yet fitted to phone width** (app-ux.md Plan step 4): S-heap-activity. It still uses the older stone
-   palette rather than the design tokens (so does the history list inside P-tag-history and P-param-history).
+   palette rather than the design tokens (so does the history list inside P-tag-history, P-param-history and General's heap history).
    S-account uses the tokens (its Profile and Your data cards), but its phone layout waits on a phone board.
 4. **Long blocker lists.** P-blocker is a native select of every open item; at a few thousand items it needs search.
 5. **Registration closed.** No endpoint tells the sign-in page that registration is off before the user tries.

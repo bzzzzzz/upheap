@@ -269,7 +269,8 @@ const heapSettingsRoute = createRoute({
     // Another heap starts afresh, but a new link name for this one keeps the page as it is, with focus where it was.
     // So it's keyed by the heap's ID, and waits for it rather than rendering once under another key. A new link
     // name's heap is already cached under it, so it doesn't load again.
-    if (record.isPending) return <p className="py-16 text-center text-muted">Loading…</p>;
+    // A failed refetch keeps the heap it had, so the page stays; the error shows only when there's no heap to show.
+    if (record.data) return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
     if (record.isError) {
       return (
         <p role="alert" className="py-16 text-center text-overdue-ink">
@@ -277,7 +278,7 @@ const heapSettingsRoute = createRoute({
         </p>
       );
     }
-    return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
+    return <p className="py-16 text-center text-muted">Loading…</p>;
   },
 });
 

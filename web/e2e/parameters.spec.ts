@@ -84,7 +84,7 @@ test("New parameter opens a form that Cancel closes, and Rename renames the para
   await expect(page.getByRole("button", { name: "Move Enterprise up" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Move Free down" })).toBeDisabled();
 
-  await page.getByRole("button", { name: "Rename" }).click();
+  await page.getByRole("button", { name: "Rename Customer" }).click();
   const name = page.getByLabel("Name of parameter Customer");
   await expect(name).toBeFocused();
   await name.fill("Plan");
@@ -118,4 +118,31 @@ test("an option added after the first can replace it when the first is archived"
   await confirm.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByLabel("Label of option 1")).toHaveValue("South");
   await expect(page.getByLabel("Label of option 2")).toHaveCount(0);
+});
+
+test("an arrangement or weight not yet saved survives the parameter's other saves", async ({ page }) => {
+  await addParameter(page, "Customer", 10, ["Enterprise", "Team", "Free"]);
+
+  // Saving the weight keeps the options moved but not yet saved.
+  await page.getByRole("button", { name: "Move Enterprise down" }).click();
+  const weight = page.getByLabel("Weight of parameter Customer");
+  await weight.fill("30");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await expect(weight).toHaveValue("30");
+  await expect(page.getByRole("button", { name: "Save options" })).toBeVisible();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("Team");
+  await expect(page.getByLabel("Label of option 2")).toHaveValue("Enterprise");
+  await expect(page.getByLabel("Label of option 3")).toHaveValue("Free");
+
+  // Renaming keeps a weight typed but not yet saved.
+  await weight.fill("45");
+  await page.getByRole("button", { name: "Rename Customer" }).click();
+  const name = page.getByLabel("Name of parameter Customer");
+  await name.fill("Plan");
+  await name.press("Enter");
+  await expect(page.getByRole("heading", { name: "Plan", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Weight of parameter Plan")).toHaveValue("45");
+  await expect(page.getByRole("button", { name: "Save options" })).toBeVisible();
+  await expect(page.getByLabel("Label of option 1")).toHaveValue("Team");
 });

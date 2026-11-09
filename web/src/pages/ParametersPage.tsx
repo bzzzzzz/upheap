@@ -254,6 +254,8 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
               parameter={parameter}
               pending={weigh.isPending}
               onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
+              // Cancelled, the weight is back to the saved one, so the last attempt's error no longer applies.
+              onCancel={() => weigh.reset()}
             />
           ) : (
             <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
@@ -269,6 +271,7 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
                 ref={renameButton}
                 type="button"
                 onClick={() => setRenaming(true)}
+                aria-label={`Rename ${parameter.name}`}
                 className={compactButtonClass.quiet}
               >
                 Rename
@@ -301,10 +304,12 @@ function WeightForm({
   parameter,
   pending,
   onSave,
+  onCancel,
 }: {
   parameter: Parameter;
   pending: boolean;
   onSave: (weight: number) => void;
+  onCancel: () => void;
 }) {
   const [weight, setWeight] = useState(parameter.weight);
   // Reseeded when the saved weight changes, not on every new version, so a rename doesn't drop a weight being typed.
@@ -338,7 +343,14 @@ function WeightForm({
           <button type="submit" disabled={pending} className={compactButtonClass.primary}>
             Save
           </button>
-          <button type="button" onClick={() => setWeight(parameter.weight)} className={compactButtonClass.quiet}>
+          <button
+            type="button"
+            onClick={() => {
+              setWeight(parameter.weight);
+              onCancel();
+            }}
+            className={compactButtonClass.quiet}
+          >
             Cancel
           </button>
         </>
@@ -363,7 +375,13 @@ function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; 
     setShownOptions(saved);
     setOptions(parameter.options);
   }
-  const changed = JSON.stringify(options) !== saved;
+  // Labels are saved trimmed, so a space before or after one isn't a change to save.
+  const changed =
+    options.length !== parameter.options.length ||
+    options.some((option, index) => {
+      const savedOption = parameter.options[index];
+      return option.id !== savedOption?.id || option.label.trim() !== savedOption.label.trim();
+    });
 
   const move = (index: number, by: -1 | 1) => {
     const next = [...options];
@@ -463,13 +481,16 @@ function OptionRow({
   onMove: (by: -1 | 1) => void;
 }) {
   const archive = useArchiveOption(heapRef);
-  const { confirming, ask, cancel, buttonRef } = useConfirmation();
+  const { confirming, ask, cancel, dismiss, buttonRef } = useConfirmation();
   const [picked, setReplacement] = useState("");
+  // Editing the options takes Archive away, and the confirm with it: it doesn't come back, stealing focus, once the
+  // edit is cancelled.
+  if (confirming && !canArchive) dismiss();
   // Options come and go while the row stays mounted, so the pick falls back to the first other option.
   const replacement = others.some((other) => other.id === picked) ? picked : (others[0]?.id ?? "");
   const rank = <span className={rankClass}>{index + 1}</span>;
 
-  if (confirming && canArchive) {
+  if (confirming) {
     return (
       <li className="my-1 rounded-xl border border-overdue-ink/25 bg-overdue-soft p-3 text-sm">
         <div className="flex items-center gap-2">
@@ -557,10 +578,25 @@ function OptionRow({
 function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
   const tags = useTags(heapRef);
   const change = useChangeParameter(heapRef);
-  const linked: ItemTag[] = (tags.data?.tags ?? [])
+  const heading = <h4 className={labelClass}>Suggested by tags</h4>;
+
+  // Until the tags load, the linked ones can't be named, and a pick would replace the links rather than add to them.
+  if (!tags.data) {
+    if (!canEdit && parameter.tag_ids.length === 0) return null;
+    return (
+      <div className="min-w-0 sm:flex-[1_1_220px]">
+        {heading}
+        {tags.isError ? (
+          <ProblemText error={tags.error} className={`${problemClass} mt-1.5`} />
+        ) : (
+          <p className="mt-1.5 text-sm text-muted">Loading tags…</p>
+        )}
+      </div>
+    );
+  }
+  const linked: ItemTag[] = tags.data.tags
     .filter((tag) => parameter.tag_ids.includes(tag.id))
     .map((tag) => ({ id: tag.id, name: tag.name }));
-  const heading = <h4 className={labelClass}>Suggested by tags</h4>;
 
   if (!canEdit) {
     if (linked.length === 0) return null;
@@ -594,7 +630,7 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; hea
         onChange={(next) => change.mutate({ parameter, change: { kind: "link_tags", tagIds: next.map((t) => t.id) } })}
       />
       <p className="mt-2 text-[13px]/[1.45] text-muted">
-        {linked.length > 0
+        {parameter.tag_ids.length > 0
           ? `Adding one of these tags to an item suggests ${parameter.name}.`
           : `No tags suggest ${parameter.name} yet.`}
       </p>
