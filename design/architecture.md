@@ -385,7 +385,8 @@ the remaining admins.
    the user's live families: not revoked, and holding a refresh token that is unused and unexpired. Each carries
    `last_used_at`, the creation time of the family's newest token (the sign-in or its latest refresh), and
    `device_name`, which the client sent with the code exchange. It also carries the wording, in the request's time
-   zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`. `DELETE /me/sign-ins/{id}` revokes the family as
+   zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`.
+   `DELETE /me/sign-ins/{id}` revokes the family as
    `/oauth/revoke` does, answers `204` again for one already ended, and `404` for an unknown id or another user's,
    which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
    it is validated as text (`domain::oauth::DeviceName`), not trusted.

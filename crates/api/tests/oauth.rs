@@ -848,9 +848,11 @@ async fn a_sign_in_without_a_name_or_with_a_blank_one_is_listed_unnamed() -> Res
 #[gtest]
 #[tokio::test]
 async fn sign_in_labels_are_worded_in_the_requests_timezone() -> Result<()> {
-    // Arrange: START is 12:00 UTC on 1 Jan 2027. Three days on, a refresh moves last use.
+    // Arrange: START is 12:00 UTC on 1 Jan 2027. Signing in at 23:30 UTC is already 2 Jan in Berlin, the zone the
+    // test requests send. Three days on, a refresh moves last use.
     let app = TestApp::start().await?;
     let (session, _) = app.register("ada@example.test").await?;
+    app.clock.advance(Duration::from_minutes(11 * 60 + 30));
     let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
     app.clock.advance(Duration::from_hours(24 * 3));
     let refreshed = app
@@ -870,7 +872,7 @@ async fn sign_in_labels_are_worded_in_the_requests_timezone() -> Result<()> {
 
     // Assert
     expect_that!(refreshed.status, eq(StatusCode::OK));
-    expect_that!(listed[0]["signed_in_label"], eq(&json!("1 Jan")));
+    expect_that!(listed[0]["signed_in_label"], eq(&json!("2 Jan")));
     expect_that!(listed[0]["last_used_label"], eq(&json!("3 days ago")));
     Ok(())
 }

@@ -138,9 +138,9 @@ pub async fn find_token_family(
 }
 
 /// The user's live sign-ins at `now`, most recently used first, then by id. Two queries however many there are: the
-/// families, then the newest token of each. A user has a handful (one per machine signed in), so neither is paged. The scans rely on
-/// `idx_oauth_token_families_user` and `idx_oauth_tokens_family` (migration 14); the foreign keys have no index of
-/// their own.
+/// families, then the newest token of each. A user has a handful (one per machine signed in), so neither is paged.
+/// The scans rely on `idx_oauth_token_families_user` and `idx_oauth_tokens_family`: SQLite and Postgres don't index
+/// a foreign key by themselves.
 pub async fn list_live_token_families(
     db: &impl ConnectionTrait,
     user_id: UserId,

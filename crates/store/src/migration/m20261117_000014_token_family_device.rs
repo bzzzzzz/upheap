@@ -2,7 +2,7 @@
 //! their sign-ins apart. Nullable: families made before this have none, and a client may send none.
 //!
 //! Also indexes what listing a user's sign-ins reads: the families of a user, and the tokens of a family. Neither
-//! foreign key has one, and both tables only grow.
+//! foreign key has one on SQLite or Postgres, and both tables only grow.
 
 use sea_orm_migration::prelude::*;
 
