@@ -525,6 +525,49 @@ served as Pages serves it; the Pages workflow publishes the same build from `mai
 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes twice. The commands are in
 [README.md](../README.md#develop).
 
+## CLI
+
+`crates/cli` is `upheap`, another client of the API. Its conventions (command shape, output, exit codes,
+configuration, signing in, layout and tests) are the [CLI rules](engineering-principles.md#cli) of the engineering
+principles; the exit codes are in `crates/cli/src/error.rs`, and the commands and flags in `upheap --help`. This
+section is how it maps onto this API.
+
+1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), tags
+   (list, add, edit), heaps (list, pick a default) and signing in. Teams, members, heap settings, parameters and
+   saved-view editing stay in the web app. The local build has no server, so the CLI can't reach it.
+2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
+   link without its `/h/`. A pasted link works, short or in the long form the address bar shows after the redirect;
+   its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is
+   exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it.
+3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
+   server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
+   refusals. `item block --by` sets `blocked_by_item_id` in the same request; a bare key there is in the blocked
+   item's heap.
+4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
+   sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`
+   ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)). Every request carries the
+   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser.
+5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
+   a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
+   result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
+   the heap's tags. `item add` reads the list once more to say where the item landed, a read `--quiet` and `--json`
+   skip; if it fails, the add still stands and a warning says so.
+6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
+   device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
+   answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
+   keyed by the server's URL: the refresh token, and the last access token with its expiry, as JSON. `keyring` uses
+   the Secret Service over zbus on Linux, which is pure Rust, so a static build needs no libdbus.
+7. **A newer server's values.** A new enum value is additive
+   ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
+   still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
+   (`deserialize_with`), and `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant
+   marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
+   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. Values the server reads in
+   requests stay strict: `Need`, `Size`, `ItemState`, `Role`, and the list view's `StateMode`, `BlockedLayout` and
+   `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
+   would still stop an older CLI reading the heap's views; making them lenient needs a second type, left for when it
+   happens.
+
 ## Testing
 
 1. **Domain:** unit tests for each ranking factor, the state machine and the due labels, and proptest invariants:
@@ -544,5 +587,9 @@ served as Pages serves it; the Pages workflow publishes the same build from `mai
    widths. Each test registers its own account, so tests share no data and run in parallel; everything beyond these
    paths is tested lower down. The same paths, without sign-up, run against the local build, with its own tests for
    export, import and the tab lock.
+6. **CLI:** `crates/cli/tests` runs each command against the real API router on in-memory SQLite, served on a
+   localhost port, and checks stdout, stderr and the exit code. The tests sign in through the real OAuth endpoints,
+   most by seeding the token store with tokens from a code they approved and exchanged, the login tests by running
+   `upheap auth login` with a browser that answers the consent page.
 
 The commands are in [README.md](../README.md#develop).
