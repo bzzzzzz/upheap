@@ -12,11 +12,11 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    looks the same wherever it appears: S M L XL buttons, the due choices and the tag chips are identical in the item
    pane, the Add dialog and their phone sheets.
 2. **Predictable layout.** Every screen keeps the same areas in the same places. Browser: sidebar, then the list,
-   then the item pane. Phone: top bar, then view chips, then the list, then the bottom tabs, with the + button above
+   then the item pane. Phone: top bar, then search and Filters, then the list, then the bottom tabs, with the + button above
    the tabs. Overlays come in only two kinds: a centred dialog or popover in the browser, a bottom sheet on the
    phone.
 3. **At your fingertips.** Whatever is used most (screens.md, ratings 4–5) is visible without opening anything: the
-   ranked list, Add, state changes, search, the saved views. On a phone it sits within thumb reach at the bottom.
+   ranked list, Add, state changes, search. On a phone it sits within thumb reach at the bottom.
 4. **One step ahead.** Whatever the user is likely to do next is one click away. Everything they can do with what's
    on screen is at most two obvious clicks away (open, then act). Keyboard shortcuts come later, on top of this,
    not instead of it ([Later: keyboard](#later-keyboard)).
@@ -41,8 +41,8 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    \<the top open item\>". If something else is already in progress, the user is carrying on with it, and the
    offer would be noise.
 3. **Active filters show as removable chips** under the toolbar, so the user always sees why the list is short.
-   When a saved view has changed, its chip shows a dot. Tapping the chip offers "Save to \<view\>" and "Undo
-   changes".
+   Changed view settings show as chips too. (A changed saved view's dot, with "Save to \<view\>" and "Undo
+   changes", is not shown for now: the web app hides saved views.)
 4. **The hidden-items note offers the fix** ("3 blocked items are hidden. Show them").
 
 ### The item (M-item)
@@ -75,13 +75,16 @@ phone (under 640 px). The tablet keeps app-ux.md's layout and has no mockups her
    link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching every heap
    needs a server search endpoint; today's search filters only the loaded list.
 2. **The search box filters the current list.** Matches stay in ranked order.
-3. **The heap switcher shows open counts** and ends with New heap (gap 8). In the browser it's the sidebar.
+3. **The heap switcher shows open counts** and ends with New heap (gap 8). In the browser it opens from the heap
+   button at the top of the sidebar, and Open shows the heap's open count.
 
-### Filters and views (M-filters, M-view-settings)
+### Filters and views (M-filters)
 
-1. **Each chip shows how many items it would match,** and the footer shows "Showing 4 of 14". The list updates
-   live behind the popover, or behind the phone sheet, whose button reads "Show 4 items".
-2. **"Save as view…" is in the popover**, where the user finishes shaping the list.
+1. **One Filters panel** sets both what the list shows (each state pinned, shown or hidden) and the filters (tags,
+   need, effort, impact, parameters); the phone's also has the sort. The footer shows "4 of 14 items". The list
+   updates live behind the popover, or behind the phone sheet, whose button reads "Show 4 items".
+2. **"Save as view…" is not shown for now**, as the web app hides saved views; when they return, it goes in the
+   panel, where the user finishes shaping the list.
 
 ## Rules that settle open questions
 

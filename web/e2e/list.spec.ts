@@ -74,7 +74,7 @@ test("the item pane walks the list, and the link sign by its title copies the li
   await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
 });
 
-test("filters show as chips with what they leave out, and a changed view is saved or undone", async ({ page }) => {
+test("filters show as chips with what they leave out, and each chip takes its filter off", async ({ page }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
 
@@ -93,35 +93,8 @@ test("filters show as chips with what they leave out, and a changed view is save
   await expect(on).toContainText("1 of 2");
   await page.getByLabel("Search items").fill("");
 
-  // The changed view's chip offers to undo the change.
-  await page.getByRole("button", { name: "Default (changed)" }).click();
-  await page.getByRole("menuitem", { name: "Undo changes" }).click();
-  await expect(on).toHaveCount(0);
-  await expect(row(page, "Slog")).toBeVisible();
-
   // A chip takes its own filter off.
-  await page.getByRole("button", { name: "Filters" }).click();
-  await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
-  await filters.getByRole("button", { name: "Close" }).click();
   await on.getByRole("button", { name: "Remove filter Effort S" }).click();
   await expect(on).toHaveCount(0);
-  await expect(row(page, "Slog")).toBeVisible();
-
-  // Saved as a new view from the dot's menu, then changed again and saved to it.
-  await page.getByRole("button", { name: "Filters" }).click();
-  await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
-  await filters.getByRole("button", { name: "Close" }).click();
-  await page.getByRole("button", { name: "Default (changed)" }).click();
-  await page.getByRole("menuitem", { name: "Save as a new view…" }).click();
-  await page.getByLabel("Name of the new view").fill("Small");
-  await page.getByRole("button", { name: "Save view" }).click();
-  const views = page.getByRole("navigation", { name: "Saved views" });
-  await expect(views.getByRole("link", { name: "Small" })).toHaveAttribute("aria-current", "page");
-
-  await on.getByRole("button", { name: "Remove filter Effort S" }).click();
-  await expect(row(page, "Slog")).toBeVisible();
-  await page.getByRole("button", { name: "Small (changed)" }).click();
-  await page.getByRole("menuitem", { name: "Save to Small" }).click();
-  await expect(views.getByRole("link", { name: "Small" })).toHaveAttribute("aria-current", "page");
   await expect(row(page, "Slog")).toBeVisible();
 });

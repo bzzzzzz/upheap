@@ -90,7 +90,7 @@ state reads better than `upheap item edit --state done`, and there's only one wa
 
 **`upheap item list`** shows pinned items, then the ranked ones, then grouped blocked items when shown, each row with its position,
 key, title, state, effort and impact, due label, tags, and the top contributor. It takes the list query parameters as
-flags with the same names and values: `--tag`, `--effort`, `--impact`, `--sort`, `--sort-parameter`,
+flags with the same names and values: `--tag`, `--need`, `--effort`, `--impact`, `--sort`, `--sort-parameter`,
 `--open/--in-progress/--blocked <pinned|shown|hidden>` and `--blocked-layout`. `--view <name>` loads a saved view of
 the heap and sends its settings, so team views work in the terminal without being edited there. The optional `<text>`
 narrows the result by title and description on the client, which is the one kind of filtering the thin-client rules

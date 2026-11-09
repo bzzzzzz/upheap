@@ -69,6 +69,10 @@ pub(crate) struct RankedQuery {
     #[serde(default, deserialize_with = "comma_separated")]
     #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
     pub impact: Vec<SizeDto>,
+    /// Keep items with any of these needs, comma-separated.
+    #[serde(default, deserialize_with = "comma_separated")]
+    #[param(value_type = Option<Vec<NeedDto>>, style = Form, explode = false)]
+    pub need: Vec<NeedDto>,
     /// Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
     /// any of its options listed. An archived option keeps the items that switched to its replacement.
     #[serde(default, deserialize_with = "comma_separated")]
@@ -88,6 +92,7 @@ impl RankedQuery {
             tag: self.tag.clone(),
             effort: self.effort.clone(),
             impact: self.impact.clone(),
+            need: self.need.clone(),
             param: self.param.clone(),
         }
         .to_view()
@@ -121,7 +126,7 @@ pub(crate) struct RankedListDto {
     pub blocked: Vec<RankedItemDto>,
     /// How many items the filters keep but are left out because their state is hidden.
     pub hidden_count: u32,
-    /// How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the "14" in
+    /// How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the "14" in
     /// "6 of 14". Hidden states still leave theirs out.
     pub unfiltered_count: u32,
     /// How many of the heap's items are in progress, whatever the view and its filters leave out.

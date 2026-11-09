@@ -52,7 +52,7 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | --- | --- | --- | --- |
 | Phone, under 640 px | Heap name at the top switches heap; bottom tabs Open, Closed, + (Add), Activity, More | Full width, compact rows | Bottom sheet over the list |
 | Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: heaps, then the heap's views, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
+| Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
 **More** on a phone holds Team, Teams, Tags, Parameters, Account (with Your data in the local build) and Sign out,
 as a card of 52 px rows above the tabs. The **+** in the middle of the tabs opens the Add dialog from any of the
@@ -69,7 +69,7 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
    list as a popover; below it are the heap's views (Open, Closed, Activity, Tags, Parameters) as icons with short
    labels; the account sits at the bottom.
-2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Filters, View) and rows,
+2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows,
    including the effort and impact sizes, at touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
    row switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it.
@@ -104,8 +104,16 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `x` marks done;
    `N` and `/` stay.
 5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
-6. Saved views stay chips above the list, scrolling sideways on a phone.
-7. Filters and View open as a popover on a wide screen and as a sheet on a phone.
+6. Saved views are hidden in the web app for now; the API keeps them, so a client can bring them back.
+7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
+   Hidden, a dot on a changed one; shown blocked items in their own group or mixed in), then Narrow down (tags, need,
+   effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
+   on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
+   sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
+   and changed settings, amber while any are on; on a phone, where the sort is out of sight in the sheet, it counts a
+   sort other than Priority too ("Filters and sort, 1 on").
+8. Under the toolbar a chip takes off each filter ("Need: Critical") or changed setting ("Blocked: shown"), with
+   "6 of 14" while filters are on and Reset all. Reset all keeps the sort and the search.
 
 ### The item
 
@@ -128,8 +136,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 ### Adding an item
 
-1. Clicking or tapping "Add an item" (or pressing `N`) opens the Add dialog: a modal over the list on a wide screen
-   and a tablet, a sheet above the keyboard on a phone. The field above the list stays only as the way in.
+1. The Add item button beside the heap name (or `N`) opens the Add dialog: a modal over the list on a wide screen and
+   a tablet. On a phone the + in the middle of the tabs opens it as a sheet above the keyboard.
 2. The dialog has every field Add item takes: title (focused), description, need, effort, impact, due, tags, and the
    parameters linked to the chosen tags, which appear as soon as a tag is added. Each is optional apart from the
    title and the need: Add stays off until a need is picked. Nothing is picked for you, so every need is someone's
@@ -173,7 +181,7 @@ Chromium, against both the server and the local build.
    2. Compact rows with the state circle, the item pane and sheet in place of the Edit item page, undo toast,
       keyboard navigation.
 3. **Phone interactions.** The Add dialog as a sheet above the keyboard, swipe actions on rows, dragging the item
-   sheet down and swiping the tablet panel right to close them, Filters and View sheets, heap switcher.
+   sheet down and swiping the tablet panel right to close them, the Filters & sort sheet, heap switcher.
 4. **Every other page at phone width.** Closed, Activity, Tags, Parameters, Team, Account, sign-in.
 
 ## Later: an installable app

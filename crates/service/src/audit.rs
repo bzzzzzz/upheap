@@ -139,6 +139,7 @@ fn list_view_fields(view: &ListView) -> Value {
     let tags: Vec<String> = view.filter.tags.iter().map(ToString::to_string).collect();
     let effort: Vec<&str> = view.filter.effort.iter().map(|s| s.code()).collect();
     let impact: Vec<&str> = view.filter.impact.iter().map(|s| s.code()).collect();
+    let need: Vec<&str> = view.filter.need.iter().map(|n| n.code()).collect();
     let options: Vec<String> = view.filter.options.iter().map(ToString::to_string).collect();
     json!({
         "open": view.open.code(),
@@ -150,6 +151,7 @@ fn list_view_fields(view: &ListView) -> Value {
         "tag": tags,
         "effort": effort,
         "impact": impact,
+        "need": need,
         "param": options,
     })
 }

@@ -1008,6 +1008,8 @@ export interface components {
             /** @description Keeps items with any of these impacts. Empty doesn't filter. */
             impact: components["schemas"]["Size"][];
             in_progress: components["schemas"]["StateMode"];
+            /** @description Keeps items with any of these needs. Empty doesn't filter. */
+            need: components["schemas"]["Need"][];
             open: components["schemas"]["StateMode"];
             /**
              * @description Options of custom parameters. For each parameter they belong to, keeps items with any of its options listed.
@@ -1033,6 +1035,7 @@ export interface components {
             effort?: components["schemas"]["Size"][];
             impact?: components["schemas"]["Size"][];
             in_progress?: null | components["schemas"]["StateMode"];
+            need?: components["schemas"]["Need"][];
             open?: null | components["schemas"]["StateMode"];
             /** @description Options of the same heap's parameters. */
             param?: string[];
@@ -1199,7 +1202,7 @@ export interface components {
             ranked: components["schemas"]["RankedItem"][];
             /**
              * Format: int32
-             * @description How many items the view would list without its filters (`tag`, `effort`, `impact`, `param`): the "14" in
+             * @description How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the "14" in
              *     "6 of 14". Hidden states still leave theirs out.
              */
             unfiltered_count: number;
@@ -2172,6 +2175,8 @@ export interface operations {
                 effort?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these impacts, comma-separated. */
                 impact?: components["schemas"]["Size"][];
+                /** @description Keep items with any of these needs, comma-separated. */
+                need?: components["schemas"]["Need"][];
                 /**
                  * @description Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
                  *     any of its options listed. An archived option keeps the items that switched to its replacement.

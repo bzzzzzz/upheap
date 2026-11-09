@@ -65,7 +65,7 @@ async fn a_saved_view_spells_out_every_setting_and_the_team_sees_it() -> Result<
         &app,
         &session,
         &heap,
-        json!({ "name": " Ops work ", "view": { "blocked": "shown", "tag": [ops, ops], "effort": ["s"] } }),
+        json!({ "name": " Ops work ", "view": { "blocked": "shown", "tag": [ops, ops], "effort": ["s"], "need": ["critical", "idea"] } }),
     )
     .await?;
     let listed = list_views(&app, &member_session, &heap).await?;
@@ -85,6 +85,7 @@ async fn a_saved_view_spells_out_every_setting_and_the_team_sees_it() -> Result<
             "tag": [ops],
             "effort": ["s"],
             "impact": [],
+            "need": ["idea", "critical"],
             "param": [],
         }))
     );

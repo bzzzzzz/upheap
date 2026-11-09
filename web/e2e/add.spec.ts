@@ -20,7 +20,7 @@ import type { Page } from "@playwright/test";
 
 /** Opens the Add dialog from the list's button, or on a phone from the tabs' +. */
 async function openAdd(page: Page) {
-  await page.getByRole("button", { name: "Add an item" }).click();
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
   await expect(addDialog(page)).toBeVisible();
 }
 

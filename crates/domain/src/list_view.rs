@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
-use crate::item::{Item, Size, StateKind};
+use crate::item::{Item, Need, Size, StateKind};
 use crate::parameter::Parameter;
 use crate::{OptionId, ParameterId, TagId};
 
@@ -127,6 +127,8 @@ pub enum Group {
 pub struct ListFilter {
     /// Keep items with at least one of these tags.
     pub tags: BTreeSet<TagId>,
+    /// Keep items with one of these needs.
+    pub need: BTreeSet<Need>,
     /// Keep items with one of these efforts.
     pub effort: BTreeSet<Size>,
     /// Keep items with one of these impacts.
@@ -142,7 +144,8 @@ impl ListFilter {
     /// none of them, or to an archived one, are ignored.
     pub fn matches(&self, item: &Item, parameters: &[Parameter]) -> bool {
         let tags = self.tags.is_empty() || !self.tags.is_disjoint(&item.tags);
-        tags && within(&self.effort, item.effort)
+        tags && (self.need.is_empty() || self.need.contains(&item.need))
+            && within(&self.effort, item.effort)
             && within(&self.impact, item.impact)
             && self.matches_options(item, parameters)
     }
@@ -429,6 +432,22 @@ mod tests {
 
         expect_that!(filter.matches(&small, &[]), eq(true));
         expect_that!(filter.matches(&large, &[]), eq(false));
+        expect_that!(filter.matches(&item(3), &[]), eq(false));
+    }
+
+    #[gtest]
+    fn the_need_filter_keeps_items_with_one_of_its_needs() {
+        let filter = ListFilter {
+            need: BTreeSet::from([Need::Critical, Need::Idea]),
+            ..ListFilter::default()
+        };
+        let mut critical = item(1);
+        critical.need = Need::Critical;
+        let mut idea = item(2);
+        idea.need = Need::Idea;
+
+        expect_that!(filter.matches(&critical, &[]), eq(true));
+        expect_that!(filter.matches(&idea, &[]), eq(true));
         expect_that!(filter.matches(&item(3), &[]), eq(false));
     }
 

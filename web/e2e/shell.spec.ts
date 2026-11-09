@@ -23,8 +23,10 @@ test("every page fits the screen, with the navigation for its width", async ({ p
     expect(box?.width).toBeLessThanOrEqual(80);
     await expect(page.getByRole("button", { name: /^Switch heap/ })).toBeVisible();
   } else {
-    // The sidebar, listing the heaps.
-    await expect(page.getByRole("navigation", { name: "Heaps" }).getByRole("link")).not.toHaveCount(0);
+    // The sidebar, with the heap and its team on the button that switches heap.
+    await expect(page.getByRole("button", { name: /^Switch heap: .+ · .+$/ })).toBeVisible();
+    // Open says how many items the heap has open.
+    await expect(views.getByRole("link", { name: "Open", exact: true })).toContainText("1");
     // The content sits next to the sidebar, not across the screen from it.
     const sidebar = await page.getByRole("complementary", { name: "Heaps and views" }).boundingBox();
     const main = await page.getByRole("main").boundingBox();
@@ -40,10 +42,20 @@ test("every page fits the screen, with the navigation for its width", async ({ p
   }
 });
 
-test("the heap switcher opens another heap", async ({ page }) => {
-  const width = page.viewportSize()?.width ?? 0;
-  test.skip(width >= 1024, "A wide screen lists the heaps in the sidebar instead.");
+test("the sidebar's Open count follows adding an item and closing one", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "Only the sidebar shows the count.");
 
+  const open = page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Open", exact: true });
+  await expect(open).toHaveText(/^Open\s*0$/);
+  await addItem(page, "Water the plants");
+  await addItem(page, "Feed the cat");
+  await expect(open).toHaveText(/^Open\s*2$/);
+  await row(page, "Feed the cat").getByRole("button", { name: "Mark Feed the cat done" }).click();
+  await expect(row(page, "Feed the cat")).toHaveCount(0);
+  await expect(open).toHaveText(/^Open\s*1$/);
+});
+
+test("the heap switcher opens another heap", async ({ page }) => {
   await page.getByRole("button", { name: /^Switch heap/ }).click();
   const heaps = page.getByRole("dialog", { name: "Heaps" });
   // The heap on screen is checked.
@@ -54,9 +66,6 @@ test("the heap switcher opens another heap", async ({ page }) => {
 });
 
 test("the heap switcher starts a new heap in the heap's team", async ({ page }) => {
-  const width = page.viewportSize()?.width ?? 0;
-  test.skip(width >= 1024, "A wide screen lists the heaps in the sidebar instead.");
-
   await page.getByRole("button", { name: /^Switch heap/ }).click();
   const heaps = page.getByRole("dialog", { name: "Heaps" });
   await heaps.getByRole("button", { name: /^New heap in / }).click();
