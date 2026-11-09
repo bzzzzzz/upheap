@@ -5,7 +5,7 @@ import type { Locator, Page } from "@playwright/test";
 import { addItem, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
-const pages: AppPage[] = ["Closed", "Activity", "Tags", "Parameters", "Open", "Account"];
+const pages: AppPage[] = ["Closed", "Activity", "Settings", "Tags", "Parameters", "Open", "Account"];
 
 test("every page fits the screen, with the navigation for its width", async ({ page }) => {
   await addItem(page, "Write up the findings from the customer interviews for the whole team", { effort: "L" });
@@ -82,7 +82,7 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   const tabs = page.getByRole("navigation", { name: "Heap views" });
   await tabs.getByRole("button", { name: "More" }).click();
   const more = page.getByRole("dialog", { name: "More" });
-  await expect(more.getByRole("link", { name: "Tags", exact: true })).toBeVisible();
+  await expect(more.getByRole("link", { name: "Activity", exact: true })).toBeVisible();
   const tabsBox = await tabs.boundingBox();
   const sheet = await more.boundingBox();
   if (!tabsBox || !sheet) throw new Error("the tabs or More are not laid out");
@@ -195,7 +195,7 @@ test("the active navigation entry stands out from its bar in either theme", asyn
 test("on a phone, More shows as active on the pages it holds", async ({ page }) => {
   test.skip(!isPhone(page), "Only the phone's tabs have More.");
   const bar = viewsBar(page);
-  await goTo(page, "Tags");
+  await goTo(page, "Activity");
   const more = bar.getByRole("button", { name: "More" });
   await expect(more).toHaveAttribute("aria-current", "true");
   await expectToStandOut(more, bar);

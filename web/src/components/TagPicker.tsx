@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags } from "../api/queries";
@@ -17,6 +17,8 @@ export function TagPicker({
   disabled,
   inline = false,
   layout = "stack",
+  label = <span className="text-xs font-medium text-ink-soft">Tags</span>,
+  inputLabel = "Add a tag",
 }: {
   heapRef: HeapRef;
   value: ItemTag[];
@@ -25,6 +27,10 @@ export function TagPicker({
   /** The matches in the flow, under the field, rather than over what follows; for a phone's sheet, which grows. */
   inline?: boolean;
   layout?: FieldLayout;
+  /** The heading above the tags, for a page that names them otherwise, such as a parameter's "Suggested by tags". */
+  label?: ReactNode;
+  /** The input's accessible name, for a page with several pickers, such as "Tags that suggest Plan". */
+  inputLabel?: string;
 }) {
   const tags = useTags(heapRef);
   const create = useCreateTag(heapRef);
@@ -97,12 +103,15 @@ export function TagPicker({
   const optionId = (index: number) => `${listId}-${index}`;
 
   return (
-    <FieldFrame layout={layout} label={<span className="text-xs font-medium text-ink-soft">Tags</span>}>
+    <FieldFrame layout={layout} label={label}>
       <div className="flex flex-wrap items-center gap-1">
         {value.map((tag) => (
+          // To a finger, Remove is 44 px square around its 20 px circle. It stays inside the chip, which widens for it
+          // and with its margins takes a 44 px line, so the target never covers the tag's name, the next chip or the
+          // input.
           <span
             key={tag.id}
-            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft"
+            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft pointer-coarse:my-2 pointer-coarse:pr-0"
           >
             {tag.name}
             <button
@@ -110,15 +119,15 @@ export function TagPicker({
               disabled={disabled || busy}
               onClick={() => onChange(value.filter((t) => t.id !== tag.id))}
               aria-label={`Remove tag ${tag.name}`}
-              className="flex size-5 items-center justify-center rounded-full text-muted hover:bg-line hover:text-ink"
+              className="group flex size-5 shrink-0 items-center justify-center rounded-full text-muted hover:text-ink pointer-coarse:size-11"
             >
-              ×
+              <span className="flex size-5 items-center justify-center rounded-full group-hover:bg-line">×</span>
             </button>
           </span>
         ))}
         <input
           role="combobox"
-          aria-label="Add a tag"
+          aria-label={inputLabel}
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"

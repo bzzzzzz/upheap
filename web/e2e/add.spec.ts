@@ -3,6 +3,7 @@
 import {
   addDialog,
   addItem,
+  addParameter,
   changeState,
   closeItem,
   expect,
@@ -319,12 +320,7 @@ test("the dialog starts from the list's filters, also after each item added", as
 });
 
 test("a parameter the filters pick one option of starts with it, under More fields on a phone", async ({ page }) => {
-  await goTo(page, "Parameters");
-  await page.getByLabel("New parameter name").fill("Customer");
-  await page.getByLabel("Weight of the new parameter").fill("50");
-  await page.getByLabel(/^Options of the new parameter/).fill("Enterprise\nFree");
-  await page.getByRole("button", { name: "Add parameter" }).click();
-  await expect(page.getByLabel("Name of parameter Customer")).toBeVisible();
+  await addParameter(page, "Customer", 50, ["Enterprise", "Free"]);
   await goTo(page, "Open");
   await filterBy(page, "Customer (any)", "Enterprise");
 

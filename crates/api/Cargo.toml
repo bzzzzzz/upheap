@@ -16,6 +16,7 @@ accounts = ["dep:form_urlencoded", "service/accounts"]
 trace-and-timeout = ["tower-http/trace", "tower-http/timeout"]
 
 [dependencies]
+api-types.workspace = true
 axum.workspace = true
 domain.workspace = true
 form_urlencoded = { workspace = true, optional = true }

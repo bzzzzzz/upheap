@@ -1,5 +1,6 @@
 // A history from the audit log, as the server describes it. Entries and their changes come ready to show; this only
 // lays them out.
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 import type { AuditEntry } from "../api/client";
@@ -102,15 +103,22 @@ export function HistoryDisclosure({
   scope,
   entityId,
   label = "History",
+  className = "mt-1",
 }: {
   scope: AuditScope;
   entityId?: string;
   label?: string;
+  /** Where it sits: its margins, or how much of a row it takes. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)} className="mt-1">
-      <summary className="cursor-pointer text-xs text-stone-500 select-none hover:text-stone-900 dark:hover:text-stone-100">
+    <details onToggle={(event) => setOpen(event.currentTarget.open)} className={`group ${className}`}>
+      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+        />
         {label}
       </summary>
       {open && (

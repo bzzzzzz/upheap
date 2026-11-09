@@ -9,7 +9,11 @@ web app, on SQLite, MySQL or Postgres. A static build runs the same backend in t
 - `crates/domain`: pure logic (types, item state machine, ranking, due labels, permissions). No IO.
 - `crates/store`: SeaORM entities, migrations, repositories.
 - `crates/service`: use cases. Each one runs in one transaction with its audit entry.
-- `crates/api`: axum handlers, DTOs, error mapping, OpenAPI (utoipa).
+- `crates/api-types`: the API's request and response types (serde + utoipa) and their conversions from domain types,
+  shared by `api` and `cli`. No IO; depends only on `domain`.
+- `crates/api`: axum handlers, error mapping, OpenAPI (utoipa), conversions from service views to `api-types`.
+- `crates/cli`: the `upheap` command-line client (lib + thin bin), over HTTP with `api-types`. Never depends on `api`,
+  `service` or `store` outside its tests.
 - `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
 - `crates/local`: the backend compiled to WebAssembly, for the static single-user build.
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.

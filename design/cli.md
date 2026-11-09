@@ -95,6 +95,11 @@ flags with the same names and values: `--tag`, `--need`, `--effort`, `--impact`,
 the heap and sends its settings, so team views work in the terminal without being edited there. The optional `<text>`
 narrows the result by title and description on the client, which is the one kind of filtering the thin-client rules
 allow. When `hidden_count` isn't zero, the footer says how many items are hidden and which flag shows them.
+Flags given with `--view` replace that setting of the view. `<text>` doesn't go with `--json`, which prints the
+server's list unchanged; `--closed` shows the first page of closed items (the newest 50) and takes no list flags. Values
+are the API's own spellings (`nice_to_have`, `in_progress`), and `--tag` and `--sort-parameter` take names (or IDs).
+`--sort-parameter` implies `--sort parameter`; with any other `--sort` it's exit 2, before any request. `--sort
+parameter` needs the parameter, from `--sort-parameter` or the view's own, or it's exit 2 too.
 
 **`upheap item show <item>`** prints every field, the blocker, tags and parameter values. `--history` adds the item's audit
 entries (`GET …/audit?entity_id=`), rendered from the server's `phrase` and `changes`.
@@ -144,12 +149,20 @@ heap slug alone works when only one of the caller's teams has a heap by that slu
 ## Output
 
 1. **Human output** by default: aligned columns, colour when stdout is a terminal and `NO_COLOR` isn't set. Labels
-   (due, contributors, audit phrases) are printed as the server wrote them.
+   (due, contributors, audit phrases) are printed as the server wrote them, except that every control character
+   (C0, DEL, C1: escapes, newlines) in what goes to the terminal, stdout or stderr, is shown as U+FFFD. Titles and
+   names come from other people through the server, which doesn't strip them, and an escape sequence would run in
+   the reader's terminal (clear it, write the clipboard) or a newline forge a row. `Output` does it in one place,
+   before adding its own colour codes; `--json` prints the body as it came.
 2. **`--json`** prints the server's response body unchanged, so scripts get the documented OpenAPI types and the CLI
-   adds no second schema to keep in sync. For `item add`, that's the created item.
+   adds no second schema to keep in sync. For `item add`, that's the created item. Piped, it's byte for byte as it
+   came. On a terminal, DEL and the C1 controls (U+007F to U+009F), which JSON doesn't escape and a terminal may run,
+   are written as `\u007f` to `\u009f`: the same JSON value, nothing for the terminal to interpret. The same goes for
+   a problem body on stderr.
 3. **`--quiet`** prints only what a script needs next: the item ID for `item add`, nothing for a state change, IDs one
    per line for `item list`.
-4. Results go to stdout; warnings and errors go to stderr.
+4. Results go to stdout; warnings and errors go to stderr. A reader that stops early (`upheap item list -q | head -1`)
+   isn't an error: the command exits 0 without a message.
 5. Only the command's flow function writes output, through one `Output` value that `main` builds from these flags and
    passes down. API calls and lookups return values and errors; they don't print.
 
@@ -167,8 +180,12 @@ body printed to stderr.
 | 2 | The command line was wrong | clap, and checks that run before any request |
 | 3 | The request was refused: bad input or a rule | `400`, `409`, `422`, and the CLI's own lookups (unknown tag, ambiguous item) |
 | 4 | Not signed in, not allowed, or not found | `401`, `403`, `404` |
-| 5 | The server couldn't be reached or is unavailable | connection errors, timeouts, `503` |
+| 5 | The server couldn't be reached or is unavailable | connection errors, timeouts (a response cut off halfway too), `503`, and a proxy's `502` or `504` |
 | 6 | The local setup is broken: unreadable config, no keychain | |
+
+Signing in maps onto the same table: a cancel on the consent page, giving up waiting for the browser and a refused
+code or refresh token are 4; no loopback port is 6. A heap name that isn't `team/heap` or a slug, a missing heap or
+server, a plain `http` server elsewhere and a server that redirects are 2, as they're about what the CLI was told.
 
 `version_conflict` is a `3`. The CLI doesn't retry it: someone else changed the item between the read and the write,
 and the user should look before trying again. The message says so.
@@ -183,27 +200,70 @@ not found together because the server deliberately doesn't tell them apart.
 browser, listens on a loopback redirect URI, and receives an access token and a rotating refresh token. The refresh
 token goes into the OS keychain; if there's no keychain, login fails with exit 6 rather than writing a token to a plain
 file. `upheap auth logout` revokes the token on the server with `POST /oauth/revoke`, which ends the whole sign-in,
-and removes it from the keychain. `POST /auth/logout` is the web app's: it ends only a session cookie, and answers `204`
+and removes it from the keychain. If the server can't revoke it (unreachable, or failing), the sign-in is kept so a
+later try still ends it, and the error suggests `upheap auth logout --local`, which forgets it on this machine only and
+says it may stay open on the server until its tokens expire. `POST /auth/logout` is the web app's: it ends only a session cookie, and answers `204`
 for a bearer token without revoking it.
 
 The server's half is built ([progress.md](progress.md)): the client is `upheap-cli`, its redirect URI is
 `http://127.0.0.1:<port><path>` (or `[::1]`), and the endpoints and lifetimes are in
 [architecture.md](architecture.md#authentication-and-authorization). See [Server changes](#server-changes).
 
+How the CLI keeps the sign-in:
+
+1. **One keychain entry per server**, service `upheap`, keyed by the server's URL: the refresh token, the last access
+   token and when it expires, as JSON. `keyring` 4 picks the macOS keychain, the Windows credential manager, or the
+   Secret Service over zbus, which is pure Rust, so building on Linux needs no libdbus. A Linux machine without a
+   Secret Service daemon gets exit 6.
+2. **The access token is reused** while it has more than a minute left, so most commands make no token request.
+3. **Refreshing takes a lock.** Refresh tokens rotate, and presenting a spent one revokes the whole sign-in, so two
+   `upheap`s refreshing at once would sign the user out. A refresh holds an exclusive lock on `tokens.lock` in the
+   config directory and reads the tokens again once it has it; whoever waited finds the new pair. A refused refresh
+   (`invalid_grant`) forgets the sign-in.
+4. **Login replaces an earlier sign-in** to the same server, doing what can fail first and the destructive step
+   last: it reads `/me` with the new access token, writes the config file, saves the new tokens (under the token
+   lock, after reading the stored ones again, so it can't race a refresh), and only then revokes the earlier sign-in,
+   best effort. Any failure up to and including the save revokes the new tokens, which never reached the keychain,
+   and leaves the earlier sign-in working, so nothing new is left open on the server. Likewise a refresh whose new tokens the keychain won't take revokes them, and
+   says to sign in again (exit 6). `--server` is written to the config file once signed in; when it
+   changes the file's server, a `heap` set for the old one is cleared, as a heap is one server's, and login says so.
+5. **The loopback listener** reads each connection in its own task, with a 10-second limit on the request line,
+   because browsers open spare connections (preconnects) that send nothing. It checks `state` itself: a redirect with
+   another `state` gets the not-signed-in page and the wait goes on; only the sign-in's own redirect gets the
+   signed-in page.
+6. **A keychain entry the CLI can't read** (another program's, or another version's) doesn't lock the user out:
+   `auth login` overwrites it (there's nothing to revoke), `auth logout --local` forgets it, and other commands fail
+   with exit 6 and a hint naming those two.
+7. **Tokens go only where they were sent.** A plain `http://` server is refused (exit 2) unless it's on this machine
+   (`localhost`, `127.0.0.0/8`, `::1`). Requests to a server on this machine ignore `HTTP_PROXY`, `HTTPS_PROXY` and
+   `ALL_PROXY` (reqwest doesn't leave loopback out by itself), so plain-`http` tokens never cross to a proxy; other
+   servers use a proxy as the environment says. And the HTTP client follows no redirects: a `3xx` is an error (exit 2) naming
+   where the server pointed, so a form with a refresh token or code verifier is never re-sent to another host.
+
 ## Configuration
 
-One TOML file, `~/.config/upheap/config.toml` (the platform's config dir), with two settings: `server` (the base URL)
+One TOML file, `config.toml` in `upheap` under the platform's config dir (`~/.config` on Linux, `~/Library/Application
+Support` on macOS), with two settings: `server` (the base URL)
 and `heap` (the default heap). `upheap auth login --server` and `upheap heap use` write them. Flags beat environment variables
-(`UPHEAP_SERVER`, `UPHEAP_HEAP`), which beat the file.
+(`UPHEAP_SERVER`, `UPHEAP_HEAP`), which beat the file. `upheap heap use` writes the heap as `team/heap`, after checking
+it against `GET /me`; when the server it used (`--server`, `UPHEAP_SERVER` or the file) isn't the file's, it writes
+that server too, so the heap and its server stay a pair, and says so. Each write holds an exclusive lock on `config.lock`
+in the same directory and reads the file again under it, so two `upheap`s changing different settings at once both
+keep theirs, and goes to a temporary file in the same
+directory that's then renamed over it, so nobody reads half a file. The file is read and written with `toml` and serde; `confique` only reads config, and the CLI
+writes it too. Unknown settings are refused, not ignored: the error names the setting, and the hint says to upgrade
+`upheap` if a newer one wrote it. With `RUST_LOG` set, the CLI logs to `upheap.log` in the same directory.
 
 ## Code layout
 
-A new crate, `crates/cli`, with the `upheap` binary. It talks to the server over HTTP and depends on nothing below `api`,
-so it never links the database drivers or the service layer.
+A new crate, `crates/cli`, with the `upheap` binary. It talks to the server over HTTP and depends on nothing below `api`
+but `domain`, through `api-types`, so it never links the database drivers or the service layer.
 
 ```
 crates/cli/src/
-  main.rs          parse args, build Output and the API client, dispatch, map errors to exit codes
+  main.rs          gather the environment (Deps::system), start the log, call cli::run
+  lib.rs           parse args, build Output, dispatch, report the error and its exit code
+  error.rs         every failure, its message, hint and exit code
   config.rs        config file and environment, read once at startup
   client/          the HTTP client: base URL, bearer token, Time-Zone header, problem+json errors
   auth/            the OAuth flow, keychain, token refresh
@@ -215,18 +275,33 @@ crates/cli/src/
   output/          human and JSON rendering
 ```
 
-Each command file holds its args struct (`item::AddArgs`) and its `run`, as the guideline asks. Shared flags (`--heap`,
-`--json`, `--quiet`, `--server`) are one struct flattened into every command.
+Each command file holds its args struct (`item::AddArgs`) and its `run`, as the guideline asks. The crate is a library
+with a thin binary: `main` gathers the environment (`Deps::system`) and calls `cli::run(args, deps)`, which returns the
+exit code. `Deps` holds the environment, the token store, the browser and the two output streams, so tests pass an
+in-memory store, a browser that answers the consent page itself, and buffers. Shared flags (`--json`, `--quiet`,
+`--server`) are one struct flattened into every command; `--heap` is a second one, flattened only into the commands
+that work in a heap (`item list` for now), so it doesn't show where it would mean nothing.
 
 **API types.** The CLI must not hand-write the request and response types ([one source of
-truth](engineering-principles.md#general)). They live in `api` today, next to axum. The plan is to move the DTOs into a
-small `crates/api-types` crate (serde and utoipa only) that both `api` and `cli` use. That's a refactor with no
-behaviour change, so it's its own pull request before the CLI. Generating a Rust client from `openapi.json` was the
+truth](engineering-principles.md#general)). They are in `crates/api-types`, which both `api` and `cli` use. It has no IO
+and depends on nothing in the workspace but `domain`, so it keeps the conversions between the types and domain types; conversions from the
+service layer's views stay in `api` as plain functions. The move was a refactor with no behaviour change, its own
+commit before the CLI's.
+
+**Values a later server adds.** Adding a value is an additive change ([engineering
+principles](engineering-principles.md#api), 3), so a CLI built before it must still read the response. The
+`allowed_actions` lists of every response type skip values the client doesn't know (`deserialize_with`), and
+`Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant marked
+`#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent. The CLI prints the
+contributor's `label`, so an unknown factor reads as the server wrote it. Values the server reads in requests stay
+strict: `Need`, `Size`, `ItemState`, `Role`, and the list view's `StateMode`, `BlockedLayout` and `ListSort`, which saved
+views share with the list query. A new sort or state mode in a saved view would still stop an older CLI reading the
+heap's views; that's left for when it happens, as making it lenient would need a second type. Generating a Rust client from `openapi.json` was the
 alternative; the common generators target OpenAPI 3.0 and utoipa writes 3.1, and sharing the types the spec is
 generated from is simpler anyway.
 
-Libraries: `clap` (derive), `reqwest` with rustls, `tokio`, `serde`, `confique` for the config file, `keyring`,
-`owo-colors`, `tracing` to a logfile. All are boring and widely used.
+Libraries: `clap` (derive), `reqwest` with rustls (ring, as the server's database drivers use), `tokio`, `serde`,
+`toml` for the config file, `keyring`, `webbrowser`, `owo-colors`, `tracing` to a logfile. All are boring and widely used.
 
 ## Server changes
 
@@ -247,9 +322,10 @@ Everything else uses endpoints the web app uses today.
 ## Testing
 
 1. Lookup (heap handles, due choices, tag names) is plain functions over plain values, unit tested.
-2. Integration tests in `crates/cli/tests` run each command against the real API router on in-memory SQLite, the same
-   way the API suite does, and check stdout, stderr and the exit code. They sign in through a test-only token, not the
-   browser flow.
+2. Integration tests in `crates/cli/tests` run each command against the real API router on in-memory SQLite, served
+   on a localhost port, and check stdout, stderr and the exit code. They sign in through the real OAuth endpoints:
+   most seed the token store with a code they approved and exchanged, and the login tests run `upheap auth login`
+   with a browser that answers the consent page.
 3. The OAuth flow is tested in the API suite, where it lives. The CLI's half (loopback listener, PKCE verifier) gets a
    unit test with a fake authorization server.
 

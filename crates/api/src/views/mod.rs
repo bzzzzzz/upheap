@@ -1,25 +1,25 @@
 //! A heap's saved views: listing them, saving one, changing it and archiving it. Views are never deleted.
 
+use api_types::common::HeapSummaryDto;
+use api_types::list_view::ListViewDto;
+use api_types::views::{CreateSavedViewDto, SavedViewDto, SavedViewListDto, SavedViewPatchDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::parameter::ParameterError;
-use domain::permission::{SavedViewAction, SavedViewListAction};
-use domain::saved_view::{NewSavedView, SavedViewPatch};
+use domain::saved_view::NewSavedView;
 use domain::text::Name;
 use domain::{SavedViewId, ValidationError};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use service::ServiceError;
 use service::saved_views::SavedViewEntry;
-use utoipa::ToSchema;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
-use crate::dto::{HeapSummaryDto, IfMatchHeader};
+use crate::dto::IfMatchHeader;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, IfMatch};
-use crate::list_view::{ListViewDto, ListViewInputDto};
 use crate::paths::{HeapParams, HeapPath};
 use crate::{ApiError, AppState};
 
@@ -36,99 +36,18 @@ struct ViewPathId {
     view_id: Uuid,
 }
 
-/// An action the caller can take on a saved view.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = SavedViewAction)]
-pub(crate) enum SavedViewActionDto {
-    Edit,
-    Archive,
-}
-
-impl From<SavedViewAction> for SavedViewActionDto {
-    fn from(action: SavedViewAction) -> Self {
-        match action {
-            SavedViewAction::Edit => Self::Edit,
-            SavedViewAction::Archive => Self::Archive,
-        }
+fn to_saved_view_dto(entry: SavedViewEntry) -> SavedViewDto {
+    let view = entry.view;
+    SavedViewDto {
+        id: *view.id.as_uuid(),
+        heap_id: *view.heap_id.as_uuid(),
+        name: view.name.as_str().to_owned(),
+        view: ListViewDto::from(&view.list_view),
+        created_by: *view.created_by.as_uuid(),
+        archived_at: view.archived_at.map(|t| t.as_millis()),
+        version: view.version.get(),
+        allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
     }
-}
-
-/// An action the caller can take on a heap's saved views.
-#[derive(Clone, Copy, Debug, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-#[schema(as = SavedViewListAction)]
-pub(crate) enum SavedViewListActionDto {
-    Create,
-}
-
-impl From<SavedViewListAction> for SavedViewListActionDto {
-    fn from(action: SavedViewListAction) -> Self {
-        match action {
-            SavedViewListAction::Create => Self::Create,
-        }
-    }
-}
-
-#[derive(Serialize, ToSchema)]
-#[schema(as = SavedView)]
-pub(crate) struct SavedViewDto {
-    pub id: Uuid,
-    pub heap_id: Uuid,
-    pub name: String,
-    /// What the view shows. The fields are the query parameters of `GET /teams/{team}/heaps/{heap}/items`.
-    pub view: ListViewDto,
-    pub created_by: Uuid,
-    /// When the view was archived (UTC milliseconds); `null` while it is in use.
-    pub archived_at: Option<i64>,
-    /// Send back in `If-Match` when editing.
-    pub version: u32,
-    pub allowed_actions: Vec<SavedViewActionDto>,
-}
-
-impl From<SavedViewEntry> for SavedViewDto {
-    fn from(entry: SavedViewEntry) -> Self {
-        let view = entry.view;
-        Self {
-            id: *view.id.as_uuid(),
-            heap_id: *view.heap_id.as_uuid(),
-            name: view.name.as_str().to_owned(),
-            view: ListViewDto::from(&view.list_view),
-            created_by: *view.created_by.as_uuid(),
-            archived_at: view.archived_at.map(|t| t.as_millis()),
-            version: view.version.get(),
-            allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-#[derive(Serialize, ToSchema)]
-#[schema(as = SavedViewList)]
-pub(crate) struct SavedViewListDto {
-    pub heap: HeapSummaryDto,
-    /// The views in use, by name. Archived views are left out.
-    pub views: Vec<SavedViewDto>,
-    pub allowed_actions: Vec<SavedViewListActionDto>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = CreateSavedViewRequest)]
-pub(crate) struct CreateSavedViewDto {
-    /// 1 to 100 characters. Need not be unique.
-    pub name: String,
-    #[serde(default)]
-    pub view: ListViewInputDto,
-}
-
-/// A partial edit. Leave a field out to keep it; a `view` replaces the whole view, with defaults for what it leaves
-/// out.
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = SavedViewPatchRequest)]
-pub(crate) struct SavedViewPatchDto {
-    pub name: Option<String>,
-    pub view: Option<ListViewInputDto>,
 }
 
 /// The heap's saved views that are in use, by name.
@@ -142,7 +61,7 @@ async fn list_views(State(state): State<AppState>, path: HeapPath) -> Result<Jso
         .await?;
     Ok(Json(SavedViewListDto {
         heap: HeapSummaryDto::from(&list.heap),
-        views: list.views.into_iter().map(SavedViewDto::from).collect(),
+        views: list.views.into_iter().map(to_saved_view_dto).collect(),
         allowed_actions: list.allowed_actions.into_iter().map(Into::into).collect(),
     }))
 }
@@ -170,7 +89,7 @@ async fn create_view(
         .create_saved_view(path.principal, path.heap.heap_id, fields)
         .await
         .map_err(name_view_field)?;
-    Ok((StatusCode::CREATED, Json(SavedViewDto::from(entry))))
+    Ok((StatusCode::CREATED, Json(to_saved_view_dto(entry))))
 }
 
 /// Renames a saved view or replaces what it shows. Send the view's `version` in `If-Match`.
@@ -190,7 +109,7 @@ async fn update_view(
     ApiPath(ViewPathId { view_id }): ApiPath<ViewPathId>,
     ApiJson(body): ApiJson<SavedViewPatchDto>,
 ) -> Result<Json<SavedViewDto>, ApiError> {
-    let patch = to_patch(&body).map_err(|e| name_view_field(e.into()))?;
+    let patch = body.to_patch().map_err(|e| name_view_field(e.into()))?;
     let entry = state
         .services
         .update_saved_view(
@@ -202,7 +121,7 @@ async fn update_view(
         )
         .await
         .map_err(name_view_field)?;
-    Ok(Json(SavedViewDto::from(entry)))
+    Ok(Json(to_saved_view_dto(entry)))
 }
 
 /// Archives a saved view, which takes it out of the heap's list. Archiving an archived view succeeds.
@@ -222,14 +141,7 @@ async fn archive_view(
         .services
         .archive_saved_view(path.principal, path.heap.heap_id, SavedViewId::from_uuid(view_id))
         .await?;
-    Ok(Json(SavedViewDto::from(entry)))
-}
-
-fn to_patch(body: &SavedViewPatchDto) -> Result<SavedViewPatch, ValidationError> {
-    Ok(SavedViewPatch {
-        name: body.name.as_deref().map(Name::parse).transpose()?,
-        list_view: body.view.as_ref().map(ListViewInputDto::to_view).transpose()?,
-    })
+    Ok(Json(to_saved_view_dto(entry)))
 }
 
 /// Names the field of `view` an error comes from: a foreign or excess tag from its tag filter, a foreign or excess

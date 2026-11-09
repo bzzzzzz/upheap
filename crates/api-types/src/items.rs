@@ -1,0 +1,337 @@
+//! The ranked list, closed items, and adding and editing items.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
+use domain::list_view::ListView;
+use domain::tag::parse_tag_set;
+use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
+use jiff::tz::TimeZone;
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+
+use crate::common::{
+    DueInputDto, HeapSummaryDto, ItemDto, NeedDto, RankedItemDto, SizeDto, StateDto, double_option, never_null,
+    non_null,
+};
+use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
+
+/// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
+/// pinned, open items shown, blocked items hidden, by priority.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct RankedQuery {
+    /// The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time.
+    pub as_of: Option<i64>,
+    /// Where open items go. Defaults to `shown`.
+    pub open: Option<StateModeDto>,
+    /// Where in-progress items go. Defaults to `pinned`.
+    pub in_progress: Option<StateModeDto>,
+    /// Where blocked items go. Defaults to `hidden`.
+    pub blocked: Option<StateModeDto>,
+    /// Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.
+    pub blocked_layout: Option<BlockedLayoutDto>,
+    /// What each group is sorted by. Ties keep priority order. Defaults to `priority`.
+    pub sort: Option<SortDto>,
+    /// The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`.
+    pub sort_parameter: Option<Uuid>,
+    /// Keep items with any of these tags, comma-separated. Tags of the same heap.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub tag: Vec<Uuid>,
+    /// Keep items with any of these efforts, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub effort: Vec<SizeDto>,
+    /// Keep items with any of these impacts, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub impact: Vec<SizeDto>,
+    /// Keep items with any of these needs, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<NeedDto>>, style = Form, explode = false)]
+    pub need: Vec<NeedDto>,
+    /// Options of the same heap's parameters, comma-separated. For each parameter they belong to, keep items with
+    /// any of its options listed. An archived option keeps the items that switched to its replacement.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub param: Vec<Uuid>,
+}
+
+impl RankedQuery {
+    /// The view the query asks for, with defaults for what it leaves out. Fails when `sort_parameter` doesn't go
+    /// with `sort`.
+    pub fn to_view(&self) -> Result<ListView, ValidationError> {
+        ListViewInputDto {
+            open: self.open,
+            in_progress: self.in_progress,
+            blocked: self.blocked,
+            blocked_layout: self.blocked_layout,
+            sort: self.sort,
+            sort_parameter: self.sort_parameter,
+            tag: self.tag.clone(),
+            effort: self.effort.clone(),
+            impact: self.impact.clone(),
+            need: self.need.clone(),
+            param: self.param.clone(),
+        }
+        .to_view()
+    }
+}
+
+/// A comma-separated query value, such as `tag=a,b`. An empty value is an empty list.
+fn comma_separated<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let raw = String::deserialize(deserializer)?;
+    raw.split(',')
+        .filter(|part| !part.is_empty())
+        .map(|part| T::deserialize(part.to_owned().into_deserializer()))
+        .collect()
+}
+
+/// The other way from [`comma_separated`]: `[a, b]` as `a,b`. Every value must serialize as a string, as enums of
+/// unit variants and UUIDs do.
+fn comma_joined<S, T>(values: &[T], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    let parts = values
+        .iter()
+        .map(|value| match serde_json::to_value(value) {
+            Ok(serde_json::Value::String(part)) => Ok(part),
+            _ => Err(serde::ser::Error::custom("a comma-separated value must be a string")),
+        })
+        .collect::<Result<Vec<_>, S::Error>>()?;
+    serializer.serialize_str(&parts.join(","))
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = RankedList)]
+pub struct RankedListDto {
+    pub heap: HeapSummaryDto,
+    /// The time the ranking used (UTC milliseconds). Send it back as `as_of` to keep the order stable.
+    pub as_of: i64,
+    /// Items in pinned states (in progress by default), above the rest.
+    pub pinned: Vec<RankedItemDto>,
+    /// Items in shown states, including blocked items when they're mixed in.
+    pub ranked: Vec<RankedItemDto>,
+    /// Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden.
+    pub blocked: Vec<RankedItemDto>,
+    /// How many items the filters keep but are left out because their state is hidden.
+    pub hidden_count: u32,
+    /// How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the "14" in
+    /// "6 of 14". Hidden states still leave theirs out.
+    pub unfiltered_count: u32,
+    /// How many of the heap's items are in progress, whatever the view and its filters leave out.
+    pub in_progress_count: u32,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct ClosedQuery {
+    /// `next_cursor` from the previous page.
+    pub cursor: Option<String>,
+    /// Page size, 1 to 200. Defaults to 50.
+    pub limit: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ClosedItems)]
+pub struct ClosedItemsDto {
+    pub heap: HeapSummaryDto,
+    /// Most recently closed first.
+    pub items: Vec<ItemDto>,
+    /// Pass as `cursor` for the next page; `null` on the last page.
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[schema(as = CreateItemRequest)]
+pub struct CreateItemDto {
+    pub title: String,
+    pub description: Option<String>,
+    /// Required: every item says how much it's needed.
+    pub need: NeedDto,
+    pub effort: Option<SizeDto>,
+    pub impact: Option<SizeDto>,
+    pub due: Option<DueInputDto>,
+    /// Tags of the same heap, at most 50.
+    pub tag_ids: Option<Vec<Uuid>>,
+    /// An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use.
+    pub parameter_values: Option<BTreeMap<Uuid, Uuid>>,
+}
+
+impl CreateItemDto {
+    /// The new item's fields, with due dates read in `tz`. Fails on the first invalid field.
+    pub fn to_new_item(&self, tz: &TimeZone) -> Result<NewItem, ValidationError> {
+        Ok(NewItem {
+            title: Title::parse(&self.title)?,
+            description: self
+                .description
+                .as_deref()
+                .map(Description::parse)
+                .transpose()?
+                .flatten(),
+            need: self.need.into(),
+            effort: self.effort.map(Into::into),
+            impact: self.impact.map(Into::into),
+            due: self.due.as_ref().map(|due| due.to_due(tz)).transpose()?,
+            tags: to_tag_set(self.tag_ids.as_deref().unwrap_or_default())?,
+            parameters: self
+                .parameter_values
+                .iter()
+                .flatten()
+                .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), OptionId::from_uuid(*option)))
+                .collect(),
+        })
+    }
+}
+
+/// A partial edit. Leave a field out to keep it; send `null` to clear it.
+#[derive(Deserialize, ToSchema)]
+#[schema(as = ItemPatchRequest)]
+pub struct ItemPatchDto {
+    pub title: Option<String>,
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<String>, nullable)]
+    pub description: Option<Option<String>>,
+    /// Need can be changed but not cleared; `null` is refused.
+    #[serde(default, deserialize_with = "never_null")]
+    #[schema(value_type = NeedDto, required = false)]
+    pub need: Option<NeedDto>,
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<SizeDto>, nullable)]
+    pub effort: Option<Option<SizeDto>>,
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<SizeDto>, nullable)]
+    pub impact: Option<Option<SizeDto>>,
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<DueInputDto>, nullable)]
+    pub due: Option<Option<DueInputDto>>,
+    /// Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused.
+    #[serde(default, deserialize_with = "non_null")]
+    #[schema(value_type = Vec<Uuid>, required = false)]
+    pub tag_ids: Option<Vec<Uuid>>,
+    /// Values to change, by parameter ID: an option in use to set, or `null` to clear. Parameters left out keep
+    /// their values.
+    #[serde(default, deserialize_with = "non_null")]
+    #[schema(value_type = BTreeMap<Uuid, Option<Uuid>>, required = false)]
+    pub parameter_values: Option<BTreeMap<Uuid, Option<Uuid>>>,
+    pub state: Option<StateDto>,
+    /// The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send
+    /// it with `"state": "blocked"` unless the item is blocked already. `null` clears it. Leaving the blocked state
+    /// clears it too.
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<Uuid>, nullable)]
+    pub blocked_by_item_id: Option<Option<Uuid>>,
+}
+
+impl ItemPatchDto {
+    /// The edit, with due dates read in `tz`. Fails on the first invalid field.
+    pub fn to_patch(&self, tz: &TimeZone) -> Result<ItemPatch, ValidationError> {
+        Ok(ItemPatch {
+            title: self.title.as_deref().map(Title::parse).transpose()?,
+            description: match &self.description {
+                None => None,
+                Some(None) => Some(None),
+                Some(Some(raw)) => Some(Description::parse(raw)?),
+            },
+            need: self.need.map(Into::into),
+            effort: self.effort.map(|e| e.map(Into::into)),
+            impact: self.impact.map(|i| i.map(Into::into)),
+            due: match &self.due {
+                None => None,
+                Some(None) => Some(None),
+                Some(Some(due)) => Some(Some(due.to_due(tz)?)),
+            },
+            tags: self.tag_ids.as_deref().map(to_tag_set).transpose()?,
+            parameters: self
+                .parameter_values
+                .iter()
+                .flatten()
+                .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), option.map(OptionId::from_uuid)))
+                .collect(),
+            state: self.state.map(StateKind::from),
+            blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
+        })
+    }
+}
+
+fn to_tag_set(ids: &[Uuid]) -> Result<BTreeSet<TagId>, ValidationError> {
+    parse_tag_set(ids.iter().copied().map(TagId::from_uuid))
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn ranked_query_writes_lists_comma_separated_and_leaves_out_what_is_unset() -> googletest::Result<()> {
+        // Arrange
+        let query = RankedQuery {
+            blocked: Some(StateModeDto::Shown),
+            effort: vec![SizeDto::S, SizeDto::Xl],
+            need: vec![NeedDto::NiceToHave],
+            ..RankedQuery::default()
+        };
+
+        // Act
+        let encoded = serde_urlencoded::to_string(&query)?;
+
+        // Assert
+        verify_that!(encoded, eq("blocked=shown&effort=s%2Cxl&need=nice_to_have"))
+    }
+
+    #[gtest]
+    fn ranked_query_reads_back_what_it_writes() -> googletest::Result<()> {
+        // Arrange
+        let tag = Uuid::from_u128(7);
+        let query = RankedQuery {
+            sort: Some(SortDto::Due),
+            tag: vec![tag],
+            impact: vec![SizeDto::M, SizeDto::L],
+            ..RankedQuery::default()
+        };
+
+        // Act
+        let read: RankedQuery = serde_urlencoded::from_str(&serde_urlencoded::to_string(&query)?)?;
+
+        // Assert
+        verify_that!(read.sort, some(eq(SortDto::Due)))?;
+        verify_that!(read.tag, elements_are![eq(&tag)])?;
+        verify_that!(read.impact, elements_are![eq(&SizeDto::M), eq(&SizeDto::L)])
+    }
+}
