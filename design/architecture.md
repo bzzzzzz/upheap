@@ -83,7 +83,8 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **Insert-only tables:** the application can only insert into `audit_log`. There is no update or delete code path
   for it.
 - **The heap's ranking policy** is its row: the need, age, deadline and value weights on `heaps`, plus each
-  parameter's weight. Effort, impact and need are columns on `items` rather than custom parameters, because they are
+  parameter's weight. The weights change together through one endpoint, in one transaction under the heap lock.
+  Effort, impact and need are columns on `items` rather than custom parameters, because they are
   fixed and apply to every heap ([decisions.md](decisions.md#6-effort-impact-and-need-are-item-columns-not-custom-parameters)).
 - **A user's username is the slug of their personal team**, so usernames and team slugs share one namespace under
   one unique index. The personal team can't take members, and its slug never changes.
@@ -170,6 +171,9 @@ blocking edges, and an `as_of` time go in; positions and contributors come out. 
    days", "Blocks *Migrate auth*"). Scores themselves are never returned.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
+
+A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and returns the top of
+the default view's ranked group with each item's position under both. It stores nothing.
 
 ### Session-stable order
 

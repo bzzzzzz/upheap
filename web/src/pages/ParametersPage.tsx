@@ -16,7 +16,15 @@ import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
-import { cardClass, cardTitleClass, inputClass, introClass, labelClass, nameFormClasses } from "./settingsForm";
+import {
+  cardClass,
+  cardTitleClass,
+  clampWeight,
+  inputClass,
+  introClass,
+  labelClass,
+  nameFormClasses,
+} from "./settingsForm";
 
 const problemClass = "text-overdue-ink";
 /** An option's place in the list, in the parameter colour. */
@@ -193,7 +201,7 @@ function WeightInput({ value, onChange, label }: { value: number; onChange: (val
         max={100}
         aria-label={label}
         value={value}
-        onChange={(e) => onChange(Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))))}
+        onChange={(e) => onChange(clampWeight(e.target.value))}
         className={`${inputClass} w-20 font-normal`}
       />
     </label>

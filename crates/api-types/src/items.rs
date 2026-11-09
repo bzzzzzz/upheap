@@ -13,8 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::common::{
-    DueInputDto, HeapSummaryDto, ItemDto, NeedDto, RankedItemDto, SizeDto, StateDto, double_option, never_null,
-    non_null,
+    DueInputDto, HeapSummaryDto, ItemDto, ItemRefDto, NeedDto, RankedItemDto, SizeDto, StateDto, double_option,
+    never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
 
@@ -391,4 +391,62 @@ mod tests {
         verify_that!(read.tag, elements_are![eq(&tag)])?;
         verify_that!(read.impact, elements_are![eq(&SizeDto::M), eq(&SizeDto::L)])
     }
+}
+
+/// Weights to rank the heap with, without saving them. Leave a weight out to keep its stored value.
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = RankingPreviewRequest)]
+pub struct RankingPreviewRequestDto {
+    /// 0 to 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub need: Option<i64>,
+    /// 0 to 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub age: Option<i64>,
+    /// 0 to 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub deadline: Option<i64>,
+    /// 0 to 100. Value per effort.
+    #[schema(minimum = 0, maximum = 100)]
+    pub value: Option<i64>,
+    /// Parameters of the heap in use to give another weight, each listed once.
+    #[serde(default)]
+    pub parameters: Vec<ParameterWeightDraftDto>,
+    /// How many items to list, 1 to 20. Defaults to 5.
+    #[schema(minimum = 1, maximum = 20)]
+    pub limit: Option<i64>,
+}
+
+/// A draft weight for one parameter.
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ParameterWeightDraft)]
+pub struct ParameterWeightDraftDto {
+    pub id: Uuid,
+    /// 0 to 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub weight: i64,
+}
+
+/// The top of the list under draft weights. Nothing is saved.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = RankingPreview)]
+pub struct RankingPreviewDto {
+    /// The time both rankings used (UTC milliseconds).
+    pub as_of: i64,
+    /// The first items of the ranked group (what `GET …/items` lists under `ranked` with the default view) under
+    /// the draft weights, in order.
+    pub items: Vec<RankingPreviewItemDto>,
+}
+
+/// An item near the top of the list under draft weights.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = RankingPreviewItem)]
+pub struct RankingPreviewItemDto {
+    pub item: ItemRefDto,
+    /// 1-based position under the draft weights.
+    pub position: u32,
+    /// 1-based position of the same item in the same group under the stored weights.
+    pub current_position: u32,
 }

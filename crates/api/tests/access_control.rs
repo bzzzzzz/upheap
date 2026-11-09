@@ -88,6 +88,10 @@ enum RequestBody {
     NewView,
     /// A team, heap or saved view name.
     Name,
+    /// A new need weight for the heap.
+    Weights,
+    /// A ranking preview with the stored weights.
+    RankingPreview,
     /// A parameter name no other request used, since names are unique per heap.
     NewParameter,
     /// A label for a new option.
@@ -330,6 +334,23 @@ fn endpoints() -> Vec<Endpoint> {
             manage_heap(true),
             Target::HeapVersion,
             RequestBody::Name,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/heaps/{heap}/weights",
+            configure,
+            Target::HeapVersion,
+            RequestBody::Weights,
+            StatusCode::OK,
+        ),
+        // A read that carries a body, so it works on an archived heap too.
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/ranking/preview",
+            view,
+            Target::Heap,
+            RequestBody::RankingPreview,
             StatusCode::OK,
         ),
         // Archiving and unarchiving say what the heap should end up as, so they succeed on an archived heap too.
@@ -857,6 +878,8 @@ impl World {
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
             RequestBody::Name => Some(json!({ "name": self.unique_name("name") })),
+            RequestBody::Weights => Some(json!({ "need": 11 })),
+            RequestBody::RankingPreview => Some(json!({})),
             RequestBody::AddMember => Some(json!({ "user_id": user })),
             RequestBody::Promote => Some(json!({ "role": "admin" })),
             RequestBody::DisplayName => Some(json!({ "display_name": self.unique_name("Name") })),

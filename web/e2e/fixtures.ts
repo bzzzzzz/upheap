@@ -192,15 +192,16 @@ export async function addItem(
   if (listed) await expect(row(page, title)).toBeVisible();
 }
 
-/** A page the app's navigation leads to. Tags and Parameters are tabs of the heap's Settings. */
-export type AppPage = "Open" | "Closed" | "Activity" | "Settings" | "Tags" | "Parameters" | "Account";
+/** A page the app's navigation leads to. Tags, Parameters and Ranking are tabs of the heap's Settings. */
+export type AppPage = "Open" | "Closed" | "Activity" | "Settings" | "Tags" | "Parameters" | "Ranking" | "Account";
 
 /**
  * Goes to one of the app's pages through its navigation, wherever the layout puts it: the sidebar on a wide screen,
- * the rail on a tablet, and on a phone the bottom tabs or their More menu. Tags and Parameters go through Settings.
+ * the rail on a tablet, and on a phone the bottom tabs or their More menu. Tags, Parameters and Ranking go through
+ * Settings.
  */
 export async function goTo(page: Page, name: AppPage) {
-  if (name === "Tags" || name === "Parameters") {
+  if (name === "Tags" || name === "Parameters" || name === "Ranking") {
     const tab = page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name, exact: true });
     if (!(await tab.isVisible())) await goTo(page, "Settings");
     await tab.click();

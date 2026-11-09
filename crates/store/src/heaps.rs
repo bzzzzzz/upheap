@@ -2,6 +2,7 @@
 
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
+use domain::parameter::Weight;
 use domain::text::Name;
 use domain::{HeapId, TeamId, Timestamp, Version};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -21,10 +22,10 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
         team_id: Set(id_to_db(heap.team_id.as_uuid())),
         slug: Set(heap.slug.as_str().to_owned()),
         name: Set(heap.name.as_str().to_owned()),
-        need_weight: Set(i32::from(heap.policy.need_weight)),
-        age_weight: Set(i32::from(heap.policy.age_weight)),
-        deadline_weight: Set(i32::from(heap.policy.deadline_weight)),
-        value_weight: Set(i32::from(heap.policy.value_weight)),
+        need_weight: Set(weight_to_db(heap.policy.need_weight)),
+        age_weight: Set(weight_to_db(heap.policy.age_weight)),
+        deadline_weight: Set(weight_to_db(heap.policy.deadline_weight)),
+        value_weight: Set(weight_to_db(heap.policy.value_weight)),
         created_at: Set(created_at.as_millis()),
         archived_at: Set(heap.archived_at.map(Timestamp::as_millis)),
     };
@@ -85,10 +86,10 @@ pub async fn update_heap(
     let row = heaps::ActiveModel {
         slug: Set(saved.slug.as_str().to_owned()),
         name: Set(saved.name.as_str().to_owned()),
-        need_weight: Set(i32::from(saved.policy.need_weight)),
-        age_weight: Set(i32::from(saved.policy.age_weight)),
-        deadline_weight: Set(i32::from(saved.policy.deadline_weight)),
-        value_weight: Set(i32::from(saved.policy.value_weight)),
+        need_weight: Set(weight_to_db(saved.policy.need_weight)),
+        age_weight: Set(weight_to_db(saved.policy.age_weight)),
+        deadline_weight: Set(weight_to_db(saved.policy.deadline_weight)),
+        value_weight: Set(weight_to_db(saved.policy.value_weight)),
         archived_at: Set(saved.archived_at.map(Timestamp::as_millis)),
         version: Set(version_to_db(saved.version, TABLE, &id)?),
         ..Default::default()
@@ -134,4 +135,8 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,
     })
+}
+
+fn weight_to_db(weight: Weight) -> i32 {
+    i32::from(weight.get())
 }

@@ -376,3 +376,18 @@ the team, for clients that use them (the CLI's `--view`).
 
 **Consequences.** One place shapes the list. When saved views return, "Save as view…" goes in the Filters panel,
 where the user finishes shaping the list.
+
+## 28. Weights are saved together as one policy
+
+**Context.** The heap's weights and each parameter's weight live on different rows, each with its own version, but
+the weights only mean something next to each other: a factor's share is its weight out of the total.
+
+**Decision.** One endpoint saves them all in one transaction, under the heap lock. The heap's version orders these
+saves, moving on also when one changes only parameter weights, and each parameter's version is checked too.
+
+**Instead of.** Separate PATCHes per row, which can leave the policy half-saved.
+
+**Consequences.** A rename elsewhere conflicts with a weights save, and the client saves again after refetching. The
+parameter PATCH still sets a weight alone, from the Parameters tab, guarded by the parameter's version only: it
+doesn't move the heap's version, so a weights save made meanwhile against other parameters still succeeds. Making
+every parameter edit move the heap's version would close that gap but make renames conflict with parameter edits.

@@ -52,7 +52,7 @@ async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
     expect_that!(detail.body["members"][0]["allowed_actions"], eq(&json!([])));
     expect_that!(
         detail.body["heaps"][0]["allowed_actions"],
-        eq(&json!(["rename", "archive", "view_history"]))
+        eq(&json!(["rename", "archive", "edit_weights", "view_history"]))
     );
     Ok(())
 }

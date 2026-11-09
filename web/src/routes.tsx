@@ -26,6 +26,7 @@ import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
 import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { ParametersPage } from "./pages/ParametersPage";
+import { HeapRankingSettings } from "./pages/RankingPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TeamsPage } from "./pages/TeamsPage";
@@ -309,6 +310,15 @@ const parametersRoute = createRoute({
   },
 });
 
+const rankingRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "ranking",
+  component: function RankingRoute() {
+    const { team, heap } = rankingRoute.useParams();
+    return <HeapRankingSettings heap={{ team, heap }} />;
+  },
+});
+
 // Tags and Parameters were the heap's own pages before they became tabs of its settings; links to them still work.
 const oldTagsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -404,7 +414,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     heapRoute.addChildren([itemRoute]),
     closedRoute,
-    heapSettingsRoute.addChildren([heapGeneralSettingsRoute, tagsRoute, parametersRoute]),
+    heapSettingsRoute.addChildren([heapGeneralSettingsRoute, tagsRoute, parametersRoute, rankingRoute]),
     oldTagsRoute,
     oldParametersRoute,
     heapActivityRoute,

@@ -16,7 +16,7 @@ const tabClass =
   "-mb-px flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-medium text-ink-soft hover:text-ink data-[status=active]:border-accent data-[status=active]:text-ink";
 
 /**
- * The heap's settings (ux.md, Heap settings): General (name, link name, archive), Tags and Parameters, each a tab
+ * The heap's settings (ux.md, Heap settings): General (name, link name, archive), Tags, Parameters and Ranking, each a tab
  * with its own path under `/settings`. The tab's page renders below them.
  */
 export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
@@ -40,6 +40,9 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
         </Link>
         <Link to="/teams/$team/heaps/$heap/settings/parameters" params={heapRef} className={tabClass}>
           Parameters
+        </Link>
+        <Link to="/teams/$team/heaps/$heap/settings/ranking" params={heapRef} className={tabClass}>
+          Ranking
         </Link>
       </nav>
       <Outlet />

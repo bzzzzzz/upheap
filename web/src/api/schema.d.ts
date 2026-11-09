@@ -479,6 +479,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/ranking/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ranks the heap's items with draft weights and returns the top of the ranked group, each with its position now.
+         *     Nothing is saved and no audit entry is made; this is a `POST` only because it carries a body. Any member may ask,
+         *     and an archived heap can be previewed. Weights left out keep their stored values.
+         */
+        post: operations["preview_ranking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/tags": {
         parameters: {
             query?: never;
@@ -581,6 +602,28 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Sets the heap's weights and its parameters' weights in one transaction. Admins only; send the heap's `version` in
+         *     `If-Match`. The heap's version orders saves through here, even those that change only parameter weights, and
+         *     each listed parameter's `version` is checked too. A parameter's own edits are guarded by its version alone. Weights equal to the stored ones are skipped, and a request that changes
+         *     nothing succeeds. Any error saves nothing.
+         */
+        patch: operations["update_weights"];
         trace?: never;
     };
     "/api/v1/teams/{team}/leave": {
@@ -902,15 +945,17 @@ export interface components {
             team_id: string;
             /**
              * Format: int32
-             * @description Send back in `If-Match` when renaming.
+             * @description Send back in `If-Match` when renaming or changing weights.
              */
             version: number;
+            /** @description The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`. */
+            weights: components["schemas"]["HeapWeights"];
         };
         /**
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive" | "view_history";
+        HeapAction: "rename" | "archive" | "unarchive" | "edit_weights" | "view_history";
         /** @description A heap of one of the caller's teams, with how many items it has open. */
         HeapOverview: components["schemas"]["HeapSummary"] & {
             /**
@@ -939,6 +984,66 @@ export interface components {
             slug: string;
             /** Format: uuid */
             team_id: string;
+        };
+        /**
+         * @description How much each of the heap's own ranking factors counts. A factor's share is its weight out of the total of all
+         *     weights, parameters' included; `0` turns the factor off.
+         */
+        HeapWeights: {
+            /**
+             * Format: int32
+             * @description 0 to 100. The weight of how long an item has waited.
+             */
+            age: number;
+            /**
+             * Format: int32
+             * @description 0 to 100. The weight of the due date.
+             */
+            deadline: number;
+            /**
+             * Format: int32
+             * @description 0 to 100. The weight of need.
+             */
+            need: number;
+            /**
+             * Format: int32
+             * @description 0 to 100. The weight of value per effort: effort and impact count together as one factor.
+             */
+            value: number;
+        };
+        /** @description New weights for the heap and its parameters, saved together. Leave a weight out to keep it. */
+        HeapWeightsPatchRequest: {
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            age?: number | null;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            deadline?: number | null;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            need?: number | null;
+            /** @description Parameters of the heap in use whose weight changes, each listed once. */
+            parameters?: components["schemas"]["ParameterWeightChange"][];
+            /**
+             * Format: int64
+             * @description 0 to 100. Value per effort.
+             */
+            value?: number | null;
+        };
+        /** @description The heap and its parameters in use after a weights save. */
+        HeapWeightsResult: {
+            heap: components["schemas"]["Heap"];
+            /**
+             * @description The heap's parameters in use, by name, with their new versions: what `GET …/parameters` lists as
+             *     `parameters`.
+             */
+            parameters: components["schemas"]["Parameter"][];
         };
         Item: {
             allowed_actions: components["schemas"]["ItemAction"][];
@@ -1296,6 +1401,31 @@ export interface components {
              */
             weight?: number | null;
         };
+        /** @description A new weight for one parameter, if it is still at `version`. */
+        ParameterWeightChange: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int32
+             * @description The parameter's `version` as the client last saw it.
+             */
+            version: number;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            weight: number;
+        };
+        /** @description A draft weight for one parameter. */
+        ParameterWeightDraft: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            weight: number;
+        };
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
             /** @description Stable machine-readable error code, for example `version_conflict`. */
@@ -1353,6 +1483,63 @@ export interface components {
              *     "6 of 14". Hidden states still leave theirs out.
              */
             unfiltered_count: number;
+        };
+        /** @description The top of the list under draft weights. Nothing is saved. */
+        RankingPreview: {
+            /**
+             * Format: int64
+             * @description The time both rankings used (UTC milliseconds).
+             */
+            as_of: number;
+            /**
+             * @description The first items of the ranked group (what `GET …/items` lists under `ranked` with the default view) under
+             *     the draft weights, in order.
+             */
+            items: components["schemas"]["RankingPreviewItem"][];
+        };
+        /** @description An item near the top of the list under draft weights. */
+        RankingPreviewItem: {
+            /**
+             * Format: int32
+             * @description 1-based position of the same item in the same group under the stored weights.
+             */
+            current_position: number;
+            item: components["schemas"]["ItemRef"];
+            /**
+             * Format: int32
+             * @description 1-based position under the draft weights.
+             */
+            position: number;
+        };
+        /** @description Weights to rank the heap with, without saving them. Leave a weight out to keep its stored value. */
+        RankingPreviewRequest: {
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            age?: number | null;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            deadline?: number | null;
+            /**
+             * Format: int64
+             * @description How many items to list, 1 to 20. Defaults to 5.
+             */
+            limit?: number | null;
+            /**
+             * Format: int64
+             * @description 0 to 100.
+             */
+            need?: number | null;
+            /** @description Parameters of the heap in use to give another weight, each listed once. */
+            parameters?: components["schemas"]["ParameterWeightDraft"][];
+            /**
+             * Format: int64
+             * @description 0 to 100. Value per effort.
+             */
+            value?: number | null;
         };
         RegisterRequest: {
             display_name: string;
@@ -3399,6 +3586,66 @@ export interface operations {
             };
         };
     };
+    preview_ranking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankingPreviewRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RankingPreview"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_tags: {
         parameters: {
             query?: never;
@@ -3824,6 +4071,86 @@ export interface operations {
             };
             /** @description `heap_archived` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_weights: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeapWeightsPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeapWeightsResult"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `heap_archived` or `parameter_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `weight_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };
