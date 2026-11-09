@@ -298,7 +298,7 @@ mod tests {
 
     use super::*;
 
-    #[test]
+    #[gtest]
     fn ranked_query_writes_lists_comma_separated_and_leaves_out_what_is_unset() -> googletest::Result<()> {
         // Arrange
         let query = RankedQuery {
@@ -315,7 +315,7 @@ mod tests {
         verify_that!(encoded, eq("blocked=shown&effort=s%2Cxl&need=nice_to_have"))
     }
 
-    #[test]
+    #[gtest]
     fn ranked_query_reads_back_what_it_writes() -> googletest::Result<()> {
         // Arrange
         let tag = Uuid::from_u128(7);

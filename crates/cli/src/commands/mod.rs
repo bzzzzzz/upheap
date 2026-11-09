@@ -1,0 +1,33 @@
+//! The commands, one module per category and one file per verb. Each file holds its args and its `run`, the flow
+//! that makes the calls and writes the output.
+
+pub mod auth;
+pub mod heap;
+pub mod item;
+
+use clap::Args;
+use serde::de::DeserializeOwned;
+
+/// The flags every command takes.
+#[derive(Args, Clone, Debug)]
+pub struct SharedArgs {
+    /// The heap to work in: team/heap, or a heap slug only one of your teams has. Beats UPHEAP_HEAP and the
+    /// default from `upheap heap use`
+    #[arg(long, value_name = "HEAP")]
+    pub heap: Option<String>,
+    /// Print the server's response body as it came, and a refusal's problem body on stderr
+    #[arg(long, conflicts_with = "quiet")]
+    pub json: bool,
+    /// Print only what a script needs next, such as item keys one per line
+    #[arg(long, short)]
+    pub quiet: bool,
+    /// The server's address, such as https://upheap.example.com. Beats UPHEAP_SERVER and the config file
+    #[arg(long, value_name = "URL")]
+    pub server: Option<String>,
+}
+
+/// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.
+pub fn parse_api_value<T: DeserializeOwned>(raw: &str) -> Result<T, String> {
+    T::deserialize(serde::de::value::StrDeserializer::<serde::de::value::Error>::new(raw))
+        .map_err(|err| err.to_string())
+}

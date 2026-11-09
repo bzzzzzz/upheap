@@ -12,6 +12,8 @@ web app, on SQLite or MySQL.
 - `crates/api-types`: the API's request and response types (serde + utoipa) and their conversions from domain types,
   shared by `api` and `cli`. No IO; depends only on `domain`.
 - `crates/api`: axum handlers, error mapping, OpenAPI (utoipa), conversions from service views to `api-types`.
+- `crates/cli`: the `upheap` command-line client (lib + thin bin), over HTTP with `api-types`. Never depends on `api`,
+  `service` or `store` outside its tests.
 - `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.
 
