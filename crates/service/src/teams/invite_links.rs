@@ -1,5 +1,6 @@
 //! A team's invite links: admins make them, list them and revoke them, and anyone holding one can open it and a
-//! signed-in user can join the team through it.
+//! signed-in user can join the team through it. A person without an account creates one through it, and joins in
+//! the same act, whether registration is open or closed.
 //!
 //! Making and revoking lock the team row first, like every team write (see `lock_team_for`), so two admins revoking
 //! the same link at once give one revocation and one no-op. A link ending by time is not an act and has no audit
@@ -9,7 +10,8 @@
 //! removal, so the removal is remembered by the team's `member_removed` audit entry for that person: the newest one
 //! is read when someone opens or joins through a link (architecture.md, Data model).
 //!
-//! Joining reads the link by its token before the transaction begins, only to learn which team to lock. On MySQL the
+//! Joining, and creating an account through a link, read the link by its token before the transaction begins, only
+//! to learn which team to lock. On MySQL the
 //! first plain read of a transaction fixes its snapshot, so reading the link inside the transaction before the team
 //! lock would hide a revocation that commits while the join waits for the lock (see `lock_team_for`). The link is
 //! read again after the lock, and that read decides.
@@ -31,7 +33,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 use super::manage::{MemberAdded, lock_team_for};
 use super::{TeamDetail, load_team_detail};
 use crate::access::authorize_team;
-use crate::auth::random_token;
+use crate::auth::{Registration, SessionGrant, parse_registration, random_token};
 use crate::{Principal, ServiceError, Services};
 
 /// An invite link as an admin of its team sees it.
@@ -137,47 +139,74 @@ impl Services {
         let (team_id, link_id) = (found.team_id, found.id);
 
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        // Not `lock_team_for`: the caller is not a member yet, so its membership check would refuse them.
-        let team = store::teams::lock_team(&txn, team_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
-        let members = store::teams::list_memberships(&txn, team_id).await?;
-        team.ensure_shared()?;
+        let (team, members, link) = lock_link_team(&txn, team_id, link_id).await?;
         if members.iter().any(|m| m.user_id == principal.user_id) {
             let detail = load_team_detail(&txn, principal, team).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
         }
 
-        // After the lock, so it sees a revocation committed before the lock was taken.
-        let link = store::invite_links::find_invite_link(&txn, team_id, link_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
         let now = self.now();
         let removed_at = last_removed_at(&txn, team_id, principal.user_id).await?;
         link.check_join(now, removed_at)?;
-
-        let membership = Membership {
-            team_id,
-            user_id: principal.user_id,
-            role: Role::Member,
-            joined_at: now,
-        };
-        store::teams::insert_membership(&txn, &membership).await?;
-        let entry = self.team_audit_entry(
-            principal,
-            team_id,
-            AuditAction::MemberJoined,
-            EntityType::InviteLink,
-            *link.id.as_uuid(),
-            json!({ "role": Role::Member.code() }),
-            now,
-        );
-        store::audit::insert_audit_entry(&txn, &entry).await?;
+        self.admit_through_link(&txn, principal, &link, now).await?;
         let detail = load_team_detail(&txn, principal, team).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, invite_link_id = %link.id, user_id = %principal.user_id, "joined through invite link");
         Ok((detail, MemberAdded::Added))
+    }
+
+    /// Creates an account through a link, and signs it in: the user, their personal team and heap, their password,
+    /// their membership in the link's team and the sign-in are made together or not at all. Works whether
+    /// registration is open or closed; the link is what lets the person in.
+    ///
+    /// Checks come in this order: the token, the input (as [`Services::register`] does), the link at this moment,
+    /// then whether the email and username are free. So a link that ended while the form was open says so, even if
+    /// the username was also taken. Fails with [`ServiceError::NotFound`] for an unknown token, and with
+    /// [`ServiceError::InviteLink`] when the link ended or was revoked. Returns the link's team as the new member
+    /// sees it.
+    pub async fn register_through_invite(
+        &self,
+        token: &InviteToken,
+        registration: Registration<'_>,
+    ) -> Result<(SessionGrant, TeamDetail), ServiceError> {
+        // Only to learn which team to lock: see the module doc.
+        let found = store::invite_links::find_invite_link_by_token(&self.db, token)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let (team_id, link_id) = (found.team_id, found.id);
+        let account = parse_registration(registration).await?;
+
+        let now = self.now();
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (team, _, link) = lock_link_team(&txn, team_id, link_id).await?;
+        // A new user has never been removed from any team. Before the user is made, so that an ended link wins over
+        // a taken username.
+        link.check_join(now, None)?;
+        let made = self
+            .insert_personal_user(
+                &txn,
+                account.email,
+                account.username,
+                account.display_name,
+                account.team_name,
+                now,
+            )
+            .await?;
+        store::users::insert_password(&txn, made.user.id, &account.password_hash, now).await?;
+        let principal = Principal { user_id: made.user.id };
+        self.admit_through_link(&txn, principal, &link, now).await?;
+        let grant = self.open_session(&txn, made.user, now).await?;
+        let detail = load_team_detail(&txn, principal, team).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            user_id = %grant.user.id,
+            %team_id,
+            invite_link_id = %link.id,
+            "user registered through invite link"
+        );
+        Ok((grant, detail))
     }
 
     /// Makes a link that works for a week. Admins only. Fails with [`domain::team::TeamError::PersonalTeam`] on a
@@ -279,6 +308,57 @@ impl Services {
 
         tracing::info!(%team_id, invite_link_id = %link_id, user_id = %principal.user_id, "invite link revoked");
         Ok(view)
+    }
+}
+
+/// Locks the link's team and reads its members and the link again. Not `lock_team_for`: the caller is not a member
+/// yet, so its membership check would refuse them. The link is read after the lock, so it sees a revocation
+/// committed before the lock was taken. Fails with [`ServiceError::NotFound`] when either is gone, and with
+/// [`domain::team::TeamError::PersonalTeam`] for a personal team.
+async fn lock_link_team(
+    txn: &impl ConnectionTrait,
+    team_id: TeamId,
+    link_id: InviteLinkId,
+) -> Result<(Team, Vec<Membership>, InviteLink), ServiceError> {
+    let team = store::teams::lock_team(txn, team_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    let members = store::teams::list_memberships(txn, team_id).await?;
+    team.ensure_shared()?;
+    let link = store::invite_links::find_invite_link(txn, team_id, link_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    Ok((team, members, link))
+}
+
+impl Services {
+    /// Makes `principal` a member of the link's team and records that they joined through it. The caller has
+    /// locked the team and checked that the link admits them.
+    async fn admit_through_link(
+        &self,
+        txn: &impl ConnectionTrait,
+        principal: Principal,
+        link: &InviteLink,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        let membership = Membership {
+            team_id: link.team_id,
+            user_id: principal.user_id,
+            role: Role::Member,
+            joined_at: now,
+        };
+        store::teams::insert_membership(txn, &membership).await?;
+        let entry = self.team_audit_entry(
+            principal,
+            link.team_id,
+            AuditAction::MemberJoined,
+            EntityType::InviteLink,
+            *link.id.as_uuid(),
+            json!({ "role": Role::Member.code() }),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok(())
     }
 }
 

@@ -112,6 +112,32 @@ impl TestApp {
         })
     }
 
+    /// The same server with registration closed: a second router over the same database and clock. Set accounts up
+    /// on `self`, and exercise the closed one.
+    pub fn with_registration_closed(&self) -> TestApp {
+        let services = Services::new(
+            self.db.clone(),
+            self.clock.clone(),
+            Settings {
+                allow_registration: false,
+                session_ttl: Duration::from_days(30),
+                sign_in_limit: SignInLimit::DEFAULT,
+            },
+        );
+        let cookies = CookieSettings {
+            secure: true,
+            max_age: StdDuration::from_secs(3600),
+        };
+        TestApp {
+            router: api::router(AppState {
+                services,
+                authentication: Authentication::Sessions(cookies),
+            }),
+            clock: self.clock.clone(),
+            db: self.db.clone(),
+        }
+    }
+
     /// The local build's setup: one user, made on start, who is every request's caller.
     pub async fn start_local() -> Result<Self> {
         init_tracing();

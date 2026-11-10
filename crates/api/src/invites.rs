@@ -1,23 +1,29 @@
-//! Opening an invite link and joining a team through it, by the link's token. The local build has no teams to join,
+//! Opening an invite link, joining a team through it and creating an account through it, by the link's token. The local build has no teams to join,
 //! so it leaves these out (the `accounts` feature).
 
+use api_types::auth::RegisterRequest;
 use api_types::invite_links::{
-    InvitationActionDto, InvitationDto, InviteLinkStateDto, InviteViewerDto, InviteViewerStatusDto,
+    InvitationActionDto, InvitationDto, InviteLinkStateDto, InviteRegistrationDto, InviteViewerDto,
+    InviteViewerStatusDto,
 };
+use api_types::me::UserDto;
 use api_types::teams::TeamDto;
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::Response;
 use domain::invite_link::InviteToken;
 use serde::Deserialize;
 use service::ServiceError;
+use service::auth::Registration;
 use service::teams::{InvitationView, InviteViewer, MemberAdded};
 use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::auth::{cookie_settings, signed_in_with};
 use crate::error::Problem;
-use crate::extract::{ApiPath, MaybeUser, SessionUser};
+use crate::extract::{ApiJson, ApiPath, MaybeUser, SessionUser};
 use crate::teams::to_team_dto;
 use crate::{ApiError, AppState};
 
@@ -25,6 +31,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(open_invite))
         .routes(routes!(join_by_invite))
+        .routes(routes!(register_by_invite))
 }
 
 /// `{token}`, for documenting the path as well as reading it.
@@ -106,4 +113,38 @@ async fn join_by_invite(
         MemberAdded::AlreadyMember => StatusCode::OK,
     };
     Ok((status, Json(to_team_dto(detail, &state.authentication))))
+}
+
+/// Creates an account through the link, and joins its team as a member in the same act: the account, its personal
+/// team and heap, the membership and the session are all made, or none is. Works whether registration is open or
+/// closed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`
+/// `invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is
+/// also taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.
+#[utoipa::path(post, path = "/invites/{token}/register", tag = "auth", request_body = RegisterRequest,
+    params(InviteTokenParams),
+    responses(
+        (status = 201, description = "Registered, joined and signed in; sets the session cookie", body = InviteRegistrationDto),
+        (status = 404, description = "No such link", body = Problem),
+        (status = 409, description = "`invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
+        (status = 422, description = "Invalid email, name or password, or `invalid_handle` with a `hint`", body = Problem),
+    ))]
+async fn register_by_invite(
+    State(state): State<AppState>,
+    path: ApiPath<InviteTokenParams>,
+    ApiJson(body): ApiJson<RegisterRequest>,
+) -> Result<Response, ApiError> {
+    let token = parse_token(path.0)?;
+    let registration = Registration {
+        email: &body.email,
+        username: &body.username,
+        display_name: &body.display_name,
+        password: &body.password,
+    };
+    let cookies = cookie_settings(&state)?;
+    let (grant, detail) = state.services.register_through_invite(&token, registration).await?;
+    let answer = InviteRegistrationDto {
+        user: UserDto::from(&grant.user),
+        team: to_team_dto(detail, &state.authentication),
+    };
+    Ok(signed_in_with(StatusCode::CREATED, &grant, cookies, answer))
 }

@@ -65,6 +65,35 @@ pub struct Registration<'a> {
     pub password: &'a str,
 }
 
+/// A registration that passed the input checks, with its password hashed.
+pub(crate) struct NewAccount {
+    pub email: Email,
+    pub username: Handle,
+    pub display_name: DisplayName,
+    /// The name of the personal team: the display name.
+    pub team_name: Name,
+    pub password_hash: String,
+}
+
+/// Checks what a new user entered, in the order the form shows it, and hashes the password. Touches no database,
+/// so nothing is made before the input is known to be good.
+pub(crate) async fn parse_registration(registration: Registration<'_>) -> Result<NewAccount, ServiceError> {
+    let email = Email::parse(registration.email)?;
+    let username = Handle::parse(registration.username, Field::Username)?;
+    let display_name = DisplayName::parse(registration.display_name)?;
+    validate_new_password(registration.password)?;
+    let team_name = Name::parse(display_name.as_str())?;
+    let password = registration.password.to_owned();
+    let password_hash = run_blocking(move || hash_password(&password)).await?;
+    Ok(NewAccount {
+        email,
+        username,
+        display_name,
+        team_name,
+        password_hash,
+    })
+}
+
 /// Hash of a fixed password, verified against when an email is unknown so that both cases take as long.
 static DUMMY_HASH: LazyLock<Option<String>> = LazyLock::new(|| hash_password("dummy password for timing").ok());
 
@@ -77,20 +106,21 @@ impl Services {
         if !self.settings.allow_registration {
             return Err(ServiceError::RegistrationClosed);
         }
-        let email = Email::parse(registration.email)?;
-        let username = Handle::parse(registration.username, Field::Username)?;
-        let display_name = DisplayName::parse(registration.display_name)?;
-        validate_new_password(registration.password)?;
-        let team_name = Name::parse(display_name.as_str())?;
-        let password = registration.password.to_owned();
-        let password_hash = run_blocking(move || hash_password(&password)).await?;
+        let account = parse_registration(registration).await?;
 
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let made = self
-            .insert_personal_user(&txn, email, username, display_name, team_name, now)
+            .insert_personal_user(
+                &txn,
+                account.email,
+                account.username,
+                account.display_name,
+                account.team_name,
+                now,
+            )
             .await?;
-        store::users::insert_password(&txn, made.user.id, &password_hash, now).await?;
+        store::users::insert_password(&txn, made.user.id, &account.password_hash, now).await?;
         let grant = self.open_session(&txn, made.user, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
@@ -204,7 +234,7 @@ impl Services {
         Ok(())
     }
 
-    async fn open_session(
+    pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
         user: User,
