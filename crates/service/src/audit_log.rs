@@ -73,7 +73,8 @@ pub struct AuditChange {
 /// Which history to read and from where.
 #[derive(Clone, Copy, Debug)]
 pub struct AuditRequest {
-    /// Only the history of this item, tag, parameter, saved view, heap, member or team, when given.
+    /// Only the history of this item, tag, parameter, saved view, heap, member, invite link or team, when
+    /// given.
     pub entity_id: Option<Uuid>,
     pub after: Option<AuditCursor>,
     /// Clamped to 1..=[`MAX_AUDIT_PAGE`].

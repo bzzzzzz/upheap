@@ -7,7 +7,7 @@ It serves Product Invite links, Teams §6, and Accounts and sign-in §2 and §5 
 
 ## Progress
 
-Two stages, a pull request per piece. Nothing is built yet. Rules and scenarios are numbered as in Behaviours,
+Two stages, a pull request per piece. Rules and scenarios are numbered as in Behaviours,
 Interface entries as in its inventory, and Kept as in the list under Golden path.
 
 ### Stage 1: the golden path, end to end

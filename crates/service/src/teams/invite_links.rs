@@ -65,10 +65,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let view = load_views(&txn, vec![link], Role::Admin, now)
-            .await?
-            .pop()
-            .ok_or(ServiceError::NotFound)?;
+        let view = load_one(&txn, link, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, invite_link_id = %view.link.id, user_id = %principal.user_id, "invite link made");

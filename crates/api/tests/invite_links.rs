@@ -487,3 +487,29 @@ async fn members_are_refused_and_outsiders_find_nothing() -> Result<()> {
     expect_that!(revoke(&setup, &outsider, &id).await?.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
+
+/// Two admins revoking the same link at the same moment: one revokes, the other finds it revoked, and the audit log
+/// has one revocation. Both the team lock and the conditional update stand behind this.
+#[gtest]
+#[tokio::test]
+async fn two_admins_revoking_at_once_record_one_revocation() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let (ben, _) = join(&setup, "ben@example.test", "Ben", Role::Admin).await?;
+    let id = id_of(&make(&setup, &setup.ana).await?.body)?;
+
+    // Act
+    let (by_ana, by_ben) = tokio::join!(revoke(&setup, &setup.ana, &id), revoke(&setup, &ben, &id));
+    let (by_ana, by_ben) = (by_ana?, by_ben?);
+
+    // Assert
+    expect_that!(by_ana.status, eq(StatusCode::OK));
+    expect_that!(by_ben.status, eq(StatusCode::OK));
+    expect_that!(by_ana.body, eq(&by_ben.body));
+    expect_that!(by_ana.body["state"], eq(&json!("revoked")));
+    expect_that!(
+        actions_for(&setup, &id).await?,
+        elements_are![eq("invite_link_created"), eq("invite_link_revoked")]
+    );
+    Ok(())
+}

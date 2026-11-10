@@ -48,7 +48,7 @@ impl From<InviteLinkAction> for InviteLinkActionDto {
 }
 
 /// An invite link: whoever holds its token can join the team until it ends or is revoked.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = InviteLink)]
 pub struct InviteLinkDto {
     pub id: Uuid,
@@ -73,7 +73,7 @@ pub struct InviteLinkDto {
 }
 
 /// A team's invite links, newest first.
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = InviteLinkList)]
 pub struct InviteLinkListDto {
     pub links: Vec<InviteLinkDto>,
