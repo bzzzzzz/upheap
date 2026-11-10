@@ -714,10 +714,15 @@ joining the queue; and need being settled for everything made from a note.
 
 ### Unproven mechanisms
 
-1. **Driving an agent tool without a person at it, and getting its cost back.** Claude's command-line tool has a
-   non-interactive mode that returns a result with its cost. Not run for this design, and not checked for other
-   tools. The rules need only "run a command with a prompt, wait for it to exit"; cost is recorded "as reported"
-   and may be empty. To be tried in stage 1's first piece that starts an agent.
+1. **Driving an agent tool without a person at it, and getting its cost back.** Proven for Claude's
+   command-line tool (2.1.322) in stage 1's first piece; not checked for other tools. `claude -p --output-format
+   json` reads the prompt on stdin, runs to the end with no one at it and exits. It prints one JSON object with
+   `result` (the agent's last message), `subtype` and `is_error` (how it ended) and `total_cost_usd`.
+   `--permission-mode dontAsk` with `--allowedTools "Bash(upheap:*)"` lets the agent run only `upheap`: any
+   other command is refused without a prompt, the run carries on, and the refusal is listed in
+   `permission_denials`. `--max-budget-usd` stops a run that costs more, exiting 1 with `subtype`
+   `error_max_budget_usd`. `--no-session-persistence` keeps runs out of the person's session list. Exit 0 with
+   `is_error` false is a run that ended; anything else is a failed run, with its cost still reported.
 2. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.
 
 ## 5. Interface
@@ -824,11 +829,15 @@ States: no count at zero. Local build: neither entry, and today's tabs.
 
 ```
 ALL WIDTHS · List row (W1)                            constant · core
-│ ○ 3  Rotate the certs  2/5   [due] [tags]               with an agent │
+│ ○ 3 ☑ Rotate the certs ▤ 2/5  [due] [tags]              with an agent │
 │      Due this week · small effort                                     │
-│ ○ 4  Paint the fence         [tags]                     waits for you │
-│ ○ 5  Renew the domain  reminder                                       │
-Marks: a task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
+│ ○ 4   Paint the fence         [tags]                    waits for you │
+│ ○ 5   Renew the domain  reminder                                      │
+Marks: a task shows a checklist icon before the title (a note shows none, and the slot stays so titles line up),
+       and after the title the stage: with context a page, defined a clipboard with a check, as written none.
+       No words on the row; a screen reader hears them. The step count joins after the stage icon; the local
+       build shows no stage icon.
+       A task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
        The end of the row says "with an agent" or "waits for you", and nothing when it's the person's.
 States: the state circle and the swipes work as today. On an item an agent holds they ask first, since
         changing its state takes it back and that can't be undone.
@@ -877,7 +886,7 @@ Next likely action: the next row.
 WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Rotate the certs                                    k3x9a  link   [✕]  │
-│ task · defined                                                         │
+│ ☑ Task · ▤ Defined                    the icons with their words       │
 │ state buttons, as today                                                │
 │                                                                        │
 │ WAITS FOR YOU   only with an open question, a stuck turn or a closed   │
@@ -905,8 +914,9 @@ WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 │                  links, cost                                           │
 │ History              as today; an agent's change is marked as one      │
 │                                                                        │
-│ ⋯  Won't do · Make it a task · Stage: as written, with context,        │
-│    defined                                                             │
+│ ⋯  More: Won't do · Make it a task… (asks first: a task can't go back  │
+│    to a note) · Stage: as written, with context, defined (Defined      │
+│    only on a task). A stage change saves silently.                     │
 └────────────────────────────────────────────────────────────────────────┘
 Who has it, by state:
   Yours, open:           "With you."  [Send to an agent ▾]  to <the next state>, or all the way,

@@ -4,12 +4,13 @@
 
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
-use domain::item::{Due, ItemSummary, Need, Size, StateKind};
+use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
+use domain::validation::Field;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -87,6 +88,83 @@ impl From<NeedDto> for Need {
     }
 }
 
+/// What an item is. A note becomes a task in place; a task never goes back to a note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Kind)]
+pub enum KindDto {
+    Note,
+    Task,
+    /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<Kind> for KindDto {
+    fn from(kind: Kind) -> Self {
+        match kind {
+            Kind::Note => Self::Note,
+            Kind::Task => Self::Task,
+        }
+    }
+}
+
+impl TryFrom<KindDto> for Kind {
+    type Error = ValidationError;
+
+    /// Fails on a kind this server doesn't know, which a request can carry.
+    fn try_from(kind: KindDto) -> Result<Self, Self::Error> {
+        match kind {
+            KindDto::Note => Ok(Self::Note),
+            KindDto::Task => Ok(Self::Task),
+            KindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
+        }
+    }
+}
+
+/// How far an item has been prepared, from least to most. Set by hand.
+///
+/// - `as_written`: just as it was put down.
+/// - `with_context`: background has been added.
+/// - `defined`: clear enough to start on. Only a task can be defined.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Stage)]
+pub enum StageDto {
+    AsWritten,
+    WithContext,
+    Defined,
+    /// A stage this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<Stage> for StageDto {
+    fn from(stage: Stage) -> Self {
+        match stage {
+            Stage::AsWritten => Self::AsWritten,
+            Stage::WithContext => Self::WithContext,
+            Stage::Defined => Self::Defined,
+        }
+    }
+}
+
+impl TryFrom<StageDto> for Stage {
+    type Error = ValidationError;
+
+    /// Fails on a stage this server doesn't know, which a request can carry.
+    fn try_from(stage: StageDto) -> Result<Self, Self::Error> {
+        match stage {
+            StageDto::AsWritten => Ok(Self::AsWritten),
+            StageDto::WithContext => Ok(Self::WithContext),
+            StageDto::Defined => Ok(Self::Defined),
+            StageDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Stage }),
+        }
+    }
+}
+
 /// Item state. `done` and `wont_do` are closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -156,6 +234,8 @@ pub enum ItemActionDto {
     Edit,
     ChangeState,
     Reopen,
+    /// Make a note a task. Offered for an open note the caller may edit.
+    MakeTask,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -164,6 +244,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::Edit => Self::Edit,
             ItemAction::ChangeState => Self::ChangeState,
             ItemAction::Reopen => Self::Reopen,
+            ItemAction::MakeTask => Self::MakeTask,
         }
     }
 }
@@ -319,6 +400,14 @@ pub struct ItemDto {
     pub heap_id: Uuid,
     pub title: String,
     pub description: Option<String>,
+    pub kind: KindDto,
+    /// How far the item has been prepared. `null` when the item is closed, and always in a build without the stage
+    /// (the static, single-user one).
+    pub stage: Option<StageDto>,
+    /// The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
+    /// Empty when the item is closed, when the caller can't edit it, and in a build without the stage.
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub stage_choices: Vec<StageDto>,
     pub state: StateDto,
     /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be
     /// closed: finishing a blocker doesn't unblock what waits for it.
@@ -521,7 +610,7 @@ mod tests {
             ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
-                "description": null, "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
@@ -541,6 +630,8 @@ mod tests {
         expect_that!(ranked.contributors[0].label, eq("Picked up again"));
         expect_that!(ranked.contributors[1].factor, eq(FactorDto::Need));
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
+        expect_that!(ranked.item.kind, eq(KindDto::Unknown));
+        expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
         Ok(())
     }
 
@@ -564,6 +655,8 @@ mod tests {
         // The server never makes one, and a client that read one can't send it back as if it were a real value.
         expect_that!(serde_json::to_value(FactorDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(ClosedGroupDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(KindDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(StageDto::Unknown), err(anything()));
     }
 
     #[gtest]

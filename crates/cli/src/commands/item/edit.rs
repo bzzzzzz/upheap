@@ -171,7 +171,7 @@ mod tests {
     fn item_with_tags(tags: &[Uuid]) -> googletest::Result<ItemDto> {
         Ok(serde_json::from_value(json!({
             "id": Uuid::new_v4(), "key": "k3x9a", "heap_id": Uuid::new_v4(), "title": "Rotate the staging certs",
-            "description": null, "state": "open", "blocked_by": null, "need": "expected",
+            "description": null, "kind": "note", "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
             "effort": null, "impact": null, "due": null,
             "tags": tags.iter().map(|id| json!({ "id": id, "name": id.to_string() })).collect::<Vec<_>>(),
             "parameters": [], "created_at": 0, "created_label": "today", "created_by": null, "closed_at": null,

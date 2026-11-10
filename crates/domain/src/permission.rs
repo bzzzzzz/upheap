@@ -3,7 +3,7 @@
 use crate::audit::AuditAction;
 use crate::heap::Heap;
 use crate::invite_link::InviteLink;
-use crate::item::Item;
+use crate::item::{Item, Kind, Stage};
 use crate::parameter::Parameter;
 use crate::saved_view::SavedView;
 use crate::team::{Membership, Role, Team, admin_remains};
@@ -88,6 +88,8 @@ pub enum ItemAction {
     ChangeState,
     /// Move a closed item back to open.
     Reopen,
+    /// Make a note a task.
+    MakeTask,
 }
 
 /// What `role` can do with `item` in `heap` at `now`. Empty for archived heaps.
@@ -96,12 +98,25 @@ pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp
         return Vec::new();
     }
     if !item.is_closed() {
-        return vec![ItemAction::Edit, ItemAction::ChangeState];
+        let mut actions = vec![ItemAction::Edit, ItemAction::ChangeState];
+        match item.kind {
+            Kind::Note => actions.push(ItemAction::MakeTask),
+            Kind::Task => {}
+        }
+        return actions;
     }
     if item.can_reopen(now) {
         return vec![ItemAction::Reopen];
     }
     Vec::new()
+}
+
+/// The stages `role` may set on `item` in `heap` now: none unless they may edit it.
+pub fn allowed_stage_choices(item: &Item, heap: &Heap, role: Role) -> Vec<Stage> {
+    if heap.is_archived() || !Permission::EditItems.is_granted_to(role) {
+        return Vec::new();
+    }
+    item.stage_choices()
 }
 
 /// An action a client may offer on a tag.
@@ -494,6 +509,78 @@ mod tests {
         expect_that!(allowed_member_actions(&members, &plain, &admin), is_empty());
         expect_that!(
             allowed_team_actions(&team(None), &members, UserId::from_uuid(Uuid::from_u128(99))),
+            is_empty()
+        );
+    }
+
+    fn item(kind: Kind, closed: bool) -> Item {
+        use crate::item::{ItemState, NewItem, Title};
+        use std::collections::{BTreeMap, BTreeSet};
+
+        let fields = NewItem {
+            title: Title::parse("Rotate the certs").expect("valid"),
+            description: None,
+            need: crate::item::Need::Expected,
+            effort: None,
+            impact: None,
+            due: None,
+            tags: BTreeSet::new(),
+            parameters: BTreeMap::new(),
+        };
+        let mut item = Item::new(
+            crate::ItemId::from_uuid(Uuid::from_u128(3)),
+            crate::HeapId::from_uuid(Uuid::from_u128(2)),
+            crate::handle::ItemKey::parse("k3x9a").expect("valid"),
+            fields,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+        item.kind = kind;
+        if closed {
+            item.state = ItemState::Done {
+                closed_at: Timestamp::EPOCH,
+                closed_by: None,
+            };
+        }
+        item
+    }
+
+    #[gtest]
+    fn only_an_open_note_can_be_made_a_task_by_someone_who_can_edit() {
+        let now = Timestamp::EPOCH;
+        let has_make_task = |item: &Item, heap: &Heap, role| {
+            allowed_item_actions(item, heap, role, now).contains(&ItemAction::MakeTask)
+        };
+
+        expect_that!(
+            has_make_task(&item(Kind::Note, false), &heap(false), Role::Member),
+            eq(true)
+        );
+        expect_that!(
+            has_make_task(&item(Kind::Task, false), &heap(false), Role::Member),
+            eq(false)
+        );
+        expect_that!(
+            has_make_task(&item(Kind::Note, true), &heap(false), Role::Member),
+            eq(false)
+        );
+        expect_that!(
+            has_make_task(&item(Kind::Note, false), &heap(true), Role::Member),
+            eq(false)
+        );
+    }
+
+    #[gtest]
+    fn stage_choices_are_offered_only_to_those_who_can_edit() {
+        let note = item(Kind::Note, false);
+
+        expect_that!(
+            allowed_stage_choices(&note, &heap(false), Role::Member),
+            elements_are![eq(&Stage::AsWritten), eq(&Stage::WithContext)]
+        );
+        expect_that!(allowed_stage_choices(&note, &heap(true), Role::Member), is_empty());
+        expect_that!(
+            allowed_stage_choices(&item(Kind::Task, true), &heap(false), Role::Member),
             is_empty()
         );
     }

@@ -158,6 +158,8 @@ enum ItemCommand {
     Wontdo(commands::item::state::StateArgs),
     /// Move an item back to open, from any state
     Reopen(commands::item::state::StateArgs),
+    /// Make a note a task, in place: it keeps its key, age and history
+    ToTask(commands::item::state::StateArgs),
 }
 
 #[derive(Subcommand)]
@@ -197,7 +199,8 @@ impl Command {
                 ItemCommand::Start(args)
                 | ItemCommand::Done(args)
                 | ItemCommand::Wontdo(args)
-                | ItemCommand::Reopen(args),
+                | ItemCommand::Reopen(args)
+                | ItemCommand::ToTask(args),
             ) => &args.shared,
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
             Self::Tag(TagCommand::List(args)) => &args.shared,
@@ -295,6 +298,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Item(ItemCommand::Done(args)) => run_verb(StateVerb::Done, args, app, out).await,
         Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
         Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
+        Command::Item(ItemCommand::ToTask(args)) => commands::item::to_task::run(args, app, out).await,
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,

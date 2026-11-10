@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use domain::audit::{AuditAction, EntityType};
 use domain::due::{describe_due_date, describe_time};
-use domain::item::{Due, Need, Size, StateKind};
+use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
 use domain::team::Role;
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
@@ -363,8 +363,10 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 22] = [
+const FIELD_ORDER: [&str; 24] = [
     "title",
+    "kind",
+    "stage",
     "name",
     "display_name",
     "description",
@@ -481,6 +483,8 @@ fn has_no_value(value: &Value) -> bool {
 fn describe_field(field: &str) -> &str {
     match field {
         "title" => "Title",
+        "kind" => "Kind",
+        "stage" => "Stage",
         "name" => "Name",
         "display_name" => "Display name",
         "description" => "Description",
@@ -511,6 +515,8 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         return None;
     }
     let text = match field {
+        "kind" => describe_kind(Kind::from_code(value.as_str()?)?).to_owned(),
+        "stage" => describe_stage(Stage::from_code(value.as_str()?)?).to_owned(),
         "state" => describe_state(StateKind::from_code(value.as_str()?)?).to_owned(),
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
@@ -560,6 +566,21 @@ const fn describe_state(state: StateKind) -> &'static str {
         StateKind::Blocked => "Blocked",
         StateKind::Done => "Done",
         StateKind::WontDo => "Won't do",
+    }
+}
+
+const fn describe_kind(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Note => "Note",
+        Kind::Task => "Task",
+    }
+}
+
+const fn describe_stage(stage: Stage) -> &'static str {
+    match stage {
+        Stage::AsWritten => "As written",
+        Stage::WithContext => "With context",
+        Stage::Defined => "Defined",
     }
 }
 

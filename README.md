@@ -117,6 +117,7 @@ cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
 cargo run -p cli -- item done k3x9a
+cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
 cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- auth logout
 ```

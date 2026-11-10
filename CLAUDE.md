@@ -54,6 +54,14 @@ When asked to write a "doc", write it as a Markdown file in `design/`, or in `de
 add it to `design/README.md`, and to the tracker when it's a track, not as an external document (Claude Docs,
 Notion, Google Docs).
 
+## Interface changes
+
+Before building a significant change to the web app's design, on wide screens or on a phone, make a mockup in
+Claude Docs and wait for the owner to approve it. Significant means a new kind of page, new data on a layout used
+many times a session (the list row, the item, Waiting for me), or a change to how a core workflow goes on screen.
+Small fixes, copy and changes that follow an approved design or an existing pattern don't need one. Once the
+mockup is approved, the design doc or ux.md records what was agreed, and the mockup isn't linked from the repository.
+
 ## Git
 
 Pushing to `main` is prohibited. Always work on a branch and open a pull request.

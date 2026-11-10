@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { ClosedGroup, ItemState, Need, Size } from "../api/client";
+import type { ClosedGroup, ItemState, Kind, Need, Size, Stage } from "../api/client";
 
 export const SIZES: readonly Size[] = ["s", "m", "l", "xl"];
 
@@ -21,6 +21,14 @@ export const NEED_HINTS: Record<Need, string> = {
   nice_to_have: "Wanted, but nobody is waiting for it.",
   expected: "Someone is counting on it. Skipping it lets them down.",
   critical: "It has to happen. Skipping it does real damage.",
+};
+
+export const KIND_LABELS: Record<Kind, string> = { note: "Note", task: "Task" };
+
+export const STAGE_LABELS: Record<Stage, string> = {
+  as_written: "As written",
+  with_context: "With context",
+  defined: "Defined",
 };
 
 export const STATE_LABELS: Record<ItemState, string> = {

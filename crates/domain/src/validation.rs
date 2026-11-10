@@ -38,6 +38,9 @@ pub enum ValidationError {
     /// A list sorted by a custom parameter names it in `sort_parameter`, and no other sort does.
     #[error("send sort_parameter exactly when sort is parameter")]
     SortParameterMismatch,
+    /// A field names a value the server doesn't know, such as an enum value from a newer client.
+    #[error("{field} is not a value this server knows")]
+    ValueUnknown { field: Field },
 }
 
 /// The input field a [`ValidationError`] is about.
@@ -58,6 +61,10 @@ pub enum Field {
     /// What sign-in takes: an email address or a username.
     Login,
     Password,
+    /// An item's kind.
+    Kind,
+    /// An item's stage.
+    Stage,
 }
 
 impl Field {
@@ -75,6 +82,8 @@ impl Field {
             Self::Email => "email",
             Self::Login => "login",
             Self::Password => "password",
+            Self::Kind => "kind",
+            Self::Stage => "stage",
         }
     }
 }
