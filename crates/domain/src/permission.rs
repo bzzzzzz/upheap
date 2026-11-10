@@ -51,6 +51,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::MemberRoleChanged
         | AuditAction::MemberRemoved
         | AuditAction::MemberLeft
+        | AuditAction::MemberJoined
         | AuditAction::InviteLinkCreated
         | AuditAction::InviteLinkRevoked => Permission::ManageTeam,
         AuditAction::HeapCreated

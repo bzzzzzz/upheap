@@ -200,6 +200,157 @@
         ]
       }
     },
+    "/api/v1/invites/{token}": {
+      "get": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Opens an invite link: the team's name, the maker's name and whether the link works, ended or was revoked. Anyone\nholding the token may, signed in or not; with a session cookie or bearer token the answer also says where the\ncaller stands in the team (`viewer`). An expired or unknown session cookie counts as signed out.",
+        "operationId": "open_invite",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The invite link's secret: the last part of the link, `{origin}/invite/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: the bearer token is invalid, expired or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/invites/{token}/join": {
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Joins the link's team as a member. Takes the session cookie only, never a bearer token: joining is the person's\ndecision in their browser, not something a client holding a token can do for itself. The link must be working at\nthis moment, and must not have been made before the caller was removed from the team. Answers `200` with the team\nunchanged when the caller is already in it, as member or admin, whatever the link's state. The link keeps\nworking for others.",
+        "operationId": "join_by_invite",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The invite link's secret: the last part of the link, `{origin}/invite/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Already in the team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Joined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: no session cookie, or the request carried a bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`removed_from_team`: removed from the team after the link was made",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invite_link_ended` or `invite_link_revoked`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -4704,6 +4855,7 @@
           "member_role_changed",
           "member_removed",
           "member_left",
+          "member_joined",
           "heap_created",
           "heap_updated",
           "heap_archived",
@@ -5527,6 +5679,40 @@
           }
         }
       },
+      "Invitation": {
+        "type": "object",
+        "description": "What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no\nmembers, no maker username or email.",
+        "required": [
+          "team_name",
+          "created_by_name",
+          "state"
+        ],
+        "properties": {
+          "created_by_name": {
+            "type": "string",
+            "description": "The display name of whoever made the link, now, even if they have left the team."
+          },
+          "state": {
+            "$ref": "#/components/schemas/InviteLinkState",
+            "description": "Where the link is in its life. `ended` and `revoked` are shown too, so the page can say which."
+          },
+          "team_name": {
+            "type": "string",
+            "description": "The team's name now."
+          },
+          "viewer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InviteViewer",
+                "description": "The caller's standing in the team; `null` when the request has no signed-in user."
+              }
+            ]
+          }
+        }
+      },
       "InviteLink": {
         "type": "object",
         "description": "An invite link: whoever holds its token can join the team until it ends or is revoked.",
@@ -5633,6 +5819,34 @@
           "working",
           "ended",
           "revoked"
+        ]
+      },
+      "InviteViewer": {
+        "type": "object",
+        "description": "A signed-in person's standing in the team a link is for.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/InviteViewerStatus"
+          },
+          "team_slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The team's slug, so the client can take a member to the team; `null` unless `status` is `member`."
+          }
+        }
+      },
+      "InviteViewerStatus": {
+        "type": "string",
+        "description": "Where a signed-in person stands in the team a link is for.",
+        "enum": [
+          "not_member",
+          "member",
+          "removed"
         ]
       },
       "Item": {

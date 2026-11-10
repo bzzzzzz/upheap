@@ -56,6 +56,20 @@ pub async fn find_invite_link(
         .transpose()
 }
 
+/// The link whose secret is `token`, or `None`. The match is exact, case included: the column is unique and binary
+/// on every database, so a token that differs in case is another token.
+pub async fn find_invite_link_by_token(
+    db: &impl ConnectionTrait,
+    token: &InviteToken,
+) -> Result<Option<InviteLink>, StoreError> {
+    invite_links::Entity::find()
+        .filter(invite_links::Column::Token.eq(token.expose()))
+        .one(db)
+        .await?
+        .map(to_invite_link)
+        .transpose()
+}
+
 /// Marks `link` revoked by `by` at `at` and bumps its version, if it is still unrevoked at the version read.
 /// Returns whether the update applied.
 pub async fn revoke_invite_link(

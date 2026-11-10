@@ -19,6 +19,8 @@ mod error;
 mod extract;
 mod health;
 mod heaps;
+#[cfg(feature = "accounts")]
+mod invites;
 mod items;
 mod me;
 #[cfg(feature = "accounts")]
@@ -165,6 +167,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(auth::routes())
         .merge(oauth::authorize_routes())
         .merge(users::routes())
+        .merge(invites::routes())
         .merge(me::sign_ins::routes());
     let v1 = v1
         .merge(me::routes())

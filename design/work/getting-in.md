@@ -22,7 +22,7 @@ this order.
    hides the team from an outsider, with rows in the access-control table test; a personal team has none;
    scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Product Invite links §1 to §3, the making
    and revoking half of §6, and Kept 1 and 2.
-- [ ] 2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
+- [x] 2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
    state (rule 5). A signed-in user joins as a member (rules 6 and 7), a person removed since the link was made is
    refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
    are tests; a direct add still works as before. Product Invite links §5, the signed-in half of §4, the rest of
@@ -616,7 +616,6 @@ Exit: 0 made; 2 no user given; 3 no such user; 5 the database can't be reached.
 
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
 
-- Where a removal is remembered, since the membership row goes: for the implementation.
 - An invite link is kept readable while session and reset secrets are kept hashed: for the implementation.
 - The shape of the invite and reset addresses, under architecture.md's rule for handles in URLs: for the
   implementation.
