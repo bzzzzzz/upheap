@@ -215,3 +215,48 @@ async fn the_flags_for_setting_and_clearing_a_field_exclude_each_other() -> Resu
     expect_that!(edited.exited(2), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn item_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("context.txt");
+    std::fs::write(&path, "From a file\n\nsecond paragraph\n")?;
+    let path = path.to_string_lossy().into_owned();
+
+    // Act
+    let from_file = cli.run(&["item", "edit", key, "--context-file", &path, "-q"]).await;
+    let after_file = server.read_item(&ada, HEAP, key).await?;
+    cli.stdin = b"From stdin\r\n".to_vec();
+    let from_stdin = cli.run(&["item", "edit", key, "--context-file", "-", "-q"]).await;
+    let after_stdin = server.read_item(&ada, HEAP, key).await?;
+    let cleared = cli.run(&["item", "edit", key, "--no-context", "-q"]).await;
+    let after_clear = server.read_item(&ada, HEAP, key).await?;
+    let both = cli
+        .run(&["item", "edit", key, "--context-file", &path, "--description", "x"])
+        .await;
+    let with_clear = cli
+        .run(&["item", "edit", key, "--context-file", &path, "--no-context"])
+        .await;
+    let missing = cli
+        .run(&["item", "edit", key, "--context-file", "/nonexistent/context.txt"])
+        .await;
+
+    // Assert
+    expect_that!(from_file.exited(0), eq(true));
+    expect_that!(after_file["description"], eq("From a file\n\nsecond paragraph"));
+    expect_that!(from_stdin.exited(0), eq(true));
+    expect_that!(after_stdin["description"], eq("From stdin"));
+    expect_that!(cleared.exited(0), eq(true));
+    expect_that!(after_clear["description"], eq(&Value::Null));
+    expect_that!(both.exited(2), eq(true));
+    expect_that!(with_clear.exited(2), eq(true));
+    expect_that!(missing.exited(2), eq(true));
+    expect_that!(missing.stderr, contains_substring("/nonexistent/context.txt"));
+    Ok(())
+}

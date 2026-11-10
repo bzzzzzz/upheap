@@ -88,17 +88,19 @@ pub struct HeapDto {
 }
 
 /// A change to a heap. Leave a field out to keep it.
-#[derive(Deserialize, ToSchema)]
+#[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = HeapPatchRequest)]
 pub struct HeapPatchDto {
     /// 1 to 100 characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old
     /// slug stop working.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
     /// At most 20,000 characters, trimmed; blank or `null` clears it. Any member may change it; the name and slug
     /// need an admin.
-    #[serde(default, deserialize_with = "double_option")]
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub context: Option<Option<String>>,
 }

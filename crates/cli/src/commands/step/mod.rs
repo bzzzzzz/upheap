@@ -7,10 +7,8 @@ pub mod state;
 use api_types::common::{ItemDto, StepDto};
 use serde::Serialize;
 
-use crate::App;
 use crate::CliError;
 use crate::client::{ClientError, Fetched};
-use crate::commands::UsageError;
 use crate::commands::heap_api::{HeapApi, is_not_found};
 
 impl HeapApi<'_> {
@@ -97,18 +95,4 @@ pub(super) fn find_step(item: &ItemDto, number: u32) -> Option<&StepDto> {
 /// A step's name: its item's key and its number, as `k3x9a.3`.
 pub(super) fn step_name(item: &ItemDto, step: &StepDto) -> String {
     format!("{}.{}", item.key, step.number)
-}
-
-/// The context a flag gives: the text of the file at `path`, or all of stdin for `-`.
-pub(super) async fn read_context(path: &str, app: &App) -> Result<String, CliError> {
-    if path == "-" {
-        return Ok(app.read_stdin("--context-file").await?);
-    }
-    std::fs::read_to_string(path).map_err(|source| {
-        UsageError::UnreadableContextFile {
-            path: path.to_owned(),
-            source,
-        }
-        .into()
-    })
 }

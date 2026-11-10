@@ -51,7 +51,11 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
     expect_that!(value_of(&shown.stdout, "Tags"), some(eq("Infra")));
     expect_that!(value_of(&shown.stdout, "Due"), some(ends_with("(firm)")));
     expect_that!(value_of(&shown.stdout, "Created"), some(ends_with("by Ada")));
-    expect_that!(shown.stdout, ends_with("\n\nBefore they expire\nin March\n"));
+    expect_that!(
+        shown.stdout,
+        ends_with("\n\nContext\n  Before they expire\n  in March\n")
+    );
+    expect_that!(bare.stdout, not(contains_substring("Context")));
     expect_that!(value_of(&bare.stdout, "Effort"), none());
     expect_that!(value_of(&bare.stdout, "Tags"), none());
     expect_that!(value_of(&bare.stdout, "Need"), some(eq("idea")));
@@ -72,7 +76,7 @@ async fn item_show_prints_crlf_and_tabs_in_a_description_as_text() -> Result<()>
     let shown = cli.run(&["item", "show", key]).await;
 
     expect_that!(shown.exited(0), eq(true));
-    expect_that!(shown.stdout, ends_with("\n\none\n    two\nthree\n"));
+    expect_that!(shown.stdout, ends_with("\n\nContext\n  one\n      two\n  three\n"));
     Ok(())
 }
 

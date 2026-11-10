@@ -7,7 +7,7 @@ use api_types::steps::AddStepDto;
 use clap::Args;
 use domain::step::StepNumber;
 
-use super::read_context;
+use crate::commands::heap_api::read_context;
 use crate::commands::item::common::locate_item;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
 use crate::lookup::{HeapHandle, ItemName, LookupError, StepName};

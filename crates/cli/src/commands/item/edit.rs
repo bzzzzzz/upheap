@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::common::{dedupe, locate_item, resolve_due};
 use crate::client::NO_QUERY;
-use crate::commands::heap_api::{HeapApi, read_description};
+use crate::commands::heap_api::{HeapApi, read_context, read_description};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
 use crate::lookup::{ItemName, LookupError, resolve_tags};
 use crate::output::{Mode, Output};
@@ -25,9 +25,12 @@ pub struct EditArgs {
     /// How much it's needed: idea, nice_to_have, expected, critical
     #[arg(long, value_name = "NEED", value_parser = parse_api_value::<NeedDto>)]
     pub need: Option<NeedDto>,
-    /// A new description. `-` reads all of stdin
-    #[arg(long, value_name = "TEXT", conflicts_with = "no_description")]
+    /// A new context for the item (its description). `-` reads all of stdin. For longer text, use --context-file
+    #[arg(long, value_name = "TEXT", conflicts_with_all = ["no_description", "context_file"])]
     pub description: Option<String>,
+    /// The item's context, read from this file, or from stdin for `-`
+    #[arg(long, value_name = "FILE", conflicts_with = "no_description")]
+    pub context_file: Option<String>,
     /// How much work: s, m, l, xl
     #[arg(long, value_name = "SIZE", value_parser = parse_api_value::<SizeDto>, conflicts_with = "no_effort")]
     pub effort: Option<SizeDto>,
@@ -52,8 +55,8 @@ pub struct EditArgs {
     /// Clear the impact
     #[arg(long)]
     pub no_impact: bool,
-    /// Clear the description
-    #[arg(long)]
+    /// Clear the item's context (its description)
+    #[arg(long, visible_alias = "no-context")]
     pub no_description: bool,
     #[command(flatten)]
     pub heap: HeapArgs,
@@ -67,6 +70,7 @@ impl EditArgs {
         self.title.is_some()
             || self.need.is_some()
             || self.description.is_some()
+            || self.context_file.is_some()
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
@@ -90,10 +94,11 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         return Ok(());
     }
     let at = locate_item(&args.item, name, args.heap.name.as_deref(), app)?;
-    let description = match (&args.description, args.no_description) {
-        (Some(raw), _) => Some(Some(read_description(raw, app).await?)),
-        (None, true) => Some(None),
-        (None, false) => None,
+    let description = match (&args.description, &args.context_file, args.no_description) {
+        (Some(raw), _, _) => Some(Some(read_description(raw, app).await?)),
+        (None, Some(path), _) => Some(Some(read_context(path, app).await?)),
+        (None, None, true) => Some(None),
+        (None, None, false) => None,
     };
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
