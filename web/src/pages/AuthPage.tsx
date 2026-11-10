@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
+import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
 import { useRegister, useSignIn } from "../api/queries";
@@ -7,7 +7,7 @@ import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
 import { problemMessage } from "../components/ProblemText";
 
-type Mode = "sign_in" | "register";
+export type Mode = "sign_in" | "register";
 /** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
 type FieldName = "display_name" | "username" | "email" | "login" | "password";
 type Values = Record<FieldName, string>;
@@ -17,12 +17,48 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
   register: ["display_name", "username", "email", "password"],
 };
 
+/** What Create account sends. */
+type RegisterBody = { email: string; username: string; display_name: string; password: string };
+
+/**
+ * A request that creates an account, which the invite page uses in place of `useRegister`. It takes no callback: it
+ * moves on by itself when it succeeds, where `onSignedIn` is for the default request.
+ */
+export type RegisterRequest = {
+  mutate: (body: RegisterBody) => void;
+  error: Error | null;
+  isPending: boolean;
+  reset: () => void;
+};
+
 /**
  * Sign in, or create an account (S-sign-in, S-register): a card on a wide screen (WideSignIn), the bare form on a
  * phone (PhoneSignIn). `notice` says where a link the user followed while signed out leads.
+ *
+ * The invite page (ux.md, Invite page) uses the same switch and forms, changed through the optional props: `header`
+ * above the switch, `initialMode` (Create account comes first in the switch when it starts selected), its own
+ * `register` request, and Create account's submit label (`registerLabel`) and footnote (`registerNote`).
  */
-export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: () => void }) {
-  const [mode, setMode] = useState<Mode>("sign_in");
+export function AuthPage({
+  notice,
+  header,
+  initialMode = "sign_in",
+  register: registerOverride,
+  registerLabel = "Create account",
+  registerNote = "You'll start in your own heap. Teams come next.",
+  onSignedIn,
+}: {
+  notice?: string;
+  header?: ReactNode;
+  initialMode?: Mode;
+  register?: RegisterRequest;
+  registerLabel?: string;
+  registerNote?: string;
+  onSignedIn: () => void;
+}) {
+  const [mode, setMode] = useState<Mode>(initialMode);
+  // After "Sign in instead", the password is the next thing to type: the address is already carried over.
+  const [focusPassword, setFocusPassword] = useState(false);
   // Kept across the switch, so an email typed under Sign in stays for Create account; the password isn't.
   const [values, setValues] = useState<Values>({
     display_name: "",
@@ -33,24 +69,47 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
   });
   // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
   const signIn = useSignIn();
-  const register = useRegister();
+  const defaultRegister = useRegister();
+  const register: RegisterRequest = registerOverride ?? {
+    mutate: (body) => defaultRegister.mutate(body, { onSuccess: onSignedIn }),
+    error: defaultRegister.error,
+    isPending: defaultRegister.isPending,
+    reset: defaultRegister.reset,
+  };
   const pending = signIn.isPending || register.isPending;
+  const selectMode = (key: Key) => {
+    setMode(key === "register" ? "register" : "sign_in");
+    // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
+    // An email address carries over between Sign in's "Email or username" and Create account's Email.
+    setValues((current) => ({
+      ...current,
+      password: "",
+      ...(key === "register" && current.email === "" && current.login.includes("@") && { email: current.login }),
+      ...(key === "sign_in" && current.login === "" && { login: current.email }),
+    }));
+    signIn.reset();
+    register.reset();
+  };
   const form = (formMode: Mode) => (
     <AuthForm
       mode={formMode}
       mutation={formMode === "sign_in" ? signIn : register}
+      submitLabel={formMode === "register" ? registerLabel : undefined}
+      note={formMode === "register" ? registerNote : undefined}
+      focusPassword={focusPassword}
+      onSignInInstead={() => {
+        setFocusPassword(true);
+        selectMode("sign_in");
+      }}
       onSubmit={() =>
         formMode === "sign_in"
           ? signIn.mutate({ login: values.login, password: values.password }, { onSuccess: onSignedIn })
-          : register.mutate(
-              {
-                display_name: values.display_name,
-                username: values.username,
-                email: values.email,
-                password: values.password,
-              },
-              { onSuccess: onSignedIn },
-            )
+          : register.mutate({
+              display_name: values.display_name,
+              username: values.username,
+              email: values.email,
+              password: values.password,
+            })
       }
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
@@ -59,6 +118,7 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
 
   return (
     <AuthCard>
+      {header}
       {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
       {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
       {/* Held while a submit is pending, so its result lands on the form that sent it. */}
@@ -66,29 +126,16 @@ export function AuthPage({ notice, onSignedIn }: { notice?: string; onSignedIn: 
         selectedKey={mode}
         isDisabled={pending}
         onSelectionChange={(key) => {
-          setMode(key === "register" ? "register" : "sign_in");
-          // Each form starts clean. A sign-in password, perhaps mistyped, mustn't become the new one.
-          // An email address carries over between Sign in's "Email or username" and Create account's Email.
-          setValues((current) => ({
-            ...current,
-            password: "",
-            ...(key === "register" && current.email === "" && current.login.includes("@") && { email: current.login }),
-            ...(key === "sign_in" && current.login === "" && { login: current.email }),
-          }));
-          signIn.reset();
-          register.reset();
+          setFocusPassword(false);
+          selectMode(key);
         }}
       >
         <TabList
           aria-label="Sign in or create account"
           className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
         >
-          <Tab id="sign_in" className={tabClass}>
-            Sign in
-          </Tab>
-          <Tab id="register" className={tabClass}>
-            Create account
-          </Tab>
+          {/* A link that invites someone to a team opens with Create account, so it comes first. */}
+          {initialMode === "register" ? [registerTab, signInTab] : [signInTab, registerTab]}
         </TabList>
         <TabPanel id="sign_in" className="mt-4">
           {form("sign_in")}
@@ -119,12 +166,31 @@ export function AuthCard({ children }: { children: ReactNode }) {
   );
 }
 
+/** The card's main button: 52 px on a phone, 44 px beyond. A link styled as one adds `flex items-center justify-center`. */
+export const authButtonClass =
+  "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
+
 const tabClass =
   "flex h-10 flex-1 cursor-default items-center justify-center rounded-[10px] text-sm text-ink-soft sm:h-auto sm:rounded-lg sm:p-[7px] data-selected:bg-surface data-selected:font-semibold data-selected:text-ink data-selected:shadow-[0_1px_2px_rgba(0,0,0,0.08)]";
+
+const signInTab = (
+  <Tab key="sign_in" id="sign_in" className={tabClass}>
+    Sign in
+  </Tab>
+);
+const registerTab = (
+  <Tab key="register" id="register" className={tabClass}>
+    Create account
+  </Tab>
+);
 
 function AuthForm({
   mode,
   mutation,
+  submitLabel,
+  note,
+  focusPassword,
+  onSignInInstead,
   onSubmit,
   values,
   onChange,
@@ -132,6 +198,14 @@ function AuthForm({
   mode: Mode;
   /** The form's request: its error and whether it's pending. */
   mutation: { error: Error | null; isPending: boolean; reset: () => void };
+  /** What Create account's button says; the default is "Create account". */
+  submitLabel?: string | undefined;
+  /** The footnote under Create account's button. */
+  note?: string | undefined;
+  /** Whether Password takes focus as the form shows, as after "Sign in instead". */
+  focusPassword: boolean;
+  /** Switches to Sign in, the email carried over: what a taken email offers. */
+  onSignInInstead: () => void;
   onSubmit: () => void;
   values: Values;
   onChange: (name: FieldName, value: string) => void;
@@ -146,6 +220,13 @@ function AuthForm({
     const input = errorField && formRef.current?.elements.namedItem(errorField);
     if (input instanceof HTMLInputElement) input.focus();
   }, [error, errorField]);
+
+  // Once, as the form shows after "Sign in instead".
+  useEffect(() => {
+    if (!focusPassword) return;
+    const input = formRef.current?.elements.namedItem("password");
+    if (input instanceof HTMLInputElement) input.focus();
+  }, [focusPassword]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -204,6 +285,15 @@ function AuthForm({
           required
         />
       )}
+      {mode === "register" && errorField === "email" && error instanceof ApiProblem && error.code === "email_taken" && (
+        <button
+          type="button"
+          onClick={onSignInInstead}
+          className="-mt-2 self-start rounded-lg px-1 py-1.5 text-sm font-semibold text-accent-ink underline pointer-coarse:min-h-11"
+        >
+          Sign in instead
+        </button>
+      )}
       <Field
         label="Password"
         {...field("password")}
@@ -218,16 +308,10 @@ function AuthForm({
           {problemMessage(error)}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm"
-      >
-        {mode === "sign_in" ? "Sign in" : "Create account"}
+      <button type="submit" disabled={mutation.isPending} className={authButtonClass}>
+        {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
       </button>
-      {mode === "register" && (
-        <p className="text-center text-xs text-muted">You'll start in your own heap. Teams come next.</p>
-      )}
+      {mode === "register" && note && <p className="text-center text-xs text-muted">{note}</p>}
     </form>
   );
 }
