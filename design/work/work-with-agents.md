@@ -2,7 +2,7 @@
 
 Upheap as the place where a person's projects keep their ideas, tasks and progress, worked on together with AI
 agents. It replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design
-method. Step agreed: none.
+method. Step agreed: 1 (value).
 
 ## Constraints
 
@@ -10,7 +10,12 @@ method. Step agreed: none.
    no new design here. (Owner.)
 2. Agents use Upheap through the command-line client only. (Owner.)
 3. Agents are set up outside Upheap. Upheap decides what's next and calls an agent; it isn't one. (Owner.)
-4. What's built stays: the ranking and its factors, need, states, tags, the audit log, nothing deleted, the stack.
+4. A note is today's item, unchanged. (Owner.)
+5. An agent both refines work and does it. (Owner.)
+6. One person uses agents by running a server for themselves. The browser-only build stays as it is, without
+   agents. (Owner.)
+7. This pitch replaces the one in product.md. (Owner.)
+8. What's built stays: the ranking and its factors, need, states, tags, the audit log, nothing deleted, the stack.
    (Repository.)
 
 ## 1. Value
@@ -50,6 +55,9 @@ is, not how far along it is.
 Free, open source and self-hosted, as today. The web app is for the person, phone included. The command-line
 client is for agents and for scripts, and can do everything an agent needs.
 
+One person runs the server for themselves, on their own machine with SQLite or hosted. The browser-only build
+stays, without agents.
+
 ## 2. Golden path
 
 ### The path
@@ -70,57 +78,82 @@ Two side paths: a note too big for a task becomes a new heap with its own contex
 reminder ("renew the certificate in March") stays out of the list until its date, then ranks with the rest, and
 is resolved or turned into a task.
 
-### Requirements, in outline
+### Commitments
 
-Not yet numbered commitments. Those follow once this reads right.
+**Core** marks a promise that would go to product.md. The rest guide the design and stay here.
 
 **Heaps**
 
-- A heap has a context: free text that can point at repositories, wikis and anything else the person and their
-  agents can reach.
+1. **Core.** A heap has a context: text that says what the project is and points at where its knowledge lives,
+   such as a repository or a wiki. Upheap stores the pointers and doesn't fetch what they point at.
+2. Any member of the heap's team can edit its context.
 
 **Items**
 
-- An item is a note, a task or a reminder. All three are ranked together in one list.
-- Every item has its own context, beside the heap's.
-- A **note** is today's item.
-- A **task** is a note with a checklist. Each step of the checklist has its own context and is ticked when done.
-- A **reminder** has a date. It is hidden until then, and from then on is ranked like any item.
+1. **Core.** An item is a note, a task or a reminder. All three are ranked together in one list, by the same
+   factors.
+2. **Core.** Every item has its own context, beside the heap's.
+3. **Core.** A note is today's item, unchanged: it can be started, blocked and done on its own.
+4. **Core.** A task is a note with a checklist. Each step has a title and its own context, and is ticked when
+   done.
+5. **Core.** A reminder has a date. It is out of the list until that date, and from then on is ranked like any
+   item.
+6. An item's kind changes only by the moves under "What can become what". Its history stays with it.
 
 **Questions**
 
-- A question is attached to an item. It is either a question to answer or a request to do something.
-- An item with an open question waits for the person, and the person can list everything that waits for them,
-  across heaps.
-- Answering sends the item back to whoever asked.
+1. **Core.** A question is attached to an item, and is either a question to answer or a request to do something.
+   An agent or a person can attach one.
+2. **Core.** An item with an open question waits for the person. An agent never picks it up.
+3. **Core.** The person can see everything that waits for them, across their heaps, in one place.
+4. **Core.** Answering a question, or saying a request is done, closes it. When an item's last open question
+   closes, the item goes back to whoever asked.
+5. Questions and their answers stay with the item for good.
 
 **Handing work to an agent**
 
-- The person marks an item for agents. Nothing unmarked is ever picked up by one.
-- At any moment an item is with the person or with an agent, and the list shows which.
+1. **Core.** The person marks an item for agents. An agent never picks up an unmarked one.
+2. **Core.** At any moment an item is with the person or with an agent, and the list shows which.
+3. **Core.** An agent refines and does: it turns a note into a task, asks, adds steps, and also does the work,
+   ticking the steps as it goes.
+4. The person can take a marked item back at any time.
+5. What an agent does is in the audit log, told apart from what the person did.
 
 **What can become what**
 
-- Note: gains questions; becomes a task; becomes a new heap with tasks and notes.
-- Task: gains questions; gains steps; is done.
-- Reminder: is resolved; becomes a task, and from there behaves as one.
-- A person can make every one of these moves by hand too.
+1. **Core.** A note can gain questions, become a task, or become a new heap with its own context, tasks and
+   notes.
+2. **Core.** A task can gain questions and gain steps, and is done like any item.
+3. **Core.** A reminder is resolved, or becomes a task and from there behaves as one.
+4. A person can make every one of these moves by hand, and an agent through the command-line client.
 
 **Command-line client**
 
-- It gives the next item for an agent, by rules alone: the same state gives the same answer.
-- It reads and writes everything an agent needs: contexts, checklists, questions, moves between kinds.
-- `upheap work` runs the loop: find what's next, call the agent, wait when there is nothing or when everything
-  waits for the person.
+1. **Core.** It gives the next item for an agent by rules alone: the heaps' ranking, limited to marked items
+   that don't wait for the person. The same state gives the same answer, and no model is asked.
+2. **Core.** It reads and writes everything an agent needs: both contexts, checklists, questions, and the moves
+   between kinds.
+3. **Core.** `upheap work` runs the loop: it finds what's next, calls the agent the person configured with the
+   item and its contexts, and waits when there is nothing or everything waits for the person.
+4. Upheap doesn't hold the agent's model, prompts or tools. `upheap work` is told what command to call.
 
-**People**
+**One person and teams**
 
-- Everything above works for one person with no teammates.
-- In a shared heap any member can answer a question or mark an item. Nothing more is designed for teams yet.
+1. **Core.** Everything above works for one person with no teammates, on a server they run for themselves.
+2. The browser-only build stays as it is, without agents: it has no API for the command-line client to reach.
+3. In a shared heap any member can mark an item, answer a question and edit a context. Nothing else is designed
+   for teams here.
+
+### Actors
+
+| Actor | May |
+| --- | --- |
+| The person | Everything a member may do today, and: edit contexts, mark items for agents and take them back, answer questions, make every move between kinds |
+| An agent, through the CLI, as the person | Read contexts; on marked items only: attach questions, change the item's context, add and tick steps, make the moves between kinds, change its state |
 
 ### Out
 
-See Ideas.
+Notifications, more than one kind of agent, and who in a team answers a question. See Ideas.
 
 ## 3. Workflows
 
