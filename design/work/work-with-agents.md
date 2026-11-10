@@ -450,19 +450,24 @@ from another item. Its work state is today's, with one more closed state:
 - **became**: closed because it turned into other things (several tasks, a step, a heap). It isn't done and
   isn't refused; the work carries on in what it became.
 
-An item also has a **stage**, which with its kind and state gives its stable state:
+An open item also has a **stage**: how far it has been prepared. It is set when a turn reaches a stable
+state, or by the person by hand, and never worked out from what the item happens to contain.
 
-| Stable state | Is |
-| --- | --- |
-| Note as written | A note whose context nobody has filled in |
-| Note with context | A note with a context and no open question |
-| Defined task | A task with a context, at least one step and no open question |
-| Done | Closed as done |
-| Became | Closed as became, with at least one thing made from it |
+| Stage | Means | Starts here |
+| --- | --- | --- |
+| As written | Nobody has prepared it yet | Every new note; a task the person made by hand; a reminder turned into a task |
+| With context | Its context says what it means in this project | |
+| Defined | A task with a context and at least one step, ready to be done | |
+
+An item is at a **stable state** when it has no open turn and no open question. Then its stable state is its
+stage, or done or became once it's closed. The next stable state is the next row; for a task as written it is
+defined, in one turn; after defined it is done. A note with context goes on by becoming one task, several, a
+step or a heap (Kinds and moves).
 
 **Who has it.** Read off the item, never set by hand:
 
-- **Waits for the person:** it has an open question, or its turn is stuck.
+- **Waits for the person:** it has an open question, its turn is stuck, or its blocker was closed as won't do
+  or became.
 - **With an agent:** it has an open turn and doesn't wait for the person.
 - **With the person:** everything else.
 
@@ -485,8 +490,9 @@ item is open.
 
 **Turn.** One piece of an agent's work on one item: from the stable state it's at to the next. It has a
 **reach** (one state, or all the way) and is opened by the person's go-ahead or by the heap's prepare setting. It
-is open, then ends as reached, taken back, or redone. An open turn can be **stuck**. An item has at most one open
-turn.
+is open, then ends as reached or taken back. A reached turn can later be marked **redone**. An open turn can be
+**stuck**. An item has at most one open turn. A go-ahead can carry a line from the person, shown to the turn's
+runs.
 
 **Run.** One start of the agent tool on one item, inside a turn. It records when it started and ended, how it
 ended (reached, asked, failed), the state it started from and reached, a **result** (a line or two and links to
@@ -506,8 +512,8 @@ change it makes carries the run it was made in.
    task the same way.
 2. A note that becomes several tasks, a step of an existing task, or a heap is closed as became. What it became
    keeps it as origin.
-3. Tasks made from a note take its need, and their age counts from the note's creation, so splitting a note
-   never sends its work to the back.
+3. Everything made from a note, the items of a heap made from it included, takes its need, and its age counts
+   from the note's creation, so splitting a note never sends its work to the back.
 4. A step can only be added to an open task in the same heap. A heap made from a note is in the note's team,
    with prepare off.
 5. No other move changes a kind. A task doesn't go back to a note.
@@ -531,15 +537,16 @@ change it makes carries the run it was made in.
 **The agent's queue**
 
 1. An item is in the queue when it has an open turn, doesn't wait for the person, isn't blocked, isn't claimed,
-   and is in a heap `upheap work` was given.
+   and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and comes
+   right after its source in the order of §2.
 2. The queue's order is the heap's ranking. Across heaps, the heaps are taken in the order the person named
    them: a later heap's items come up only when the earlier heaps have nothing.
 3. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 4. A run ends in one of three ways: **reached**, with its result; **asked**, having attached at least one
    question; or **failed**. A claim that lapses counts as failed.
-5. Reached is checked, not believed: the turn ends only if the item fits the next stable state's row in the
-   table. Otherwise the run counts as failed.
+5. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
+   in the table and has no open question. Otherwise the run counts as failed.
 6. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
    wrong. The person retries it or takes it back.
 7. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
@@ -561,13 +568,16 @@ change it makes carries the run it was made in.
 **Review**
 
 1. A review is asked only on a task, in a turn that is doing it.
-2. An agent can close a task as done only when every step is ticked or dropped, it has asked for at least one
-   review, and every review on the task is approved or withdrawn.
+2. An agent can close a task as done only when every step is ticked or dropped, at least one review on it is
+   approved, and for each piece of work the latest round is approved.
 3. Changes asked closes that review. The agent's next request for the same work is a new review, shown as the
-   next round.
-4. Reviews on one task are answered one by one.
-5. At a stable state short of done there is no review request: the person's "changes asked" there ends the turn
-   as redone and opens a new one to the same state, carrying what they said.
+   next round of that piece.
+4. An agent can't withdraw a review. Reviews withdrawn by a take-back count for nothing: after a new go-ahead
+   the agent asks again.
+5. Reviews on one task are answered one by one.
+6. At a stable state short of done there is no review request. The person's "changes asked" there marks the
+   turn that reached it as redone, puts the item's stage back to where that turn started, and opens a new turn
+   to the same state, carrying what they said. What the agent wrote stays for the new turn to change.
 
 **Blocks**
 
@@ -582,8 +592,9 @@ change it makes carries the run it was made in.
 2. Write only inside a run that holds a claim: the item's context, steps and state, questions on it, and the
    moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item.
 3. Set effort, impact and due time on what it makes. Never need: it's inherited, and only the person changes it.
-4. Never: close anything as won't do, answer a question, change a heap's context or settings once the turn that
-   made the heap has ended, or touch tags' and parameters' definitions.
+4. Never: close anything as won't do, close anything as done except a task under Review §2, answer a question,
+   change a heap's context or settings once the turn that made the heap has ended, or touch tags' and
+   parameters' definitions.
 
 **What the person does to a turn**
 
@@ -638,8 +649,8 @@ Each walked by hand through the rules above.
    changes on the second. Review §2: not done. Review §3: the agent reworks the second and asks again, round 2.
    Approved: every review is approved, steps are ticked, done.
 8. **A second thought after done.** A day later the person wants to change the first approval. Questions §3: the
-   task is closed, so no. They reopen it (within a week), which puts it with them, and give a go-ahead saying
-   what's wrong.
+   task is closed, so no. They reopen it (within a week), which puts it with them, and give a go-ahead with a
+   line saying what's wrong. The earlier approvals stand, and the agent asks for a review of what it changes.
 9. **A reminder in a heap that prepares.** "Renew the certificate" comes due. Ranking §2: it arrives as due
    today. Opening §2: prepare doesn't touch reminders. The person turns it into a task (Moves §1, in place) and
    gives a go-ahead.
@@ -652,7 +663,10 @@ Each walked by hand through the rules above.
     The agent's write of the context is refused as stale; it reads the note again and writes a context for the
     new title.
 
-Two scenarios changed the rules: 10 added "closing by hand takes it back first", and 11 added Blocks §3.
+Two scenarios changed the rules: 10 added "closing by hand takes it back first", and 11 added Blocks §3. A
+review of this step added six more: the stage as something set, not worked out; the latest round of each piece
+deciding done; agents never closing a note as done; a refused blocker counting as waiting; heaps an agent made
+joining the queue; and need passing to everything made from a note.
 
 ### Choices
 
@@ -700,7 +714,8 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - The exact reach of "all the way" when a turn spawns tasks, notes and heaps. To be iterated on while building.
 - Whether a done task that an agent thinks needs follow-up makes a new note.
 - How many failed runs stop the retries, and how long before a claim lapses.
-- Whether the stage is stored or read off the context being empty.
+- When the reached check fails a run, the agent is told which condition it missed.
+- A heap's cost can come in more than one unit, and the interface has to show that.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
 
 ## Ideas
