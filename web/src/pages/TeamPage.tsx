@@ -13,12 +13,12 @@ import {
   useLeaveTeam,
   useMe,
   useRemoveMember,
-  useSetHeapArchived,
   useSetMemberRole,
   useTeam,
   useUpdateHeap,
   useUpdateTeam,
 } from "../api/queries";
+import { useArchiveHeap } from "../components/archiveHeap";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
@@ -282,7 +282,7 @@ type HeapAction = "rename" | "slug" | "archive" | "history";
  */
 function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boolean }) {
   const update = useUpdateHeap(team);
-  const setArchived = useSetHeapArchived(team);
+  const { archive, unarchive, mutation: setArchived } = useArchiveHeap(team);
   const [editing, setEditing] = useState<TeamEdit | null>(null);
   const [history, setHistory] = useState(false);
   // After Save, Cancel or Escape, focus goes back to the ⋯ the editor came from.
@@ -305,7 +305,7 @@ function HeapRow({ team, heap, phone }: { team: string; heap: Heap; phone: boole
   const act = (id: HeapAction) => {
     if (id === "rename") setEditing("name");
     if (id === "slug") setEditing("slug");
-    if (id === "archive") setArchived.mutate({ heap, archived: !archived });
+    if (id === "archive") (archived ? unarchive : archive)(heap);
     if (id === "history") setHistory((open) => !open);
   };
 
@@ -432,38 +432,71 @@ function removeQuestion(member: TeamMember, team: Team): string {
   return `Remove ${member.display_name} from ${team.name}?${access} Their items stay.`;
 }
 
+/** "Give up your admin role in Acme? …": the question before an admin makes themselves a member. */
+function demoteQuestion(team: Team): string {
+  return `Give up your admin role in ${team.name}? You'll no longer manage its members and heaps, and only another admin can make you an admin again.`;
+}
+
+/** What the confirm under the member list is asking: to remove `member`, or for you to give up your admin role. */
+type Asking = { kind: "remove" | "demote"; member: TeamMember };
+
 function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
   const { data: me } = useMe();
   const remove = useRemoveMember(team.slug);
-  const [removing, setRemoving] = useState<TeamMember | null>(null);
-  const removeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const setRole = useSetMemberRole(team.slug);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const askButtons = useRef(new Map<string, HTMLButtonElement>());
   const heading = useRef<HTMLHeadingElement>(null);
-  // Who to give focus back to once the confirm is gone: the Remove button it came from.
+  // Who to give focus back to once the confirm is gone: the button it came from.
   const refocus = useRef<string | null>(null);
   useEffect(() => {
-    if (removing || refocus.current === null) return;
-    removeButtons.current.get(refocus.current)?.focus();
+    if (asking || refocus.current === null) return;
+    askButtons.current.get(refocus.current)?.focus();
     refocus.current = null;
-  }, [removing]);
+  }, [asking]);
+  // A demote question goes away, without moving focus, once your row no longer offers it (another admin left).
+  const demoteOffered =
+    asking?.kind !== "demote" ||
+    team.members.some((m) => m.user_id === asking.member.user_id && m.allowed_actions.includes("demote"));
+  if (!demoteOffered) setAsking(null);
 
-  const ask = (member: TeamMember) => {
+  const buttonKey = (kind: Asking["kind"], member: TeamMember) => `${kind}:${member.user_id}`;
+  const registerButton = (kind: Asking["kind"], member: TeamMember) => (button: HTMLButtonElement | null) => {
+    if (button) askButtons.current.set(buttonKey(kind, member), button);
+    else askButtons.current.delete(buttonKey(kind, member));
+  };
+  const ask = (kind: Asking["kind"], member: TeamMember) => {
     remove.reset();
-    setRemoving(member);
+    setRole.reset();
+    setAsking({ kind, member });
   };
   const cancel = () => {
-    refocus.current = removing?.user_id ?? null;
-    setRemoving(null);
+    refocus.current = asking ? buttonKey(asking.kind, asking.member) : null;
+    setAsking(null);
     remove.reset();
+    setRole.reset();
   };
-  const confirm = (member: TeamMember, onDone?: () => void) =>
+  const confirmRemove = (member: TeamMember, onDone?: () => void) =>
     remove.mutate(member.username, {
       onSuccess: () => {
-        setRemoving(null);
+        setAsking(null);
         onDone?.();
         // Their row is gone, so focus goes to the section.
         heading.current?.focus();
       },
     });
+  const confirmDemote = (member: TeamMember) =>
+    setRole.mutate(
+      { username: member.username, role: "member" },
+      {
+        onSuccess: () => {
+          setAsking(null);
+          // The button that asked is gone, so focus goes to the section.
+          heading.current?.focus();
+        },
+      },
+    );
+  const current = asking && demoteOffered ? asking : null;
 
   return (
     <section aria-labelledby="team-members" className="flex flex-col gap-2 max-sm:gap-2.5">
@@ -481,30 +514,30 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
               member={member}
               you={you}
               removing={remove}
-              onRemove={(onDone) => confirm(member, onDone)}
+              onRemove={(onDone) => confirmRemove(member, onDone)}
             />
           ) : (
             <MemberRow
               key={member.user_id}
-              team={team.slug}
+              team={team}
               member={member}
               you={you}
-              asking={removing?.user_id === member.user_id}
-              onAskRemove={() => ask(member)}
-              removeRef={(button) => {
-                if (button) removeButtons.current.set(member.user_id, button);
-                else removeButtons.current.delete(member.user_id);
-              }}
+              asking={current?.member.user_id === member.user_id ? current.kind : null}
+              onAskRemove={() => ask("remove", member)}
+              onAskDemote={() => ask("demote", member)}
+              removeRef={registerButton("remove", member)}
+              demoteRef={registerButton("demote", member)}
             />
           );
         })}
       </ul>
-      {!phone && removing && (
-        <RemoveConfirm
-          question={removeQuestion(removing, team)}
-          pending={remove.isPending}
-          error={remove.error}
-          onConfirm={() => confirm(removing)}
+      {!phone && current && (
+        <MemberConfirm
+          question={current.kind === "remove" ? removeQuestion(current.member, team) : demoteQuestion(team)}
+          confirmLabel={current.kind === "remove" ? "Remove" : "Give up admin"}
+          pending={current.kind === "remove" ? remove.isPending : setRole.isPending}
+          error={current.kind === "remove" ? remove.error : setRole.error}
+          onConfirm={() => (current.kind === "remove" ? confirmRemove(current.member) : confirmDemote(current.member))}
           onCancel={cancel}
         />
       )}
@@ -512,15 +545,20 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
   );
 }
 
-/** The remove confirm under the list (WideTeam): focus moves to it, and Escape or Cancel goes back to Remove. */
-function RemoveConfirm({
+/**
+ * The confirm under the member list (WideTeam), for removing someone or giving up your admin role: focus moves to it,
+ * and Escape or Cancel goes back to the button that asked.
+ */
+function MemberConfirm({
   question,
+  confirmLabel,
   pending,
   error,
   onConfirm,
   onCancel,
 }: {
   question: string;
+  confirmLabel: string;
   pending: boolean;
   error: Error | null;
   onConfirm: () => void;
@@ -556,7 +594,7 @@ function RemoveConfirm({
           onClick={onConfirm}
           className={`${compactButtonClass.danger} py-1.5 text-[13px]`}
         >
-          Remove
+          {confirmLabel}
         </button>
       </div>
       <ProblemText error={error} className="text-overdue-ink" />
@@ -600,23 +638,31 @@ function RoleBadge({ role }: { role: TeamMember["role"] }) {
 
 const memberName = (member: TeamMember, you: boolean) => `${member.display_name}${you ? " (you)" : ""}`;
 
-/** A member on a wide screen: avatar, name and @username, role, Make admin or Make member, Remove, and History. */
+/**
+ * A member on a wide screen: avatar, name and @username, role, Make admin or Make member, Remove, and History. Remove
+ * asks first, and so does Make member on your own row (ux.md, Rules §1), in the confirm under the list; `asking` says
+ * which of the two is open for this row. Any other role change acts at once.
+ */
 function MemberRow({
   team,
   member,
   you,
   asking,
   onAskRemove,
+  onAskDemote,
   removeRef,
+  demoteRef,
 }: {
-  team: string;
+  team: Team;
   member: TeamMember;
   you: boolean;
-  asking: boolean;
+  asking: Asking["kind"] | null;
   onAskRemove: () => void;
+  onAskDemote: () => void;
   removeRef: Ref<HTMLButtonElement>;
+  demoteRef: Ref<HTMLButtonElement>;
 }) {
-  const setRole = useSetMemberRole(team);
+  const setRole = useSetMemberRole(team.slug);
   const [history, setHistory] = useState(false);
   const can = (action: TeamMember["allowed_actions"][number]) => member.allowed_actions.includes(action);
   const roleChange = can("promote") ? "admin" : can("demote") ? "member" : null;
@@ -633,8 +679,14 @@ function MemberRow({
         {roleChange && (
           <button
             type="button"
+            ref={roleChange === "member" && you ? demoteRef : undefined}
             disabled={setRole.isPending}
-            onClick={() => setRole.mutate({ username: member.username, role: roleChange })}
+            aria-expanded={roleChange === "member" && you ? asking === "demote" : undefined}
+            onClick={() =>
+              roleChange === "member" && you
+                ? onAskDemote()
+                : setRole.mutate({ username: member.username, role: roleChange })
+            }
             className={roleButtonClass}
           >
             {roleChange === "admin" ? "Make admin" : "Make member"}
@@ -644,7 +696,7 @@ function MemberRow({
           <button
             ref={removeRef}
             type="button"
-            aria-expanded={asking}
+            aria-expanded={asking === "remove"}
             onClick={onAskRemove}
             className={dangerTextButtonClass}
           >
@@ -664,7 +716,7 @@ function MemberRow({
       <ProblemText error={setRole.error} className="px-2 pb-2 text-overdue-ink" />
       {history && (
         <div className="px-2 pb-2">
-          <AuditHistory scope={{ team }} entityId={member.user_id} />
+          <AuditHistory scope={{ team: team.slug }} entityId={member.user_id} />
         </div>
       )}
     </li>
@@ -673,7 +725,7 @@ function MemberRow({
 
 /**
  * A member on a phone (PhoneTeam): name and role, and a ⋯ whose sheet holds Make admin or Make member, History, and
- * Remove, which asks in the sheet.
+ * Remove, which asks in the sheet. So does Make member on your own row (ux.md, Rules §1), shown as "Make member…".
  */
 function PhoneMemberRow({
   team,
@@ -690,17 +742,22 @@ function PhoneMemberRow({
 }) {
   const setRole = useSetMemberRole(team.slug);
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [asked, setConfirming] = useState<Asking["kind"] | null>(null);
   const [history, setHistory] = useState(false);
-  const { ref: removeRow, returnFocus: returnToRemoveRow } = useReturnFocus<HTMLButtonElement>(confirming);
   const questionId = useId();
   const can = (action: TeamMember["allowed_actions"][number]) => member.allowed_actions.includes(action);
   const roleChange = can("promote") ? "admin" : can("demote") ? "member" : null;
+  // Giving up your own admin role asks first.
+  const asksFirst = roleChange === "member" && you;
+  // The question goes away, without moving focus, once the row no longer offers the role change.
+  const confirming = asked === "demote" && !asksFirst ? null : asked;
+  const { ref: removeRow, returnFocus: returnToRemoveRow } = useReturnFocus<HTMLButtonElement>(confirming === "remove");
+  const { ref: demoteRow, returnFocus: returnToDemoteRow } = useReturnFocus<HTMLButtonElement>(confirming === "demote");
   const roleLabel = member.role === "admin" ? "Admin" : "Member";
   const name = memberName(member, you);
   const close = () => {
     setOpen(false);
-    setConfirming(false);
+    setConfirming(null);
     setHistory(false);
     removing.reset();
     setRole.reset();
@@ -734,41 +791,55 @@ function PhoneMemberRow({
         {confirming ? (
           <div className="flex flex-col gap-2 px-1 pb-1">
             <p id={questionId} className="px-2 pb-1 text-[15px] text-ink">
-              {removeQuestion(member, team)}
+              {confirming === "remove" ? removeQuestion(member, team) : demoteQuestion(team)}
             </p>
             <button
               type="button"
               autoFocus
-              disabled={removing.isPending}
-              onClick={() => onRemove(close)}
+              disabled={confirming === "remove" ? removing.isPending : setRole.isPending}
+              onClick={() =>
+                confirming === "remove"
+                  ? onRemove(close)
+                  : setRole.mutate({ username: member.username, role: "member" }, { onSuccess: close })
+              }
               className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
             >
-              Remove
+              {confirming === "remove" ? "Remove" : "Give up admin"}
             </button>
             <button
               type="button"
               onClick={() => {
                 // The confirm replaced the row that asked; focus goes back to it.
-                returnToRemoveRow();
-                setConfirming(false);
+                if (confirming === "remove") returnToRemoveRow();
+                else returnToDemoteRow();
+                setConfirming(null);
                 removing.reset();
+                setRole.reset();
               }}
               className="min-h-13 rounded-xl border border-line text-[15px] text-ink"
             >
               Cancel
             </button>
-            <ProblemText error={removing.error} className="px-2 text-overdue-ink" />
+            <ProblemText
+              error={confirming === "remove" ? removing.error : setRole.error}
+              className="px-2 text-overdue-ink"
+            />
           </div>
         ) : (
           <div className="flex flex-col">
             {roleChange && (
               <button
                 type="button"
+                ref={asksFirst ? demoteRow : undefined}
                 disabled={setRole.isPending}
-                onClick={() => setRole.mutate({ username: member.username, role: roleChange }, { onSuccess: close })}
+                onClick={() =>
+                  asksFirst
+                    ? setConfirming("demote")
+                    : setRole.mutate({ username: member.username, role: roleChange }, { onSuccess: close })
+                }
                 className={sheetRowClass}
               >
-                {roleChange === "admin" ? "Make admin" : "Make member"}
+                {roleChange === "admin" ? "Make admin" : asksFirst ? "Make member…" : "Make member"}
               </button>
             )}
             <button
@@ -788,7 +859,7 @@ function PhoneMemberRow({
               <button
                 ref={removeRow}
                 type="button"
-                onClick={() => setConfirming(true)}
+                onClick={() => setConfirming("remove")}
                 className={`${sheetRowClass} rounded-t-none border-t border-line text-overdue-ink`}
               >
                 Remove from {team.name}…

@@ -236,6 +236,13 @@ test("a heap's ⋯ renames it, archives and unarchives it, and shows its history
   await expect(link).toHaveCount(0);
   await expect(heaps(page).getByRole("button", { name: "Actions for Allotment" })).toBeFocused();
 
+  // Archiving offers Undo in the toast.
+  await choose("Allotment", "Archive");
+  await expect(heaps(page).getByText("Archived", { exact: true })).toBeVisible();
+  const toast = page.getByRole("status").filter({ hasText: "“Allotment” is archived." });
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(heaps(page).getByText("Archived", { exact: true })).toHaveCount(0);
   await choose("Allotment", "Archive");
   await expect(heaps(page).getByText("Archived", { exact: true })).toBeVisible();
   await choose("Allotment", "Unarchive");
@@ -313,6 +320,63 @@ test("leaving asks first, and the last admin is told why they can't", async ({ p
   await page.getByRole("button", { name: "Leave", exact: true }).click();
   await expect(page).toHaveURL(/\/teams$/);
   await expect(page.getByRole("link", { name: "Open Rota" })).toHaveCount(0);
+});
+
+test("giving up your own admin role asks first", async ({ page, request, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  const sam = await registerOther(request, "Sam Ortiz");
+  await createTeam(page, "Acme");
+  await addMember(page, sam.username);
+  const question =
+    "Give up your admin role in Acme? You'll no longer manage its members and heaps, and only another admin can make you an admin again.";
+  const myRow = members(page).getByRole("listitem").filter({ hasText: "(you)" });
+
+  // Making someone else an admin acts at once.
+  if (isPhone(page)) {
+    await members(page).getByRole("button", { name: "Actions for Sam Ortiz" }).click();
+    await page.getByRole("dialog", { name: "Sam Ortiz" }).getByRole("button", { name: "Make admin" }).click();
+    await expect(members(page).getByRole("listitem").filter({ hasText: "Sam Ortiz" })).toContainText("Admin");
+
+    await myRow.getByRole("button", { name: /^Actions for / }).click();
+    const sheet = page.getByRole("dialog", { name: "Tester" });
+    const makeMember = sheet.getByRole("button", { name: "Make member…" });
+    await makeMember.click();
+    const confirm = page.getByRole("alertdialog", { name: "Tester" });
+    await expect(confirm).toHaveAccessibleDescription(question);
+    // Cancel goes back to the row that asked.
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(makeMember).toBeFocused();
+    await makeMember.click();
+    await confirm.getByRole("button", { name: "Give up admin" }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(myRow).toContainText("Member");
+  } else {
+    await members(page)
+      .getByRole("listitem")
+      .filter({ hasText: "Sam Ortiz" })
+      .getByRole("button", { name: "Make admin" })
+      .click();
+    await expect(members(page).getByRole("listitem").filter({ hasText: "Sam Ortiz" })).toContainText("Admin");
+
+    const makeMember = myRow.getByRole("button", { name: "Make member" });
+    await makeMember.click();
+    const confirm = page.getByRole("alertdialog", { name: question });
+    await expect(confirm).toBeFocused();
+    await expect(makeMember).toHaveAttribute("aria-expanded", "true");
+    // Escape and Cancel put focus back on Make member.
+    await page.keyboard.press("Escape");
+    await expect(confirm).toHaveCount(0);
+    await expect(makeMember).toBeFocused();
+    await makeMember.click();
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(makeMember).toBeFocused();
+    await makeMember.click();
+    await confirm.getByRole("button", { name: "Give up admin" }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(myRow).toContainText("Member");
+    await expect(myRow.getByRole("button", { name: /^Make (member|admin)$/ })).toHaveCount(0);
+  }
 });
 
 test("Enter waits for the results of what was typed, not the ones still on screen", async ({

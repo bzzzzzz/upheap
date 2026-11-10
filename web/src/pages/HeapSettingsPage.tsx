@@ -2,8 +2,9 @@ import { Link, Outlet } from "@tanstack/react-router";
 import { useState } from "react";
 
 import type { HeapRef } from "../api/client";
-import { useHeap, useSetHeapArchived, useUpdateHeap } from "../api/queries";
+import { useHeap, useUpdateHeap } from "../api/queries";
 import { BASE } from "../basePath";
+import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";
@@ -57,7 +58,7 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
 export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
   const update = useUpdateHeap(heapRef.team);
-  const setArchived = useSetHeapArchived(heapRef.team);
+  const { archive, unarchive, mutation: setArchived } = useArchiveHeap(heapRef.team);
   // What the link name field holds, for the new path under it while it's being changed.
   const [slugDraft, setSlugDraft] = useState("");
 
@@ -163,7 +164,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
             <button
               type="button"
               disabled={setArchived.isPending}
-              onClick={() => setArchived.mutate({ heap: data, archived: !archived })}
+              onClick={() => (archived ? unarchive(data) : archive(data))}
               className={`${archived ? compactButtonClass.bordered : compactButtonClass.borderedDanger} max-sm:w-full`}
             >
               {archived ? "Unarchive heap" : "Archive heap"}

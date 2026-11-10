@@ -16,7 +16,7 @@ request, and they don't depend on each other, so they can go in any order and at
    password change (stage 2, piece 2) also ends token families, so land this before it.
    Done when: an exchange removes the rows that can no longer be used, a test shows it, and the suites pass on
    SQLite, MySQL and Postgres.
-- [ ] 3. **Confirmations.** Two actions break ux.md, Rules §1. Archiving a heap acts at once with no Undo toast,
+- [x] 3. **Confirmations.** Two actions break ux.md, Rules §1. Archiving a heap acts at once with no Undo toast,
    and giving up your own admin role acts at once without asking first. Getting in piece 4 also edits the Team
    page, so whichever lands second rebases.
    Done when: archiving offers Undo in a toast, demoting yourself asks first in a dialog on a wide screen and a
