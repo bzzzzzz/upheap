@@ -30,7 +30,8 @@ impl From<DbErr> for StoreError {
 }
 
 impl StoreError {
-    pub(crate) fn corrupt(table: &'static str, id: &str, problem: impl Into<String>) -> Self {
+    /// A row that breaks an invariant of the data, such as a user with no personal team.
+    pub fn corrupt(table: &'static str, id: &str, problem: impl Into<String>) -> Self {
         Self::CorruptRow {
             table,
             id: id.to_owned(),

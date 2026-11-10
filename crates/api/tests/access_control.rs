@@ -127,6 +127,9 @@ enum RequestBody {
     AddMember,
     Promote,
     DisplayName,
+    /// The caller's password, as both the current and the new one: the change succeeds and leaves the password every
+    /// other call signs in with.
+    ChangePassword,
     /// The CLI's authorization request.
     Authorization,
     /// A form exchanging the code from [`Target::AuthorizationCode`], as the CLI sends it, without cookie or CSRF
@@ -264,6 +267,14 @@ fn endpoints() -> Vec<Endpoint> {
             Target::SignIn,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/me/password",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::ChangePassword,
+            StatusCode::OK,
         ),
         row(
             Method::GET,
@@ -1087,6 +1098,7 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::ChangePassword => Some(json!({ "current_password": PASSWORD, "password": PASSWORD })),
             RequestBody::Authorization => Some(common::cli_authorization()),
             // Sent as forms by `call`.
             RequestBody::TokenExchange | RequestBody::Revocation => None,

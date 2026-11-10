@@ -7,6 +7,7 @@ import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { PasswordCard } from "../components/PasswordCard";
 import { ProblemText } from "../components/ProblemText";
 import { SignInsSection } from "../components/SignIns";
 import { useTheme, type Theme } from "../components/theme";
@@ -26,7 +27,7 @@ const themes: readonly { id: Theme; label: string }[] = [
 ];
 
 /**
- * The signed-in user's display name, which teammates see, this browser's theme, where the CLI is signed in as them (server
+ * The signed-in user's display name, which teammates see, their password (server build), this browser's theme, where the CLI is signed in as them (server
  * build), and in the local build their data.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
@@ -66,6 +67,7 @@ export function AccountPage() {
             </div>
           </dl>
         </section>
+        {me.allowed_actions.includes("change_password") && <PasswordCard inputClass={nameFormClasses.input} />}
         <AppearanceSection />
         {me.allowed_actions.includes("manage_sign_ins") && <SignInsSection />}
         <LocalDataSection />

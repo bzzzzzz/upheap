@@ -10,6 +10,7 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::Timestamp;
+use domain::audit::{AuditAction, EntityType};
 use domain::handle::Handle;
 use domain::heap::Heap;
 use domain::team::Team;
@@ -17,6 +18,7 @@ use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
 use rand::RngCore;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use store::{StoreError, TransactionTrait};
 
@@ -56,6 +58,14 @@ pub struct SessionGrant {
     pub token: SessionToken,
     pub user: User,
     pub expires_at: Timestamp,
+}
+
+/// The outcome of a password change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PasswordChanged {
+    /// How many other sign-ins the change ended that were still live: other web sessions, and sign-ins by clients
+    /// such as the CLI.
+    pub ended_sign_ins: u32,
 }
 
 /// What a new user enters to register.
@@ -230,6 +240,91 @@ impl Services {
             tracing::warn!(attempts = attempts.count, "sign-in refused: too many attempts");
             ServiceError::TooManySignInAttempts { retry_after }
         })
+    }
+
+    /// Changes the caller's password, ends their other sign-ins and records it, in one transaction.
+    ///
+    /// `session` is the caller's own web session, which stays. Every other session of the user is deleted and every
+    /// token family of theirs is revoked, so nothing signed in with the old password keeps working. The new password
+    /// may equal the current one: that ends the other sign-ins all the same.
+    ///
+    /// Empty or unacceptable input fails with [`ValidationError`] before anything is counted. Then the attempt is
+    /// counted under the account's sign-in key (`domain::sign_in`), so wrong tries here and at sign-in add up, and
+    /// one past the limit fails with [`ServiceError::TooManySignInAttempts`] before the password is checked. A
+    /// wrong `current` fails with [`ServiceError::WrongPassword`] and changes nothing. A success clears the count.
+    ///
+    /// The change is recorded in the user's personal team, whose one member is the user, with the number of
+    /// sign-ins it ended and nothing about either password.
+    pub async fn change_password(
+        &self,
+        principal: Principal,
+        session: &SessionToken,
+        current: &str,
+        new: &str,
+    ) -> Result<PasswordChanged, ServiceError> {
+        if current.is_empty() {
+            return Err(ValidationError::Empty {
+                field: Field::CurrentPassword,
+            }
+            .into());
+        }
+        if new.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Password }.into());
+        }
+        validate_new_password(new)?;
+
+        let user = store::users::find_user(&self.db, principal.user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let attempts_key = sha256_hex(user.email.as_str());
+        self.count_sign_in_attempt(&attempts_key).await?;
+
+        let stored_hash = store::users::find_password_hash(&self.db, user.id)
+            .await?
+            .ok_or(ServiceError::WrongPassword)?;
+        let current = current.to_owned();
+        if !run_blocking(move || Ok(verify_password(&current, &stored_hash))).await? {
+            tracing::info!(user_id = %user.id, "password change rejected");
+            return Err(ServiceError::WrongPassword);
+        }
+        let new = new.to_owned();
+        let new_hash = run_blocking(move || hash_password(&new)).await?;
+        // The username is the slug of the personal team, the team `UserRegistered` is recorded in.
+        let personal_team = store::teams::find_team_by_slug(&self.db, &user.username)
+            .await?
+            .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;
+
+        let now = self.now();
+        let keep = session.to_hash();
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        // The personal team first, as `update_display_name` takes team rows before the user's.
+        store::teams::lock_team(&txn, personal_team.id).await?;
+        let live_sessions = store::sessions::count_live_sessions_except(&txn, user.id, &keep, now).await?;
+        let live_clients = store::oauth::list_live_token_families(&txn, user.id, now).await?.len();
+        let ended_sign_ins = u32::try_from(live_sessions.saturating_add(live_clients as u64)).unwrap_or(u32::MAX);
+        if !store::users::update_password(&txn, user.id, &new_hash, now).await? {
+            return Err(ServiceError::WrongPassword);
+        }
+        store::sessions::delete_sessions_except(&txn, user.id, &keep).await?;
+        store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
+        let entry = self.team_audit_entry(
+            principal,
+            personal_team.id,
+            AuditAction::PasswordChanged,
+            EntityType::User,
+            *user.id.as_uuid(),
+            json!({ "ended_sign_ins": ended_sign_ins }),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        // The password is changed by now, so failing to clear the count mustn't fail the request.
+        if let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, &attempts_key).await {
+            tracing::warn!(?error, "can't clear sign-in attempts");
+        }
+        tracing::info!(user_id = %user.id, ended_sign_ins, "password changed");
+        Ok(PasswordChanged { ended_sign_ins })
     }
 
     /// Resolves a session token to its user. Fails with [`ServiceError::Unauthenticated`] when the session is

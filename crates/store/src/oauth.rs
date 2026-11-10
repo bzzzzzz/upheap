@@ -280,6 +280,22 @@ pub async fn revoke_token_family(
     Ok(result.rows_affected == 1)
 }
 
+/// Revokes every family of the user that isn't revoked yet at `now`, and returns how many it revoked. As
+/// [`revoke_token_family`], each row waits for a refresh of its family in progress.
+pub async fn revoke_user_token_families(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let result = oauth_token_families::Entity::update_many()
+        .col_expr(oauth_token_families::Column::RevokedAt, now.as_millis().into())
+        .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(oauth_token_families::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
+}
+
 pub async fn insert_token(db: &impl ConnectionTrait, token: &NewToken<'_>) -> Result<(), StoreError> {
     let row = oauth_tokens::ActiveModel {
         token_hash: Set(token.token_hash.to_owned()),

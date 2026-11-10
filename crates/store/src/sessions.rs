@@ -3,7 +3,7 @@
 //! Sessions are authentication plumbing, not domain data, so ending one deletes its row.
 
 use domain::{Timestamp, UserId};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db};
@@ -45,6 +45,37 @@ pub async fn find_session_user(
         id: &row.user_id,
     };
     Ok(Some(UserId::from_uuid(read.uuid(&row.user_id)?)))
+}
+
+/// How many of the user's sessions other than `keep_hash` are still live at `now`.
+pub async fn count_live_sessions_except(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    keep_hash: &str,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let count = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(sessions::Column::TokenHash.ne(keep_hash))
+        .filter(sessions::Column::ExpiresAt.gt(now.as_millis()))
+        .count(db)
+        .await?;
+    Ok(count)
+}
+
+/// Ends every session of the user except `keep_hash`, expired ones included, and returns how many rows it deleted.
+/// Scans the user's sessions: neither SQLite nor Postgres indexes `sessions.user_id`, and a user has few.
+pub async fn delete_sessions_except(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    keep_hash: &str,
+) -> Result<u64, StoreError> {
+    let result = sessions::Entity::delete_many()
+        .filter(sessions::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(sessions::Column::TokenHash.ne(keep_hash))
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
 }
 
 /// Ends a session. Ending a session that doesn't exist succeeds.

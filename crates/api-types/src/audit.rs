@@ -56,6 +56,7 @@ pub enum AuditActionDto {
     OptionArchived,
     InviteLinkCreated,
     InviteLinkRevoked,
+    PasswordChanged,
     /// An action this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
     /// API's schema.
     #[serde(other, skip_serializing)]
@@ -96,6 +97,7 @@ impl From<AuditAction> for AuditActionDto {
             AuditAction::OptionArchived => Self::OptionArchived,
             AuditAction::InviteLinkCreated => Self::InviteLinkCreated,
             AuditAction::InviteLinkRevoked => Self::InviteLinkRevoked,
+            AuditAction::PasswordChanged => Self::PasswordChanged,
         }
     }
 }

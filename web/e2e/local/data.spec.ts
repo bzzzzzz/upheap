@@ -32,6 +32,8 @@ test("a downloaded copy replaces the data after a confirm, and a file that isn't
   // Nobody signs the CLI in to a database in this browser, so there is nothing to list.
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Command line" })).toHaveCount(0);
+  // Nor a password to change.
+  await expect(page.getByRole("heading", { name: "Password" })).toHaveCount(0);
   const input = page.getByLabel("Open a copy…");
   await input.setInputFiles({ name: "monday.sqlite3", mimeType: "application/vnd.sqlite3", buffer: copy });
   const confirm = page.getByRole("alertdialog", { name: "Replace everything here with monday.sqlite3?" });
