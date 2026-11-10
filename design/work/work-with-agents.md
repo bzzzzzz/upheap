@@ -15,8 +15,8 @@ method. Step agreed: 1 (value).
    agents. (Owner.)
 7. This pitch replaces the one in product.md, and it is still a ranked todo list holding more work than can be
    done. Agents are how part of that work gets done, not what the product is. (Owner.)
-8. Upheap waits for the person and doesn't interrupt. It pushes only what they asked for, such as a reminder, or
-   what is critical to act on fast. (Owner.)
+8. Upheap waits for the person and doesn't interrupt. It pushes only what they asked for: a reminder, or
+   what they have said is critical to act on fast. Only the person decides what is critical. (Owner.)
 9. What's built stays: the ranking and its factors, need, states, tags, the audit log, nothing deleted, the stack.
    (Repository.)
 
@@ -41,7 +41,7 @@ doesn't interrupt.
 ### The questions it answers
 
 1. What's important right now, and what should I work on? (As today.)
-2. What's on the horizon?
+2. What's on the horizon? (Whatever comes next in the list: scroll down, and it's still in priority order.)
 3. Why is this here, and why isn't it higher? (As today.)
 4. What is waiting for me: which questions and requests only I can deal with?
 5. What should the agent pick up next? (Answered the same way every time, without asking a model.)
@@ -51,7 +51,7 @@ doesn't interrupt.
 1. **Not a plan that gets finished.** The heap holds more than can be done. It orders the work; it doesn't
    promise all of it.
 2. **Not something that interrupts.** Information appears when the person asks for it. Upheap pushes only what
-   they asked to be pushed, such as a reminder, and the rare thing that is critical to act on fast.
+   they asked to be pushed: a reminder, or what they have said is critical to act on fast.
 3. **Not an agent runner.** It doesn't host models, hold prompts or manage their tools. It hands an agent an item
    with its context and takes back the result.
 4. **Not a wiki or a document store.** A heap's context is short and points at where the knowledge lives: a
@@ -123,9 +123,8 @@ is resolved or turned into a task.
 
 1. **Core.** Nothing reaches the person unless they look: a question, a finished task and an agent's progress all
    wait in Upheap until then.
-2. **Core.** Two things may be pushed: what the person asked to be pushed, such as a reminder on its date, and
-   what is critical to act on fast. Which cases count as critical is decided one by one, and the list stays
-   short.
+2. **Core.** Only what the person asked to be pushed is pushed: a reminder on its date, and whatever else they
+   have said is critical to act on fast. Upheap and agents never decide that for them.
 3. An agent that has to wait for the person goes on to the next item it can work on.
 
 **Handing work to an agent**
@@ -171,7 +170,7 @@ is resolved or turned into a task.
 
 ### Out
 
-How a pushed reminder or a critical case reaches the person, more than one kind of agent, and who in a team
+How a pushed reminder or a critical case reaches the person, how the person says what is critical, more than one kind of agent, and who in a team
 answers a question. See Ideas.
 
 ## 3. Workflows
@@ -196,6 +195,6 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 
 Outside the scope. Not commitments.
 
-- The channel for what is pushed: a reminder on its date, and the critical cases.
+- The channel for what is pushed, and how the person says what counts as critical.
 - Several kinds of agent, with items marked for one of them.
 - A person in a shared heap picking who answers a question.
