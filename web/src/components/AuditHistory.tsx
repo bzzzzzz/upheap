@@ -22,11 +22,11 @@ export function AuditHistory({
   const log = useAuditLog(scope, entityId);
 
   if (log.isPending) {
-    return <p className="py-4 text-sm text-stone-500">Loading history…</p>;
+    return <p className="py-4 text-sm text-muted">Loading history…</p>;
   }
   if (log.isError) {
     return (
-      <p role="alert" className="py-4 text-sm text-red-700 dark:text-red-400">
+      <p role="alert" className="py-4 text-sm text-overdue-ink">
         {log.error.message}
       </p>
     );
@@ -36,9 +36,9 @@ export function AuditHistory({
   return (
     <div>
       {entries.length === 0 ? (
-        <p className="py-4 text-sm text-stone-500">No history you can see.</p>
+        <p className="py-4 text-sm text-muted">No history you can see.</p>
       ) : (
-        <ol className="divide-y divide-stone-200 dark:divide-stone-800">
+        <ol className="divide-y divide-line">
           {entries.map((entry) => (
             <AuditEntryRow key={entry.id} entry={entry} showEntity={showEntity} />
           ))}
@@ -49,7 +49,7 @@ export function AuditHistory({
           type="button"
           onClick={() => void log.fetchNextPage()}
           disabled={log.isFetchingNextPage}
-          className="mt-2 text-sm text-stone-500 hover:text-stone-900 dark:hover:text-stone-100"
+          className="mt-2 min-h-9 text-sm text-muted hover:text-ink pointer-coarse:min-h-11"
         >
           Load more
         </button>
@@ -63,19 +63,19 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
   // The viewer's own changes read as theirs, as the phrase reads after any name: "You added item".
   const actor = entry.actor.id === me?.user.id ? "You" : entry.actor.display_name;
   return (
-    <li className="py-2 text-sm">
+    <li className="py-2 text-sm wrap-anywhere">
       <p>
         <span className="font-medium">{actor}</span> {entry.phrase}
         {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}
-        <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-stone-500">
+        <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-muted">
           {entry.created_label}
         </time>
       </p>
       {entry.changes.length > 0 && (
-        <ul className="mt-1 space-y-0.5 text-xs text-stone-600 dark:text-stone-400">
+        <ul className="mt-1 space-y-0.5 text-xs text-ink-soft">
           {entry.changes.map((change) => (
             <li key={change.field}>
-              <span className="text-stone-500">{change.label}:</span> <ChangeValues {...change} />
+              <span className="text-muted">{change.label}:</span> <ChangeValues {...change} />
             </li>
           ))}
         </ul>
@@ -93,7 +93,7 @@ function ChangeValues({ before, after }: { before?: string | null; after?: strin
   }
   return (
     <span>
-      <del className="text-stone-500">{before}</del> → {after ?? <span className="italic">none</span>}
+      <del className="text-muted">{before}</del> → {after ?? <span className="italic">none</span>}
     </span>
   );
 }
