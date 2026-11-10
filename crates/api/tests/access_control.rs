@@ -383,6 +383,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/invites/{token}/register",
+            Public,
+            Target::ForeignInviteLink,
+            RequestBody::Registration,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps",
             team(ManageHeaps),
             Target::Nothing,

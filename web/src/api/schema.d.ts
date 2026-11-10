@@ -125,6 +125,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invites/{token}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates an account through the link, and joins its team as a member in the same act: the account, its personal
+         *     team and heap, the membership and the session are all made, or none is. Works whether registration is open or
+         *     closed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`
+         *     `invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is
+         *     also taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.
+         */
+        post: operations["register_by_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1275,10 +1298,11 @@ export interface components {
             viewer?: null | components["schemas"]["InviteViewer"];
         };
         /**
-         * @description An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+         * @description An action the holder of an invite link can take. Empty unless the link works and admits the viewer: `join` for a
+         *     signed-in outsider, `create_account` for someone signed out.
          * @enum {string}
          */
-        InvitationAction: "join";
+        InvitationAction: "join" | "create_account";
         /** @description An invite link: whoever holds its token can join the team until it ends or is revoked. */
         InviteLink: {
             allowed_actions: components["schemas"]["InviteLinkAction"][];
@@ -1327,6 +1351,14 @@ export interface components {
          * @enum {string}
          */
         InviteLinkState: "working" | "ended" | "revoked";
+        /**
+         * @description What creating an account through an invite link answers: the new account, and the link's team as the new member
+         *     sees it, so a client can land them there without another call.
+         */
+        InviteRegistration: {
+            team: components["schemas"]["Team"];
+            user: components["schemas"]["User"];
+        };
         /** @description A signed-in person's standing in the team a link is for. */
         InviteViewer: {
             status: components["schemas"]["InviteViewerStatus"];
@@ -2387,6 +2419,60 @@ export interface operations {
             };
             /** @description `invite_link_ended` or `invite_link_revoked` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    register_by_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invite link's secret: the last part of the link, `{origin}/invite/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered, joined and signed in; sets the session cookie */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteRegistration"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid email, name or password, or `invalid_handle` with a `hint` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -11,6 +11,8 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::Timestamp;
 use domain::handle::Handle;
+use domain::heap::Heap;
+use domain::team::Team;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
@@ -65,6 +67,57 @@ pub struct Registration<'a> {
     pub password: &'a str,
 }
 
+/// A registration that passed the input checks, password not yet hashed.
+pub(crate) struct ValidRegistration {
+    email: Email,
+    username: Handle,
+    display_name: DisplayName,
+    /// The name of the personal team: the display name.
+    team_name: Name,
+    password: String,
+}
+
+/// A registration that passed the input checks, with its password hashed.
+pub(crate) struct NewAccount {
+    pub email: Email,
+    pub username: Handle,
+    pub display_name: DisplayName,
+    /// The name of the personal team: the display name.
+    pub team_name: Name,
+    pub password_hash: String,
+}
+
+/// Checks what a new user entered, in the order the form shows it. Cheap, and touches no database, so nothing is
+/// made before the input is known to be good.
+pub(crate) fn validate_registration(registration: Registration<'_>) -> Result<ValidRegistration, ServiceError> {
+    let email = Email::parse(registration.email)?;
+    let username = Handle::parse(registration.username, Field::Username)?;
+    let display_name = DisplayName::parse(registration.display_name)?;
+    validate_new_password(registration.password)?;
+    let team_name = Name::parse(display_name.as_str())?;
+    Ok(ValidRegistration {
+        email,
+        username,
+        display_name,
+        team_name,
+        password: registration.password.to_owned(),
+    })
+}
+
+/// Hashes the password of a checked registration. Costly (argon2), so it runs off the async threads and callers do
+/// it as late as they can.
+pub(crate) async fn hash_registration(valid: ValidRegistration) -> Result<NewAccount, ServiceError> {
+    let password = valid.password;
+    let password_hash = run_blocking(move || hash_password(&password)).await?;
+    Ok(NewAccount {
+        email: valid.email,
+        username: valid.username,
+        display_name: valid.display_name,
+        team_name: valid.team_name,
+        password_hash,
+    })
+}
+
 /// Hash of a fixed password, verified against when an email is unknown so that both cases take as long.
 static DUMMY_HASH: LazyLock<Option<String>> = LazyLock::new(|| hash_password("dummy password for timing").ok());
 
@@ -77,24 +130,14 @@ impl Services {
         if !self.settings.allow_registration {
             return Err(ServiceError::RegistrationClosed);
         }
-        let email = Email::parse(registration.email)?;
-        let username = Handle::parse(registration.username, Field::Username)?;
-        let display_name = DisplayName::parse(registration.display_name)?;
-        validate_new_password(registration.password)?;
-        let team_name = Name::parse(display_name.as_str())?;
-        let password = registration.password.to_owned();
-        let password_hash = run_blocking(move || hash_password(&password)).await?;
+        let account = hash_registration(validate_registration(registration)?).await?;
 
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let made = self
-            .insert_personal_user(&txn, email, username, display_name, team_name, now)
-            .await?;
-        store::users::insert_password(&txn, made.user.id, &password_hash, now).await?;
-        let grant = self.open_session(&txn, made.user, now).await?;
+        let (grant, team, heap) = self.insert_account(&txn, account, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(user_id = %grant.user.id, team_id = %made.team.id, heap_id = %made.heap.id, "user registered");
+        tracing::info!(user_id = %grant.user.id, team_id = %team.id, heap_id = %heap.id, "user registered");
         Ok(grant)
     }
 
@@ -204,7 +247,31 @@ impl Services {
         Ok(())
     }
 
-    async fn open_session(
+    /// Makes the account inside the caller's transaction: the user with their personal team and first heap, their
+    /// password, and a session. Fails like [`Services::insert_personal_user`] when the email or username is taken.
+    /// Returns the session and the personal team and heap, for the caller's log line.
+    pub(crate) async fn insert_account(
+        &self,
+        txn: &impl store::ConnectionTrait,
+        account: NewAccount,
+        now: Timestamp,
+    ) -> Result<(SessionGrant, Team, Heap), ServiceError> {
+        let made = self
+            .insert_personal_user(
+                txn,
+                account.email,
+                account.username,
+                account.display_name,
+                account.team_name,
+                now,
+            )
+            .await?;
+        store::users::insert_password(txn, made.user.id, &account.password_hash, now).await?;
+        let grant = self.open_session(txn, made.user, now).await?;
+        Ok((grant, made.team, made.heap))
+    }
+
+    pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
         user: User,

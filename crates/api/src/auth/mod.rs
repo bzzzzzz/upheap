@@ -5,6 +5,7 @@ use api_types::me::UserDto;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use serde::Serialize;
 use service::auth::{Registration, SessionGrant};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -79,7 +80,7 @@ async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<R
 }
 
 /// How to set the session cookie. A server whose one user needs no signing in has no such routes.
-fn cookie_settings(state: &AppState) -> Result<&CookieSettings, ApiError> {
+pub(crate) fn cookie_settings(state: &AppState) -> Result<&CookieSettings, ApiError> {
     match &state.authentication {
         Authentication::Sessions(cookies) => Ok(cookies),
         Authentication::LocalUser(_) => Err(ApiError::NoSuchRoute),
@@ -87,7 +88,17 @@ fn cookie_settings(state: &AppState) -> Result<&CookieSettings, ApiError> {
 }
 
 fn signed_in(status: StatusCode, grant: &SessionGrant, cookies: &CookieSettings) -> Response {
-    let body = axum::Json(UserDto::from(&grant.user));
+    signed_in_with(status, grant, cookies, UserDto::from(&grant.user))
+}
+
+/// `body` with the session cookie of `grant`.
+pub(crate) fn signed_in_with(
+    status: StatusCode,
+    grant: &SessionGrant,
+    cookies: &CookieSettings,
+    body: impl Serialize,
+) -> Response {
+    let body = axum::Json(body);
     match session_cookie(&grant.token, cookies) {
         Some(cookie) => (status, [(header::SET_COOKIE, cookie)], body).into_response(),
         // Tokens are base64url, which is always a valid header value; a failure here is a bug.

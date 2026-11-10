@@ -319,24 +319,27 @@ pub fn allowed_invite_link_actions(link: &InviteLink, role: Role, now: Timestamp
 /// An action a client may offer to someone holding an invite link.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvitationAction {
-    /// Join the team through the link.
+    /// Join the team through the link, signed in.
     Join,
+    /// Create an account through the link, joining the team in the same act.
+    CreateAccount,
 }
 
 /// What a viewer can do with the invite link they hold at `now`. `viewer_is_member` is `None` when nobody is signed
-/// in (the client signs them in first, so nothing is offered), else whether they are already in the team.
-/// `last_removed_at` is their last removal from the team, if any. Joining is offered only to a signed-in outsider
-/// the link would admit: working, and not made before their removal.
+/// in, else whether they are already in the team. `last_removed_at` is their last removal from the team, if any.
+/// Joining is offered only to a signed-in outsider the link would admit: working, and not made before their removal.
+/// Creating an account is offered to someone signed out while the link works; a new account has no removal.
 pub fn allowed_invitation_actions(
     link: &InviteLink,
     viewer_is_member: Option<bool>,
     now: Timestamp,
     last_removed_at: Option<Timestamp>,
 ) -> Vec<InvitationAction> {
-    if viewer_is_member == Some(false) && link.check_join(now, last_removed_at).is_ok() {
-        return vec![InvitationAction::Join];
+    match viewer_is_member {
+        None if link.check_join(now, None).is_ok() => vec![InvitationAction::CreateAccount],
+        Some(false) if link.check_join(now, last_removed_at).is_ok() => vec![InvitationAction::Join],
+        _ => Vec::new(),
     }
-    Vec::new()
 }
 
 /// An action a client may offer on one member of a team.
@@ -695,12 +698,17 @@ mod tests {
         }
 
         #[gtest]
-        fn nothing_is_offered_to_a_signed_out_viewer_or_a_member() {
+        fn a_signed_out_viewer_may_create_an_account_through_a_working_link() {
             let link = link(false);
             expect_that!(
                 allowed_invitation_actions(&link, None, link.created_at, None),
-                is_empty()
+                elements_are![eq(&InvitationAction::CreateAccount)]
             );
+        }
+
+        #[gtest]
+        fn nothing_is_offered_to_a_member() {
+            let link = link(false);
             expect_that!(
                 allowed_invitation_actions(&link, Some(true), link.created_at, None),
                 is_empty()
@@ -725,9 +733,14 @@ mod tests {
                 allowed_invitation_actions(&working, Some(false), ended, None),
                 is_empty()
             );
+            expect_that!(allowed_invitation_actions(&working, None, ended, None), is_empty());
             let revoked = link(true);
             expect_that!(
                 allowed_invitation_actions(&revoked, Some(false), revoked.created_at, None),
+                is_empty()
+            );
+            expect_that!(
+                allowed_invitation_actions(&revoked, None, revoked.created_at, None),
                 is_empty()
             );
         }
