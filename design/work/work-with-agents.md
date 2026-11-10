@@ -144,6 +144,8 @@ is resolved or turned into a task.
 5. A task in review is in the middle of the agent's turn, like any item with an open request. "All the way"
    still stops for each review.
 6. Work the person does themselves needs no review.
+7. Ticking a step needs no review. Steps track progress inside a task, and an agent or a person adds, rewords
+   and ticks them freely while the task is in progress. Only the task's done is reviewed.
 
 **Waiting, not interrupting**
 
@@ -185,8 +187,8 @@ is resolved or turned into a task.
 
 **What can become what**
 
-1. **Core.** A note can gain questions, become a task, or become a new heap with its own context, tasks and
-   notes.
+1. **Core.** A note can gain questions, become a task, become a step of a task that already exists, or become a
+   new heap with its own context, tasks and notes.
 2. **Core.** A task can gain questions and gain steps, and is done like any item.
 3. **Core.** A reminder is resolved, or becomes a task and from there behaves as one.
 4. A person can make every one of these moves by hand, and an agent through the command-line client.
@@ -283,7 +285,7 @@ week), setup (once or rarely) or recovery.
 
 **P7. Shape things by hand.** Loop, occasional.
 
-1. Turn a note into a task and write its steps, or turn a note into a new heap.
+1. Turn a note into a task and write its steps, into a step of a task that already exists, or into a new heap.
 2. Say that one item blocks another.
 3. Attach a question to an item for myself or a teammate to answer later.
 
@@ -357,7 +359,9 @@ week), setup (once or rarely) or recovery.
 1. A note is more than one piece of work.
 2. The agent makes several tasks from it and says which block which, or makes a new heap with its context,
    tasks and notes. Each keeps a link to the note.
-3. The note has reached its stable state. The new items are at theirs, and wait for the person.
+3. Or the note belongs to a task that already exists: the agent adds it there as a step, with a link to the
+   note, and the note is closed.
+4. The note has reached its stable state. The new items are at theirs, and wait for the person.
 
 **A6. Ask for review.** Loop.
 
