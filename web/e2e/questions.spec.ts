@@ -75,7 +75,8 @@ test("a question without choices is answered with text, and then reads in Questi
   const reply = first.getByRole("button", { name: "Reply", exact: true });
   await expect(first).toContainText("Question");
   await expect(reply).toBeDisabled();
-  if (isPhone(page)) expect((await reply.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  // Rounded: layout can land a 44 px control a hair short, such as 43.99997.
+  if (isPhone(page)) expect(Math.round((await reply.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
   await answer.fill("   ");
   await expect(reply).toBeDisabled();
   await answer.fill("Let's Encrypt");
