@@ -37,10 +37,12 @@ Rules for the docs:
    next, and ideas, in about sixty lines at most. Each track's progress is in its own doc. Nothing lists what's
    built: the code and product.md say that, and the pull requests are the history.
 3. **A track's doc is temporary.** `design/work/<track>.md` holds one piece of work while it's built: what it is,
-   its progress, its design, its open questions and its ideas. Nothing outside `work/` links into it but CLAUDE.md
-   and the index: code and the permanent docs cite the permanent doc that holds a mechanism, or nothing until one
-   does. Once built, the mechanisms worth keeping move into architecture.md or the module docs, what passes rule 4
-   into product.md and decisions.md, the ideas left over into the tracker, and the file goes. Git remembers it.
+   its progress, its design, its open questions and its ideas. A long design goes in a file of its own beside it,
+   `<track>-design.md`, so the track's doc stays short and is only status. Nothing outside `work/` links into
+   either but CLAUDE.md and the index: code and the permanent docs cite the permanent doc that holds a mechanism,
+   or nothing until one does. Once built, the mechanisms worth keeping move into architecture.md or the module
+   docs, what passes rule 4 into product.md and decisions.md, the ideas left over into the tracker, and the files
+   go. Git remembers them.
 4. **product.md and decisions.md hold the core only.** product.md takes a promise to a user, stated as an outcome,
    that only a product change could break: not how a screen behaves, an edge case or an error state. decisions.md
    takes a choice that had a real alternative someone would propose again, is costly to reverse, and has a reason
