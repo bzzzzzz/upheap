@@ -2,7 +2,7 @@
 
 Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents. It
 replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design method.
-Step agreed: 3 (workflows).
+Step agreed: 4 (behaviours).
 
 ## Constraints
 
@@ -744,6 +744,409 @@ joining the queue; and need being settled for everything made from a note.
 
 ## 5. Interface
 
+Two surfaces: the web app, for the person, and the command-line client, for agents, `upheap work` and scripts.
+Everything here adds to [ux.md](../ux.md) and to the commands that exist. What isn't mentioned stays as it is.
+
+An item's context is the description it has today, shown as Markdown and called Context. There is one text
+field on an item, not two. So an agent that fills in the context rewrites what the person wrote, and the text
+as it was before stays in the item's history.
+
+### Inventory
+
+F is frequency and N is necessity, both 1 to 5 by the method's scale, for the server build. The local build has
+no agents: it gets what works without one (W1, W4, W5, W12, W15 and W17) and none of the rest.
+
+**Web app**
+
+| # | Entry | Flows | F | N | Why, for 4 and 5 |
+| --- | --- | --- | :---: | :---: | --- |
+| W1 | List row: step count, reminder mark, who has it | P2 | 5 | 5 | Without the marks an item an agent holds looks free to take |
+| W2 | Waiting for me, across heaps | P3, P14, A5 | 5 | 5 | Every agent turn that asks stops until the person finds the question |
+| W3 | Replying: a question, a request, a review | P3, P14 | 5 | 5 | The only way an item goes back to the agent |
+| W4 | Item: context as Markdown | P4, P5 | 4 | 5 | It is what the agent reads and what it writes |
+| W5 | Item: steps | P4, P5 | 5 | 5 | A task is its steps |
+| W6 | Item: who has it, send on, take back, changes asked, retry | P4, P11, P12 | 5 | 5 | Nothing reaches an agent without the go-ahead |
+| W7 | Item: closed questions with their replies, change a reply | P13 | 3 | 4 | A wrong answer has no other fix |
+| W8 | Item: what it came from and what it became | P4, P10 | 3 | 4 | After a split it's the only way from the note to its tasks |
+| W9 | Item: runs with result, links and cost, and the total | P10, A5 | 3 | 4 | Asked and failed runs, and why a turn is stuck, are nowhere else |
+| W10 | Agents: progress across heaps, and what waits for a decision | P4, P10 | 4 | 5 | P4 starts here; a prepared note is otherwise found only by scrolling |
+| W11 | Navigation: Waiting for me and Agents | all | 5 | 5 | Both are across heaps and have no place today |
+| W12 | Add: a reminder with its date | P1 | 3 | 4 | A reminder can't be made otherwise |
+| W13 | Heap settings: context, agents prepare | P8 | 1 | 5 | Golden path step 1 |
+| W14 | Heap settings: my weight for this heap | Queue §2 | 2 | 4 | With two heaps it's the only way to say which comes first |
+| W15 | The list: reminders to come, and search finding them | P6 | 2 | 4 | A reminder with a wrong date can't be found to fix |
+| W16 | Closed: items closed as became | P11 | 2 | 4 | Reopening one within its week starts here |
+| W17 | Item: make a note or a reminder a task | P6, P7 | 3 | 4 | P6 dead-ends: a due reminder can't become a task |
+| W18 | Item: attach a question by hand | P7 | 2 | 2 | |
+| W19 | Item: split a note by hand into tasks, a step or a heap | P7 | 2 | 3 | |
+| W20 | Steps: reorder by dragging | P5 | 2 | 2 | |
+| W21 | Activity and history: a mark on what an agent changed | P10, story 19 | 2 | 4 | Otherwise an agent's wrong edit reads as the person's own |
+| W22 | Heap: its total cost | P10, story 25 | 2 | 4 | The only place the cost of a whole project is seen |
+
+**Command-line client**
+
+| # | Entry | Flows | F | N | Why, for 4 and 5 |
+| --- | --- | --- | :---: | :---: | --- |
+| C1 | `work run`: the loop | P9, A1 to A5 | 5 | 5 | It is how an agent gets work |
+| C2 | `work next`: what's next, without taking it | A1 | 3 | 4 | The promise that "next" is a rule can be checked, and a person's own loop needs it |
+| C3 | `item show` and `heap show` with everything an agent reads | A1 | 5 | 5 | The agent starts every run by reading |
+| C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | 5 | 5 | Filling in context is the first turn of every note |
+| C5 | `step add`, `tick`, `drop`, `edit` | A1 | 5 | 5 | Doing a task is ticking its steps |
+| C6 | `question ask`, `request`, `review` | A2, A6 | 5 | 5 | The agent's only way to reach the person |
+| C7 | `work reached`: the run says what it reached and made | A1 | 5 | 5 | A turn ends no other way |
+| C8 | `item to-task` | A1 | 4 | 5 | Golden path step 6 |
+| C9 | Splitting: `item add --from`, `item became` | A4 | 3 | 5 | Golden path step 6 |
+| C10 | `item to-step` | A4 | 2 | 4 | A core move with no other way for an agent |
+| C11 | `heap add --from` | A4 | 2 | 4 | A core move with no other way for an agent |
+| C12 | What a run is refused, and what it's told | A5, P12 | 3 | 5 | An agent that isn't told why repeats the same write |
+| C13 | The person's side: `item send`, `item take-back`, `question list`, `question reply` | P3, P4 | 3 | 3 | |
+| C14 | `item list` showing kind and who has it | P2 | 3 | 3 | |
+| C15 | `item add --reminder` | P1 | 2 | 3 | |
+| C16 | `work queue`: the whole queue, with why each is where it is | A1 | 2 | 2 | |
+| C17 | `work log`: the agents' progress | P10 | 2 | 2 | |
+| C18 | `step reopen`, `step move` | A1 | 2 | 2 | |
+
+**The first set** is W1 to W17, W21, W22 and C1 to C12. W18 to W20 and C13 to C18 are ideas.
+
+### Layout follows frequency
+
+1. **Waiting for me and Agents are above the heaps,** since both are across heaps. Waiting carries its count. On
+   a phone they take two of the four tabs, and Closed and Settings, used weekly and rarely, move into More.
+2. **A reply is given in the row,** in Waiting and in the item alike, without opening anything.
+3. **In the item, what the person is likeliest to act on comes first:** an open question, then who has the item
+   with the one action that fits, then the steps, then the context. What is read now and then (where it came
+   from, closed questions, runs) is folded at the bottom, one step away.
+4. **Rare things are two steps away:** a heap's context, prepare and weight in its Settings, and changing an
+   item's kind or stage under the item's ⋯.
+5. **An agent's common commands are one short line** with the item's key, and read as a sentence.
+
+### Wireframes: web app
+
+One wireframe per screen; entries that share a screen share a wireframe.
+
+```
+ALL WIDTHS · Navigation (W11)                         frequency 5 · necessity 5
+Wide sidebar, tablet rail              Phone tabs
+┌────────────────────────┐             ┌──────────────────────────────────────┐
+│ Waiting for me       3 │             │ Open   Waiting 3   [+]  Agents  More │
+│ Agents                 │             └──────────────────────────────────────┘
+│ ────────────────────── │             More: Closed, Settings, Activity, Team,
+│ [Work · Acme ▾]        │                   Teams, Account
+│ Open 14                │
+│ Closed                 │
+│ Activity               │
+│ Settings               │
+│ team, Teams, Account   │
+└────────────────────────┘
+States: no count at zero. Local build: neither entry, and today's tabs.
+```
+
+```
+ALL WIDTHS · List row (W1)                            frequency 5 · necessity 5
+│ ○ 3  Rotate the certs  2/5   [due] [tags]               with an agent │
+│      Due this week · small effort                                     │
+│ ○ 4  Paint the fence         [tags]                     waits for you │
+│ ○ 5  Renew the domain  reminder                                       │
+Marks: a task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
+       The end of the row says "with an agent" or "waits for you", and nothing when it's the person's.
+States: the state circle and the swipes work as today. On an item an agent holds they ask first, since
+        changing its state takes it back and that can't be undone.
+Next likely action: open the item.
+```
+
+```
+ALL WIDTHS · Waiting for me (W2, W3)                  frequency 5 · necessity 5
+┌────────────────────────────────────────────────────────────────────────┐
+│ Waiting for me · 5                 all heaps, most important first     │
+│                                                                        │
+│ Review, round 2 · Rotate the certs · Work                              │
+│   "The script and the runbook"   ↗ link to the work                    │
+│   [Approved] [Changes asked]     comment, optional                     │
+│                                                                        │
+│ Question · Paint the fence · House                                     │
+│   "Which colour?"   ( ) White  ( ) Green                               │
+│   comment, optional                                    [Reply]         │
+│                                                                        │
+│ Request · Rotate the certs · Work · step "Run in staging"              │
+│   "Create a staging token and store it in the vault."                  │
+│   [Done] [Can't be done]         comment, optional                     │
+│                                                                        │
+│ Stuck · Fix the footer · Site                                          │
+│   3 runs failed: <what went wrong>           [Retry] [Take back]       │
+│                                                                        │
+│ Blocker closed · Ship the feed · Work                                  │
+│   Waits for "Pick a host", closed as won't do     [Unblock] [Open]     │
+└────────────────────────────────────────────────────────────────────────┘
+One row per open question, so an item with two has two rows. The item's title opens the item.
+A question with no choices: the comment is the answer, and Reply stays off until it has text.
+A question with choices: pick one, or any number when the asker allowed it.
+States: empty ("Nothing waits for you"); loading; a failed refresh keeps the rows.
+        After a reply the row leaves, and a toast offers Change, which opens the item at that reply.
+Next likely action: the next row.
+```
+
+```
+WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   frequency 5 · necessity 5
+┌────────────────────────────────────────────────────────────────────────┐
+│ Rotate the certs                                    k3x9a  link   [✕]  │
+│ task · defined                                                         │
+│ state buttons, as today                                                │
+│                                                                        │
+│ WAITS FOR YOU   only with an open question, a stuck turn or a closed   │
+│   blocker: the same rows as in Waiting for me, with their replies      │
+│                                                                        │
+│ WHO HAS IT      one line and the action that fits (states below)       │
+│                                                                        │
+│ Why it's #3                                              as today      │
+│                                                                        │
+│ Steps 2/5                                                task only     │
+│   [x] Inventory the certs                                              │
+│   [ ] Run in staging                  opens to its context             │
+│   [-] Email ops                       dropped, shown struck            │
+│   + Add a step                                                         │
+│                                                                        │
+│ Context                               rendered Markdown     [Edit]     │
+│                                                                        │
+│ need, effort, impact, due, tags, parameters              as today      │
+│                                                                        │
+│ From: "Certs are a mess", a note                         when made     │
+│ Became: 3 tasks, listed with their states                on a note     │
+│                                                          closed so     │
+│ Questions 3   folded: each with its reply and Change reply             │
+│ Runs 4 · $1.20   folded: when, from → to, how it ended, result,        │
+│                  links, cost                                           │
+│ History              as today; an agent's change is marked as one      │
+│                                                                        │
+│ ⋯  Won't do · Make it a task · Stage: as written, with context,        │
+│    defined                                                             │
+└────────────────────────────────────────────────────────────────────────┘
+Who has it, by state:
+  Yours, open:           "With you."  [Send to an agent ▾]  to <the next state>, or all the way,
+                         with an optional line. A defined task has one choice: do it.
+  An agent brought it:   "An agent brought this to: with context, 2 h ago."
+                         [Send on ▾] [Changes asked…]  Changes asked takes a line saying what's wrong.
+  With an agent:         "With an agent since 14:02, going to: defined."  [Take back]
+  Stuck:                 shown under Waits for you, with [Retry] [Take back].
+  Closed, any reminder, an archived heap, the local build: no line. A reminder becomes a task first.
+Steps: a tap ticks or unticks; the title is edited in place; Drop is under the step's ⋯.
+Context: Edit turns it into a Markdown text field; it saves as it closes, like today's description.
+A reminder shows its date where a task shows its steps, and Make it a task is its main action once due.
+The runs' total is shown per unit when the runs reported more than one ("$1.20 and 40k tokens").
+Confirmations: Send on acts at once, with Undo while no run has started. Take back asks first.
+States: loading, saved, conflict (shows the other version, as today), read-only in an archived heap.
+Next likely action: reply when something waits; otherwise send on, or tick a step.
+```
+
+```
+ALL WIDTHS · Agents (W10)                             frequency 4 · necessity 5
+┌────────────────────────────────────────────────────────────────────────┐
+│ Agents                                                                 │
+│                                                                        │
+│ Your decision · 2                                                      │
+│   Rotate the certs     Work    note, with context         2 h ago      │
+│   Move the blog        Work    made the heap "Blog move"  yesterday    │
+│                                                                        │
+│ Today                                                                  │
+│   14:02  Rotate the certs · Work               reached: with context   │
+│          Filled the context from the infra repo's runbook.             │
+│   11:40  Fix the footer · Site                 reached: done           │
+│          Footer links fixed.   ↗ pull request                          │
+│ Yesterday                                                              │
+│   …                                                                    │
+│ Load more                                                              │
+└────────────────────────────────────────────────────────────────────────┘
+Your decision: items with the person whose latest turn ended as reached, with no turn opened and no
+         change of state or stage since; and for a note closed as became in such a turn, one row
+         standing for what it became, until any of those is sent on, started or closed. Most important
+         first, ordered as Waiting for me is.
+History: runs that ended as reached, newest first: the item, its heap, the state reached, the run's
+         result in a line or two, and its links. No cost here; it's on the item.
+A row opens its item.
+States: empty (says no agent has finished anything yet, and shows the command that starts one);
+        loading; a failed refresh keeps the rows.
+Next likely action: open the first item under Your decision.
+```
+
+```
+DIALOG, PHONE SHEET · Add (W12)                       frequency 5 · necessity 5; reminder 3 · 4
+│ Add to Work ▾                                                          │
+│ [Note] [Reminder]                    Note is picked                    │
+│ Title                                                                  │
+│ Need                                 as today, required                │
+│ Date                                 reminder only: exact, required    │
+│ context, effort, impact, tags, parameters                as today      │
+A reminder has no due field: its date is its deadline.
+States: for a reminder, Add stays off until a date is picked. The toast says when it joins the list
+        instead of where it landed.
+```
+
+```
+ALL WIDTHS · Heap settings, General (W13, W14)        frequency 2 · necessity 5
+│ Name, link name                                          as today      │
+│ Context                              rendered Markdown     [Edit]      │
+│ Agents prepare new notes             off / on                          │
+│ Your weight for this heap            1                                 │
+│ Agents' cost in this heap            $14.20                            │
+│ History, Archive heap                                    as today      │
+Context, empty: one line saying what belongs there: what the project is, where its repository and docs
+         are, where its work is reviewed and what finishing a piece means.
+Prepare: an admin's control; everyone else reads the value. One line says what it does.
+Weight:  each person's own, with a line saying it's against their other heaps and nobody else sees it.
+Cost:    the total of the runs on the heap's items, per unit when there is more than one.
+Activity, the heap's and the team's, marks an agent's change the same way an item's history does.
+Local build: none of these.
+```
+
+```
+ALL WIDTHS · The list, reminders to come (W15)        frequency 2 · necessity 4
+Filters › Show gains "Reminders to come": Hidden (the default) or Shown.
+Shown: a group of their own under the list, by date, soonest first. A row has the reminder mark, the
+       title and the date, and no position. It opens the item, where the date can be changed.
+Search matches reminders to come whether the group is shown or not, and lists them in that group.
+No note counts the hidden ones: they aren't part of the list yet.
+```
+
+```
+ALL WIDTHS · Closed (W16)                             frequency 2 · necessity 4
+│ Certs are a mess       Became 3 tasks · today by an agent    [Reopen]  │
+A third outcome beside Done and Won't do. The title opens the item, which lists what it became.
+Reopen works within the week, as for any closed item, and what it became stays.
+```
+
+### Wireframes: command-line client
+
+The new commands follow the shape of the ones that exist: a category, a verb, the required input, then
+options. Every one takes `--json` and `--quiet`.
+
+**Names.** A step and a question are named by their item's key and a number given once and never reused:
+`k3x9a.3` is a step, `k3x9a.q2` a question. Reordering steps doesn't rename them.
+
+**Markdown** comes from a file or from standard input: `--context-file notes.md`, or `--context-file -`.
+
+**A run** is known to the commands by the `UPHEAP_RUN` environment variable, which `work run` sets when it
+starts the agent tool. A command with it set writes as an agent, inside that run. Without it the same command
+is the person's own.
+
+```
+C1 · upheap work run --tool <tool> [--heap <heap>]... [--once]     frequency 5 · necessity 5
+
+$ upheap work run --tool claude --heap work --heap house
+Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
+14:02  k3x9a  Rotate the certs    note → with context    reached   2m10s   $0.31
+14:05  p2m4q  Paint the fence     note → with context    asked     0m40s   $0.08
+14:06  Nothing to do. 1 item waits for you. Asking again in a minute.
+
+--heap    repeatable; with none, the default heap. Heaps agents make from these are included.
+--once    do one run, or nothing when there is nothing, and exit.
+The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
+prints, the state to reach, and the person's line.
+How a run ended is read off it: it said `work reached` and the check passed; or it left an open
+question; otherwise it failed. Cost is what the tool reported, or blank.
+Ctrl-C: once, the current run finishes and the loop stops; twice, the run is stopped and counts as failed.
+Exits:  0 stopped by the person, or --once done; 2 no heap named and no default; 4 not signed in;
+        5 server unreachable with --once (without it the loop waits and tries again); 6 the tool isn't
+        installed or wouldn't start.
+```
+
+```
+C2 · upheap work next [--heap <heap>]...                           frequency 3 · necessity 4
+
+$ upheap work next --heap work --heap house
+k3x9a  Rotate the certs   Work   task → done   started, ready to go on
+
+$ upheap work next
+Nothing to do. 1 item waits for you.
+
+It takes nothing: no claim, no run. --quiet prints the key, or nothing. Exit 0 either way.
+```
+
+```
+C3 · upheap item show <item>, upheap heap show [<heap>]            frequency 5 · necessity 5
+
+$ upheap item show k3x9a
+k3x9a  Rotate the certs
+task · defined · in progress · with an agent                      Work #3
+need expected · effort M · due in a few weeks
+Turn: to done, all the way. "Use the new CA."
+From: n8c2d "Certs are a mess" (note, became)
+
+Context
+  <the Markdown, as written>
+
+Steps 2/4
+  [x] k3x9a.1  Inventory the certs
+  [x] k3x9a.2  Write the script
+  [ ] k3x9a.3  Run in staging
+        <its context>
+  [-] k3x9a.4  Email ops                                   dropped
+
+Questions
+  k3x9a.q1  Question · closed · changed since your last run
+            "Which CA?"  →  Internal. "Use the 2026 root."
+  k3x9a.q2  Review, round 1 · changes asked
+            https://example.com/pull/12  →  "See the comments there."
+
+Runs 3 · $1.20
+
+$ upheap heap show work
+Work · Acme · agents prepare new notes: on · your weight: 2
+
+Context
+  <the Markdown, as written>
+```
+
+```
+C4 to C11 · What an agent writes                                   frequency 5 · necessity 5
+
+upheap item edit k3x9a --context-file context.md
+upheap item to-task k3x9a                                  a note or a reminder, in place
+upheap step add k3x9a "Run in staging" [--context-file f] [--after k3x9a.2]
+upheap step tick k3x9a.3
+upheap step drop k3x9a.4
+upheap step edit k3x9a.3 [--title "..."] [--context-file f]
+upheap item start k3x9a                                    as today
+
+upheap question ask k3x9a "Which CA?" [--choice Internal --choice "Let's Encrypt"] [--many] [--step k3x9a.3]
+upheap question request k3x9a "Create a staging token and store it in the vault." [--step k3x9a.3]
+upheap question review k3x9a https://example.com/pull/12 [--piece "the script"] [--text "..."]
+
+upheap item add "Write the script" --task --from n8c2d --need expected --age keep [--blocked-by k3x9a]
+upheap item to-step n8c2d --task k3x9a                     closes the note as became
+upheap heap add "Blog move" --from n8c2d --context-file context.md
+upheap item add "Pick a host" --heap blog-move --from n8c2d --need expected --age new
+upheap item became n8c2d                                   after making things from it
+
+upheap item done k3x9a                                     a task, once its reviews are approved
+upheap work reached --result "Rotation script merged." [--link https://example.com/pull/12]...
+
+--from     what the new thing was made from. With it, --need and --age are required: nothing is
+           inherited silently. --age keep counts from the note's creation, --age new from now.
+--piece    names the piece of work a review is for. Without it the link is the name, so asking again
+           with the same link is that piece's next round. It's needed only when a piece moves to a new
+           link.
+--many     the person may pick any number of the choices; without it, one.
+Each prints one line saying what changed, and --quiet prints the key of what was made.
+`item became` is refused while nothing was made from the item.
+`work reached` takes no item: the run knows it.
+```
+
+```
+C12 · What a run is refused                                        frequency 3 · necessity 5
+
+Each is exit 3 with the server's message and code, and a hint saying what to do next.
+
+  The item changed since it was read          "Read it again: upheap item show k3x9a"
+  The turn was taken back, or the claim lapsed  "This run is over. Stop."
+  A write outside the run's own item          names the item the run holds
+  A need above the note's                     names the highest it may give
+  Done without what Review §2 asks            names what's missing: open steps, no approved review,
+                                              a piece whose latest round isn't approved
+  Reached, but the item doesn't fit the stage names the condition it misses, and the run can fix it
+                                              and say reached again
+  Won't do, answering a question, changing    "Only the person does that."
+  a heap it didn't just make
+```
+
 ## 6. Stages
 
 ## Parked
@@ -755,10 +1158,12 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Whether a done task that an agent thinks needs follow-up makes a new note.
 - How many failed runs stop the retries, and how long before a claim lapses.
 - Whether heap scores need normalising before the heap weight is applied.
-- When the reached check fails a run, the agent is told which condition it missed.
-- A heap's cost can come in more than one unit, and the interface has to show that.
 - Which Markdown is allowed (tables, images, raw HTML) and how it's made safe to render.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
+- The text of the instructions `upheap work run` gives the agent.
+- Which agent tools `--tool` knows how to start beyond the first.
+- How an item leaves "Your decision" when the person decides to leave it for now.
+- How often `upheap work run` asks again when there is nothing to do.
 
 ## Ideas
 
