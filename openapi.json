@@ -2407,7 +2407,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, or `value_unknown` (a `step` of 0, or one the item has no step for)",
+            "description": "Invalid fields, `value_unknown` (a `step` of 0) or `step_not_in_item` (`field` `step`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2529,7 +2529,7 @@
             }
           },
           "404": {
-            "description": "No such item, or `question_not_in_item`",
+            "description": "No such item or question",
             "content": {
               "application/json": {
                 "schema": {
@@ -2549,7 +2549,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields: no `reply`, or picks and a comment that don't fit the question",
+            "description": "Invalid fields: no `reply`, `pick_invalid` (`field` `picked`: out of range, repeated, none picked, or more than one where only one may be)",
             "content": {
               "application/json": {
                 "schema": {

@@ -31,7 +31,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`heap_archived`, `item_closed` or `too_many_questions`", body = Problem),
-        (status = 422, description = "Invalid fields, or `value_unknown` (a `step` of 0, or one the item has no step for)", body = Problem),
+        (status = 422, description = "Invalid fields, `value_unknown` (a `step` of 0) or `step_not_in_item` (`field` `step`)", body = Problem),
     ))]
 async fn ask_question(
     State(state): State<AppState>,
@@ -55,9 +55,9 @@ async fn ask_question(
     responses(
         (status = 200, body = ItemDto),
         (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
-        (status = 404, description = "No such item, or `question_not_in_item`", body = Problem),
+        (status = 404, description = "No such item or question", body = Problem),
         (status = 409, description = "`version_conflict`, `question_answered`, `item_closed` or `heap_archived`", body = Problem),
-        (status = 422, description = "Invalid fields: no `reply`, or picks and a comment that don't fit the question", body = Problem),
+        (status = 422, description = "Invalid fields: no `reply`, `pick_invalid` (`field` `picked`: out of range, repeated, none picked, or more than one where only one may be)", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn reply_to_question(

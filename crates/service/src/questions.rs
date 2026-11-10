@@ -88,7 +88,7 @@ impl Services {
     }
 
     /// Replies to question `number` of an item if the question is still at version `expected`, picking `picked`
-    /// (indices into its choices) and saying `comment`. Fails with [`QuestionError::NotInItem`] when the item has
+    /// (indices into its choices) and saying `comment`. Fails with [`ServiceError::NotFound`] when the item has
     /// no such question, with [`ItemError::Closed`](domain::item::ItemError::Closed) on a closed item, with
     /// [`QuestionError::Answered`] when it already has a reply, and with a validation error when the reply doesn't
     /// fit the question.
@@ -115,7 +115,7 @@ impl Services {
         let current = questions
             .iter()
             .find(|question| question.number == number)
-            .ok_or(QuestionError::NotInItem { number })?;
+            .ok_or(ServiceError::NotFound)?;
         check_questions_editable(&item)?;
         // Before the version: someone else's reply moved it, and "already answered" is the more useful thing to say.
         if current.reply.is_some() {

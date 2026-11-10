@@ -197,12 +197,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Question(QuestionError::Answered { .. }) => {
             simple(StatusCode::CONFLICT, "question_answered", Category::Conflict)
         }
-        ServiceError::Question(QuestionError::NotInItem { .. }) => {
-            simple(StatusCode::NOT_FOUND, "question_not_in_item", Category::Caller)
-        }
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),
-            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "value_unknown", Category::Caller)
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "step_not_in_item", Category::Caller)
         },
         ServiceError::Item(ItemError::NotBlocked { .. }) => Classified {
             field: Some("blocked_by_item_id"),
@@ -375,10 +372,10 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::ChoiceCount { .. } => ("choice_count_invalid", Some(Field::Choices.as_str())),
         ValidationError::ChoiceDuplicate => ("choice_duplicate", Some(Field::Choices.as_str())),
         ValidationError::NotAllowed { field } => ("field_not_allowed", Some(field.as_str())),
-        ValidationError::PickOutOfRange => ("pick_out_of_range", Some(Field::Picked.as_str())),
-        ValidationError::PickRepeated => ("pick_repeated", Some(Field::Picked.as_str())),
-        ValidationError::PickNone => ("pick_required", Some(Field::Picked.as_str())),
-        ValidationError::PickTooMany => ("pick_too_many", Some(Field::Picked.as_str())),
+        ValidationError::PickOutOfRange
+        | ValidationError::PickRepeated
+        | ValidationError::PickNone
+        | ValidationError::PickTooMany => ("pick_invalid", Some(Field::Picked.as_str())),
     };
     Classified {
         status: StatusCode::UNPROCESSABLE_ENTITY,

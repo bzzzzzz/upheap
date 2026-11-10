@@ -228,7 +228,7 @@ async fn a_question_names_a_step_of_the_item_even_a_dropped_one() -> Result<()> 
     expect_that!(asked.status, eq(StatusCode::CREATED));
     expect_that!(asked.body["questions"][0]["step"], eq(&json!(2)));
     expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
-    expect_that!(unknown.body["code"], eq(&json!("value_unknown")));
+    expect_that!(unknown.body["code"], eq(&json!("step_not_in_item")));
     expect_that!(unknown.body["field"], eq(&json!("step")));
     expect_that!(zero.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
     expect_that!(zero.body["field"], eq(&json!("step")));
@@ -472,10 +472,15 @@ async fn a_question_with_choices_is_replied_to_by_picking() -> Result<()> {
         expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
         expect_that!(refused.body["field"], eq(&json!("picked")));
     }
-    expect_that!(none.body["code"], eq(&json!("pick_required")));
-    expect_that!(two.body["code"], eq(&json!("pick_too_many")));
-    expect_that!(out_of_range.body["code"], eq(&json!("pick_out_of_range")));
-    expect_that!(repeated.body["code"], eq(&json!("pick_repeated")));
+    for refused in [&none, &two, &out_of_range, &repeated] {
+        expect_that!(refused.body["code"], eq(&json!("pick_invalid")));
+    }
+    // The title says which rule broke.
+    let titles: std::collections::HashSet<_> = [&none, &two, &out_of_range, &repeated]
+        .into_iter()
+        .map(|refused| refused.body["title"].to_string())
+        .collect();
+    expect_that!(titles.len(), eq(4));
     expect_that!(one.status, eq(StatusCode::OK));
     expect_that!(one.body["questions"][0]["reply"]["picked"], eq(&json!([1])));
     expect_that!(one.body["questions"][0]["reply"]["comment"], eq(&json!("Because")));
@@ -621,7 +626,7 @@ async fn a_second_reply_is_refused_and_so_is_a_stale_version() -> Result<()> {
     expect_that!(again.body["code"], eq(&json!("question_answered")));
     expect_that!(late.body["code"], eq(&json!("question_answered")));
     expect_that!(missing.status, eq(StatusCode::NOT_FOUND));
-    expect_that!(missing.body["code"], eq(&json!("question_not_in_item")));
+    expect_that!(missing.body["code"], eq(&json!("not_found")));
     expect_that!(nonsense.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

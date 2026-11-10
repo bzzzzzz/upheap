@@ -853,6 +853,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::audit::{AuditActionDto, AuditLogDto};
     use crate::me::{MeActionDto, MeDto};
 
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
@@ -915,6 +916,28 @@ mod tests {
     }
 
     #[gtest]
+    fn an_audit_action_a_later_server_added_doesnt_stop_a_client_reading_the_history() -> googletest::Result<()> {
+        let entry = |action: &str| {
+            json!({
+                "id": Uuid::nil(), "created_at": 0, "created_label": "today",
+                "actor": { "id": Uuid::nil(), "display_name": "Ada" },
+                "action": action, "phrase": "did something", "names_entity": true,
+                "entity": { "type": "item", "id": Uuid::nil(), "label": "Rotate the certs" },
+                "changes": [], "diff": {},
+            })
+        };
+        let log: AuditLogDto = serde_json::from_value(json!({
+            "entries": [entry("question_asked"), entry("item_pinned")],
+            "next_cursor": null,
+        }))?;
+
+        expect_that!(log.entries[0].action, eq(AuditActionDto::QuestionAsked));
+        expect_that!(log.entries[1].action, eq(AuditActionDto::Unknown));
+        expect_that!(log.entries[1].phrase, eq("did something"));
+        Ok(())
+    }
+
+    #[gtest]
     fn an_account_action_a_later_server_added_is_left_out() -> googletest::Result<()> {
         let me: MeDto = serde_json::from_value(json!({
             "user": { "id": Uuid::nil(), "username": "ada", "email": "ada@example.test", "display_name": "Ada", "version": 1 },
@@ -939,6 +962,7 @@ mod tests {
         expect_that!(serde_json::to_value(StepStateDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(QuestionKindDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(QuestionStateDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(AuditActionDto::Unknown), err(anything()));
     }
 
     #[gtest]

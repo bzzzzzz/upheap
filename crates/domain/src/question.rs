@@ -5,7 +5,7 @@
 
 use crate::item::{Item, ItemError};
 use crate::step::StepNumber;
-use crate::text::{Context, parse_required};
+use crate::text::{Context, parse_positive, parse_required};
 use crate::validation::Field;
 use crate::{ItemId, QuestionId, Timestamp, UserId, ValidationError, Version};
 
@@ -32,7 +32,7 @@ impl QuestionNumber {
     /// A positive integer written in digits, as in a path. `None` for anything else, a sign and a leading zero
     /// included.
     pub fn parse(raw: &str) -> Option<Self> {
-        StepNumber::parse(raw).and_then(|number| Self::new(number.get()))
+        parse_positive(raw).and_then(Self::new)
     }
 
     pub const fn get(self) -> u32 {
@@ -270,8 +270,6 @@ pub enum QuestionError {
     TooMany { item_id: ItemId, max: usize },
     #[error("the item has no step {number}")]
     StepNotFound { number: StepNumber },
-    #[error("the item has no question {number}")]
-    NotInItem { number: QuestionNumber },
     #[error("question {number} is already answered")]
     Answered { number: QuestionNumber },
 }

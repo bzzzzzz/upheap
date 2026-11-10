@@ -96,4 +96,5 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
 
 ## Open questions
 
-None yet.
+- An open question on an item closed past its reopen window can't be answered or withdrawn. Waiting for me (piece 6)
+  must count only open items; piece 7 decides whether closing an item withdraws its open questions.

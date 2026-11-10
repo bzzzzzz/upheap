@@ -605,7 +605,7 @@ section is how it maps onto this API.
 7. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
-   (`deserialize_with`), and `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant
+   (`deserialize_with`), and `Factor` (contributors), `ClosedGroup` and the audit log's `AuditAction` read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
    CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
    and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a

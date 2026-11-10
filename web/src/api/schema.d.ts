@@ -3855,7 +3855,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, or `value_unknown` (a `step` of 0, or one the item has no step for) */
+            /** @description Invalid fields, `value_unknown` (a `step` of 0) or `step_not_in_item` (`field` `step`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3922,7 +3922,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description No such item, or `question_not_in_item` */
+            /** @description No such item or question */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3940,7 +3940,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields: no `reply`, or picks and a comment that don't fit the question */
+            /** @description Invalid fields: no `reply`, `pick_invalid` (`field` `picked`: out of range, repeated, none picked, or more than one where only one may be) */
             422: {
                 headers: {
                     [name: string]: unknown;

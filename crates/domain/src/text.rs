@@ -2,6 +2,15 @@
 
 use crate::validation::{Field, ValidationError};
 
+/// A positive integer written in digits, as in a path or on a command line. `None` for anything else, a sign and a
+/// leading zero included, and for one too big for a `u32`.
+pub(crate) fn parse_positive(raw: &str) -> Option<u32> {
+    if raw.is_empty() || raw.starts_with('0') || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
+}
+
 /// Trims `raw` and checks it is non-empty and at most `max` characters long.
 pub(crate) fn parse_required(raw: &str, field: Field, max: usize) -> Result<String, ValidationError> {
     let trimmed = raw.trim();
