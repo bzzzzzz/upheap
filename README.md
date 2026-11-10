@@ -158,6 +158,10 @@ with an in-memory database:
 (cd web && npx playwright install chromium && npm run e2e)
 ```
 
+The invite-link golden path needs a server with registration closed, so its worker starts a second copy of the same
+binary on its own port and a temporary SQLite file: it registers two accounts while registration is open, then
+restarts the server with registration closed (`web/e2e/closedServer.ts`).
+
 The tests use in-memory SQLite. To run the store and API suites on MySQL or Postgres as CI does, point
 `TEST_DATABASE_URL` at a server (no database name; each test creates its own):
 

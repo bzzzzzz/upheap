@@ -352,6 +352,36 @@ it's permanent and part of every link. A problem about an input shows under it, 
 password, too many attempts, registration closed) shows above the button. A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
 
+## Invite page
+
+`/invite/{token}` is where an invite link leads, outside the app's shell like sign-in and in the same card, and needs
+no sign-in. The server decides the state (the link's state, the viewer's standing and `allowed_actions`), in this
+order, and the page only shows it:
+
+- **Checking the link…** while it loads, with no form.
+- **Not an invite link** for any token the server doesn't know, naming no team. The local build has no invite
+  endpoints, so it says this for every link.
+- **Ended or revoked:** says which, who the link was for and from, and to ask the team for a new one. This comes
+  before the viewer's standing.
+- **Already a member:** no page; they land in the team (below) with "You're already in Acme."
+- **Removed:** "This link can't add you back. Ask one of the team's admins."
+- **Signed in:** "Join Acme?", who invited them, and who they're signed in as, with **Join Acme** and "Not you? Sign
+  out", which reloads the same page signed out.
+- **Signed out:** "Join Acme" and who invited them, over the sign-in switch with Create account first
+  ([Sign in and create account](#sign-in-and-create-account)). Create account and join makes the account and joins in
+  one act, also when registration is closed. A taken email offers **Sign in instead**, which carries the address
+  over. Signing in leads to the signed-in state, where they press Join: it doesn't join by itself, so they see who
+  they joined as.
+
+The states that can't be used end in an **Open Upheap** button. A failed read says why, with Try again. A link that stops
+working while a form or the confirm is open, or a session that ends, refetches the invitation and the page becomes
+the state that says so; it never sends the user to sign-in. When the page changes state, focus moves to its heading.
+
+A new member lands on the team's heap when it has exactly one that isn't archived, otherwise on the Team page, which
+lists the heaps. Landing replaces the invite page in the history. The app's toast says "You joined Acme." (or "You're
+already in Acme."), belongs to the page they land on like any toast, and is shown once: the line is taken out of the
+history entry as it is shown, so a reload doesn't repeat it.
+
 ## Command line
 
 In the server build, Account's Command line card lists where the `upheap` CLI is signed in as the user. A row has a
