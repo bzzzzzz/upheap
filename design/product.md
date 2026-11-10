@@ -31,21 +31,17 @@ It answers questions like:
 
 1. The app runs self-contained, with its own accounts: an email address, a username and a password.
 2. Registration is open by default. The operator can close it, and then a new account is made only through a
-   team's invite link (Invite links §12).
+   team's invite link (Invite links §4).
 3. Users can also sign in through a third-party identity provider, for example Okta. Signing in through one for the
    first time creates the user record.
 4. Non-web clients such as the CLI sign in through the browser: the client opens the app's sign-in page, the user
    signs in there, and the backend hands a token back to the client (OAuth authorization code flow with PKCE). The
    client never handles the user's password.
-5. A signed-in user can change their password in their account by giving the current one and a new one.
-6. Changing a password ends every other sign-in of that user, in browsers and in command-line clients. The one
-   they're using stays.
-7. The operator can make a password reset link for a user with a command on the server. It works once and for one
-   hour. Making a new one for the same user cancels the earlier one. The server sends no email.
-8. Opening a reset link lets the person set a new password. That ends all their sign-ins and signs them in there.
-9. There is no reset inside the app. The sign-in page says to ask whoever runs the server.
-10. A password change and a reset are in the audit log, without the password, and the user sees them in their
-    account. Nobody else does.
+5. A signed-in user can change their password by giving the current one. That ends every other sign-in of theirs,
+   in browsers and in command-line clients.
+6. A forgotten password is reset through a link the operator makes with a command on the server. It works once and
+   for one hour, and setting the new password ends all the user's sign-ins. The server sends no email.
+7. A password change and a reset are in the audit log, without the password, and only the user sees them.
 
 ## Teams
 
@@ -69,24 +65,13 @@ It answers questions like:
 ## Invite links
 
 1. A team admin can make an invite link for a team they administer. A personal team has none.
-2. A link works for one week from when it's made. It can't be extended; the admin makes a new one.
-3. Any number of people can join through one link while it works.
-4. Any admin of the team can revoke a link, and it stops working at once. People who already joined through it
-   stay. A link belongs to the team, so it keeps working when the admin who made it is demoted or leaves.
-5. A team can have several working links at a time. Admins see each one with who made it and when it ends, and can
-   copy a working link again.
-6. Opening a working link shows the team's name and who made the link, to anyone, signed in or not.
-7. A signed-in user joins by confirming on that page. A person who creates an account from the link joins with
-   it, with no second confirm. Either way they join as a member, never as an admin.
-8. A user who is already in the team is taken to it, and nothing changes.
-9. A link that has ended or been revoked lets no one in and says which happened. A person an admin removed from the
-   team can't come back through a link made before the removal; a newer link or a direct add lets them in.
-10. Links are never deleted. Ended and revoked links stay in the team's history.
-11. Making a link, revoking one, and each join through one are in the audit log, the join naming the link. Admins
-    see them where they see membership changes.
-12. A person without an account can create one from a working invite link, whether registration is open or closed.
-13. An account made this way is like any other: it has its personal team and heap (Teams §3) and stays if the
-    person later leaves or is removed from the team.
+2. A link works for one week, for any number of people. It can't be extended; the admin makes a new one.
+3. Any admin of the team can revoke a link, and it stops working at once. People who already joined through it
+   stay.
+4. A person joins through a working link as a member, never as an admin: a signed-in user by confirming, and a
+   person without an account by creating one, whether registration is open or closed.
+5. A person an admin removed from the team can't come back through a link made before the removal.
+6. Links are never deleted. Making one, revoking one and each join through one are in the audit log.
 
 ## Heaps
 
@@ -242,7 +227,6 @@ A supporting view, for team admins only.
 | Add and edit items | ✓ | ✓ |
 | Add and edit tags | ✓ | ✓ |
 | Rename the team | | ✓ |
-| Change their own password | ✓ | ✓ |
 | Join a team through a working invite link | ✓ | ✓ |
 | Add users to the team and remove them | | ✓ |
 | Make, see and revoke the team's invite links | | ✓ |
