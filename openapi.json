@@ -1297,7 +1297,7 @@
         "tags": [
           "heaps"
         ],
-        "summary": "Renames the heap or changes its slug. Admins only; send the heap's `version` in `If-Match`.",
+        "summary": "Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and\nslug need an admin, the context any member. A body that sets a field the caller may not change is refused whole\nwith 403, and saves nothing. A save that changes nothing succeeds and keeps the version.",
         "operationId": "update_heap",
         "parameters": [
           {
@@ -5160,6 +5160,7 @@
           "member_joined",
           "heap_created",
           "heap_updated",
+          "heap_context_updated",
           "heap_archived",
           "heap_unarchived",
           "item_created",
@@ -5757,6 +5758,13 @@
             "format": "int64",
             "description": "When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only."
           },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as\nwritten: plain text for now, Markdown later. `null` when nobody has written one."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -5797,6 +5805,7 @@
           "rename",
           "archive",
           "unarchive",
+          "edit_context",
           "edit_weights",
           "view_history"
         ]
@@ -5827,6 +5836,13 @@
         "type": "object",
         "description": "A change to a heap. Leave a field out to keep it.",
         "properties": {
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "At most 20,000 characters, trimmed; blank or `null` clears it. Any member may change it; the name and slug\nneed an admin."
+          },
           "name": {
             "type": [
               "string",

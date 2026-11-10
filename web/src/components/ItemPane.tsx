@@ -394,7 +394,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor={descriptionId} className="text-xs font-medium text-ink-soft">
-              Description
+              Context
             </label>
             <textarea
               id={descriptionId}
@@ -496,7 +496,7 @@ function FieldRows({
         );
       })}
       <FieldRow
-        label="Description"
+        label="Context"
         // The first line names it; the sheet, or the read-only row, shows all of it.
         value={(canEdit ? item.description?.split("\n")[0] : item.description) ?? null}
         disabled={!canEdit}
@@ -522,8 +522,8 @@ function FieldRows({
           />
         </div>
       </Sheet>
-      <Sheet title="Description" {...sheet("description")}>
-        <DescriptionEditor description={item.description ?? ""} onSave={(text) => saveText("description", text)} />
+      <Sheet title="Context" {...sheet("description")}>
+        <ContextEditor context={item.description ?? ""} onSave={(text) => saveText("description", text)} />
       </Sheet>
     </div>
   );
@@ -618,12 +618,12 @@ function OptionRows({
 }
 
 /**
- * The description in a phone's sheet. It starts from the saved text each time the sheet opens, and saves as the sheet
+ * The item's context (its description) in a phone's sheet. It starts from the saved text each time the sheet opens, and saves as the sheet
  * goes away, however it goes (✕, Escape, a tap outside, Back, a turn of the phone), and only if it was changed, so an
  * untouched sheet never writes back what it was opened with.
  */
-function DescriptionEditor({ description, onSave }: { description: string; onSave: (text: string) => void }) {
-  const [opened] = useState(description);
+function ContextEditor({ context, onSave }: { context: string; onSave: (text: string) => void }) {
+  const [opened] = useState(context);
   const [text, setText] = useState(opened);
   // What the cleanup reads as the sheet goes away: the text as last typed, and the save of that moment.
   const latest = useRef({ text, onSave });
@@ -638,7 +638,7 @@ function DescriptionEditor({ description, onSave }: { description: string; onSav
   );
   return (
     <textarea
-      aria-label="Description"
+      aria-label="Context"
       autoFocus
       value={text}
       onChange={(e) => setText(e.target.value)}

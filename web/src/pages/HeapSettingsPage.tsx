@@ -1,14 +1,15 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { useState } from "react";
+import { localDatabase } from "#local-database";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { HeapRef } from "../api/client";
+import type { Heap, HeapRef } from "../api/client";
 import { useHeap, useSetHeapArchived, useUpdateHeap } from "../api/queries";
 import { BASE } from "../basePath";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
-import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
+import { cardClass, cardTitleClass, inputClass, nameFormClasses } from "./settingsForm";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -51,8 +52,9 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
 }
 
 /**
- * The heap's name, its link name (the last part of its path) and whether it's archived. Those who may change them,
- * as `allowed_actions` says, edit them in place; everyone else reads them.
+ * The heap's name, its link name (the last part of its path), its context and whether it's archived. Those who may
+ * change them, as `allowed_actions` says, edit them in place; everyone else reads them. The local build has no
+ * context card.
  */
 export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
@@ -149,6 +151,8 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}
       </section>
 
+      {!localDatabase && <HeapContextCard heap={data} canEdit={can("edit_context")} update={update} />}
+
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>
           <h2 id="heap-archive" className={cardTitleClass}>
@@ -173,5 +177,100 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         </section>
       )}
     </div>
+  );
+}
+
+const CONTEXT_MAX_CHARS = 20_000;
+
+/**
+ * The heap's context, as written: read in place, with an Edit button that turns the card into a form (ux.md, Heap
+ * settings). The draft is local state from the press of Edit, so a refetch of the heap doesn't touch it; a failed
+ * save keeps the form and the draft open. Escape does nothing, so a long draft is never lost to a stray key.
+ */
+function HeapContextCard({
+  heap,
+  canEdit,
+  update,
+}: {
+  heap: Heap;
+  canEdit: boolean;
+  update: ReturnType<typeof useUpdateHeap>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  // Set when the form closes, so focus goes to the Edit button once it is back.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (editing) {
+      const field = textarea.current;
+      field?.focus();
+      field?.setSelectionRange(field.value.length, field.value.length);
+    } else if (refocus.current) {
+      refocus.current = false;
+      editButton.current?.focus();
+    }
+  }, [editing]);
+
+  const close = () => {
+    refocus.current = true;
+    setEditing(false);
+  };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    update.mutate({ heap, patch: { context: draft.trim() === "" ? null : draft } }, { onSuccess: close });
+  };
+  const error = update.variables && "context" in update.variables.patch ? update.error : null;
+
+  return (
+    <section aria-labelledby="heap-context" className={cardClass}>
+      <h2 id="heap-context" className={cardTitleClass}>
+        Context
+      </h2>
+      {editing ? (
+        <form onSubmit={submit} className="mt-3 flex flex-wrap items-center gap-2">
+          <textarea
+            ref={textarea}
+            aria-label="Heap context"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            maxLength={CONTEXT_MAX_CHARS}
+            className={`${inputClass} field-sizing-content min-h-48 w-full`}
+          />
+          <button type="submit" disabled={update.isPending} className={`${compactButtonClass.primary} max-sm:flex-1`}>
+            Save
+          </button>
+          <button type="button" onClick={close} className={`${compactButtonClass.quiet} max-sm:flex-1`}>
+            Cancel
+          </button>
+          <ProblemText error={error} className="text-overdue-ink" />
+        </form>
+      ) : (
+        <>
+          {heap.context ? (
+            <p className="mt-2 text-sm/normal break-words whitespace-pre-wrap text-ink-soft">{heap.context}</p>
+          ) : (
+            <p className="mt-2 text-sm/normal text-muted">
+              What the project is, where its repository and docs are, where its work is reviewed and what finishing a
+              piece means.
+            </p>
+          )}
+          {canEdit && (
+            <button
+              ref={editButton}
+              type="button"
+              onClick={() => {
+                setDraft(heap.context ?? "");
+                setEditing(true);
+              }}
+              className={`${compactButtonClass.bordered} mt-4 max-sm:w-full`}
+            >
+              Edit
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }

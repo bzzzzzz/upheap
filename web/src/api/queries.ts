@@ -729,14 +729,20 @@ function invalidateHeapRecord(queryClient: QueryClient, heap: HeapRef) {
 }
 
 /**
- * Renames a heap of the team `team` or gives it a new slug. A new slug is a new path: when the app is on one of the
- * heap's pages, it moves to the same page at the new path, with the same search.
+ * Renames a heap of the team `team`, gives it a new slug or writes its context. A new slug is a new path: when the app
+ * is on one of the heap's pages, it moves to the same page at the new path, with the same search.
  */
 export function useUpdateHeap(team: string) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
-    mutationFn: async ({ heap, patch }: { heap: Heap; patch: { name?: string; slug?: string } }) =>
+    mutationFn: async ({
+      heap,
+      patch,
+    }: {
+      heap: Heap;
+      patch: { name?: string; slug?: string; context?: string | null };
+    }) =>
       unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}", {
           params: { path: { team, heap: heap.slug }, header: { "If-Match": `"${heap.version}"` } },

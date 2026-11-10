@@ -418,7 +418,7 @@ export function AddItemDialog({
 
   const description = (
     <label className="flex flex-col gap-1.5 text-[13px] text-ink-soft">
-      Description
+      Context
       <textarea
         value={draft.description}
         onChange={(e) => set("description", e.target.value)}

@@ -393,10 +393,10 @@ test("on a phone, Add is a sheet of one-tap chips, with More fields", async ({ p
   // + Tag opens the tag picker in a sheet; the tag's chip takes it off again.
   await addNewTag(page, "home");
 
-  // The description waits under More fields.
-  await expect(dialog.getByLabel("Description")).toHaveCount(0);
+  // The context waits under More fields.
+  await expect(dialog.getByLabel("Context")).toHaveCount(0);
   await dialog.getByRole("button", { name: "More fields" }).click();
-  await dialog.getByLabel("Description").fill("The kitchen tap");
+  await dialog.getByLabel("Context").fill("The kitchen tap");
 
   // Add sits above the keyboard, in the sheet's last row.
   const add = await dialog.getByRole("button", { name: "Add", exact: true }).boundingBox();
