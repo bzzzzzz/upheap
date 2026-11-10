@@ -3,7 +3,7 @@
 How a person gets an account, gets into a team, and keeps being able to sign in: invite links, password change and
 password reset. Designed by the steps of the maintainer's design method. Scale: a feature area, so Value is short
 and [product.md](../product.md), [ux.md](../ux.md) and [architecture.md](../architecture.md) are given. Step
-agreed: 6. The design is agreed, its commitments are in product.md, and stage 1 is next.
+agreed: 6. The design is agreed, its core commitments are in product.md, and stage 1 is next.
 
 ## Constraints
 
@@ -54,8 +54,34 @@ agreed: 6. The design is agreed, its commitments are in product.md, and stage 1 
 
 ### Commitments
 
-Agreed, and now in [product.md](../product.md): Invite links §1 to §13, Teams §6, and Accounts and sign-in §2 and
-§5 to §10. The sections below cite them there, as Product and the section.
+The core ones are in [product.md](../product.md): Invite links §1 to §6, Teams §6, and Accounts and sign-in §2 and
+§5 to §7. The sections below cite them there, as Product and the section.
+
+The rest are agreed too, but they say how the feature behaves, not what the product promises, so they stay here
+until it's built. The sections below cite them as Kept and the number.
+
+Invite links:
+
+1. A link belongs to the team, so it keeps working when the admin who made it is demoted or leaves.
+2. A team can have several working links at a time. Admins see each one with who made it and when it ends, and can
+   copy a working link again.
+3. Opening a working link shows the team's name and who made the link, to anyone, signed in or not.
+4. A person who creates an account from a link joins with it, with no second confirm.
+5. A user who is already in the team is taken to it, and nothing changes.
+6. A link that has ended or been revoked says which happened. A removed person gets back in through a newer link
+   or a direct add.
+7. A join's audit entry names the link. Admins see link entries where they see membership changes, and ended and
+   revoked links stay in the team's history.
+8. An account made from a link is like any other: it has its personal team and heap (Product Teams §3) and stays
+   if the person later leaves or is removed from the team.
+
+Passwords:
+
+9. Changing a password takes the current one and a new one, and the sign-in in use stays.
+10. Making a new reset link for a user cancels the earlier one. Setting the password through one signs the person
+    in there.
+11. There is no reset inside the app. The sign-in page says to ask whoever runs the server.
+12. The user sees their password changes and resets in their account.
 
 ### Actors and roles
 
@@ -540,16 +566,16 @@ request each, in this order. Product is product.md; rules and scenarios are numb
    readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
    are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
    hides the team from an outsider, with rows in the access-control table test; a personal team has none;
-   scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Product Invite links §1 to §5 and §10, and
-   the making and revoking half of §11.
+   scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Product Invite links §1 to §3, the making
+   and revoking half of §6, and Kept 1 and 2.
 2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
    state (rule 5). A signed-in user joins as a member (rules 6 and 7), a person removed since the link was made is
    refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
-   are tests; a direct add still works as before. Product Invite links §6, §8 and §9, the signed-in
-   half of §7, the rest of §11, and Teams §6.
+   are tests; a direct add still works as before. Product Invite links §5, the signed-in half of §4, the rest of
+   §6, Teams §6, and Kept 3 and 5 to 7.
 3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
    (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
-   on a closed server is still refused. Product Invite links §12 and §13, the rest of §7, and Accounts §2.
+   on a closed server is still refused. Product Invite links §4 (the rest of it), Accounts §2, and Kept 4 and 8.
 4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
    Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
    the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
@@ -567,10 +593,11 @@ usable. Each pull request updates the Getting in row in progress.md.
 
 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
 2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
-   without History; Product Accounts §5 and §6; rules 13 to 15; scenario 7).
+   without History; Product Accounts §5; Kept 9; rules 13 to 15; scenario 7).
 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
-   (Interface 6, 7 and 9; Product Accounts §7 to §9; rules 16 to 18; scenarios 8 to 10).
-4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §10; rules 21 and 22).
+   (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10).
+4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §7; Kept 12; rules 21
+   and 22).
 5. **This doc dissolves:** the flows into ux.md, the concepts and rules into architecture.md, the choices into
    decisions.md, and the file goes.
 
