@@ -255,6 +255,16 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const impactId = useId();
   const dueId = useId();
   const [openSheet, setOpenSheet] = useState<string | null>(null);
+  // Set when the Due sheet was opened from "Held back by", whose row goes away once the due date is set.
+  const dueFromHeldBack = useRef(false);
+  const setSheet = (field: string | null) => {
+    setOpenSheet(field);
+    if (field === null && dueFromHeldBack.current) {
+      dueFromHeldBack.current = false;
+      // After the sheet's own focus restore, which would land on the row that is gone: two frames on.
+      requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(dueId)?.focus()));
+    }
+  };
 
   const closed = isClosed(item.state);
   const canEdit = item.allowed_actions.includes("edit") && !closed;
@@ -265,8 +275,10 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const fix = (gap: HeldBackGap) => {
     if (gap === "need") focusField(needId, "[data-selected]", "button");
     else if (gap === "size") focusField(item.effort ? impactId : effortId, "button");
-    else if (phone) setOpenSheet("due");
-    else focusField(dueId, "button", "input");
+    else if (phone) {
+      dueFromHeldBack.current = true;
+      setOpenSheet("due");
+    } else focusField(dueId, "button", "input");
   };
 
   const saveText = (field: "title" | "description", text: string) => {
@@ -373,7 +385,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           save={save}
           saveText={saveText}
           open={openSheet}
-          setOpen={setOpenSheet}
+          setOpen={setSheet}
+          dueRowId={dueId}
         />
       ) : (
         <>
@@ -477,6 +490,7 @@ function FieldRows({
   saveText,
   open,
   setOpen,
+  dueRowId,
 }: {
   heapRef: HeapRef;
   item: Item;
@@ -486,6 +500,8 @@ function FieldRows({
   /** Which sheet is open, kept by the caller so "Held back by" can open the Due sheet. */
   open: string | null;
   setOpen: (field: string | null) => void;
+  /** The id of the Due row, where focus goes when its sheet was opened from "Held back by". */
+  dueRowId: string;
 }) {
   const parameters = useParameters(heapRef);
   const close = () => setOpen(null);
@@ -496,7 +512,7 @@ function FieldRows({
 
   return (
     <div className="-mt-2 flex flex-col border-t border-line/60">
-      <FieldRow label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
+      <FieldRow id={dueRowId} label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
       <FieldRow label="Tags" value={tags} disabled={!canEdit} onOpen={() => setOpen("tags")} />
       {item.parameters.map((current) => {
         const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
@@ -569,6 +585,7 @@ function FieldRows({
  * field that can't be changed is a plain row showing all of its value, as there's no sheet to read the rest in.
  */
 function FieldRow({
+  id,
   label,
   value,
   empty = "None",
@@ -576,6 +593,7 @@ function FieldRow({
   disabled,
   onOpen,
 }: {
+  id?: string;
   label: string;
   value: string | null;
   empty?: string;
@@ -598,6 +616,7 @@ function FieldRow({
   }
   return (
     <button
+      id={id}
       type="button"
       onClick={onOpen}
       className={`${rowClass} items-center outline-none focus-visible:outline-2 focus-visible:outline-accent`}

@@ -171,7 +171,7 @@ Display names, team names and heap names stay free text that can repeat. Only ha
 ### Computation
 
 Ranking is a pure function in `domain`: the heap's policy, its non-closed items with their parameter values and
-blocking edges, and an `as_of` time go in; positions and contributors come out. Nothing about scores is stored.
+blocking edges, and an `as_of` time go in; positions, contributors and held-back entries come out. Nothing about scores is stored.
 
 1. The service loads everything the heap needs and ranks in memory on each request. Heaps are expected to hold at
    most a few thousand open items, so this is cheap. A per-heap cache invalidated on write can be added if
@@ -187,6 +187,10 @@ blocking edges, and an `as_of` time go in; positions and contributors come out. 
    the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
 4. **Contributors** are the largest weighted components, each with a label and a relative share ("Deadline in a few
    days", "Blocks *Migrate auth*"). Scores themselves are never returned.
+   **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes. A
+   factor counts while its weight is above 0 (the need while its weight or the age weight is), and unset sizes are
+   labelled with the formula's defaults. It is empty for a blocker ranked by what it blocks; the service also
+   empties it for the item listed first in its group, which is the one the item pane calls "Why it's #1".
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
 
@@ -593,7 +597,7 @@ section is how it maps onto this API.
 7. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
-   (`deserialize_with`), and `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant
+   (`deserialize_with`), and `Factor` (contributors), `HeldBackGap` and `ClosedGroup` read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
    CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
    and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a

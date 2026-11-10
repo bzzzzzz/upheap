@@ -268,6 +268,11 @@ impl Services {
             for (index, entry) in entries.iter_mut().enumerate() {
                 entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
             }
+            // The item shown first is "Why it's #1", and nothing holds a first item back. The domain doesn't know
+            // the list's filters, groups and sort, so this is where "first" is known.
+            if let Some(first) = entries.first_mut() {
+                first.held_back_by.clear();
+            }
         }
 
         let mut step_progress = {

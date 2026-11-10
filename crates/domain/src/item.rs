@@ -32,6 +32,16 @@ impl Size {
         }
     }
 
+    /// The size as people read it: "S", "M", "L", "XL".
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::S => "S",
+            Self::M => "M",
+            Self::L => "L",
+            Self::Xl => "XL",
+        }
+    }
+
     pub fn from_code(code: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|size| size.code() == code)
     }

@@ -411,6 +411,8 @@ test("the item says what holds it back, and each entry takes you to its field", 
     await pane.getByLabel("Exact due date").fill(dayFromToday(5));
   }
   await expect(heldBack).not.toContainText("No due date");
+  // The entry that opened the sheet is gone, so focus returns to the Due row, not to the page.
+  if (isPhone(page)) await expect(pane.getByRole("button", { name: /^Due/ })).toBeFocused();
 });
 
 test("the item that ranks first says nothing holds it back", async ({ page }) => {

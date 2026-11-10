@@ -12,9 +12,9 @@
 //! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
 //! counts as the last option (product.md, Priority §4), and an archived option as the option that replaced it.
 //!
-//! **Held back by** lists, for each item below the top, the fields the person could change to lift it: a low need,
-//! no due date, unset sizes. It depends only on which factors count, not on the formula's numbers
-//! (product.md, Priority §9).
+//! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes.
+//! It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
+//! what it blocks has none, since its own fields don't move it.
 //!
 //! **Blockers** take on the priority of the most important item they block, times a small boost, through whole
 //! chains. The blocking edges form a forest because cycles are refused on write; the walk still tolerates a cycle
@@ -131,7 +131,8 @@ pub struct RankedItem {
     pub position: u32,
     /// Largest contributors first.
     pub contributors: Vec<Contributor>,
-    /// What keeps it from ranking higher, in a fixed order (need, due, sizes); empty for the top item.
+    /// What keeps it from ranking higher, in a fixed order (need, due, sizes); empty for a blocker ranked by what
+    /// it blocks.
     pub held_back_by: Vec<HeldBack>,
 }
 
@@ -190,22 +191,24 @@ pub fn rank(
             item_id: item.id,
             position,
             contributors: select_contributors(components, inherited.score),
-            held_back_by: if position == 1 {
+            held_back_by: if inherited.via.is_some() {
                 Vec::new()
             } else {
-                find_gaps(policy, item)
+                find_gaps(formula, policy, item)
             },
         })
         .collect()
 }
 
-/// What keeps `item` from ranking higher: a low need, no due date and unset sizes, each only while its factor's
-/// weight is above 0, since otherwise changing it would move nothing. Unset values count as the lowest
-/// (product.md, Priority §4), and the item answers "why isn't this higher?" with them (Priority §9). Custom
-/// parameters are not named.
-fn find_gaps(policy: &HeapPolicy, item: &ItemForRanking<'_>) -> Vec<HeldBack> {
+/// What keeps `item` from ranking higher: a low need, no due date and unset sizes, each only while its factor
+/// counts, since otherwise changing it would move nothing. The need counts through its weight and through the
+/// age factor, which it scales. Unset values count as the lowest (product.md, Priority §4), and the item answers
+/// "why isn't this higher?" with them (Priority §9). Custom parameters are not named.
+fn find_gaps(formula: FormulaVersion, policy: &HeapPolicy, item: &ItemForRanking<'_>) -> Vec<HeldBack> {
     let mut gaps = Vec::new();
-    if policy.need_weight.get() > 0 && matches!(item.need, Need::Idea | Need::NiceToHave) {
+    if (policy.need_weight.get() > 0 || policy.age_weight.get() > 0)
+        && matches!(item.need, Need::Idea | Need::NiceToHave)
+    {
         gaps.push(HeldBack {
             gap: Gap::Need,
             label: format!("Need: {}", item.need.label()),
@@ -218,17 +221,17 @@ fn find_gaps(policy: &HeapPolicy, item: &ItemForRanking<'_>) -> Vec<HeldBack> {
         });
     }
     if policy.value_weight.get() > 0 {
+        let (unset_effort, unset_impact) = match formula {
+            FormulaVersion::V2 => (v2::UNSET_EFFORT, v2::UNSET_IMPACT),
+        };
         let label = match (item.effort, item.impact) {
-            (None, None) => Some("Effort and impact not set"),
-            (None, Some(_)) => Some("Effort not set, counts as XL"),
-            (Some(_), None) => Some("Impact not set, counts as S"),
+            (None, None) => Some("Effort and impact not set".to_owned()),
+            (None, Some(_)) => Some(format!("Effort not set, counts as {}", unset_effort.label())),
+            (Some(_), None) => Some(format!("Impact not set, counts as {}", unset_impact.label())),
             (Some(_), Some(_)) => None,
         };
         if let Some(label) = label {
-            gaps.push(HeldBack {
-                gap: Gap::Size,
-                label: label.to_owned(),
-            });
+            gaps.push(HeldBack { gap: Gap::Size, label });
         }
     }
     gaps
@@ -372,6 +375,10 @@ mod v2 {
     const LOOSE_PAST_RATE: f64 = 0.1;
     /// A blocker ranks as if it were this much more important than the item it blocks.
     pub(super) const BLOCKER_BOOST: f64 = 1.1;
+    /// What an unset effort counts as: the largest.
+    pub(super) const UNSET_EFFORT: Size = Size::Xl;
+    /// What an unset impact counts as: the smallest.
+    pub(super) const UNSET_IMPACT: Size = Size::S;
 
     pub(super) fn components(
         policy: &HeapPolicy,
@@ -510,8 +517,8 @@ mod v2 {
 
     /// Value per effort. Unset impact counts as the smallest, unset effort as the largest.
     fn value(weight: u16, item: &ItemForRanking<'_>) -> Component {
-        let impact = item.impact.unwrap_or(Size::S);
-        let effort = item.effort.unwrap_or(Size::Xl);
+        let impact = item.impact.unwrap_or(UNSET_IMPACT);
+        let effort = item.effort.unwrap_or(UNSET_EFFORT);
         let ratio = points(impact) / points(effort);
         // log2 of the ratio runs from -3 to 3; map that onto 0 to 1.
         let raw = (ratio.log2() + 3.0) / 6.0;
@@ -539,10 +546,7 @@ mod v2 {
     const fn describe_size(size: Option<Size>) -> &'static str {
         match size {
             None => "unset",
-            Some(Size::S) => "S",
-            Some(Size::M) => "M",
-            Some(Size::L) => "L",
-            Some(Size::Xl) => "XL",
+            Some(size) => size.label(),
         }
     }
 }
@@ -817,8 +821,14 @@ mod tests {
             ..item(2, 0)
         };
         let off = Weight::parse(0).expect("valid");
+        // Need also scales the age factor, so it counts while either weight is above 0.
         let no_need = HeapPolicy {
             need_weight: off,
+            ..HeapPolicy::default()
+        };
+        let no_need_or_age = HeapPolicy {
+            need_weight: off,
+            age_weight: off,
             ..HeapPolicy::default()
         };
         let no_deadline = HeapPolicy {
@@ -832,6 +842,14 @@ mod tests {
 
         expect_that!(
             held_back_by(&no_need, bare),
+            elements_are![
+                eq(&gap(Gap::Need, "Need: Idea")),
+                eq(&gap(Gap::Due, "No due date")),
+                eq(&gap(Gap::Size, "Effort and impact not set"))
+            ]
+        );
+        expect_that!(
+            held_back_by(&no_need_or_age, bare),
             elements_are![
                 eq(&gap(Gap::Due, "No due date")),
                 eq(&gap(Gap::Size, "Effort and impact not set"))
@@ -852,24 +870,44 @@ mod tests {
     }
 
     #[gtest]
-    fn gaps_come_in_a_fixed_order_and_the_top_item_has_none() {
+    fn gaps_come_in_a_fixed_order() {
         let bare = ItemForRanking {
             need: Need::Idea,
             ..item(2, 0)
         };
-        let policy = HeapPolicy::default();
 
-        let alone = rank(CURRENT_FORMULA, &policy, &[], &[bare], day(0));
-
-        expect_that!(alone[0].held_back_by, is_empty());
         expect_that!(
-            held_back_by(&policy, bare),
+            held_back_by(&HeapPolicy::default(), bare),
             elements_are![
                 eq(&gap(Gap::Need, "Need: Idea")),
                 eq(&gap(Gap::Due, "No due date")),
                 eq(&gap(Gap::Size, "Effort and impact not set"))
             ]
         );
+    }
+
+    #[gtest]
+    fn a_blocker_ranked_by_what_it_blocks_has_no_gaps() {
+        let blocked = ItemForRanking {
+            need: Need::Critical,
+            effort: Some(Size::S),
+            impact: Some(Size::Xl),
+            due: Some(Due { at: day(1), firm: true }),
+            blocked_by: Some(id(1)),
+            ..item(2, 0)
+        };
+        let blocker = item(1, 0);
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[blocker, blocked],
+            day(0),
+        );
+
+        expect_that!(order(&ranked), elements_are![eq(&blocker.id), eq(&blocked.id)]);
+        expect_that!(ranked[0].held_back_by, is_empty());
     }
 
     #[gtest]
