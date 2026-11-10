@@ -42,7 +42,12 @@ async fn registering_creates_a_personal_heap_and_signs_in() -> Result<()> {
     expect_that!(me.body["teams"][0]["heaps"].as_array().map(Vec::len), some(eq(1)));
     expect_that!(
         me.body["allowed_actions"],
-        eq(&json!(["sign_out", "create_team", "manage_sign_ins"]))
+        eq(&json!([
+            "sign_out",
+            "create_team",
+            "manage_sign_ins",
+            "change_password"
+        ]))
     );
     Ok(())
 }
