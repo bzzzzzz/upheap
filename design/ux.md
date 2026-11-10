@@ -347,9 +347,10 @@ row's actions are in its ⋯ sheet. A copy the browser refuses shows the link in
 ## Sign in and create account
 
 A card on a wide screen and the bare form on a phone, with a Sign in / Create account switch. Sign in takes "Email
-or username". Create account takes name, username, email and password; the username is checked as it's typed, since
-it's permanent and part of every link. A problem about an input shows under it, with focus on it; any other (wrong
-password, too many attempts, registration closed) shows above the button. A signed-out link says where it leads
+or username". Create account takes name, username, email and password; the username is permanent and part of every
+link, so its hint says so. A problem about an input shows under it, with focus on it; any other (wrong password, too
+many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
+to Sign in with the address carried over and focus on Password. A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
 
 ## Invite page
@@ -361,9 +362,9 @@ order, and the page only shows it:
 - **Checking the link…** while it loads, with no form.
 - **Not an invite link** for any token the server doesn't know, naming no team. The local build has no invite
   endpoints, so it says this for every link.
-- **Ended or revoked:** says which, who the link was for and from, and to ask the team for a new one. This comes
-  before the viewer's standing.
-- **Already a member:** no page; they land in the team (below) with "You're already in Acme."
+- **Already a member:** no page; they land in the team (below) with "You're already in Acme.", whatever the
+  link's state.
+- **Ended or revoked:** says which, who the link was for and from, and to ask the team for a new one.
 - **Removed:** "This link can't add you back. Ask one of the team's admins."
 - **Signed in:** "Join Acme?", who invited them, and who they're signed in as, with **Join Acme** and "Not you? Sign
   out", which reloads the same page signed out.

@@ -106,7 +106,11 @@ closed(
       // Ana revokes the link, and it says so to whoever opens it after.
       await page.goto(teamPath);
       await revokeFirstLink(page);
-      // (A member who opens it lands on the team instead; a fresh context is signed out.)
+      // A member who opens it lands on the team whatever the link's state.
+      await sam.goto(link);
+      await expect(sam).toHaveURL(`${baseURL}/teams/${team}/heaps/launch`);
+      await expect(sam.getByText("You're already in Acme.")).toBeVisible();
+      // Anyone else is told it was revoked; a fresh context is signed out.
       const visitorContext = await person();
       try {
         const visitor = await visitorContext.newPage();

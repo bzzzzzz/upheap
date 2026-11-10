@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { PASSWORD, uniqueUser } from "./fixtures";
 
@@ -24,7 +25,7 @@ export type ClosedServer = {
 };
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
-const REPOSITORY_ROOT = resolve("..");
+const REPOSITORY_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const BINARY = resolve(REPOSITORY_ROOT, process.env.CARGO_TARGET_DIR ?? "target", "debug", "upheap-server");
 
 /** A port nothing listens on, asked of the OS, so a server left over from an earlier run is never mistaken for ours. */
