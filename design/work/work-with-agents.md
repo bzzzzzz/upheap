@@ -155,7 +155,8 @@ is resolved or turned into a task.
    its defined state, for the person to send on. How far it reaches when work spawns more work is settled while
    building it, not here.
 2. **Core.** A heap can be set so agents prepare what's added without being asked: each new item is taken one
-   stable state forward, and stops there. Preparing never includes doing a defined task; that always needs the person's word.
+   stable state forward, and stops there. Preparing never includes doing a defined task; that always needs the
+   person's word.
 3. **Core.** Outside those two cases an agent never picks an item up.
 4. **Core.** At any moment an item is with the person or with an agent, and the list shows which.
 5. **Core.** An agent refines and does: it fills in context, turns a note into tasks, asks, adds steps, and also
