@@ -8,6 +8,7 @@
 
 use sea_orm_migration::prelude::*;
 use sea_orm_migration::schema::{big_integer, big_integer_null, char_len, char_len_null, integer, string_len};
+use sea_orm_migration::sea_orm::DbBackend;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -84,6 +85,16 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
+        // Tokens are base64url, so case matters. MySQL's default collation ignores it, which would let a token
+        // found by lookup differ in case from the one made, and make the unique index refuse distinct tokens.
+        if manager.get_database_backend() == DbBackend::MySql {
+            manager
+                .get_connection()
+                .execute_unprepared(
+                    "ALTER TABLE invite_links MODIFY token varchar(43) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL",
+                )
+                .await?;
+        }
         manager
             .create_index(
                 Index::create()
