@@ -96,7 +96,8 @@ built, and [CLAUDE.md](../CLAUDE.md#docs) holds the rules for the docs.
 3. **Scope every query** to what the caller may see. An ID from the request is never trusted on its own.
 4. **Never log secrets:** no passwords, tokens, cookies or client secrets in logs, errors or audit diffs.
 5. **Vetted cryptography only:** argon2id for passwords, PKCE for authorization codes, random tokens stored as
-   hashes. Never roll our own.
+   hashes, except a secret that must be shown again, as an invite link's
+   ([architecture.md](architecture.md#data-model)). Never roll our own.
 6. **Insecure defaults are bugs.** Secure cookies, CSRF protection and strict CORS are on unless explicitly turned
    off, since someone else will run this.
 7. **Text from other people is shown, never run.** Names and titles come from other users: escape them for the

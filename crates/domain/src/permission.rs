@@ -2,6 +2,7 @@
 
 use crate::audit::AuditAction;
 use crate::heap::Heap;
+use crate::invite_link::InviteLink;
 use crate::item::{Item, Kind, Stage};
 use crate::parameter::Parameter;
 use crate::saved_view::SavedView;
@@ -49,7 +50,9 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::MemberAdded
         | AuditAction::MemberRoleChanged
         | AuditAction::MemberRemoved
-        | AuditAction::MemberLeft => Permission::ManageTeam,
+        | AuditAction::MemberLeft
+        | AuditAction::InviteLinkCreated
+        | AuditAction::InviteLinkRevoked => Permission::ManageTeam,
         AuditAction::HeapCreated
         | AuditAction::HeapUpdated
         | AuditAction::HeapArchived
@@ -242,6 +245,8 @@ pub enum TeamAction {
     ChangeSlug,
     /// Add a user as a member. Not offered on a personal team.
     AddMember,
+    /// Make, list and revoke the team's invite links. Not offered on a personal team.
+    ManageInviteLinks,
     /// Add a heap to the team.
     CreateHeap,
     /// Leave the team. Not offered to the last admin, nor on a personal team.
@@ -258,7 +263,11 @@ pub fn allowed_team_actions(team: &Team, members: &[Membership], user_id: UserId
     if Permission::ManageTeam.is_granted_to(role) {
         actions.push(TeamAction::Rename);
         if shared {
-            actions.extend([TeamAction::ChangeSlug, TeamAction::AddMember]);
+            actions.extend([
+                TeamAction::ChangeSlug,
+                TeamAction::AddMember,
+                TeamAction::ManageInviteLinks,
+            ]);
         }
     }
     if Permission::ManageHeaps.is_granted_to(role) {
@@ -268,6 +277,22 @@ pub fn allowed_team_actions(team: &Team, members: &[Membership], user_id: UserId
         actions.push(TeamAction::Leave);
     }
     actions
+}
+
+/// An action a client may offer on an invite link.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InviteLinkAction {
+    /// Stop the link working. Offered while it works.
+    Revoke,
+}
+
+/// What `role` can do with `link` at `now`. Revoking needs the permission that making the link needed, and only a
+/// working link can be revoked.
+pub fn allowed_invite_link_actions(link: &InviteLink, role: Role, now: Timestamp) -> Vec<InviteLinkAction> {
+    if Permission::ManageTeam.is_granted_to(role) && link.is_working(now) {
+        return vec![InviteLinkAction::Revoke];
+    }
+    Vec::new()
 }
 
 /// An action a client may offer on one member of a team.
@@ -429,6 +454,7 @@ mod tests {
                 eq(&TeamAction::Rename),
                 eq(&TeamAction::ChangeSlug),
                 eq(&TeamAction::AddMember),
+                eq(&TeamAction::ManageInviteLinks),
                 eq(&TeamAction::CreateHeap)
             ]
         );

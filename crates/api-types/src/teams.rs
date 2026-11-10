@@ -18,6 +18,8 @@ pub enum TeamActionDto {
     ChangeSlug,
     /// Not offered on a personal team.
     AddMember,
+    /// Make, list and revoke the team's invite links. Not offered on a personal team.
+    ManageInviteLinks,
     CreateHeap,
     Leave,
 }
@@ -28,6 +30,7 @@ impl From<TeamAction> for TeamActionDto {
             TeamAction::Rename => Self::Rename,
             TeamAction::ChangeSlug => Self::ChangeSlug,
             TeamAction::AddMember => Self::AddMember,
+            TeamAction::ManageInviteLinks => Self::ManageInviteLinks,
             TeamAction::CreateHeap => Self::CreateHeap,
             TeamAction::Leave => Self::Leave,
         }

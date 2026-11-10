@@ -7,7 +7,7 @@ It serves Product Invite links, Teams §6, and Accounts and sign-in §2 and §5 
 
 ## Progress
 
-Two stages, a pull request per piece. Nothing is built yet. Rules and scenarios are numbered as in Behaviours,
+Two stages, a pull request per piece. Rules and scenarios are numbered as in Behaviours,
 Interface entries as in its inventory, and Kept as in the list under Golden path.
 
 ### Stage 1: the golden path, end to end
@@ -16,7 +16,7 @@ An admin makes a link, a newcomer creates an account through it on a closed serv
 second person with an account joins through the same link, and the link stops after a week. Five pieces, in
 this order.
 
-- [ ] 1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
+- [x] 1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
    readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
    are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
    hides the team from an outsider, with rows in the access-control table test; a personal team has none;

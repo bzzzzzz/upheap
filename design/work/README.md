@@ -6,7 +6,7 @@ What's in flight, what's next, and ideas. Last reviewed 2026-11-09.
 
 In flight. Each has a doc with its own progress.
 
-- [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 1 next.
+- [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 2 next.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
   AI agents through the CLI. Stage 1 of 2, piece 3 next.
 - [Side tasks](side-tasks.md): backups, old OAuth rows, confirmations, Activity at phone width, and what holds an

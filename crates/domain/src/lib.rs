@@ -8,6 +8,7 @@ pub mod due;
 pub mod handle;
 pub mod heap;
 pub mod ids;
+pub mod invite_link;
 pub mod item;
 pub mod list_view;
 pub mod oauth;
@@ -23,7 +24,7 @@ pub mod time;
 pub mod user;
 pub mod validation;
 
-pub use ids::{HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, TeamId, TokenFamilyId, UserId};
+pub use ids::{HeapId, InviteLinkId, ItemId, OptionId, ParameterId, SavedViewId, TagId, TeamId, TokenFamilyId, UserId};
 pub use time::{Duration, Timestamp};
 pub use validation::ValidationError;
 

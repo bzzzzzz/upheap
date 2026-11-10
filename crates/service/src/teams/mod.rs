@@ -1,6 +1,8 @@
 //! Teams as their members see them. Changing teams and their members is in `manage`, which needs accounts.
 
 #[cfg(feature = "accounts")]
+mod invite_links;
+#[cfg(feature = "accounts")]
 mod manage;
 
 use domain::audit::{AuditAction, EntityType};
@@ -12,6 +14,8 @@ use domain::permission::{
 use domain::team::{Membership, Role, Team};
 use domain::user::User;
 use domain::{HeapId, TeamId, Timestamp, UserId};
+#[cfg(feature = "accounts")]
+pub use invite_links::InviteLinkView;
 #[cfg(feature = "accounts")]
 pub use manage::{MemberAdded, TeamPatch};
 use store::audit::NewAuditEntry;

@@ -63,6 +63,8 @@ enum Target {
     /// A team of its own with a second admin, which the admin and the member of the shared team also belong to, so
     /// they can leave it without leaving the shared team or being its last admin.
     FreshTeam,
+    /// A working invite link of the shared team, made by its admin, in `{id}`.
+    InviteLink,
     /// The caller's own user, with its version for `If-Match`.
     Me,
     /// A sign-in of the CLI as the caller, in `{id}`.
@@ -329,6 +331,30 @@ fn endpoints() -> Vec<Endpoint> {
             Target::FreshTeam,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::GET,
+            "/teams/{team}/invite-links",
+            team(ManageTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/invite-links",
+            team(ManageTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/invite-links/{id}/revoke",
+            team(ManageTeam),
+            Target::InviteLink,
+            RequestBody::Empty,
+            StatusCode::OK,
         ),
         row(
             Method::POST,
@@ -958,6 +984,19 @@ impl World {
             Target::ExtraMember => path = path.replace("{username}", &self.new_member().await?),
             Target::NewUser => new_user = Some(self.new_user().await?.1),
             Target::FreshTeam => path = endpoint.path.replace("{team}", &self.new_team().await?),
+            Target::InviteLink => {
+                let made = self
+                    .app
+                    .send(
+                        Method::POST,
+                        &format!("/api/v1/teams/{}/invite-links", self.team_slug),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                let id = made.body["id"].as_str().context("invite link has no id")?;
+                path = path.replace("{id}", id);
+            }
             Target::Me => {
                 if let Some(session) = &session {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;

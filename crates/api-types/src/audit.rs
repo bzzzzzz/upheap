@@ -48,6 +48,8 @@ pub enum AuditActionDto {
     ParameterUpdated,
     ParameterArchived,
     OptionArchived,
+    InviteLinkCreated,
+    InviteLinkRevoked,
 }
 
 impl From<AuditAction> for AuditActionDto {
@@ -76,6 +78,8 @@ impl From<AuditAction> for AuditActionDto {
             AuditAction::ParameterUpdated => Self::ParameterUpdated,
             AuditAction::ParameterArchived => Self::ParameterArchived,
             AuditAction::OptionArchived => Self::OptionArchived,
+            AuditAction::InviteLinkCreated => Self::InviteLinkCreated,
+            AuditAction::InviteLinkRevoked => Self::InviteLinkRevoked,
         }
     }
 }
@@ -92,6 +96,7 @@ pub enum EntityTypeDto {
     Tag,
     SavedView,
     Parameter,
+    InviteLink,
 }
 
 impl From<EntityType> for EntityTypeDto {
@@ -104,6 +109,7 @@ impl From<EntityType> for EntityTypeDto {
             EntityType::Tag => Self::Tag,
             EntityType::SavedView => Self::SavedView,
             EntityType::Parameter => Self::Parameter,
+            EntityType::InviteLink => Self::InviteLink,
         }
     }
 }

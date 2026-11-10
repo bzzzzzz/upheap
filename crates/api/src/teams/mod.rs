@@ -1,6 +1,8 @@
-//! Teams: reading them and adding heaps to them. Changing teams and their members is in `manage`, which needs
-//! accounts.
+//! Teams: reading them and adding heaps to them. Changing teams and their members is in `manage`, and their invite
+//! links in `invite_links`; both need accounts.
 
+#[cfg(feature = "accounts")]
+mod invite_links;
 #[cfg(feature = "accounts")]
 mod manage;
 
@@ -29,7 +31,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
     #[cfg(feature = "accounts")]
     let routes = OpenApiRouter::new()
         .routes(routes!(get_team, manage::update_team))
-        .merge(manage::routes());
+        .merge(manage::routes())
+        .merge(invite_links::routes());
     #[cfg(not(feature = "accounts"))]
     let routes = OpenApiRouter::new().routes(routes!(get_team));
     routes.routes(routes!(create_heap))
