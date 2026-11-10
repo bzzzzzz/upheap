@@ -216,9 +216,10 @@ fn live_refresh_token_families(at: Timestamp) -> SelectStatement {
 /// family a code still names is kept, and the foreign key would refuse deleting it anyway, so delete the ended codes
 /// first. Ended families stay ended, so nothing is rechecked at the delete.
 ///
-/// Size assumption: a run deletes `batch` families, each with the tokens it gathered over its life, two per refresh
-/// of at most thirty days of use, so a run is a few hundred rows at most. The family read scans the tokens table for
-/// live refresh tokens, which stays small because ended families are deleted here.
+/// Size assumption: a run deletes `batch` families, each with every token it gathered over its life, two per
+/// refresh. A sign-in in daily use for months has a few thousand, so the tokens go by family, not by key, and a run
+/// stays a single statement per table. If a run grows too big for one transaction, bound the tokens per run instead.
+/// The family read scans the tokens table for live refresh tokens, which stays small because ended families go.
 ///
 /// The families are found with a plain read and then deleted by key, tokens first and both in one transaction, so a
 /// run never leaves a family without its tokens. A subquery inside a `DELETE` would take shared locks on every row it

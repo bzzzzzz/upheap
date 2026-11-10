@@ -392,9 +392,9 @@ the remaining admins.
    `last_used_at`, the creation time of the family's newest token (the sign-in or its latest refresh), and
    `device_name`, which the client sent with the code exchange. It also carries the wording, in the request's time
    zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`.
-   `DELETE /me/sign-ins/{id}` revokes the family as
-   `/oauth/revoke` does, answers `204` again for one that ended within the last day (after that it's gone and
-   answers `404` like an unknown id), and `404` for an unknown id or another user's, which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
+   `DELETE /me/sign-ins/{id}` revokes the family as `/oauth/revoke` does, answers `204` again for one that ended
+   within the last day (after that it's gone, point 7), and `404` for an unknown id or another user's, which it
+   doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
    it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
    authorization request, so the consent page never shows it: a familiar name there could make a phishing request
    look legitimate.

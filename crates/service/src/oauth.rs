@@ -333,7 +333,7 @@ impl Services {
         }
     }
 
-    /// Refuses a code presented again,and revokes the family its first exchange issued while the code is within its
+    /// Refuses a code presented again, and revokes the family its first exchange issued while the code is within its
     /// lifetime.
     async fn refuse_reused_code(
         &self,
