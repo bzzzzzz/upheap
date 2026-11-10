@@ -72,6 +72,8 @@ const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as const;
 const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 const teamKey = (team: string) => ["team", team] as const;
+/** Under the team's key, so invalidating the team refreshes its links too. */
+const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
 const usersKey = (query: string) => ["users", query] as const;
 
@@ -679,6 +681,35 @@ export function useRemoveMember(team: string) {
     mutationFn: async (username: string) =>
       ensureOk(await api.DELETE("/api/v1/teams/{team}/members/{username}", { params: { path: { team, username } } })),
     onSettled: () => invalidateTeam(queryClient, team),
+  });
+}
+
+/** The team's invite links, every one made and past, newest first. Admins only: `enabled` is whether the caller is. */
+export function useInviteLinks(team: string, enabled: boolean) {
+  return useQuery({
+    queryKey: inviteLinksKey(team),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/v1/teams/{team}/invite-links", { params: { path: { team } } })).links,
+    enabled,
+  });
+}
+
+/** Makes an invite link that works for a week. */
+export function useCreateInviteLink(team: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => unwrap(await api.POST("/api/v1/teams/{team}/invite-links", { params: { path: { team } } })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: inviteLinksKey(team) }),
+  });
+}
+
+/** Stops the invite link with `id` working at once. */
+export function useRevokeInviteLink(team: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      unwrap(await api.POST("/api/v1/teams/{team}/invite-links/{id}/revoke", { params: { path: { team, id } } })),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: inviteLinksKey(team) }),
   });
 }
 
