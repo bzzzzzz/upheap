@@ -132,6 +132,8 @@ is resolved or turned into a task.
 4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last
    open question closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
+6. A question can be answered where it's read. It says, in a few lines, what the person needs to know to
+   answer it, and the item's context and the heap's are one step away from it.
 
 **Review**
 
@@ -484,7 +486,9 @@ and still found by search. From the date on it is an ordinary open item.
 
 **Question.** Belongs to an item, and may name one of its steps. Every question has one shape:
 
-- **What is asked:** free text.
+- **What is asked:** free text, written to stand on its own: the question or the action, and under it the
+  background needed to answer, summed up from the item's context and the heap's. An agent writes that
+  summary as part of asking.
 - **Choices,** optional: a list of options to pick from, either one of them or any number.
 - **The reply:** the options picked, if there are choices, and a free-text comment. With no choices the comment
   is the answer; with choices it is optional.
@@ -813,7 +817,9 @@ The local build has no agents: it gets what works without one (W1, W4, W5, W12, 
 
 1. **Waiting for me and Agents are above the heaps,** since both are across heaps. Waiting carries its count. On
    a phone they take two of the four tabs, and Closed and Settings, used weekly and rarely, move into More.
-2. **A reply is given in the row,** in Waiting and in the item alike, without opening anything.
+2. **A reply is given in the row,** in Waiting and in the item alike, without opening anything. The row
+   holds what's needed to answer: the question with the background its asker summed up, and the item's
+   context and the heap's folded right under it.
 3. **In the item, what the person is likeliest to act on comes first:** an open question, then who has the item
    with the one action that fits, then the steps, then the context. What is read now and then (where it came
    from, closed questions, runs) is folded at the bottom, one step away.
@@ -865,7 +871,11 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 │   [Approved] [Changes asked]     comment, optional                     │
 │                                                                        │
 │ Question · Paint the fence · House                                     │
-│   "Which colour?"   ( ) White  ( ) Green                               │
+│   "Which colour?"                                                      │
+│   "The fence is cedar, last stained in 2022. The shed beside it is     │
+│   white. Green needs a primer coat first."                             │
+│   Context ▸  the item's · the heap's                                   │
+│   ( ) White  ( ) Green                                                 │
 │   comment, optional                                    [Reply]         │
 │                                                                        │
 │ Request · Rotate the certs · Work · step "Run in staging"              │
@@ -879,6 +889,8 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 │   Waits for "Pick a host", closed as won't do     [Unblock] [Open]     │
 └────────────────────────────────────────────────────────────────────────┘
 One row per open question, so an item with two has two rows. The item's title opens the item.
+Every row has the same parts: what is asked, the background the asker wrote under it, and Context, which
+unfolds the item's context and the heap's in place, rendered. The other rows above show them left out.
 A question with no choices: the comment is the answer, and Reply stays off until it has text.
 A question with choices: pick one, or any number when the asker allowed it.
 States: empty ("Nothing waits for you"); loading; a failed refresh keeps the rows.
@@ -1126,6 +1138,9 @@ upheap work reached --result "Rotation script merged." [--link https://example.c
            with the same link is that piece's next round. It's needed only when a piece moves to a new
            link.
 --many     the person may pick any number of the choices; without it, one.
+The text of a question, a request or a review carries its own background: `work run`'s instructions tell
+the agent to sum up, under what it asks, what the person needs from the item's context and the heap's.
+A long text comes from a file, like a context: --text-file f, in place of the text.
 Each prints one line saying what changed, and --quiet prints the key of what was made.
 `item became` is refused while nothing was made from the item.
 `work reached` takes no item: the run knows it.
