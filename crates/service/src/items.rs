@@ -12,7 +12,7 @@ use domain::permission::{
     ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
     allowed_stage_choices, allowed_step_actions,
 };
-use domain::question::Question;
+use domain::question::{Question, QuestionState, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, rank};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
@@ -69,6 +69,9 @@ pub struct ItemView {
     pub step_actions: Vec<StepAction>,
     /// The item's questions in number order, or `None` in a list, which doesn't carry them.
     pub questions: Option<Vec<QuestionView>>,
+    /// Whether the item is open and has an open question, in an active heap (see
+    /// [`domain::question::waits_for_you`]).
+    pub waits_for_you: bool,
 }
 
 /// A question with the users it names and what the caller may do with it.
@@ -269,6 +272,8 @@ impl Services {
                     step_progress: None,
                     step_actions,
                     questions: None,
+                    // Set below, from one count for the entries that are listed.
+                    waits_for_you: false,
                 },
                 position: 0,
                 contributors: entry.contributors,
@@ -297,16 +302,26 @@ impl Services {
             }
         }
 
-        let mut step_progress = {
-            let listed: Vec<ItemId> = [&pinned, &ranked, &blocked]
-                .into_iter()
-                .flatten()
-                .map(|entry| entry.view.item.id)
-                .collect();
-            store::steps::count_step_progress(&self.db, &listed).await?
+        let listed: Vec<ItemId> = [&pinned, &ranked, &blocked]
+            .into_iter()
+            .flatten()
+            .map(|entry| entry.view.item.id)
+            .collect();
+        let mut step_progress = store::steps::count_step_progress(&self.db, &listed).await?;
+        // Nothing waits in an archived heap, so its items need no count.
+        let open_questions = if access.heap.is_archived() {
+            HashMap::new()
+        } else {
+            store::questions::count_open_questions(&self.db, &listed).await?
         };
         for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
-            entry.view.step_progress = step_progress.remove(&entry.view.item.id);
+            let id = entry.view.item.id;
+            entry.view.step_progress = step_progress.remove(&id);
+            entry.view.waits_for_you = waits_for_you(
+                &entry.view.item,
+                &access.heap,
+                open_questions.get(&id).copied().unwrap_or(0) as usize,
+            );
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -426,6 +441,8 @@ impl Services {
                     step_progress,
                     step_actions,
                     questions: None,
+                    // Closed items never wait.
+                    waits_for_you: false,
                 }
             })
             .collect();
@@ -493,6 +510,7 @@ impl Services {
             step_progress: None,
             step_actions,
             questions: Some(Vec::new()),
+            waits_for_you: false,
         })
     }
 
@@ -646,6 +664,8 @@ pub(crate) async fn build_item_view(
     let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
     let blocked_by = find_blocker(db, &item).await?;
     let (created_by, closed_by) = find_item_users(db, &item).await?;
+    let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
+    let waits_for_you = waits_for_you(&item, heap, open_questions);
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     Ok(ItemView {
         parameters: describe_values(&item, &parameters),
@@ -660,6 +680,7 @@ pub(crate) async fn build_item_view(
         steps: Some(steps),
         step_actions,
         questions: Some(questions),
+        waits_for_you,
     })
 }
 

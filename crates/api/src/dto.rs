@@ -82,12 +82,13 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .map(|question| to_question_dto(question, as_of, tz))
                 .collect()
         }),
+        waits_for_you: view.waits_for_you,
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }
 }
 
-fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZone) -> QuestionDto {
+pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZone) -> QuestionDto {
     let question = view.question;
     let replied_by = view.replied_by.as_ref().map(UserRefDto::from);
     QuestionDto {

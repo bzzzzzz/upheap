@@ -124,11 +124,14 @@ pub struct HeldBack {
     pub label: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RankedItem {
     pub item_id: ItemId,
     /// 1-based position, highest priority first.
     pub position: u32,
+    /// The score the order is by: the item's own, raised to its blocked items' where it blocks them. Scores of
+    /// different heaps compare as numbers, which is all "Waiting for me" uses them for.
+    pub score: f64,
     /// Largest contributors first.
     pub contributors: Vec<Contributor>,
     /// What keeps it from ranking higher, in a fixed order (need, due, sizes); empty for a blocker ranked by what
@@ -190,6 +193,7 @@ pub fn rank(
         .map(|((inherited, item, components), position)| RankedItem {
             item_id: item.id,
             position,
+            score: inherited.score,
             contributors: select_contributors(components, inherited.score),
             held_back_by: if inherited.via.is_some() {
                 Vec::new()
@@ -618,6 +622,15 @@ mod tests {
             ranked.iter().map(|r| r.position).collect::<Vec<_>>(),
             elements_are![eq(&1), eq(&2), eq(&3)]
         );
+    }
+
+    #[gtest]
+    fn the_score_is_what_the_order_is_by() {
+        let items = [item(1, 0), item(2, -10), item(3, -5)];
+
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
+
+        expect_that!(ranked.windows(2).all(|pair| pair[0].score > pair[1].score), eq(true));
     }
 
     #[gtest]

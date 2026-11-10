@@ -654,6 +654,59 @@
         ]
       }
     },
+    "/api/v1/me/waiting": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "What waits for the signed-in user: the open questions and requests on open items in the active heaps of their\nteams, one row each, most important first. Rows are ordered by the item's ranking score in its own heap, highest\nfirst (blockers' inheritance included), then by heap name, the item's position and the question's number; all\nheaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.",
+        "operationId": "get_waiting",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Waiting"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/oauth/authorize": {
       "get": {
         "tags": [
@@ -6849,6 +6902,10 @@
             "format": "int32",
             "description": "Send back in `If-Match` when editing.",
             "minimum": 0
+          },
+          "waits_for_you": {
+            "type": "boolean",
+            "description": "Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the\ncaller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item\nand in an archived heap."
           }
         }
       },
@@ -8937,6 +8994,136 @@
             "format": "uuid"
           }
         }
+      },
+      "Waiting": {
+        "type": "object",
+        "description": "What waits for the caller: every open question on an open item in their active heaps, most important first.",
+        "required": [
+          "count",
+          "rows"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many questions wait. At most 500 are in `rows`; this is the true total.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingRow"
+            },
+            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, then the question's number. Heaps weigh the same for now."
+          }
+        }
+      },
+      "WaitingHeap": {
+        "type": "object",
+        "description": "The heap a row's item is in, and its team.",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "team_slug",
+          "team_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "team_name": {
+            "type": "string",
+            "description": "The team's name as `GET /me` shows it."
+          },
+          "team_slug": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitingItem": {
+        "type": "object",
+        "description": "The item a row is on.",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Five characters, unique within the heap.",
+            "example": "k3x9a"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "stage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Stage",
+                "description": "`null` in a build without the stage (the static, single-user one)."
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitingRow": {
+        "type": "object",
+        "description": "One thing that waits.",
+        "required": [
+          "kind",
+          "item",
+          "heap",
+          "question"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/WaitingHeap"
+          },
+          "item": {
+            "$ref": "#/components/schemas/WaitingItem"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WaitingRowKind"
+          },
+          "question": {
+            "$ref": "#/components/schemas/Question",
+            "description": "The open question, as the item carries it."
+          },
+          "step_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The title of the step the question names, so a client needn't load the item's steps. `null` when it names\nnone, or one that no longer exists."
+          }
+        }
+      },
+      "WaitingRowKind": {
+        "type": "string",
+        "description": "What kind of thing waits. Only questions for now: more kinds can join.",
+        "enum": [
+          "question"
+        ]
       }
     },
     "securitySchemes": {

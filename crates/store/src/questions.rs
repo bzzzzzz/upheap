@@ -1,18 +1,25 @@
 //! An item's questions. Each is its own row with its own version, so replying to one never touches the item's
 //! version. Questions are never deleted: an answered one keeps its row, with its reply.
 
+use domain::item::StateKind;
 use domain::question::{Choices, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, Reply};
 use domain::step::StepNumber;
 use domain::text::Context;
 use domain::validation::Field;
-use domain::{ItemId, QuestionId, UserId, Version};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use domain::{HeapId, ItemId, QuestionId, UserId, Version};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
+};
+use std::collections::HashMap;
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db, version_to_db};
-use crate::entities::item_questions;
+use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
+use crate::entities::{item_questions, items};
 
 const TABLE: &str = "item_questions";
+
+/// The states of an item that isn't closed.
+const OPEN_STATES: [StateKind; 3] = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
 
 /// Inserts a new question.
 pub async fn insert_question(db: &impl ConnectionTrait, question: &Question) -> Result<(), StoreError> {
@@ -34,6 +41,75 @@ pub async fn list_questions(db: &impl ConnectionTrait, item_id: ItemId) -> Resul
 /// [`domain::question::MAX_QUESTIONS`] holds. SQLite has no row locks and needs none (see `lock_heap`).
 pub async fn list_questions_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Vec<Question>, StoreError> {
     read_questions(db, item_id, true).await
+}
+
+/// The open questions on the open items (open, in progress, blocked) of `heap_ids`, each with the heap of its item, in
+/// one query per [`IN_LIST_CHUNK`] heaps. Questions of closed items and answered ones are left out; the order is the
+/// database's, so the caller orders them. The caller leaves archived heaps out of `heap_ids`.
+pub async fn list_open_questions_on_open_items(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<(HeapId, Question)>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_questions::Entity::find()
+            .join(
+                JoinType::InnerJoin,
+                item_questions::Entity::belongs_to(items::Entity)
+                    .from(item_questions::Column::ItemId)
+                    .to(items::Column::Id)
+                    .into(),
+            )
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::State.is_in(OPEN_STATES.map(StateKind::code)))
+            .filter(item_questions::Column::State.eq(QuestionState::Open.code()))
+            .select_also(items::Entity)
+            .order_by_asc(item_questions::Column::ItemId)
+            .order_by_asc(item_questions::Column::Number)
+            .all(db)
+            .await?;
+        for (question, item) in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &question.id,
+            };
+            let item = item.ok_or_else(|| read.corrupt("the item is missing".to_owned()))?;
+            let heap_id = HeapId::from_uuid(read.uuid(&item.heap_id)?);
+            found.push((heap_id, to_question(question)?));
+        }
+    }
+    Ok(found)
+}
+
+/// How many open questions each of `item_ids` has, in one grouped query per [`IN_LIST_CHUNK`] items, without loading
+/// them. Items with none are left out.
+pub async fn count_open_questions(
+    db: &impl ConnectionTrait,
+    item_ids: &[ItemId],
+) -> Result<HashMap<ItemId, u32>, StoreError> {
+    let ids: Vec<String> = item_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut counts = HashMap::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_questions::Entity::find()
+            .select_only()
+            .column_as(item_questions::Column::ItemId, "group_key")
+            .column_as(item_questions::Column::Id.count(), "count")
+            .filter(item_questions::Column::ItemId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_questions::Column::State.eq(QuestionState::Open.code()))
+            .group_by(item_questions::Column::ItemId)
+            .into_model::<GroupCount>()
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.group_key,
+            };
+            counts.insert(ItemId::from_uuid(read.uuid(&row.group_key)?), row.count);
+        }
+    }
+    Ok(counts)
 }
 
 /// [`list_questions`], or with `lock` [`list_questions_locking`].

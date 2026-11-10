@@ -94,9 +94,17 @@ The tables and columns are in the migrations. These are the conventions they fol
   so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
   the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
   whole item. A closed item takes neither, and its open questions come back replyable, unchanged, when it is
-  reopened. An item waits for the person while it is open and has an open question; that is derived, not stored. A
-  request is a question whose choices the server fixes as Done and Can't be done, so every kind shares one reply
-  shape. `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+  reopened. An item waits for the person while it is open, in an active heap, and has an open question; that is
+  derived, not stored: `waits_for_you` on every item response comes from the questions a single-item response already
+  carries, and for list rows from one grouped count of open questions per listed item, as step progress is.
+  **`GET /me/waiting`** lists the open questions of open items in the active heaps of the caller's teams, one row per
+  question, across heaps: one query for them (joined to their items), then one ranking per heap that has any, the
+  same inputs and policy the heap's list ranks by (`RankedItem.score`, blocker inheritance included), and the users
+  who asked. Rows are ordered by the item's score in its own heap, highest first, then heap name, the item's
+  position and the question number; heap weights, when they come, multiply the score. It returns at most 500 rows,
+  with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
+  whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
+  `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
