@@ -82,6 +82,58 @@ impl Need {
     }
 }
 
+/// What an item is. A note is kept so it isn't forgotten; a task is something to get done. A note becomes a task in
+/// place, keeping its key, age and history, and a task never goes back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    Note,
+    Task,
+}
+
+impl Kind {
+    pub const ALL: [Self; 2] = [Self::Note, Self::Task];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Note => "note",
+            Self::Task => "task",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.code() == code)
+    }
+}
+
+/// How far an item has been prepared. Ordered from least to most prepared.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Stage {
+    /// Just as it was first put down.
+    AsWritten,
+    /// Background has been added, but what to do is still open.
+    WithContext,
+    /// Clear enough to start on. Only a task can be here.
+    Defined,
+}
+
+impl Stage {
+    pub const ALL: [Self; 3] = [Self::AsWritten, Self::WithContext, Self::Defined];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::AsWritten => "as_written",
+            Self::WithContext => "with_context",
+            Self::Defined => "defined",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|stage| stage.code() == code)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Title(String);
 
@@ -265,6 +317,12 @@ pub enum ItemError {
     /// Only a blocked item can point to a blocker.
     #[error("item {item_id} isn't blocked, so it can't have a blocker")]
     NotBlocked { item_id: ItemId },
+    /// A task never goes back to a note.
+    #[error("item {item_id} is a {from} and can't become a {to}", from = .from.code(), to = .to.code())]
+    KindChangeNotAllowed { item_id: ItemId, from: Kind, to: Kind },
+    /// Only a task can be defined.
+    #[error("item {item_id} is a note, so it can't be defined; make it a task first")]
+    StageNeedsTask { item_id: ItemId },
 }
 
 /// The fields of a new item. Everything except the title and the need is optional.
@@ -289,6 +347,9 @@ pub struct ItemPatch {
     pub description: Option<Option<Description>>,
     /// Need can be changed but never cleared, so it has no inner `Option`.
     pub need: Option<Need>,
+    /// A note can become a task; the reverse is refused. Applied before `stage`.
+    pub kind: Option<Kind>,
+    pub stage: Option<Stage>,
     pub effort: Option<Option<Size>>,
     pub impact: Option<Option<Size>>,
     pub due: Option<Option<Due>>,
@@ -308,6 +369,8 @@ impl ItemPatch {
         self.title.is_some()
             || self.description.is_some()
             || self.need.is_some()
+            || self.kind.is_some()
+            || self.stage.is_some()
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
@@ -345,6 +408,10 @@ pub struct Item {
     pub title: Title,
     pub description: Option<Description>,
     pub state: ItemState,
+    pub kind: Kind,
+    /// Set by hand or, later, when an agent's turn reaches a stable state; never worked out from the item's
+    /// contents. It is shown only while the item is open.
+    pub stage: Stage,
     pub need: Need,
     /// `None` when unset, which ranks as the largest effort.
     pub effort: Option<Size>,
@@ -373,6 +440,8 @@ impl Item {
             title: fields.title,
             description: fields.description,
             state: ItemState::Open,
+            kind: Kind::Note,
+            stage: Stage::AsWritten,
             need: fields.need,
             effort: fields.effort,
             impact: fields.impact,
@@ -396,6 +465,18 @@ impl Item {
             .is_some_and(|closed_at| now.since(closed_at) <= REOPEN_WINDOW)
     }
 
+    /// The stages that can be set on the item now, least prepared first. None when it is closed; a note can't be
+    /// defined.
+    pub fn stage_choices(&self) -> Vec<Stage> {
+        if self.is_closed() {
+            return Vec::new();
+        }
+        match self.kind {
+            Kind::Task => Stage::ALL.to_vec(),
+            Kind::Note => vec![Stage::AsWritten, Stage::WithContext],
+        }
+    }
+
     /// The item this one waits for, if it's blocked and one was picked.
     pub const fn blocked_by(&self) -> Option<ItemId> {
         self.state.blocked_by()
@@ -405,8 +486,9 @@ impl Item {
     /// nothing. Closing the item records `actor` as who closed it.
     ///
     /// The state changes first, so a single patch can reopen an item and edit it, or block it and pick the
-    /// blocker. Fields of an item that stays closed can't be edited. The returned item keeps the old version; the
-    /// store bumps it on write.
+    /// blocker. The kind changes before the stage, so one patch can make a note a task and define it. Fields of an
+    /// item that stays closed can't be edited. The returned item keeps the old version; the store bumps it on
+    /// write.
     pub fn apply_patch(&self, patch: &ItemPatch, actor: UserId, now: Timestamp) -> Result<Option<Self>, ItemError> {
         let mut state = match patch.state {
             Some(target) => self.transition(target, actor, now)?,
@@ -423,7 +505,25 @@ impl Item {
             (_, Some(Some(_))) => return Err(ItemError::NotBlocked { item_id: self.id }),
         }
 
+        let kind = match (self.kind, patch.kind) {
+            (_, None) => self.kind,
+            (Kind::Task, Some(Kind::Note)) => {
+                return Err(ItemError::KindChangeNotAllowed {
+                    item_id: self.id,
+                    from: Kind::Task,
+                    to: Kind::Note,
+                });
+            }
+            (_, Some(target)) => target,
+        };
+        let stage = patch.stage.unwrap_or(self.stage);
+        if kind == Kind::Note && stage == Stage::Defined {
+            return Err(ItemError::StageNeedsTask { item_id: self.id });
+        }
+
         let edited = Self {
+            kind,
+            stage,
             title: patch.title.clone().unwrap_or_else(|| self.title.clone()),
             description: patch.description.clone().unwrap_or_else(|| self.description.clone()),
             need: patch.need.unwrap_or(self.need),
@@ -880,5 +980,186 @@ mod tests {
             .expect("changed");
 
         expect_that!(edited.blocked_by(), some(eq(blocker())));
+    }
+
+    #[gtest]
+    fn a_new_item_is_a_note_as_written() {
+        let item = sample_item();
+
+        expect_that!(item.kind, eq(Kind::Note));
+        expect_that!(item.stage, eq(Stage::AsWritten));
+    }
+
+    fn make_task_patch() -> ItemPatch {
+        ItemPatch {
+            kind: Some(Kind::Task),
+            ..ItemPatch::default()
+        }
+    }
+
+    #[gtest]
+    fn a_note_becomes_a_task_in_place() {
+        let mut note = sample_item();
+        note.stage = Stage::WithContext;
+
+        let task = note
+            .apply_patch(&make_task_patch(), actor(), at(3))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(task.kind, eq(Kind::Task));
+        expect_that!(task.stage, eq(Stage::WithContext));
+        expect_that!(task.id, eq(note.id));
+        expect_that!(task.key, eq(note.key));
+        expect_that!(task.created_at, eq(note.created_at));
+        expect_that!(task.need, eq(note.need));
+    }
+
+    fn sample_task() -> Item {
+        sample_item()
+            .apply_patch(&make_task_patch(), actor(), at(1))
+            .expect("allowed")
+            .expect("changed")
+    }
+
+    #[gtest]
+    fn making_a_task_a_task_or_a_note_a_note_changes_nothing() {
+        let note = ItemPatch {
+            kind: Some(Kind::Note),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            sample_task().apply_patch(&make_task_patch(), actor(), at(2)),
+            ok(none())
+        );
+        expect_that!(sample_item().apply_patch(&note, actor(), at(2)), ok(none()));
+    }
+
+    #[gtest]
+    fn a_task_never_goes_back_to_a_note() {
+        let task = sample_task();
+        let patch = ItemPatch {
+            kind: Some(Kind::Note),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            task.apply_patch(&patch, actor(), at(2)),
+            err(eq(&ItemError::KindChangeNotAllowed {
+                item_id: task.id,
+                from: Kind::Task,
+                to: Kind::Note
+            }))
+        );
+    }
+
+    #[gtest]
+    fn the_kind_of_a_closed_item_cant_change() {
+        let closed = sample_item()
+            .apply_patch(&closing_patch(), actor(), at(1))
+            .expect("ok")
+            .expect("changed");
+
+        expect_that!(
+            closed.apply_patch(&make_task_patch(), actor(), at(2)),
+            err(eq(&ItemError::Closed { item_id: closed.id }))
+        );
+    }
+
+    #[gtest]
+    fn a_note_cant_be_defined_but_a_task_can() {
+        let define = ItemPatch {
+            stage: Some(Stage::Defined),
+            ..ItemPatch::default()
+        };
+        let note = sample_item();
+
+        expect_that!(
+            note.apply_patch(&define, actor(), at(2)),
+            err(eq(&ItemError::StageNeedsTask { item_id: note.id }))
+        );
+        let defined = sample_task()
+            .apply_patch(&define, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
+        expect_that!(defined.stage, eq(Stage::Defined));
+    }
+
+    #[gtest]
+    fn one_patch_makes_a_note_a_defined_task() {
+        let patch = ItemPatch {
+            kind: Some(Kind::Task),
+            stage: Some(Stage::Defined),
+            ..ItemPatch::default()
+        };
+
+        let task = sample_item()
+            .apply_patch(&patch, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!((task.kind, task.stage), eq((Kind::Task, Stage::Defined)));
+    }
+
+    #[gtest]
+    fn setting_the_stage_it_has_changes_nothing() {
+        let patch = ItemPatch {
+            stage: Some(Stage::AsWritten),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(sample_item().apply_patch(&patch, actor(), at(2)), ok(none()));
+    }
+
+    #[gtest]
+    fn reopening_keeps_the_kind_and_stage() {
+        let define = ItemPatch {
+            stage: Some(Stage::Defined),
+            ..ItemPatch::default()
+        };
+        let closed = sample_task()
+            .apply_patch(&define, actor(), at(1))
+            .expect("ok")
+            .expect("changed")
+            .apply_patch(&closing_patch(), actor(), at(2))
+            .expect("ok")
+            .expect("changed");
+        let reopen = ItemPatch {
+            state: Some(StateKind::Open),
+            ..ItemPatch::default()
+        };
+
+        let reopened = closed
+            .apply_patch(&reopen, actor(), at(3))
+            .expect("inside window")
+            .expect("changed");
+
+        expect_that!((reopened.kind, reopened.stage), eq((Kind::Task, Stage::Defined)));
+    }
+
+    #[gtest]
+    fn kind_and_stage_codes_round_trip() {
+        for kind in Kind::ALL {
+            expect_that!(Kind::from_code(kind.code()), some(eq(kind)));
+        }
+        for stage in Stage::ALL {
+            expect_that!(Stage::from_code(stage.code()), some(eq(stage)));
+        }
+    }
+
+    #[gtest]
+    fn stage_choices_depend_on_the_kind_and_are_empty_when_closed() {
+        let closed = sample_task()
+            .apply_patch(&closing_patch(), actor(), at(2))
+            .expect("ok")
+            .expect("changed");
+
+        expect_that!(
+            sample_item().stage_choices(),
+            eq(&vec![Stage::AsWritten, Stage::WithContext])
+        );
+        expect_that!(sample_task().stage_choices(), eq(&Stage::ALL.to_vec()));
+        expect_that!(closed.stage_choices(), is_empty());
     }
 }

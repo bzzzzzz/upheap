@@ -184,3 +184,128 @@ async fn one_save_reopens_a_closed_item_as_blocked_with_its_blocker() -> Result<
     expect_that!(reopened.body["blocked_by"]["id"], eq(&json!(blocker)));
     Ok(())
 }
+
+/// The item's `allowed_actions` as strings.
+fn actions(item: &Value) -> Vec<&str> {
+    item["allowed_actions"]
+        .as_array()
+        .map(|actions| actions.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default()
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_new_item_is_a_note_as_written_that_can_become_a_task() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let item = app
+        .new_item(&session, &heap, json!({ "title": "Rotate the certs" }))
+        .await?;
+
+    // Assert
+    expect_that!(item["kind"], eq(&json!("note")));
+    expect_that!(item["stage"], eq(&json!("as_written")));
+    expect_that!(item["stage_choices"], eq(&json!(["as_written", "with_context"])));
+    expect_that!(actions(&item), contains(eq(&"make_task")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_becomes_a_task_in_place() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let note = app
+        .new_item(&session, &heap, json!({ "title": "Rotate the certs" }))
+        .await?;
+    let id = note["id"].as_str().unwrap_or_default();
+
+    // Act
+    let task = patch(&app, &session, id, 1, json!({ "kind": "task" })).await?;
+
+    // Assert
+    expect_that!(task.status, eq(StatusCode::OK));
+    expect_that!(task.body["kind"], eq(&json!("task")));
+    expect_that!(task.body["key"], eq(&note["key"]));
+    expect_that!(task.body["created_at"], eq(&note["created_at"]));
+    expect_that!(
+        task.body["stage_choices"],
+        eq(&json!(["as_written", "with_context", "defined"]))
+    );
+    expect_that!(actions(&task.body), not(contains(eq(&"make_task"))));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_task_never_goes_back_to_a_note() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let id = create(&app, &session, &heap, json!({ "title": "Rotate the certs" })).await?;
+    patch(&app, &session, &id, 1, json!({ "kind": "task" })).await?;
+
+    // Act
+    let back = patch(&app, &session, &id, 2, json!({ "kind": "note" })).await?;
+
+    // Assert
+    expect_that!(back.status, eq(StatusCode::CONFLICT));
+    expect_that!(back.body["code"], eq(&json!("kind_change_not_allowed")));
+    expect_that!(back.body["field"], eq(&json!("kind")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn only_a_task_can_be_defined() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let note = create(&app, &session, &heap, json!({ "title": "A note" })).await?;
+    let other = create(&app, &session, &heap, json!({ "title": "Another" })).await?;
+
+    // Act
+    let refused = patch(&app, &session, &note, 1, json!({ "stage": "defined" })).await?;
+    let with_context = patch(&app, &session, &note, 1, json!({ "stage": "with_context" })).await?;
+    let both = patch(&app, &session, &other, 1, json!({ "kind": "task", "stage": "defined" })).await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("stage_needs_task")));
+    expect_that!(refused.body["field"], eq(&json!("stage")));
+    expect_that!(with_context.status, eq(StatusCode::OK));
+    expect_that!(with_context.body["stage"], eq(&json!("with_context")));
+    expect_that!(both.status, eq(StatusCode::OK));
+    expect_that!(both.body["kind"], eq(&json!("task")));
+    expect_that!(both.body["stage"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_closed_item_shows_no_stage_refuses_kind_changes_and_keeps_both_when_reopened() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = create(&app, &session, &heap, json!({ "title": "Task" })).await?;
+    patch(&app, &session, &item, 1, json!({ "kind": "task", "stage": "defined" })).await?;
+    let closed = patch(&app, &session, &item, 2, json!({ "state": "done" })).await?;
+
+    // Act
+    let refused = patch(&app, &session, &item, 3, json!({ "kind": "task" })).await?;
+    let reopened = patch(&app, &session, &item, 3, json!({ "state": "open" })).await?;
+
+    // Assert
+    expect_that!(closed.body["kind"], eq(&json!("task")));
+    expect_that!(closed.body["stage"], eq(&Value::Null));
+    expect_that!(closed.body["stage_choices"], eq(&json!([])));
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("item_closed")));
+    expect_that!(reopened.body["kind"], eq(&json!("task")));
+    expect_that!(reopened.body["stage"], eq(&json!("defined")));
+    Ok(())
+}

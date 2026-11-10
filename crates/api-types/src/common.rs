@@ -4,7 +4,7 @@
 
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
-use domain::item::{Due, ItemSummary, Need, Size, StateKind};
+use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
 use domain::permission::ItemAction;
 use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
@@ -87,6 +87,67 @@ impl From<NeedDto> for Need {
     }
 }
 
+/// What an item is. A note becomes a task in place; a task never goes back to a note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Kind)]
+pub enum KindDto {
+    Note,
+    Task,
+}
+
+impl From<Kind> for KindDto {
+    fn from(kind: Kind) -> Self {
+        match kind {
+            Kind::Note => Self::Note,
+            Kind::Task => Self::Task,
+        }
+    }
+}
+
+impl From<KindDto> for Kind {
+    fn from(kind: KindDto) -> Self {
+        match kind {
+            KindDto::Note => Self::Note,
+            KindDto::Task => Self::Task,
+        }
+    }
+}
+
+/// How far an item has been prepared, from least to most. Set by hand.
+///
+/// - `as_written`: just as it was put down.
+/// - `with_context`: background has been added.
+/// - `defined`: clear enough to start on. Only a task can be defined.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Stage)]
+pub enum StageDto {
+    AsWritten,
+    WithContext,
+    Defined,
+}
+
+impl From<Stage> for StageDto {
+    fn from(stage: Stage) -> Self {
+        match stage {
+            Stage::AsWritten => Self::AsWritten,
+            Stage::WithContext => Self::WithContext,
+            Stage::Defined => Self::Defined,
+        }
+    }
+}
+
+impl From<StageDto> for Stage {
+    fn from(stage: StageDto) -> Self {
+        match stage {
+            StageDto::AsWritten => Self::AsWritten,
+            StageDto::WithContext => Self::WithContext,
+            StageDto::Defined => Self::Defined,
+        }
+    }
+}
+
 /// Item state. `done` and `wont_do` are closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -156,6 +217,8 @@ pub enum ItemActionDto {
     Edit,
     ChangeState,
     Reopen,
+    /// Make a note a task. Offered for an open note the caller may edit.
+    MakeTask,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -164,6 +227,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::Edit => Self::Edit,
             ItemAction::ChangeState => Self::ChangeState,
             ItemAction::Reopen => Self::Reopen,
+            ItemAction::MakeTask => Self::MakeTask,
         }
     }
 }
@@ -319,6 +383,14 @@ pub struct ItemDto {
     pub heap_id: Uuid,
     pub title: String,
     pub description: Option<String>,
+    pub kind: KindDto,
+    /// How far the item has been prepared. `null` when the item is closed, and always in a build without the stage
+    /// (the static, single-user one).
+    pub stage: Option<StageDto>,
+    /// The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
+    /// Empty when the item is closed, when the caller can't edit it, and in a build without the stage.
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub stage_choices: Vec<StageDto>,
     pub state: StateDto,
     /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be
     /// closed: finishing a blocker doesn't unblock what waits for it.
@@ -521,7 +593,7 @@ mod tests {
             ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
-                "description": null, "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "description": null, "kind": "note", "stage": null, "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],

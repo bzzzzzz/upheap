@@ -39,7 +39,7 @@ whoami.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 # The tests run the CLI against the real API router, served on a localhost port.
-api = { workspace = true, features = ["accounts"] }
+api = { workspace = true, features = ["accounts", "agents"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 domain.workspace = true
 googletest.workspace = true

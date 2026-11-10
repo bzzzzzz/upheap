@@ -13,8 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::common::{
-    DueInputDto, HeapSummaryDto, ItemDto, ItemRefDto, NeedDto, RankedItemDto, SizeDto, StateDto, double_option,
-    never_null, non_null,
+    DueInputDto, HeapSummaryDto, ItemDto, ItemRefDto, KindDto, NeedDto, RankedItemDto, SizeDto, StageDto, StateDto,
+    double_option, never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
 
@@ -237,6 +237,14 @@ pub struct ItemPatchDto {
     #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = NeedDto, required = false)]
     pub need: Option<NeedDto>,
+    /// A note can become a task; `"note"` on a task is refused. Applied before `stage`. `null` is refused.
+    #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = KindDto, required = false)]
+    pub kind: Option<KindDto>,
+    /// `"defined"` needs a task, or `kind` set to `"task"` in the same patch. `null` is refused.
+    #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = StageDto, required = false)]
+    pub stage: Option<StageDto>,
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<SizeDto>, nullable)]
     pub effort: Option<Option<SizeDto>>,
@@ -276,6 +284,8 @@ impl ItemPatchDto {
                 Some(Some(raw)) => Some(Description::parse(raw)?),
             },
             need: self.need.map(Into::into),
+            kind: self.kind.map(Into::into),
+            stage: self.stage.map(Into::into),
             effort: self.effort.map(|e| e.map(Into::into)),
             impact: self.impact.map(|i| i.map(Into::into)),
             due: match &self.due {

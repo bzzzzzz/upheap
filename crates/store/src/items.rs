@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
-use domain::item::{Description, Due, Item, ItemState, ItemSummary, Need, Size, StateKind, Title};
+use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
@@ -404,6 +404,8 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         title: Set(item.title.as_str().to_owned()),
         description: Set(item.description.as_ref().map(|d| d.as_str().to_owned())),
         state: Set(item.state.kind().code().to_owned()),
+        kind: Set(item.kind.code().to_owned()),
+        stage: Set(item.stage.code().to_owned()),
         need: Set(item.need.code().to_owned()),
         effort: Set(item.effort.map(|s| s.code().to_owned())),
         impact: Set(item.impact.map(|s| s.code().to_owned())),
@@ -433,6 +435,8 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
     let closed_by = user(row.closed_by.as_deref())?;
     let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, closed_by, blocked_by)
         .map_err(|e| read.corrupt(e.to_string()))?;
+    let item_kind = Kind::from_code(&row.kind).ok_or_else(|| read.corrupt(format!("unknown kind {:?}", row.kind)))?;
+    let stage = Stage::from_code(&row.stage).ok_or_else(|| read.corrupt(format!("unknown stage {:?}", row.stage)))?;
     let need = Need::from_code(&row.need).ok_or_else(|| read.corrupt(format!("unknown need {:?}", row.need)))?;
     let due = match (row.due_at, row.due_firm) {
         (None, None) => None,
@@ -457,6 +461,8 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         title: Title::parse(&row.title).map_err(|e| read.corrupt(e.to_string()))?,
         description,
         state,
+        kind: item_kind,
+        stage,
         need,
         effort: size(row.effort)?,
         impact: size(row.impact)?,

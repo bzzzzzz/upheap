@@ -5,10 +5,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{Item, ItemPatch, ItemSummary, NewItem, StateKind};
+use domain::item::{Item, ItemPatch, ItemSummary, NewItem, Stage, StateKind};
 use domain::list_view::{Group, ListView};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
-use domain::permission::{ItemAction, Permission, allowed_item_actions};
+use domain::permission::{ItemAction, Permission, allowed_item_actions, allowed_stage_choices};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -51,6 +51,8 @@ pub struct ItemView {
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
     pub closed_by: Option<User>,
     pub allowed_actions: Vec<ItemAction>,
+    /// The stages the caller may set on it now, in table order (see [`domain::permission::allowed_stage_choices`]).
+    pub stage_choices: Vec<Stage>,
 }
 
 /// An item's value for one custom parameter, ready to show.
@@ -217,6 +219,7 @@ impl Services {
                 }
             };
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
+            let stage_choices = allowed_stage_choices(&item, &access.heap, role);
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
@@ -231,6 +234,7 @@ impl Services {
                     // Ranked items aren't closed, so they have no closer.
                     closed_by: None,
                     allowed_actions,
+                    stage_choices,
                 },
                 position: 0,
                 contributors: entry.contributors,
@@ -341,6 +345,7 @@ impl Services {
             .into_iter()
             .map(|item| {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
+                let stage_choices = allowed_stage_choices(&item, &access.heap, role);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
                 let created_by = pick_user(&users, item.created_by);
@@ -354,6 +359,7 @@ impl Services {
                     created_by,
                     closed_by,
                     allowed_actions,
+                    stage_choices,
                 }
             })
             .collect();
@@ -404,6 +410,7 @@ impl Services {
 
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
+        let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
         let values = describe_values(&item, &parameters);
         // New items are open, so they have no blocker and no closer.
         Ok(ItemView {
@@ -414,6 +421,7 @@ impl Services {
             created_by,
             closed_by: None,
             allowed_actions,
+            stage_choices,
         })
     }
 
@@ -423,6 +431,7 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, self.now());
+        let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
         let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
         let parameters = store::parameters::list_parameters(&self.db, item.heap_id).await?;
         let blocked_by = find_blocker(&self.db, &item).await?;
@@ -435,6 +444,7 @@ impl Services {
             created_by,
             closed_by,
             allowed_actions,
+            stage_choices,
         })
     }
 
@@ -486,6 +496,7 @@ impl Services {
         }
         let Some(edited) = edited else {
             let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
+            let stage_choices = allowed_stage_choices(&current, &access.heap, role);
             let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
             let blocked_by = find_blocker(&txn, &current).await?;
             let (created_by, closed_by) = find_item_users(&txn, &current).await?;
@@ -497,6 +508,7 @@ impl Services {
                 created_by,
                 closed_by,
                 allowed_actions,
+                stage_choices,
             });
         };
         let saved =
@@ -522,6 +534,7 @@ impl Services {
 
         tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
         let allowed_actions = allowed_item_actions(&saved, &access.heap, role, now);
+        let stage_choices = allowed_stage_choices(&saved, &access.heap, role);
         Ok(ItemView {
             parameters: describe_values(&saved, &parameters),
             item: saved,
@@ -530,6 +543,7 @@ impl Services {
             created_by,
             closed_by,
             allowed_actions,
+            stage_choices,
         })
     }
 

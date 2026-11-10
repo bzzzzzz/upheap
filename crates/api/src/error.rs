@@ -170,6 +170,14 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Item(ItemError::ReopenWindowExpired { .. }) => {
             simple(StatusCode::CONFLICT, "reopen_window_expired", Category::Conflict)
         }
+        ServiceError::Item(ItemError::KindChangeNotAllowed { .. }) => Classified {
+            field: Some("kind"),
+            ..simple(StatusCode::CONFLICT, "kind_change_not_allowed", Category::Conflict)
+        },
+        ServiceError::Item(ItemError::StageNeedsTask { .. }) => Classified {
+            field: Some("stage"),
+            ..simple(StatusCode::CONFLICT, "stage_needs_task", Category::Conflict)
+        },
         ServiceError::Item(ItemError::NotBlocked { .. }) => Classified {
             field: Some("blocked_by_item_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "item_not_blocked", Category::Caller)

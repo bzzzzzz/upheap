@@ -51,8 +51,10 @@ module says what it owns.
 
 `service` and `api` put what only a shared server needs behind their default `accounts` feature: registration,
 sign-in and sessions, team management, user lookup, OAuth. The local build leaves it out, so that code and its
-dependencies aren't in the wasm at all ([Local build](#local-build)). The features are additive: with `accounts`
-on, the local user still works, which lets the native API tests cover it.
+dependencies aren't in the wasm at all ([Local build](#local-build)). `api` also has an `agents` feature, on by
+default, for what only the server build has for agents, which the local build leaves out: so far the stage of an
+item. The features are additive: with `accounts` on, the local user still works, which lets the native API tests
+cover it.
 
 ## Data model
 
@@ -469,9 +471,10 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
    `allowed_actions` what one user can't do (no `sign_out` or `create_team`, only `create_heap` on the team), and
    the web app hides the rest, linking straight to the one team where the server build lists teams. The Team page
    stays as the place to create, rename, archive and unarchive heaps.
-5. **Features, not flags.** The `accounts` feature ([Workspace](#workspace)) and `api`'s `trace-and-timeout`
-   feature (the request span and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left
-   out, so that code, argon2 and tokio's blocking pool aren't in the wasm. What changes is which use cases exist;
+5. **Features, not flags.** The `accounts` feature ([Workspace](#workspace)), `api`'s `agents` feature (the server
+   build sends an item's stage, the local build never does) and `api`'s `trace-and-timeout` feature (the request span
+   and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left out, so that code, argon2
+   and tokio's blocking pool aren't in the wasm. What changes is which use cases exist;
    the permission functions in `domain` don't.
 6. **Platform.** There is no tokio runtime: `wasm-bindgen-futures` drives the Router in one thread, and shared code
    uses only tokio's task-locals (Async §1 of the principles). The clock is `Date.now()`, since `SystemTime::now()`
