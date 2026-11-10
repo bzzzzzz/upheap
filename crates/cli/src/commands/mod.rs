@@ -5,6 +5,7 @@ pub mod auth;
 pub mod heap;
 pub(crate) mod heap_api;
 pub mod item;
+pub mod step;
 pub mod tag;
 
 use clap::Args;
@@ -48,8 +49,22 @@ pub enum UsageError {
     },
     #[error("--tag and --untag both name {name}")]
     TagAndUntag { name: String },
-    #[error("can't read stdin as text for --description -")]
-    UnreadableStdin(#[source] std::io::Error),
+    #[error("can't read stdin as text for {flag} -")]
+    UnreadableStdin {
+        flag: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("can't read {path} for --context-file")]
+    UnreadableContextFile {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("`{step}` is a step of another item than `{item}`; name a step of {item}, or just its number")]
+    StepInOtherItem { step: String, item: String },
+    #[error("nothing to change: give --title, --context-file or --no-context")]
+    NothingToChangeInStep,
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

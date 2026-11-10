@@ -220,7 +220,7 @@ fn text_matches_title_or_description_ignoring_case() -> googletest::Result<()> {
         "description": "Before they expire in March", "kind": "note", "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
         "effort": null, "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0,
         "created_label": "today", "created_by": null, "closed_at": null, "closed_label": null, "closed_by": null,
-        "closed_group": null, "version": 1, "allowed_actions": [],
+        "closed_group": null, "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
     }))?;
 
     verify_that!(matches_text(&item, "STAGING"), eq(true))?;
@@ -284,6 +284,60 @@ fn anything_else_names_no_item() -> googletest::Result<()> {
         );
     }
     Ok(())
+}
+
+#[gtest]
+fn a_step_is_an_item_and_a_number_split_at_the_last_dot() -> googletest::Result<()> {
+    let step = |name: &str| StepName::parse(name);
+
+    verify_that!(
+        step("k3x9a.3")?,
+        eq(&StepName {
+            item_typed: "k3x9a".to_owned(),
+            item: ItemName::Key("k3x9a".to_owned()),
+            number: 3,
+        })
+    )?;
+    verify_that!(
+        step("team/heap/k3x9a.12")?,
+        eq(&StepName {
+            item_typed: "team/heap/k3x9a".to_owned(),
+            item: item_in("team", "heap", "k3x9a"),
+            number: 12,
+        })
+    )?;
+    // The host of a link has dots, and so does an address with a port; only the part after the last `/` is split.
+    verify_that!(
+        step("https://up.heap.example.test/h/team/heap/k3x9a.3")?,
+        eq(&StepName {
+            item_typed: "https://up.heap.example.test/h/team/heap/k3x9a".to_owned(),
+            item: item_in("team", "heap", "k3x9a"),
+            number: 3,
+        })
+    )?;
+    Ok(())
+}
+
+#[gtest]
+fn anything_else_names_no_step() {
+    for bad in [
+        "",
+        "k3x9a",
+        "k3x9a.",
+        "k3x9a.x",
+        "k3x9a.0",
+        "k3x9a.-1",
+        "k3x9a.03",
+        ".3",
+        "a/b.3",
+        "k3x9a.3.4",
+    ] {
+        expect_that!(
+            StepName::parse(bad),
+            err(matches_pattern!(LookupError::MalformedStep { .. })),
+            "{bad:?}"
+        );
+    }
 }
 
 fn due_choices() -> googletest::Result<DueChoicesDto> {

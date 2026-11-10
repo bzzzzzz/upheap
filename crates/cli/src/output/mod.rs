@@ -101,6 +101,15 @@ impl Output {
         writeln!(self.stdout, "{painted}")
     }
 
+    /// Writes a line made of parts, each in its own tone, with any control characters in them made harmless.
+    pub fn line_parts(&mut self, parts: &[(&str, Tone)]) -> std::io::Result<()> {
+        let line: String = parts
+            .iter()
+            .map(|(text, tone)| self.paint(&defuse(text), *tone))
+            .collect();
+        writeln!(self.stdout, "{line}")
+    }
+
     /// Writes a line of a table from [`Output::render_table`] to stdout, after `prefix`.
     pub fn table_line(&mut self, prefix: &str, line: &TableLine) -> std::io::Result<()> {
         writeln!(self.stdout, "{}{}", defuse(prefix), line.0)

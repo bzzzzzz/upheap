@@ -57,7 +57,7 @@ fn is_stale_or_closed(err: &ClientError) -> bool {
 }
 
 /// Where an item is: the heap it named itself, or the heap to look up for its key.
-pub(super) enum HeapSpot<'a> {
+pub(in crate::commands) enum HeapSpot<'a> {
     Known(HeapHandle),
     Named(HeapName<'a>),
 }
@@ -72,14 +72,14 @@ impl HeapSpot<'_> {
 }
 
 /// The item a command named, found without asking the server.
-pub(super) struct ItemLocation<'a> {
+pub(in crate::commands) struct ItemLocation<'a> {
     pub key: String,
     pub heap: HeapSpot<'a>,
 }
 
 /// Where the item `typed` is. A key is in the current heap; a path or link names its own heap, which beats the
 /// environment and the config file, but not a different `--heap`.
-pub(super) fn locate_item<'a>(
+pub(in crate::commands) fn locate_item<'a>(
     typed: &str,
     item: ItemName,
     heap_flag: Option<&'a str>,

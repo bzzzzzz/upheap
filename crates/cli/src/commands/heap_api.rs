@@ -87,7 +87,7 @@ pub(crate) async fn read_description(raw: &str, app: &App) -> Result<String, Cli
     if raw != "-" {
         return Ok(raw.to_owned());
     }
-    let text = app.read_stdin().await?;
+    let text = app.read_stdin("--description").await?;
     let text = text.strip_suffix('\n').unwrap_or(&text);
     Ok(text.strip_suffix('\r').unwrap_or(text).to_owned())
 }

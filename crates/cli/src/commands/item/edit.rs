@@ -175,7 +175,7 @@ mod tests {
             "effort": null, "impact": null, "due": null,
             "tags": tags.iter().map(|id| json!({ "id": id, "name": id.to_string() })).collect::<Vec<_>>(),
             "parameters": [], "created_at": 0, "created_label": "today", "created_by": null, "closed_at": null,
-            "closed_label": null, "closed_by": null, "closed_group": null, "version": 1, "allowed_actions": [],
+            "closed_label": null, "closed_by": null, "closed_group": null, "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
         }))?)
     }
 
