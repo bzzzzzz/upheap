@@ -6,17 +6,37 @@ is in [architecture.md](architecture.md), and how the web app behaves, screen by
 
 ## Pitch
 
-Upheap is a todo list for people with more work than they can keep track of. You add items as they come up, with how
-much they're needed and a rough size, impact and due date. The app ranks everything by how much it's needed, how long
-it has waited, how close its deadline is and how much it's worth, and keeps that ranking current as time passes. A
-heap can be personal or shared by a team.
+Upheap is a ranked todo list for a person, or a team, with more work than can ever be done. Everything goes in:
+ideas, tasks, things to remember, each with how much it's needed and a rough size, impact and due date. Upheap ranks
+it all by how much it's needed, how long it has waited, how close its deadline is and how much it's worth, and keeps
+that ranking current as time passes. The top is what matters now, further down is what comes next, and the bottom
+may never happen.
+
+Part of that work can be handed to AI agents. A heap carries its project's context, the ranking decides what an
+agent picks up, and an agent that needs the person leaves a question on the item and moves on. The project's own
+files keep what it is, not how far along it is.
+
+Upheap waits for the person. It shows what's important and what needs them when they come and look, and it doesn't
+interrupt.
 
 It answers questions like:
 
-- What should I focus on today?
-- What's the most important thing on my plate right now?
-- What's next after I finish this?
-- Why isn't this item higher on the list?
+- What's important right now, and what should I work on?
+- What comes next? (Scroll down: the list stays in priority order.)
+- Why is this item here, and why isn't it higher?
+- What is waiting for me: which questions and requests can only I deal with?
+- What should an agent pick up next? (By rules, the same way every time, without asking a model.)
+
+What it is not:
+
+- **Not a plan that gets finished.** A heap holds more than can be done. It orders the work and doesn't promise all
+  of it.
+- **Not something that interrupts.** Information appears when the person asks for it.
+- **Not a model host.** It runs no models. It drives an agent command-line tool the person already has, on their own
+  machine.
+- **Not a wiki.** A heap's context is short and points at where the knowledge lives.
+- **Not a team project tracker.** No assignees, sprints, boards or reports.
+- **Not a chat.** A question belongs to an item and stays with it.
 
 ## Distribution
 
@@ -27,6 +47,8 @@ It answers questions like:
    its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
 4. The server exposes an API that any client can use. There are two clients, the web app and the `upheap`
    command-line client, and the API assumes neither.
+5. Working with agents needs a server, which one person can run for themselves alone. The browser-only build has
+   no agents.
 
 ## Accounts and sign-in
 
@@ -79,6 +101,9 @@ It answers questions like:
 3. A person can belong to several teams and heaps, and switches between them.
 4. Items have no assignee or owner. A shared heap has one ranking for the whole team, and "my plate" means the heaps I
    belong to. This is deliberate.
+5. A heap has a context: text that says what the project is, points at where its knowledge lives, such as a
+   repository or a wiki, and says where its work is reviewed and what finishing a piece means. Upheap stores the
+   pointers and doesn't fetch what they point at.
 
 ## Items
 
@@ -105,9 +130,73 @@ It answers questions like:
    lowest-priority option for that parameter, and the interface shows it as unset.
 5. An item can have any number of tags, used to group similar items. A tag has a name and an optional description.
 6. An item is always in one state: open, in progress, blocked, done or won't do. Done and won't do are closed
-   (terminal) states. Items are never deleted. Work that won't happen is closed as won't do.
+   (terminal) states. Items are never deleted. Work that won't happen is closed as won't do. A note that turned into
+   other things is closed too, as became (Notes, tasks and reminders §6).
 7. A closed item can be reopened within one week of being closed. After that it can't be reopened.
 8. A blocked item can point to another item as the reason it's blocked.
+
+## Notes, tasks and reminders
+
+1. An item is a note, a task or a reminder. All three are ranked together in one list, by the same factors.
+2. A note is the item described above: it can be started, blocked and done on its own.
+3. A task is a note with a checklist. Each step has a title and its own context, and is ticked when done.
+4. A reminder has a date. It is out of the list until that date, and from then on is ranked like any item.
+5. An item's description is its context, beside the heap's. Contexts, questions and replies are written in
+   Markdown, and the web app shows them rendered.
+6. A note can become a task, a step of a task that already exists, several tasks, or a new heap with its own
+   context, tasks and notes. A reminder is resolved, or becomes a task. A task gains steps and is done like any
+   item.
+
+## Questions
+
+1. A question is attached to an item, and is either a question to answer or a request to do something. An agent or
+   a person can attach one. It can offer choices to pick from, and is replied to with the choices picked and a
+   comment.
+2. An item with an open question waits for the person. An agent never picks it up.
+3. The person can see everything that waits for them, across their heaps, in one place.
+4. Answering a question, or saying a request is done or can't be done, closes it. When an item's last open
+   question closes, the item goes back to whoever asked.
+
+## Working with agents
+
+1. Work moves between stable states: points where an agent counts its part as finished and the item is the
+   person's again. They are: a note as written; a note with its context filled in; a defined task, with its
+   checklist and context, ready to be done; done. A note too big for a task becomes a defined heap instead.
+2. An agent's turn takes one item from one stable state to the next and stops there. An item with an open question
+   is in the middle of a turn, and the agent carries on once the person has answered.
+3. The person sends an item on by telling the agent to go one stable state further, or all the way to done.
+4. A heap can be set so agents prepare what's added without being asked: each new note is taken one stable state
+   forward. Preparing never includes doing a defined task; that always needs the person's word.
+5. Outside those two cases an agent never picks an item up. At any moment an item is with the person or with an
+   agent, and the list shows which.
+6. An agent refines and does: it fills in context, turns a note into tasks, asks, adds steps, and does the work,
+   ticking the steps as it goes.
+7. An agent that makes several tasks says which block which. A blocked task is never given to an agent.
+8. Nothing reaches the person unless they look: a question, a finished task and an agent's progress all wait in
+   Upheap. The person can see what agents have done across their heaps as one short history of results.
+
+## Review
+
+1. An agent never marks its own work done. It asks for a review: a request on the task with a link to where the
+   work is, such as a pull request or a document.
+2. The person reviews where the work lives, and replies in Upheap: approved, or changes asked. Their comments stay
+   where the work is.
+3. Changes asked sends the task back to the agent, which changes the work and asks again. There is no limit on
+   rounds.
+4. A task can need several reviews, as when one change lands as several pull requests. It is done when the agent
+   has nothing left to do on it and every review it asked for is approved.
+
+## The agent loop
+
+1. The command-line client gives the next item for an agent by rules alone: the heaps' ranking, limited to items an
+   agent may pick up that aren't blocked and don't wait for the person. The same state gives the same answer, and
+   no model is asked.
+2. It reads and writes everything an agent needs: both contexts, checklists, questions, and the moves between
+   kinds.
+3. It runs the loop on the person's machine: finds what's next, starts the agent tool the person named with the
+   item and its contexts, and waits when there is nothing or everything waits for the person.
+4. The person says which heaps it may work in, and it touches no other. A heap an agent makes out of an item in
+   one of those heaps is included.
 
 ## Custom parameters
 
@@ -222,6 +311,9 @@ A supporting view, for team admins only.
 | Leave a team | ✓ | ✓ (not the last admin) |
 | Add and edit items | ✓ | ✓ |
 | Add and edit tags | ✓ | ✓ |
+| Edit a heap's context | ✓ | ✓ |
+| Send an item to an agent, take it back, answer a question | ✓ | ✓ |
+| Set a heap so agents prepare what's added | | ✓ |
 | Rename the team | | ✓ |
 | Join a team through a working invite link | ✓ | ✓ |
 | Add users to the team and remove them | | ✓ |

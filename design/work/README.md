@@ -8,7 +8,7 @@ In flight. Each has a doc with its own progress.
 
 - [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 1 next.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
-  AI agents through the CLI. In design.
+  AI agents through the CLI. Stage 1 of 2, piece 1 next.
 
 ## Next
 
@@ -22,7 +22,7 @@ Defined well enough to start, in rough order.
 - **"Start next" in a shared heap.** The offer after Done shows only when nothing in the heap is in progress, which
   with teammates is almost never. Decide what it means when others have work in progress.
 - **A view across heaps.** Each user orders their own heaps, and that order is how items from different heaps
-  compare in one list (Product Heaps §4). Needs a design first.
+  compare in one list (Product Heaps §4). Designed as heap weights in the Work with agents track, stage 2.
 - **Phone width for Activity,** in the design tokens.
 - **OIDC sign-in** (Product Accounts §3), with a username step on first sign-in (Arch Handles §7).
 - **Backups.** Check Neon's restore window on the plan in use before real data goes in.
