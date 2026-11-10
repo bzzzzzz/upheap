@@ -11,7 +11,7 @@ request, and they don't depend on each other, so they can go in any order and at
    is needed, and write down how to restore. Before Getting in stage 1 ships: that's what lets real teammates in,
    and their data with them.
    Done when: operations.md gives the restore window and the steps to restore, and the plan is settled.
-- [ ] 2. **Old OAuth rows.** Used authorization codes and expired or revoked token families stay in their tables.
+- [x] 2. **Old OAuth rows.** Used authorization codes and expired or revoked token families stay in their tables.
    Remove them on each code exchange, as ended sign-in windows are removed on each sign-in attempt. Getting in's
    password change (stage 2, piece 2) also ends token families, so land this before it.
    Done when: an exchange removes the rows that can no longer be used, a test shows it, and the suites pass on

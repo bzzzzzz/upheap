@@ -393,11 +393,15 @@ the remaining admins.
    `device_name`, which the client sent with the code exchange. It also carries the wording, in the request's time
    zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`.
    `DELETE /me/sign-ins/{id}` revokes the family as
-   `/oauth/revoke` does, answers `204` again for one already ended, and `404` for an unknown id or another user's,
-   which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
+   `/oauth/revoke` does, answers `204` again for one that ended within the last day (after that it's gone and
+   answers `404` like an unknown id), and `404` for an unknown id or another user's, which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
    it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
    authorization request, so the consent page never shows it: a familiar name there could make a phishing request
    look legitimate.
+7. Codes, families and their tokens are authentication plumbing, so each code exchange deletes a few that ended over a
+   day ago: expired codes, and families that are revoked or have no refresh token left unused and unexpired. The day
+   keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh tokens of a live
+   family stay, since they detect reuse.
 
 ## Audit log
 

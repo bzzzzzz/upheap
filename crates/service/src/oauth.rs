@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::oauth::{
     ACCESS_TOKEN_LIFETIME, AUTHORIZATION_CODE_LIFETIME, AuthorizationError, AuthorizationParams, AuthorizationRequest,
-    DeviceName, GrantError, REFRESH_TOKEN_LIFETIME, TokenKind, find_client, is_code_verifier,
+    DeviceName, GrantError, KEEP_ENDED_GRANTS_FOR, REFRESH_TOKEN_LIFETIME, TokenKind, find_client, is_code_verifier,
 };
 use domain::{Duration, Timestamp, TokenFamilyId, ValidationError};
 use sha2::{Digest, Sha256};
@@ -142,9 +142,12 @@ impl Services {
     /// also revokes the tokens the first exchange issued, as RFC 6749 §4.1.2 asks: one of the two parties presenting
     /// it isn't the client. Past its lifetime it's only refused, so a code left in a browser's history can't end the
     /// sign-in it started at any later time.
+    ///
+    /// It also removes a few codes and sign-ins that ended over [`KEEP_ENDED_GRANTS_FOR`] ago.
     pub async fn exchange_authorization_code(&self, exchange: CodeExchange<'_>) -> Result<TokenPair, ServiceError> {
         require_client(exchange.client_id)?;
         let now = self.now();
+        self.delete_ended_grants(now).await;
         let code_hash = exchange.code.to_hash();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let code = store::oauth::find_auth_code(&txn, &code_hash)
@@ -304,7 +307,33 @@ impl Services {
 }
 
 impl Services {
-    /// Refuses a code presented again, and revokes the family its first exchange issued while the code is within its
+    /// Deletes a few codes, then a few token families with their tokens, that ended over [`KEEP_ENDED_GRANTS_FOR`]
+    /// before `now`. Codes go first, so a family whose code just ended can go in the same run.
+    ///
+    /// Housekeeping: a failure is logged and mustn't stop a sign-in. Ten of each per exchange keep up with the one
+    /// code and family an exchange adds; approvals that are never exchanged only outpace it when more than ten pile
+    /// up per exchange.
+    async fn delete_ended_grants(&self, now: Timestamp) {
+        const BATCH: u64 = 10;
+        let Some(cutoff) = now.checked_sub(KEEP_ENDED_GRANTS_FOR) else {
+            return;
+        };
+        let removed = async {
+            let codes = store::oauth::delete_ended_auth_codes(&self.db, cutoff, BATCH).await?;
+            let families = store::oauth::delete_ended_token_families(&self.db, cutoff, BATCH).await?;
+            Ok::<_, StoreError>((codes, families))
+        }
+        .await;
+        match removed {
+            Ok((0, 0)) => {}
+            Ok((codes_removed, families_removed)) => {
+                tracing::info!(codes_removed, families_removed, "ended oauth grants removed");
+            }
+            Err(error) => tracing::warn!(?error, "can't delete ended oauth grants"),
+        }
+    }
+
+    /// Refuses a code presented again,and revokes the family its first exchange issued while the code is within its
     /// lifetime.
     async fn refuse_reused_code(
         &self,
