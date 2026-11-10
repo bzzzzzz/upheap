@@ -2,7 +2,20 @@
 // than the screen.
 import type { Locator, Page } from "@playwright/test";
 
-import { addHeaps, addItem, createTeam, expect, goTo, HEAP_URL, row, test, type AppPage } from "./fixtures";
+import {
+  addHeaps,
+  addItem,
+  closeItem,
+  createTeam,
+  expect,
+  goTo,
+  HEAP_URL,
+  itemPane,
+  openItem,
+  row,
+  test,
+  type AppPage,
+} from "./fixtures";
 
 // Account last: it belongs to no heap, so it has no heap views to go on from.
 const pages: AppPage[] = ["Closed", "Activity", "Settings", "Tags", "Parameters", "Open", "Account"];
@@ -40,6 +53,28 @@ test("every page fits the screen, with the navigation for its width", async ({ p
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `${name} scrolls sideways`).toBeLessThanOrEqual(0);
   }
+});
+
+test("Activity fits the screen with long entries", async ({ page }) => {
+  // A title at the limit with no spaces, renamed to another: the entry holds long before and after values.
+  const before = "x".repeat(300);
+  const after = "y".repeat(300);
+  await addItem(page, before);
+  await openItem(page, before);
+  await itemPane(page).getByLabel("Title", { exact: true }).fill(after);
+  await itemPane(page).getByLabel("Title", { exact: true }).press("Enter");
+  await expect(row(page, after)).toBeVisible();
+  await closeItem(page);
+
+  await goTo(page, "Activity");
+  await expect(page.getByRole("main").getByText(after).first()).toBeVisible();
+  const { overflow, right, width } = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    right: document.querySelector("main")?.getBoundingClientRect().right ?? Infinity,
+    width: window.innerWidth,
+  }));
+  expect(overflow, "Activity scrolls sideways").toBeLessThanOrEqual(0);
+  expect(right, "Activity's content runs off the screen").toBeLessThanOrEqual(width);
 });
 
 test("the sidebar's Open count follows adding an item and closing one", async ({ page }) => {

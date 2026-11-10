@@ -294,6 +294,23 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   await expect(page).toHaveURL(new RegExp(`/teams/${linkName}/activity$`));
 });
 
+test("the team's activity fits the screen with a long team name", async ({ page, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  const name = "Q".repeat(100);
+  await createTeam(page, name);
+  await page.getByRole("button", { name: /^More for / }).click();
+  await page.getByRole("menuitem", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Team activity", level: 1 })).toBeVisible();
+  await expect(page.getByRole("main").getByText(name).first()).toBeVisible();
+  const { overflow, right, width } = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+    right: document.querySelector("main")?.getBoundingClientRect().right ?? Infinity,
+    width: window.innerWidth,
+  }));
+  expect(overflow, "the team's activity scrolls sideways").toBeLessThanOrEqual(0);
+  expect(right, "the team's activity runs off the screen").toBeLessThanOrEqual(width);
+});
+
 test("leaving asks first, and the last admin is told why they can't", async ({ page, request, localBuild }) => {
   test.skip(localBuild, SERVER_ONLY);
   const grace = await registerOther(request, "Grace Hopper");
