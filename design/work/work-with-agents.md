@@ -113,7 +113,8 @@ is resolved or turned into a task.
 
 1. **Core.** An item is a note, a task or a reminder. All three are ranked together in one list, by the same
    factors.
-2. **Core.** Every item has its own context, beside the heap's.
+2. **Core.** Every item has its own context, beside the heap's. Contexts, questions and replies are written in
+   Markdown, and the web app shows them rendered.
 3. **Core.** A note is today's item, unchanged: it can be started, blocked and done on its own.
 4. **Core.** A task is a note with a checklist. Each step has a title and its own context, and is ticked when
    done.
@@ -124,7 +125,8 @@ is resolved or turned into a task.
 **Questions**
 
 1. **Core.** A question is attached to an item, and is either a question to answer or a request to do something.
-   An agent or a person can attach one.
+   An agent or a person can attach one. It is free text, can offer choices to pick from, and is replied to with
+   the choices picked and a comment.
 2. **Core.** An item with an open question waits for the person. An agent never picks it up.
 3. **Core.** The person can see everything that waits for them, across their heaps, in one place.
 4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last
@@ -480,16 +482,26 @@ note. It is open, ticked or dropped. A dropped step stays visible as dropped; st
 **Reminder.** An item of kind reminder with a date. Before the date it is in no list and no queue. From the date
 on it is an ordinary open item.
 
-**Question.** Belongs to an item, and may name one of its steps. Three kinds:
+**Question.** Belongs to an item, and may name one of its steps. Every question has one shape:
 
-| Kind | Asked with | Closed by |
+- **What is asked:** free text.
+- **Choices,** optional: a list of options to pick from, either one of them or any number.
+- **The reply:** the options picked, if there are choices, and a free-text comment. With no choices the comment
+  is the answer; with choices it is optional.
+
+Whoever asks writes the text and the choices. Two kinds come with their choices fixed, because rules read them:
+
+| Kind | Asked with | Choices |
 | --- | --- | --- |
-| Question | Text | An answer in text |
-| Request | What to do | "Done" or "can't be done", with an optional line |
-| Review | A link to the work | "Approved" or "changes asked", with an optional line |
+| Question | Text, and any choices the asker likes | The asker's, or none |
+| Request | What to do | Done, or can't be done |
+| Review | A link to the work | Approved, or changes asked |
 
-A question is open, closed, or withdrawn (the asker no longer needs it). Its answer can be changed while its
-item is open.
+A question is open, closed by a reply, or withdrawn (the asker no longer needs it). Its reply can be changed
+while its item is open.
+
+**Text.** Contexts, what a question asks and the comment in a reply are Markdown. The web app shows them
+rendered and edits them as Markdown; the command-line client reads and writes the Markdown itself.
 
 **Turn.** One piece of an agent's work on one item: from the stable state it's at to the next. It has a
 **reach** (one state, or all the way) and is opened by the person's go-ahead or by the heap's prepare setting. It
@@ -744,6 +756,7 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Whether heap scores need normalising before the heap weight is applied.
 - When the reached check fails a run, the agent is told which condition it missed.
 - A heap's cost can come in more than one unit, and the interface has to show that.
+- Which Markdown is allowed (tables, images, raw HTML) and how it's made safe to render.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
 
 ## Ideas
