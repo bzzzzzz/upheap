@@ -9,7 +9,9 @@ Step agreed: 1 (value).
 1. One person working alone comes first. Sharing a heap with other people keeps working as it does today and gets
    no new design here. (Owner.)
 2. Agents use Upheap through the command-line client only. (Owner.)
-3. Agents are set up outside Upheap. Upheap decides what's next and calls an agent; it isn't one. (Owner.)
+3. Upheap hosts no models. `upheap work` drives an agent command-line tool the person already has, locally:
+   it runs the loop, gives the agent the prompts and context for working with Upheap, and keeps within the limits
+   it was started with. (Owner.)
 4. A note is today's item, unchanged. (Owner.)
 5. An agent both refines work and does it. (Owner.)
 6. One person uses agents by running a server for themselves. The browser-only build stays as it is, without
@@ -53,8 +55,9 @@ doesn't interrupt.
    promise all of it.
 2. **Not something that interrupts.** Information appears when the person asks for it. Upheap pushes only what
    they asked to be pushed: a reminder, or what they have said is critical to act on fast.
-3. **Not an agent runner.** It doesn't host models, hold prompts or manage their tools. It hands an agent an item
-   with its context and takes back the result.
+3. **Not a model host.** It runs no models and manages no agent's tools. `upheap work` drives an agent
+   command-line tool the person already has, such as Claude's or Copilot's, on their own machine: it runs the
+   loop, tells the agent how to work with Upheap, and stops at the limits it was given.
 4. **Not a wiki or a document store.** A heap's context is short and points at where the knowledge lives: a
    repository, a wiki, a drive.
 5. **Not a team project tracker.** No assignees, sprints, boards or reports. One ranked list per heap, as today.
@@ -151,9 +154,24 @@ is resolved or turned into a task.
    that don't wait for the person. The same state gives the same answer, and no model is asked.
 2. **Core.** It reads and writes everything an agent needs: both contexts, checklists, questions, and the moves
    between kinds.
-3. **Core.** `upheap work` runs the loop: it finds what's next, calls the agent the person configured with the
-   item and its contexts, and waits when there is nothing or everything waits for the person.
-4. Upheap doesn't hold the agent's model, prompts or tools. `upheap work` is told what command to call.
+3. **Core.** `upheap work` runs the loop on the person's machine: it finds what's next, starts the agent tool
+   the person named with the item and its contexts, and waits when there is nothing or everything waits for the
+   person.
+4. **Core.** The person starts it with limits, and it never goes past them: how much it may spend, how long it
+   may run, which heaps it may work in.
+5. `upheap work` gives the agent its instructions for working with Upheap: how to read context, ask, tick steps
+   and make the moves. The person doesn't write them.
+6. Upheap runs no models and doesn't manage the agent tool's own setup, sign-in or tools.
+
+**Cost**
+
+1. What an agent's run on an item cost is recorded with the item, as far as the agent tool reports it.
+2. The person can see the cost of an item and of a heap.
+
+**Where things came from**
+
+1. An item, a heap or a checklist step made out of another item keeps a link back to it, and the source shows
+   what came out of it.
 
 **One person and teams**
 
@@ -189,13 +207,15 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Whether "marked for agents" is a tag or a field of its own.
 - What an agent's actions look like in the audit log, and which account it signs in as.
 - Whether a checklist step can hold a question of its own.
-- How a note that became a heap points at it, and what state the note ends in.
+- What state a note ends in once it has become a heap.
+- What cost is counted in when the agent tool reports tokens, money or nothing.
 - Two agents asking for "next" at once must not get the same item.
 
 ## Ideas
 
 Outside the scope. Not commitments.
 
+- **Stories:** following a note through everything it turned into, with the cost of the whole added up.
 - The channel for what is pushed, and how the person says what counts as critical.
 - Several kinds of agent, with items marked for one of them.
 - A person in a shared heap picking who answers a question.
