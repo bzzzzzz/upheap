@@ -51,6 +51,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::MemberRoleChanged
         | AuditAction::MemberRemoved
         | AuditAction::MemberLeft
+        | AuditAction::MemberJoined
         | AuditAction::InviteLinkCreated
         | AuditAction::InviteLinkRevoked => Permission::ManageTeam,
         AuditAction::HeapCreated
@@ -291,6 +292,29 @@ pub enum InviteLinkAction {
 pub fn allowed_invite_link_actions(link: &InviteLink, role: Role, now: Timestamp) -> Vec<InviteLinkAction> {
     if Permission::ManageTeam.is_granted_to(role) && link.is_working(now) {
         return vec![InviteLinkAction::Revoke];
+    }
+    Vec::new()
+}
+
+/// An action a client may offer to someone holding an invite link.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InvitationAction {
+    /// Join the team through the link.
+    Join,
+}
+
+/// What a viewer can do with the invite link they hold at `now`. `viewer_is_member` is `None` when nobody is signed
+/// in (the client signs them in first, so nothing is offered), else whether they are already in the team.
+/// `last_removed_at` is their last removal from the team, if any. Joining is offered only to a signed-in outsider
+/// the link would admit: working, and not made before their removal.
+pub fn allowed_invitation_actions(
+    link: &InviteLink,
+    viewer_is_member: Option<bool>,
+    now: Timestamp,
+    last_removed_at: Option<Timestamp>,
+) -> Vec<InvitationAction> {
+    if viewer_is_member == Some(false) && link.check_join(now, last_removed_at).is_ok() {
+        return vec![InvitationAction::Join];
     }
     Vec::new()
 }
@@ -583,5 +607,83 @@ mod tests {
             allowed_stage_choices(&item(Kind::Task, true), &heap(false), Role::Member),
             is_empty()
         );
+    }
+
+    mod invitation {
+        use super::*;
+        use crate::invite_link::{INVITE_LINK_LIFETIME, InviteToken, Revocation};
+        use crate::{Duration, InviteLinkId};
+
+        fn link(revoked: bool) -> InviteLink {
+            InviteLink {
+                id: InviteLinkId::from_uuid(Uuid::from_u128(1)),
+                team_id: TeamId::from_uuid(Uuid::from_u128(2)),
+                token: InviteToken::new("t".to_owned()),
+                created_by: UserId::from_uuid(Uuid::from_u128(3)),
+                created_at: Timestamp::EPOCH.checked_add(Duration::from_days(1)).expect("in range"),
+                revocation: revoked.then(|| Revocation {
+                    at: Timestamp::EPOCH,
+                    by: UserId::from_uuid(Uuid::from_u128(3)),
+                }),
+                version: Version::INITIAL,
+            }
+        }
+
+        fn after(link: &InviteLink, offset: Duration) -> Timestamp {
+            link.created_at.checked_add(offset).expect("in range")
+        }
+
+        #[gtest]
+        fn an_outsider_may_join_through_a_working_link() {
+            let link = link(false);
+            let now = link.created_at;
+            expect_that!(
+                allowed_invitation_actions(&link, Some(false), now, None),
+                elements_are![eq(&InvitationAction::Join)]
+            );
+            let earlier_removal = Some(Timestamp::EPOCH);
+            expect_that!(
+                allowed_invitation_actions(&link, Some(false), now, earlier_removal),
+                elements_are![eq(&InvitationAction::Join)]
+            );
+        }
+
+        #[gtest]
+        fn nothing_is_offered_to_a_signed_out_viewer_or_a_member() {
+            let link = link(false);
+            expect_that!(
+                allowed_invitation_actions(&link, None, link.created_at, None),
+                is_empty()
+            );
+            expect_that!(
+                allowed_invitation_actions(&link, Some(true), link.created_at, None),
+                is_empty()
+            );
+        }
+
+        #[gtest]
+        fn nothing_is_offered_to_someone_removed_since_the_link_was_made() {
+            let link = link(false);
+            let removed = Some(after(&link, Duration::from_millis(1)));
+            expect_that!(
+                allowed_invitation_actions(&link, Some(false), link.created_at, removed),
+                is_empty()
+            );
+        }
+
+        #[gtest]
+        fn nothing_is_offered_on_an_ended_or_revoked_link() {
+            let working = link(false);
+            let ended = after(&working, INVITE_LINK_LIFETIME);
+            expect_that!(
+                allowed_invitation_actions(&working, Some(false), ended, None),
+                is_empty()
+            );
+            let revoked = link(true);
+            expect_that!(
+                allowed_invitation_actions(&revoked, Some(false), revoked.created_at, None),
+                is_empty()
+            );
+        }
     }
 }

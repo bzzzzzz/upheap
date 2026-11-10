@@ -105,6 +105,35 @@ impl FromRequestParts<AppState> for SessionUser {
     }
 }
 
+/// The caller if there is one, for what anyone holding a link may do and a signed-in caller gets more from: opening
+/// an invite link. Records `user_id` on the request span when there is a caller.
+///
+/// A bearer token is authenticated exactly as for [`CurrentUser`], and a rejected one is `401`: a client that sends
+/// one expects it to count. Otherwise a session cookie is used, and one that is unknown or expired counts as signed
+/// out, not as `401`, because the page behind the link works signed out too and the person can't act on the error.
+#[cfg(feature = "accounts")]
+pub(crate) struct MaybeUser(pub Option<Principal>);
+
+#[cfg(feature = "accounts")]
+impl FromRequestParts<AppState> for MaybeUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let principal =
+            if matches!(state.authentication, Authentication::Sessions(_)) && !has_bearer_scheme(&parts.headers) {
+                match session_principal(parts, state).await {
+                    Ok(principal) => Some(principal),
+                    Err(ApiError::Service(ServiceError::Unauthenticated)) => None,
+                    Err(other) => return Err(other),
+                }
+            } else {
+                let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+                Some(principal)
+            };
+        Ok(Self(principal))
+    }
+}
+
 #[cfg(feature = "accounts")]
 async fn session_principal(parts: &Parts, state: &AppState) -> Result<Principal, ApiError> {
     let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;

@@ -65,6 +65,9 @@ enum Target {
     FreshTeam,
     /// A working invite link of the shared team, made by its admin, in `{id}`.
     InviteLink,
+    /// A working invite link of a team of its own, made by a new admin none of the callers know, so every caller is a
+    /// newcomer to it and joining leaves the shared team alone. Its token is in `{token}`.
+    ForeignInviteLink,
     /// The caller's own user, with its version for `If-Match`.
     Me,
     /// A sign-in of the CLI as the caller, in `{id}`.
@@ -355,6 +358,22 @@ fn endpoints() -> Vec<Endpoint> {
             Target::InviteLink,
             RequestBody::Empty,
             StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/invites/{token}",
+            Public,
+            Target::ForeignInviteLink,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/invites/{token}/join",
+            SignedIn,
+            Target::ForeignInviteLink,
+            RequestBody::Empty,
+            StatusCode::CREATED,
         ),
         row(
             Method::POST,
@@ -874,6 +893,31 @@ impl World {
         Ok(created.body["slug"].as_str().context("team has no slug")?.to_owned())
     }
 
+    /// The token of a working invite link of a new team, made by its new admin.
+    async fn new_invite_token(&self) -> Result<String> {
+        let (owner, _) = self.new_user().await?;
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                "/api/v1/teams",
+                Some(&owner),
+                Some(json!({ "name": "Foreign" })),
+            )
+            .await?;
+        let slug = created.body["slug"].as_str().context("team has no slug")?;
+        let made = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{slug}/invite-links"),
+                Some(&owner),
+                None,
+            )
+            .await?;
+        Ok(made.body["token"].as_str().context("link has no token")?.to_owned())
+    }
+
     /// A new heap in the shared team, created by its admin. Returns its slug.
     async fn new_heap(&self) -> Result<String> {
         let created = self
@@ -997,6 +1041,7 @@ impl World {
                 let id = made.body["id"].as_str().context("invite link has no id")?;
                 path = path.replace("{id}", id);
             }
+            Target::ForeignInviteLink => path = path.replace("{token}", &self.new_invite_token().await?),
             Target::Me => {
                 if let Some(session) = &session {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;

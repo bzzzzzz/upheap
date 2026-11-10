@@ -1,7 +1,7 @@
 //! A team's invite links.
 
 use domain::invite_link::InviteLinkState;
-use domain::permission::InviteLinkAction;
+use domain::permission::{InvitationAction, InviteLinkAction};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -77,4 +77,60 @@ pub struct InviteLinkDto {
 #[schema(as = InviteLinkList)]
 pub struct InviteLinkListDto {
     pub links: Vec<InviteLinkDto>,
+}
+
+/// What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no
+/// members, no maker username or email.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Invitation)]
+pub struct InvitationDto {
+    /// The team's name now.
+    pub team_name: String,
+    /// The display name of whoever made the link, now, even if they have left the team.
+    pub created_by_name: String,
+    /// Where the link is in its life. `ended` and `revoked` are shown too, so the page can say which.
+    pub state: InviteLinkStateDto,
+    /// The caller's standing in the team; `null` when the request has no signed-in user.
+    pub viewer: Option<InviteViewerDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<InvitationActionDto>,
+}
+
+/// An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = InvitationAction)]
+pub enum InvitationActionDto {
+    /// Offered to a signed-in person outside the team while the link works and doesn't predate their removal.
+    Join,
+}
+
+impl From<InvitationAction> for InvitationActionDto {
+    fn from(action: InvitationAction) -> Self {
+        match action {
+            InvitationAction::Join => Self::Join,
+        }
+    }
+}
+
+/// A signed-in person's standing in the team a link is for.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = InviteViewer)]
+pub struct InviteViewerDto {
+    pub status: InviteViewerStatusDto,
+    /// The team's slug, so the client can take a member to the team; `null` unless `status` is `member`.
+    pub team_slug: Option<String>,
+}
+
+/// Where a signed-in person stands in the team a link is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = InviteViewerStatus)]
+pub enum InviteViewerStatusDto {
+    /// Not in the team, and free to join if the link works.
+    NotMember,
+    /// In the team, as a member or an admin, whatever the link's state.
+    Member,
+    /// Not in the team, and removed from it after the link was made, so the link won't admit them.
+    Removed,
 }

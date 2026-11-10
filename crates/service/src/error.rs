@@ -1,3 +1,4 @@
+use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
 use domain::parameter::ParameterError;
@@ -56,6 +57,9 @@ pub enum ServiceError {
     BlockingCycle { item_id: ItemId },
     #[error(transparent)]
     Team(#[from] TeamError),
+    /// An invite link that can't be used to join its team.
+    #[error(transparent)]
+    InviteLink(#[from] InviteLinkError),
     /// The user to add to a team doesn't exist.
     #[error("there is no user {user_id}")]
     UserNotFound { user_id: UserId },

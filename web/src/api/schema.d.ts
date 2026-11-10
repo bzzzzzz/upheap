@@ -81,6 +81,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invites/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Opens an invite link: the team's name, the maker's name and whether the link works, ended or was revoked. Anyone
+         *     holding the token may, signed in or not; with a session cookie or bearer token the answer also says where the
+         *     caller stands in the team (`viewer`). An expired or unknown session cookie counts as signed out.
+         */
+        get: operations["open_invite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invites/{token}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Joins the link's team as a member. Takes the session cookie only, never a bearer token: joining is the person's
+         *     decision in their browser, not something a client holding a token can do for itself. The link must be working at
+         *     this moment, and must not have been made before the caller was removed from the team. Answers `200` with the team
+         *     unchanged when the caller is already in it, as member or admin, whatever the link's state. The link keeps
+         *     working for others.
+         */
+        post: operations["join_by_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -833,7 +877,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1163,6 +1207,25 @@ export interface components {
              */
             parameters: components["schemas"]["Parameter"][];
         };
+        /**
+         * @description What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no
+         *     members, no maker username or email.
+         */
+        Invitation: {
+            allowed_actions: components["schemas"]["InvitationAction"][];
+            /** @description The display name of whoever made the link, now, even if they have left the team. */
+            created_by_name: string;
+            /** @description Where the link is in its life. `ended` and `revoked` are shown too, so the page can say which. */
+            state: components["schemas"]["InviteLinkState"];
+            /** @description The team's name now. */
+            team_name: string;
+            viewer?: null | components["schemas"]["InviteViewer"];
+        };
+        /**
+         * @description An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+         * @enum {string}
+         */
+        InvitationAction: "join";
         /** @description An invite link: whoever holds its token can join the team until it ends or is revoked. */
         InviteLink: {
             allowed_actions: components["schemas"]["InviteLinkAction"][];
@@ -1211,6 +1274,17 @@ export interface components {
          * @enum {string}
          */
         InviteLinkState: "working" | "ended" | "revoked";
+        /** @description A signed-in person's standing in the team a link is for. */
+        InviteViewer: {
+            status: components["schemas"]["InviteViewerStatus"];
+            /** @description The team's slug, so the client can take a member to the team; `null` unless `status` is `member`. */
+            team_slug?: string | null;
+        };
+        /**
+         * @description Where a signed-in person stands in the team a link is for.
+         * @enum {string}
+         */
+        InviteViewerStatus: "not_member" | "member" | "removed";
         Item: {
             allowed_actions: components["schemas"]["ItemAction"][];
             blocked_by?: null | components["schemas"]["ItemRef"];
@@ -2093,6 +2167,114 @@ export interface operations {
             };
             /** @description `unauthenticated` */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    open_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invite link's secret: the last part of the link, `{origin}/invite/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invitation"];
+                };
+            };
+            /** @description `unauthenticated`: the bearer token is invalid, expired or revoked */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    join_by_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invite link's secret: the last part of the link, `{origin}/invite/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Already in the team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            /** @description Joined */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Team"];
+                };
+            };
+            /** @description `unauthenticated`: no session cookie, or the request carried a bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `removed_from_team`: removed from the team after the link was made */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invite_link_ended` or `invite_link_revoked` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -19,6 +19,8 @@ mod error;
 mod extract;
 mod health;
 mod heaps;
+#[cfg(feature = "accounts")]
+mod invites;
 mod items;
 mod me;
 #[cfg(feature = "accounts")]
@@ -124,9 +126,15 @@ impl utoipa::Modify for SessionCookieScheme {
     }
 }
 
+/// Routes that take `SessionUser`, the cookie only: the bearer scheme is not added to them. Beside the OAuth prefix,
+/// which is skipped the same way.
+#[cfg(feature = "accounts")]
+const SESSION_ONLY_PATHS: &[&str] = &["/api/v1/invites/{token}/join"];
+
 /// Declares the bearer scheme, and offers it beside the session cookie wherever an operation takes the cookie,
 /// since [`extract::CurrentUser`] takes either. The OAuth operations are left as they say: approving an
-/// authorization request takes only the cookie. Run on the finished document, as the paths come from the routers.
+/// authorization request takes only the cookie, and so do the paths in [`SESSION_ONLY_PATHS`]. Run on the finished
+/// document, as the paths come from the routers.
 #[cfg(feature = "accounts")]
 fn add_bearer_scheme(openapi: &mut utoipa::openapi::OpenApi) {
     use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityRequirement};
@@ -138,7 +146,7 @@ fn add_bearer_scheme(openapi: &mut utoipa::openapi::OpenApi) {
     let session = SecurityRequirement::new("session", Vec::<String>::new());
     let bearer = SecurityRequirement::new("bearer", Vec::<String>::new());
     for (path, item) in &mut openapi.paths.paths {
-        if path.starts_with("/api/v1/oauth/") {
+        if path.starts_with("/api/v1/oauth/") || SESSION_ONLY_PATHS.contains(&path.as_str()) {
             continue;
         }
         let operations = [
@@ -165,6 +173,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(auth::routes())
         .merge(oauth::authorize_routes())
         .merge(users::routes())
+        .merge(invites::routes())
         .merge(me::sign_ins::routes());
     let v1 = v1
         .merge(me::routes())
