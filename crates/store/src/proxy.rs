@@ -21,6 +21,7 @@ pub fn list_column_specs() -> Vec<ColumnSpec> {
     add_entity::<audit_log::Entity>(&mut specs);
     add_entity::<heaps::Entity>(&mut specs);
     add_entity::<item_parameter_values::Entity>(&mut specs);
+    add_entity::<item_steps::Entity>(&mut specs);
     add_entity::<item_tags::Entity>(&mut specs);
     add_entity::<items::Entity>(&mut specs);
     add_entity::<parameter_options::Entity>(&mut specs);
