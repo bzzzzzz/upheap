@@ -285,7 +285,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     soon as they are pressed, sharing one row on a phone. On a phone Reply spans the width, and every control is
     44 px.
 13. After a reply there is no toast: the row leaves Waits for you and joins Questions, the focus goes to the next
-    row's first control, else to the item's title, and a polite live region says Replied to “<text>”. While it is
+    row's first control, else to the item, and a polite live region says Replied to “<text>”. While it is
     sending, that row's buttons are off. If it fails the row stays with its picks and comment and the reason shows
     under it. If someone else replied first, the row leaves and the section says "Someone else replied to “…”
     meanwhile." until the next reply. In an archived heap a row shows its text and details with no controls. A

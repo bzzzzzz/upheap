@@ -18,6 +18,11 @@ const pickClass = `group flex min-h-9 items-center gap-2 text-base ${focusClass}
 const pickBoxClass =
   "flex size-5 shrink-0 items-center justify-center border border-line-strong bg-surface group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent group-data-[selected]:border-ink group-data-[selected]:bg-ink";
 
+const isClosedMeanwhile = (error: Error) => error instanceof ApiProblem && error.code === "item_closed";
+
+/** The id of a question's short text, which its controls are described by. */
+const textId = (item: Item, question: Question) => `question-text-${item.id}-${question.number}`;
+
 /** The replies that mean the question is answered already, so the item is fetched again and the row leaves. */
 const isAnsweredMeanwhile = (error: Error) =>
   error instanceof ApiProblem && (error.code === "version_conflict" || error.code === "question_answered");
@@ -39,7 +44,9 @@ function QuestionHead({ item, question }: { item: Item; question: Question }) {
   return (
     <>
       <p className="text-xs text-muted">{kindLine(item, question)}</p>
-      <p className="text-base leading-snug font-semibold break-words">{question.text}</p>
+      <p id={textId(item, question)} className="text-base leading-snug font-semibold break-words">
+        {question.text}
+      </p>
       {question.details && (
         <>
           <Button
@@ -73,6 +80,8 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
   const listRef = useRef<HTMLUListElement>(null);
   const [message, setMessage] = useState("");
   const [elsewhere, setElsewhere] = useState<string[]>([]);
+  // Replies refused because the item was closed meanwhile, with the comment that was lost, to copy.
+  const [refused, setRefused] = useState<{ text: string; comment: string | null }[]>([]);
   // The number of the question just replied to: once its row has left, focus goes on to the next one.
   const repliedTo = useRef<number | null>(null);
 
@@ -81,22 +90,31 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
     if (after === null || open.some((question) => question.number === after)) return;
     repliedTo.current = null;
     const next = open.find((question) => question.number > after) ?? open[0];
+    // Only when the focus was lost with the row; if the person has moved on, it stays where they put it.
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
     const first = next
       ? listRef.current?.querySelector<HTMLElement>(
           `[data-question="${next.number}"] :is(input, textarea, button):not([data-details]):not(:disabled)`,
         )
-      : document.querySelector<HTMLElement>('[data-item-pane] textarea[aria-label="Title"]');
+      : document.querySelector<HTMLElement>("[data-item-pane]");
     first?.focus();
   });
 
   const onReplied = (question: Question) => {
     repliedTo.current = question.number;
     setElsewhere([]);
+    setRefused([]);
     setMessage(`Replied to “${question.text}”.`);
   };
   const onElsewhere = (question: Question) => {
     repliedTo.current = question.number;
     setElsewhere((current) => [...current, question.text]);
+  };
+
+  const onRefused = (question: Question, comment: string | null) => {
+    repliedTo.current = question.number;
+    setRefused((current) => [...current, { text: question.text, comment }]);
   };
 
   return (
@@ -119,11 +137,19 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
                 question={question}
                 onReplied={onReplied}
                 onElsewhere={onElsewhere}
+                onRefused={onRefused}
               />
             ))}
           </ul>
         </section>
       )}
+      {/* Under the state buttons, where this stays mounted when the item closes and the section goes. */}
+      {refused.map((entry, index) => (
+        <p key={index} role="alert" className="text-sm whitespace-pre-wrap text-overdue-ink">
+          The item was closed before your reply to “{entry.text}” was sent.
+          {entry.comment && `\nYour comment: ${entry.comment}`}
+        </p>
+      ))}
       {!closed &&
         elsewhere.map((text, index) => (
           <p key={index} role="alert" className="text-sm text-overdue-ink">
@@ -140,12 +166,14 @@ function QuestionRow({
   question,
   onReplied,
   onElsewhere,
+  onRefused,
 }: {
   heapRef: HeapRef;
   item: Item;
   question: Question;
   onReplied: (question: Question) => void;
   onElsewhere: (question: Question) => void;
+  onRefused: (question: Question, comment: string | null) => void;
 }) {
   const reply = useReplyToQuestion(heapRef, item.key);
   const canReply = question.allowed_actions.includes("reply");
@@ -155,14 +183,22 @@ function QuestionRow({
       () => onReplied(question),
       (error: Error) => {
         if (isAnsweredMeanwhile(error)) onElsewhere(question);
+        else if (isClosedMeanwhile(error)) onRefused(question, body.comment ?? null);
       },
     );
 
   return (
     <li data-question={question.number} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
       <QuestionHead item={item} question={question} />
-      {canReply && <ReplyControls question={question} pending={reply.isPending} onSend={send} />}
-      {reply.error && !isAnsweredMeanwhile(reply.error) && (
+      {canReply && (
+        <ReplyControls
+          describedBy={textId(item, question)}
+          question={question}
+          pending={reply.isPending}
+          onSend={send}
+        />
+      )}
+      {reply.error && !isAnsweredMeanwhile(reply.error) && !isClosedMeanwhile(reply.error) && (
         <p role="alert" className="text-sm text-overdue-ink">
           {itemProblem(reply.error)}
         </p>
@@ -173,10 +209,12 @@ function QuestionRow({
 
 /** The controls for one open question: its drafts (picks and comment) live here, so a refetch leaves them alone. */
 function ReplyControls({
+  describedBy,
   question,
   pending,
   onSend,
 }: {
+  describedBy: string;
   question: Question;
   pending: boolean;
   onSend: (reply: QuestionReply) => void;
@@ -187,21 +225,21 @@ function ReplyControls({
   const note = trimmed === "" ? null : comment;
 
   const commentField = (label: string) => (
-    <TextField value={comment} onChange={setComment} className="flex flex-col gap-1">
+    <TextField value={comment} onChange={setComment} aria-describedby={describedBy} className="flex flex-col gap-1">
       <Label className={labelClass}>{label}</Label>
       <TextArea rows={2} className={fieldClass} />
     </TextField>
   );
 
   if (question.kind === "request") {
-    const buttons = ["Done", "Can't be done"] as const;
     return (
       <div className="flex flex-col gap-2">
         {commentField("Comment, optional")}
         <div className="flex gap-2">
-          {buttons.map((label, index) => (
+          {question.choices.map((label, index) => (
             <Button
               key={label}
+              aria-describedby={describedBy}
               isDisabled={pending}
               onPress={() => onSend({ picked: [index], comment: note })}
               className={`${index === 0 ? compactButtonClass.primary : compactButtonClass.bordered} ${focusClass} max-sm:flex-1`}
@@ -217,11 +255,18 @@ function ReplyControls({
   if (question.choices.length === 0) {
     return (
       <div className="flex flex-col gap-2">
-        <TextField value={comment} onChange={setComment} isRequired className="flex flex-col gap-1">
+        <TextField
+          value={comment}
+          onChange={setComment}
+          isRequired
+          aria-describedby={describedBy}
+          className="flex flex-col gap-1"
+        >
           <Label className={labelClass}>Answer</Label>
           <TextArea rows={2} className={fieldClass} />
         </TextField>
         <Button
+          aria-describedby={describedBy}
           isDisabled={pending || trimmed === ""}
           onPress={() => onSend({ picked: [], comment })}
           className={`${compactButtonClass.primary} ${focusClass} self-start max-sm:w-full`}
@@ -276,6 +321,7 @@ function ReplyControls({
       {group}
       {commentField("Comment, optional")}
       <Button
+        aria-describedby={describedBy}
         isDisabled={pending || picked.length === 0}
         onPress={() => onSend({ picked: picked.map(Number).sort((a, b) => a - b), comment: note })}
         className={`${compactButtonClass.primary} ${focusClass} self-start max-sm:w-full`}

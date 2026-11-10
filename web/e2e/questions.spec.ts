@@ -98,11 +98,11 @@ test("a question without choices is answered with text, and then reads in Questi
   await expect(folded).toContainText("→ Let's Encrypt");
   await expect(folded).toContainText("You, today");
 
-  // The last reply takes the section away and puts the focus on the item's title.
+  // The last reply takes the section away and puts the focus on the item itself, not its title field.
   await section.getByLabel("Answer").fill("Sam");
   await section.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(section).toHaveCount(0);
-  await expect(itemPane(page).getByLabel("Title", { exact: true })).toBeFocused();
+  await expect(itemPane(page)).toBeFocused();
   await expect(folded.locator("summary")).toHaveText("Questions 2");
 
   // After a reload nothing has come back, and the server has both replies.
@@ -172,6 +172,11 @@ test("a request is replied to at once with Done or Can't be done, and a comment"
   // There is no Reply button: the two buttons are the reply.
   await expect(vault.getByRole("button", { name: "Reply", exact: true })).toHaveCount(0);
   await vault.getByLabel("Comment, optional").fill("Token is in the vault.");
+  // Each control says which request it answers.
+  await expect(vault.getByRole("button", { name: "Done", exact: true })).toHaveAccessibleDescription(
+    "Put a staging token in the vault.",
+  );
+  await expect(vault.getByLabel("Comment, optional")).toHaveAccessibleDescription("Put a staging token in the vault.");
   await vault.getByRole("button", { name: "Done", exact: true }).click();
   await expect(section.getByRole("listitem")).toHaveCount(1);
 
@@ -279,4 +284,81 @@ test("the section is absent without open questions and on a closed item, whose o
   await changeState(page, "Reopen");
   await expect(waits(page)).toBeVisible();
   await expect(answered(page)).toHaveCount(0);
+});
+
+test("a failed reply keeps the row with its picks and comment, and says why", async ({
+  page,
+  heapPath,
+  localBuild,
+}) => {
+  test.skip(localBuild, "Nothing asks a question in the static build.");
+  const item = await itemWithQuestions(page, heapPath, "Plan the move", [
+    { kind: "question", text: "Which regions?", choices: ["EU", "US", "Asia"], many: true },
+  ]);
+  await page.route("**/questions/1", (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          status: 422,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ status: 422, code: "pick_invalid", title: "Bad pick", field: "picked" }),
+        })
+      : route.fallback(),
+  );
+  const row = waits(page).getByRole("listitem");
+  await row.locator("label").filter({ hasText: "US" }).click();
+  await row.getByLabel("Comment, optional").fill("Mostly US");
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+
+  await expect(row.getByRole("alert")).toHaveText("That pick doesn't fit this question. Pick again.");
+  await expect(row.getByRole("checkbox", { name: "US" })).toBeChecked();
+  await expect(row.getByLabel("Comment, optional")).toHaveValue("Mostly US");
+  await expect(row.getByRole("button", { name: "Reply", exact: true })).toBeEnabled();
+  expect((await questionsOf(page, item))[0].state).toBe("open");
+});
+
+test("closing the item before a reply lands keeps a note with the comment", async ({ page, heapPath, localBuild }) => {
+  test.skip(localBuild, "Nothing asks a question in the static build.");
+  const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
+    { kind: "question", text: "Which CA do we use?" },
+  ]);
+  const row = waits(page).getByRole("listitem");
+  await row.getByLabel("Answer").fill("Let's Encrypt");
+
+  // Another member closes the item while the row is open.
+  const current = await (await page.request.get(item)).json();
+  const closed = await page.request.patch(item, {
+    headers: { ...headers, "If-Match": `"${current.version}"` },
+    data: { state: "wont_do" },
+  });
+  expect(closed.ok()).toBe(true);
+
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(waits(page)).toHaveCount(0);
+  const note = itemPane(page).getByRole("alert");
+  await expect(note).toContainText("The item was closed before your reply to “Which CA do we use?” was sent.");
+  await expect(note).toContainText("Your comment: Let's Encrypt");
+  expect((await questionsOf(page, item))[0].state).toBe("open");
+});
+
+test("in an archived heap a question shows its text and details, with no controls", async ({
+  page,
+  heapPath,
+  localBuild,
+}) => {
+  test.skip(localBuild, "Nothing asks a question in the static build.");
+  await itemWithQuestions(page, heapPath, "Rotate the certs", [
+    { kind: "question", text: "Which CA do we use?", details: "Internal or public." },
+    { kind: "request", text: "Put a token in the vault." },
+  ]);
+  const archived = await page.request.post(`/api/v1${heapPath}/archive`, { headers });
+  expect(archived.ok()).toBe(true);
+  await page.reload();
+
+  const section = waits(page);
+  await expect(section.getByRole("listitem")).toHaveCount(2);
+  await section.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(section.getByText("Internal or public.")).toBeVisible();
+  await expect(section.getByRole("button", { name: /^(Reply|Done|Can't be done)$/ })).toHaveCount(0);
+  await expect(section.getByRole("textbox")).toHaveCount(0);
+  await expect(section.getByRole("radio")).toHaveCount(0);
 });
