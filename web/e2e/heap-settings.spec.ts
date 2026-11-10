@@ -27,6 +27,13 @@ test("General renames the heap, changes its link name and archives it", async ({
   await expect(linkName).toHaveValue("allotment");
   await expect(page.getByText("Loading…")).toHaveCount(0);
 
+  // Archiving offers Undo in the toast; Unarchive is the other way back.
+  await page.getByRole("button", { name: "Archive heap" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
+  const toast = page.getByRole("status").filter({ hasText: "is archived." }).filter({ hasText: "Undo" });
+  await toast.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByRole("button", { name: "Archive heap" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toHaveCount(0);
   await page.getByRole("button", { name: "Archive heap" }).click();
   await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
   await page.getByRole("button", { name: "Unarchive heap" }).click();

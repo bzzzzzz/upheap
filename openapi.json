@@ -348,6 +348,78 @@
         ]
       }
     },
+    "/api/v1/invites/{token}/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Creates an account through the link, and joins its team as a member in the same act: the account, its personal\nteam and heap, the membership and the session are all made, or none is. Works whether registration is open or\nclosed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`\n`invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is\nalso taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.",
+        "operationId": "register_by_invite",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The invite link's secret: the last part of the link, `{origin}/invite/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Registered, joined and signed in; sets the session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteRegistration"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid email, name or password, or `invalid_handle` with a `hint`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -6042,9 +6114,10 @@
       },
       "InvitationAction": {
         "type": "string",
-        "description": "An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.",
+        "description": "An action the holder of an invite link can take. Empty unless the link works and admits the viewer: `join` for a\nsigned-in outsider, `create_account` for someone signed out.",
         "enum": [
-          "join"
+          "join",
+          "create_account"
         ]
       },
       "InviteLink": {
@@ -6154,6 +6227,22 @@
           "ended",
           "revoked"
         ]
+      },
+      "InviteRegistration": {
+        "type": "object",
+        "description": "What creating an account through an invite link answers: the new account, and the link's team as the new member\nsees it, so a client can land them there without another call.",
+        "required": [
+          "user",
+          "team"
+        ],
+        "properties": {
+          "team": {
+            "$ref": "#/components/schemas/Team"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
       },
       "InviteViewer": {
         "type": "object",

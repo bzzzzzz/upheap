@@ -27,7 +27,7 @@ this order.
    refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
    are tests; a direct add still works as before. Product Invite links §5, the signed-in half of §4, the rest of
    §6, Teams §6, and Kept 3 and 5 to 7.
-- [ ] 3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
+- [x] 3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
    (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
    on a closed server is still refused. Product Invite links §4 (the rest of it), Accounts §2, and Kept 4 and 8.
 - [ ] 4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and

@@ -594,7 +594,7 @@ async fn anyone_holding_a_link_sees_the_team_and_maker_names_and_nothing_else() 
             "created_by_name": "Ana",
             "state": "working",
             "viewer": null,
-            "allowed_actions": []
+            "allowed_actions": ["create_account"]
         }))
     );
     Ok(())
@@ -980,7 +980,7 @@ async fn an_expired_session_opens_the_link_as_signed_out() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn joining_is_offered_only_to_a_signed_in_outsider_the_link_admits() -> Result<()> {
+async fn joining_or_creating_an_account_is_offered_only_to_whoever_the_link_admits() -> Result<()> {
     // Arrange
     let setup = setup().await?;
     let token = new_token(&setup).await?;
@@ -999,16 +999,20 @@ async fn joining_is_offered_only_to_a_signed_in_outsider_the_link_admits() -> Re
     let member = open(&setup, &token, Some(&mia)).await?;
     let removed = open(&setup, &token, Some(&ben)).await?;
     let after_revoking = open(&setup, &revoked_token, Some(&sam)).await?;
+    let signed_out_after_revoking = open(&setup, &revoked_token, None).await?;
     setup.app.clock.advance(Duration::from_days(7));
     let after_a_week = open(&setup, &token, Some(&sam)).await?;
+    let signed_out_after_a_week = open(&setup, &token, None).await?;
 
     // Assert
     expect_that!(outsider.body["allowed_actions"], eq(&json!(["join"])));
-    expect_that!(signed_out.body["allowed_actions"], eq(&json!([])));
+    expect_that!(signed_out.body["allowed_actions"], eq(&json!(["create_account"])));
     expect_that!(member.body["allowed_actions"], eq(&json!([])));
     expect_that!(removed.body["allowed_actions"], eq(&json!([])));
     expect_that!(after_revoking.body["allowed_actions"], eq(&json!([])));
     expect_that!(after_a_week.body["allowed_actions"], eq(&json!([])));
+    expect_that!(signed_out_after_revoking.body["allowed_actions"], eq(&json!([])));
+    expect_that!(signed_out_after_a_week.body["allowed_actions"], eq(&json!([])));
     Ok(())
 }
 

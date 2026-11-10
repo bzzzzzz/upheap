@@ -76,6 +76,23 @@ pub struct TestResponse {
     pub headers: axum::http::HeaderMap,
 }
 
+/// The settings every test server shares, whether registration is open or not.
+fn test_settings(allow_registration: bool) -> Settings {
+    Settings {
+        allow_registration,
+        session_ttl: Duration::from_days(30),
+        sign_in_limit: SignInLimit::DEFAULT,
+    }
+}
+
+/// The session cookie settings every test server shares.
+fn test_cookies() -> CookieSettings {
+    CookieSettings {
+        secure: true,
+        max_age: StdDuration::from_secs(3600),
+    }
+}
+
 impl TestApp {
     pub async fn start() -> Result<Self> {
         Self::start_with_random(Arc::new(SystemRandom)).await
@@ -88,28 +105,29 @@ impl TestApp {
         let clock = Arc::new(ManualClock::new(
             Timestamp::from_millis(START).context("start in range")?,
         ));
-        let services = Services::new(
-            db.clone(),
-            clock.clone(),
-            Settings {
-                allow_registration: true,
-                session_ttl: Duration::from_days(30),
-                sign_in_limit: SignInLimit::DEFAULT,
-            },
-        )
-        .with_random(random);
-        let cookies = CookieSettings {
-            secure: true,
-            max_age: StdDuration::from_secs(3600),
-        };
+        let services = Services::new(db.clone(), clock.clone(), test_settings(true)).with_random(random);
         Ok(Self {
             router: api::router(AppState {
                 services,
-                authentication: Authentication::Sessions(cookies),
+                authentication: Authentication::Sessions(test_cookies()),
             }),
             clock,
             db,
         })
+    }
+
+    /// The same server with registration closed: a second router over the same database and clock. Set accounts up
+    /// on `self`, and exercise the closed one.
+    pub fn with_registration_closed(&self) -> TestApp {
+        let services = Services::new(self.db.clone(), self.clock.clone(), test_settings(false));
+        TestApp {
+            router: api::router(AppState {
+                services,
+                authentication: Authentication::Sessions(test_cookies()),
+            }),
+            clock: self.clock.clone(),
+            db: self.db.clone(),
+        }
     }
 
     /// The local build's setup: one user, made on start, who is every request's caller.

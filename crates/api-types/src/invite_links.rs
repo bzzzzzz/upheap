@@ -7,6 +7,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::UserRefDto;
+use crate::me::UserDto;
+use crate::teams::TeamDto;
 
 /// Where an invite link is in its life. `ended` and `revoked` are final.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -96,19 +98,23 @@ pub struct InvitationDto {
     pub allowed_actions: Vec<InvitationActionDto>,
 }
 
-/// An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+/// An action the holder of an invite link can take. Empty unless the link works and admits the viewer: `join` for a
+/// signed-in outsider, `create_account` for someone signed out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = InvitationAction)]
 pub enum InvitationActionDto {
     /// Offered to a signed-in person outside the team while the link works and doesn't predate their removal.
     Join,
+    /// Offered to someone signed out while the link works; sign in instead to join with an existing account.
+    CreateAccount,
 }
 
 impl From<InvitationAction> for InvitationActionDto {
     fn from(action: InvitationAction) -> Self {
         match action {
             InvitationAction::Join => Self::Join,
+            InvitationAction::CreateAccount => Self::CreateAccount,
         }
     }
 }
@@ -133,4 +139,13 @@ pub enum InviteViewerStatusDto {
     Member,
     /// Not in the team, and removed from it after the link was made, so the link won't admit them.
     Removed,
+}
+
+/// What creating an account through an invite link answers: the new account, and the link's team as the new member
+/// sees it, so a client can land them there without another call.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = InviteRegistration)]
+pub struct InviteRegistrationDto {
+    pub user: UserDto,
+    pub team: TeamDto,
 }
