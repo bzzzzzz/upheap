@@ -48,7 +48,12 @@ impl Context {
 
     /// Blank input means "no context" and gives `None`. Surrounding whitespace is kept off.
     pub fn parse(raw: &str) -> Result<Option<Self>, ValidationError> {
-        parse_optional(raw, Field::Context, Self::MAX_CHARS).map(|text| text.map(Self))
+        Self::parse_as(raw, Field::Context)
+    }
+
+    /// [`Self::parse`] for a text with the same rules that goes by another name, such as a question's details.
+    pub fn parse_as(raw: &str, field: Field) -> Result<Option<Self>, ValidationError> {
+        parse_optional(raw, field, Self::MAX_CHARS).map(|text| text.map(Self))
     }
 
     pub fn as_str(&self) -> &str {

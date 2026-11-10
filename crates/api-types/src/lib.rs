@@ -21,6 +21,7 @@ pub mod me;
 pub mod oauth;
 pub mod parameters;
 pub mod problem;
+pub mod questions;
 pub mod steps;
 pub mod tags;
 pub mod teams;

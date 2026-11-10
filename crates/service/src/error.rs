@@ -3,6 +3,7 @@ use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
 use domain::parameter::ParameterError;
 use domain::permission::Permission;
+use domain::question::QuestionError;
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::validation::Field;
@@ -47,6 +48,8 @@ pub enum ServiceError {
     Item(#[from] ItemError),
     #[error(transparent)]
     Step(#[from] StepError),
+    #[error(transparent)]
+    Question(#[from] QuestionError),
     /// A tag ID in the request doesn't name a tag of the item's heap.
     #[error("tag {tag_id} is not a tag of this heap")]
     TagNotInHeap { tag_id: TagId },

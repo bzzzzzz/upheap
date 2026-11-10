@@ -12,6 +12,7 @@ use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
+use domain::question::QuestionError;
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::validation::Field;
@@ -190,6 +191,19 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("after"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "step_not_in_item", Category::Caller)
         },
+        ServiceError::Question(QuestionError::TooMany { .. }) => {
+            simple(StatusCode::CONFLICT, "too_many_questions", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::Answered { .. }) => {
+            simple(StatusCode::CONFLICT, "question_answered", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::NotInItem { .. }) => {
+            simple(StatusCode::NOT_FOUND, "question_not_in_item", Category::Caller)
+        }
+        ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
+            field: Some("step"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "value_unknown", Category::Caller)
+        },
         ServiceError::Item(ItemError::NotBlocked { .. }) => Classified {
             field: Some("blocked_by_item_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "item_not_blocked", Category::Caller)
@@ -357,6 +371,14 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::ValueUnknown { field } => ("value_unknown", Some(field.as_str())),
         ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
         ValidationError::ItemKeyInvalid => ("invalid_item_key", None),
+        ValidationError::MultipleLines { field } => ("field_not_single_line", Some(field.as_str())),
+        ValidationError::ChoiceCount { .. } => ("choice_count_invalid", Some(Field::Choices.as_str())),
+        ValidationError::ChoiceDuplicate => ("choice_duplicate", Some(Field::Choices.as_str())),
+        ValidationError::NotAllowed { field } => ("field_not_allowed", Some(field.as_str())),
+        ValidationError::PickOutOfRange => ("pick_out_of_range", Some(Field::Picked.as_str())),
+        ValidationError::PickRepeated => ("pick_repeated", Some(Field::Picked.as_str())),
+        ValidationError::PickNone => ("pick_required", Some(Field::Picked.as_str())),
+        ValidationError::PickTooMany => ("pick_too_many", Some(Field::Picked.as_str())),
     };
     Classified {
         status: StatusCode::UNPROCESSABLE_ENTITY,

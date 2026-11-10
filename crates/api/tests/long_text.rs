@@ -91,3 +91,42 @@ async fn the_longest_contexts_in_four_byte_characters_are_saved_and_replaced_who
     expect_that!(read_heap["context"], eq(&Value::from(second)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn the_longest_question_details_and_reply_comment_in_four_byte_characters_are_stored_whole() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let (details, comment) = (longest('😀'), longest('🚀'));
+    let note = app
+        .new_item(&session, &heap, json!({ "title": "Rotate the certs" }))
+        .await?;
+    let item_url = app.item_url(note["id"].as_str().context("no id")?).await?;
+
+    // Act
+    let asked = app
+        .send(
+            Method::POST,
+            &format!("{item_url}/questions"),
+            Some(&session),
+            Some(json!({ "kind": "question", "text": "Which CA?", "details": details })),
+        )
+        .await?;
+    let replied = app
+        .patch(
+            &session,
+            &format!("{item_url}/questions/1"),
+            &asked.body["questions"][0]["version"],
+            json!({ "reply": { "comment": comment } }),
+        )
+        .await?;
+    let item = app.send(Method::GET, &item_url, Some(&session), None).await?.body;
+
+    // Assert
+    expect_that!(asked.status, eq(StatusCode::CREATED));
+    expect_that!(replied.status, eq(StatusCode::OK));
+    expect_that!(item["questions"][0]["details"], eq(&Value::from(details)));
+    expect_that!(item["questions"][0]["reply"]["comment"], eq(&Value::from(comment)));
+    Ok(())
+}
