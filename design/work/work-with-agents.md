@@ -2,7 +2,7 @@
 
 Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents. It
 replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design method.
-Step agreed: 1 (value).
+Step agreed: 2 (golden path).
 
 ## Constraints
 
@@ -154,8 +154,8 @@ is resolved or turned into a task.
    "All the way" covers the item and the tasks made from it, up to done. A new heap made on the way is left at
    its defined state, for the person to send on. How far it reaches when work spawns more work is settled while
    building it, not here.
-2. **Core.** A heap can be set so agents prepare what's added without being asked: each new item is taken to its
-   next stable state. Preparing never includes doing a defined task; that always needs the person's word.
+2. **Core.** A heap can be set so agents prepare what's added without being asked: each new item is taken one
+   stable state forward, and stops there. Preparing never includes doing a defined task; that always needs the person's word.
 3. **Core.** Outside those two cases an agent never picks an item up.
 4. **Core.** At any moment an item is with the person or with an agent, and the list shows which.
 5. **Core.** An agent refines and does: it fills in context, turns a note into tasks, asks, adds steps, and also
@@ -221,6 +221,162 @@ kind of agent, and who in a team answers a question. See Ideas.
 
 ## 3. Workflows
 
+Two actors: the person, and an agent started by `upheap work`. Each flow is marked loop (many times a day or a
+week), setup (once or rarely) or recovery.
+
+### The person
+
+**P1. Capture.** Loop.
+
+1. Open Upheap, in the web app or the command-line client.
+2. Add a note with a title and how much it's needed, or a reminder with a title and a date.
+3. It's in the list, ranked. Nothing else is asked.
+
+**P2. See what's important.** Loop.
+
+1. Open a heap. The list is in priority order: the top is what matters now, further down is the horizon.
+2. Each item shows its kind, whether it's with me or with an agent, and whether it waits for me.
+3. Pick something and work on it (P5), or leave.
+
+**P3. Clear what waits for me.** Loop.
+
+1. Open the list of what waits for me, across all my heaps, in priority order.
+2. Open one: the question or request, with the item and its context beside it.
+3. Answer the question, or do what was requested and say it's done.
+4. When that was the item's last open question, the item goes back to the agent. Next one.
+
+**P4. Decide at a stable state.** Loop.
+
+1. See the items an agent has brought to a stable state since I last looked.
+2. Open one and read what the agent made: the context it filled in, the tasks and their steps, what blocks what.
+3. Decide: send it on one state, send it all the way, change it and then send it on, leave it for now, or close
+   it as won't do.
+
+**P5. Do the work myself.** Loop.
+
+1. Start an item, as today.
+2. For a task, tick steps as they're done, and add or reword steps.
+3. Mark it done. What it blocked is free.
+
+**P6. A reminder comes due.** Loop, weekly.
+
+1. On its date the reminder is in the list, ranked with the rest. If I asked for it to be pushed, it is.
+2. Resolve it, or turn it into a task and carry on as with any task.
+
+**P7. Shape things by hand.** Loop, occasional.
+
+1. Turn a note into a task and write its steps, or turn a note into a new heap.
+2. Say that one item blocks another.
+3. Attach a question to an item for myself or a teammate to answer later.
+
+**P8. Start a project.** Setup.
+
+1. Create a heap.
+2. Write its context: what the project is, and where its repository and docs are.
+3. Choose whether agents prepare what's added.
+
+**P9. Start the agent loop.** Setup.
+
+1. Sign the command-line client in, as today.
+2. Run `upheap work`, naming the agent tool to use and the heaps it may work in.
+3. Leave it running, or run it for a while and stop it. Either way it picks up where things stand.
+
+**P10. Look back.** Loop, occasional.
+
+1. Open an item and see its runs: when, from which state to which, what each cost.
+2. See what a heap has cost in total, and what an item was made from or turned into.
+
+**P11. The agent got it wrong.** Recovery, for P4.
+
+1. At a stable state the result isn't what I wanted.
+2. Either fix it myself (edit the context, the steps, the blocks) and send it on.
+3. Or send it back: say what's wrong, and the agent redoes that turn. The earlier attempt stays in the history.
+
+**P12. Take an item back.** Recovery, for P4 and A1.
+
+1. An item is with an agent and I want it: I changed my mind, or the agent is going the wrong way.
+2. Take it back. The agent's turn ends, and what it had already changed stays.
+3. The item is mine: I do it, change it, or send it on again later.
+
+**P13. I answered wrong.** Recovery, for P3.
+
+1. While the item is still open, change my answer.
+2. If the agent has already acted on it, the item goes back to it with the changed answer shown as new.
+
+### The agent, through `upheap work`
+
+**A1. Take a turn.** Loop.
+
+1. `upheap work` asks for the next item. Nothing: it waits and asks again later, and no agent is started.
+2. Something: it starts the agent with the heap's context, the item with its context, its questions and answers,
+   what the item was made from, and which stable state to reach.
+3. The agent does the move: fills in context, writes a checklist, makes tasks, does the work and ticks steps.
+4. It reaches the stable state and says so. The run and its cost are recorded, and the item is the person's.
+5. Sent "all the way", the item is the next one again, until it's done.
+
+**A2. Ask.** Loop.
+
+1. In a turn the agent needs something only the person has or can do.
+2. It attaches a question or a request to the item and ends the run. The run and its cost are recorded.
+3. `upheap work` goes on to the next item.
+
+**A3. Carry on after an answer.** Loop.
+
+1. The last open question on an item closes. The item is in the agent's queue again, at its ranked place.
+2. `upheap work` starts the agent on it with the answers, and the turn continues as A1 from step 3.
+
+**A4. Split.** Loop.
+
+1. A note is more than one piece of work.
+2. The agent makes several tasks from it and says which block which, or makes a new heap with its context,
+   tasks and notes. Each keeps a link to the note.
+3. The note has reached its stable state. The new items are at theirs, and wait for the person.
+
+**A5. A run dies.** Recovery, for A1.
+
+1. The agent tool crashes, is killed, or `upheap work` is stopped in the middle of a turn.
+2. What the agent had already written stays: ticked steps, context, questions.
+3. The item is still with the agent and still not at a stable state, so it's the next item again, and the next
+   run carries on from what's written.
+4. A turn that dies repeatedly stops being retried and waits for the person, with what went wrong.
+
+### User stories
+
+From the steps above that ask something of the product.
+
+| # | Who | Does | Gets | From |
+| --- | --- | --- | --- | --- |
+| 1 | Person | Adds a note or a reminder with a title and one more field | A ranked item, at once | P1 |
+| 2 | Person | Opens a heap | One list in priority order, each item showing its kind, who has it, and whether it waits for them | P2 |
+| 3 | Person | Opens what waits for them | Every open question and request across their heaps, in priority order | P3 |
+| 4 | Person | Answers a question or says a request is done | The question closes, and the item returns to the agent when it was the last | P3 |
+| 5 | Person | Opens what reached a stable state | The items an agent has finished a turn on since they last looked | P4 |
+| 6 | Person | Reads an item at a stable state | What the agent made: context, steps, new tasks, blocks | P4 |
+| 7 | Person | Sends an item on, one state or all the way | The item is in the agent's queue | P4 |
+| 8 | Person | Ticks, adds and rewords a task's steps | A checklist that shows how far the task is | P5 |
+| 9 | Person | Resolves a due reminder or turns it into a task | The reminder closed, or a task in its place | P6 |
+| 10 | Person | Turns a note into a task or a heap by hand, and sets blocks | The same result an agent would produce | P7 |
+| 11 | Person | Writes a heap's context and sets whether agents prepare | A heap an agent can work in without being briefed | P8 |
+| 12 | Person | Runs `upheap work` with an agent tool and heaps | A loop that works those heaps and nothing else | P9 |
+| 13 | Person | Opens an item's runs | Each run with its states and cost, and totals per item and heap | P10 |
+| 14 | Person | Sends a result back saying what's wrong | The agent redoes the turn, with the earlier attempt kept | P11 |
+| 15 | Person | Takes an item back | The agent's turn ends, and the item is theirs with what was changed so far | P12 |
+| 16 | Person | Changes an answer | The agent sees the new answer on its next run | P13 |
+| 17 | `upheap work` | Asks for the next item | One item or none, the same for the same state | A1 |
+| 18 | Agent | Reads an item | Both contexts, questions with answers, where it came from, and the state to reach | A1 |
+| 19 | Agent | Writes context, steps, tasks, heaps, blocks, and ticks steps | The changes kept as it goes, under its own name in the history | A1, A4 |
+| 20 | Agent | Says it reached the stable state | The item is the person's, and the run is recorded with its cost | A1 |
+| 21 | Agent | Attaches a question or a request | The item waits for the person and leaves its queue | A2 |
+| 22 | `upheap work` | Finds a turn that died | The same item again, until it has failed too often, then it waits for the person | A5 |
+
+### Not core
+
+- Reviewing the work itself (a diff, a document): that happens where the work lives, such as a pull request.
+- Setting up the agent tool, its sign-in and its permissions.
+- Sending many items on at once.
+- Anything about teammates beyond what a member can do today: who answers, who reviews.
+- Being told about any of this without looking.
+
 ## 4. Behaviours
 
 ## 5. Interface
@@ -236,6 +392,8 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Whether a done task that an agent thinks needs follow-up makes a new note.
 - What an agent's actions look like in the audit log, and which account it signs in as.
 - Whether a checklist step can hold a question of its own.
+- How many failed runs stop the retries.
+- What "since I last looked" means for the list of items at a stable state.
 - What state a note ends in once it has become a heap.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
 - Two agents asking for "next" at once must not get the same item.
