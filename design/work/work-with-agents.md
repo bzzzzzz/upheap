@@ -9,9 +9,9 @@ The design is agreed and is in [work-with-agents-design.md](work-with-agents-des
 
 ## Progress
 
-Two stages, a pull request per piece. Nothing is built yet. Commitments, rules, scenarios and interface
-entries are cited as the [design](work-with-agents-design.md) numbers them: commitments by their heading under
-Commitments, rules and scenarios as in Behaviours, W and C entries as in the Interface inventory.
+Two stages, a pull request per piece. Commitments, rules, scenarios and interface entries are cited as the
+[design](work-with-agents-design.md) numbers them: commitments by their heading under Commitments, rules and
+scenarios as in Behaviours, W and C entries as in the Interface inventory.
 
 ### Stage 1: the golden path, thin
 
@@ -19,7 +19,7 @@ Every step of the golden path works on the real stack, for one person, in one he
 request and leaves `main` working in both builds, with its migration, its API and its tests. Pieces are in
 order.
 
-- [ ] 1. **Spike: an agent tool run without a person.** Start Claude's command-line tool with a prompt, wait for it
+- [x] 1. **Spike: an agent tool run without a person.** Start Claude's command-line tool with a prompt, wait for it
    to exit, read its result and its cost. Throwaway, outside the repository.
    Done: the answer is written under Unproven mechanisms, and pieces 9 and 10 are adjusted if it's no.
 - [ ] 2. **Kinds.** An item has a kind and a stage; a note becomes a task in place. `item to-task`, `item show` and
