@@ -26,6 +26,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
 import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
+import { InvitePage } from "./pages/InvitePage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
 import { TagsPage } from "./pages/TagsPage";
@@ -60,6 +61,14 @@ export function pageHref(href: string): string {
 /** Whether `pathname` is sign-in's, by the router's matching, so `/LOGIN` counts too. */
 export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: string): boolean {
   return router.matchRoutes(pathname, {}).some((match) => match.routeId === loginRoute.id);
+}
+
+/**
+ * Whether `pathname` is an invite link's page, which handles its own sign-in: signed out is one of its states, so a
+ * `401` there doesn't send the user to sign-in.
+ */
+export function isInvitePath(router: ReturnType<typeof useRouter>, pathname: string): boolean {
+  return router.matchRoutes(pathname, {}).some((match) => match.routeId === inviteRoute.id);
 }
 
 /**
@@ -134,6 +143,18 @@ const loginRoute = createRoute({
       else void router.navigate({ to: "/", href: page?.href, replace: true });
     };
     return <AuthPage notice={notice} onSignedIn={onSignedIn} />;
+  },
+});
+
+/**
+ * The page an invite link opens (ux.md, Invite page), outside the app's shell like sign-in. It has no guard: signed
+ * out is a normal state of it, and the page decides what to show.
+ */
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite/$token",
+  component: function InviteRoute() {
+    return <InvitePage token={inviteRoute.useParams().token} />;
   },
 });
 
@@ -407,6 +428,7 @@ const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/accou
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  inviteRoute,
   authorizeRoute,
   shortTeamRoute,
   shortHeapRoute,
@@ -446,5 +468,7 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** Set on the way into an item from a page of the app, so closing the item goes back there. */
     closesBack?: boolean;
+    /** Set on the way to where a new member lands, holding the line the shell shows once: "You joined Acme." */
+    joined?: string;
   }
 }

@@ -1,7 +1,16 @@
 // The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import { Link, Outlet, useMatch, useParams, useSearch, type LinkProps } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useMatch,
+  useParams,
+  useRouter,
+  useRouterState,
+  useSearch,
+  type LinkProps,
+} from "@tanstack/react-router";
 import {
   Activity,
   Building2,
@@ -29,7 +38,7 @@ import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
-import { ToastProvider } from "../components/UndoToast";
+import { ToastProvider, useToast } from "../components/UndoToast";
 
 export function AppLayout() {
   const { data: me } = useMe();
@@ -50,6 +59,7 @@ export function AppLayout() {
     // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
     // right-hand padding.
     <ToastProvider>
+      <JoinedLine />
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
@@ -71,6 +81,30 @@ export function AppLayout() {
       </ListSearchProvider>
     </ToastProvider>
   );
+}
+
+/**
+ * The line a new member lands with ("You joined Acme.", from the invite page; ux.md, Invite page), shown once as a toast
+ * on the page they land on. The toast belongs to the page it's shown on, so it goes on the next navigation. It is taken
+ * out of the history entry as it is shown, since the browser keeps that across a reload.
+ */
+function JoinedLine() {
+  const router = useRouter();
+  const show = useToast();
+  const joined = useRouterState({ select: (state) => state.location.state.joined });
+  useEffect(() => {
+    if (joined === undefined) return;
+    show({ message: joined });
+    void router.navigate({
+      to: ".",
+      params: true,
+      search: true,
+      hash: true,
+      replace: true,
+      state: (previous) => ({ ...previous, joined: undefined }),
+    });
+  }, [joined, show, router]);
+  return null;
 }
 
 /** Where the shell's links go, for the signed-in user, the heap on screen and the team in the URL. */
