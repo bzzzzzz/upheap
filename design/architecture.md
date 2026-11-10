@@ -190,7 +190,8 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes. A
    factor counts while its weight is above 0 (the need while its weight or the age weight is), and unset sizes are
    labelled with the formula's defaults. It is empty for a blocker ranked by what it blocks; the service also
-   empties it for the item listed first in its group, which is the one the item pane calls "Why it's #1".
+   empties it for the item listed first in its group, which is the one the item pane calls "Why it's #1", and for
+   every item in a group sorted by something other than priority, where those fields don't move it.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
 

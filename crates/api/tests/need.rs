@@ -198,3 +198,35 @@ async fn the_first_item_listed_says_nothing_even_when_it_is_not_the_top_of_the_h
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn under_another_sort_nothing_holds_an_item_back() -> Result<()> {
+    // Arrange: sorted by due date, the fields the gaps name don't move an item in the list.
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    app.new_item(
+        &session,
+        &heap,
+        json!({ "title": "Renew the certificate", "need": "critical", "effort": "s", "impact": "xl" }),
+    )
+    .await?;
+    app.new_item(&session, &heap, json!({ "title": "Dark mode", "need": "idea" }))
+        .await?;
+
+    // Act
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items?sort=due", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(list.body["ranked"].as_array().map(Vec::len), some(eq(2)));
+    expect_that!(list.body["ranked"][0]["held_back_by"], eq(&json!([])));
+    expect_that!(list.body["ranked"][1]["held_back_by"], eq(&json!([])));
+    Ok(())
+}

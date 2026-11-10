@@ -268,10 +268,16 @@ impl Services {
             for (index, entry) in entries.iter_mut().enumerate() {
                 entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
             }
-            // The item shown first is "Why it's #1", and nothing holds a first item back. The domain doesn't know
-            // the list's filters, groups and sort, so this is where "first" is known.
-            if let Some(first) = entries.first_mut() {
-                first.held_back_by.clear();
+            // The item shown first is "Why it's #1", and nothing holds a first item back. Under another sort, such as
+            // by due date, the fields don't move an item in the list, so none holds it back. The domain doesn't know
+            // the list's filters, groups and sort, so this is where both are known.
+            let cleared = if view.in_priority_order(group) {
+                1
+            } else {
+                entries.len()
+            };
+            for entry in entries.iter_mut().take(cleared) {
+                entry.held_back_by.clear();
             }
         }
 
