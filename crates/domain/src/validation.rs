@@ -65,6 +65,12 @@ pub enum Field {
     Kind,
     /// An item's stage.
     Stage,
+    /// A step's context.
+    Context,
+    /// A step's state.
+    State,
+    /// The step a new step goes after.
+    After,
 }
 
 impl Field {
@@ -84,6 +90,9 @@ impl Field {
             Self::Password => "password",
             Self::Kind => "kind",
             Self::Stage => "stage",
+            Self::Context => "context",
+            Self::State => "state",
+            Self::After => "after",
         }
     }
 }

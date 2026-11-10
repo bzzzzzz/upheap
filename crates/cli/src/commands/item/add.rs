@@ -171,7 +171,7 @@ mod tests {
             "description": null, "kind": "note", "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
             "effort": null, "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0,
             "created_label": "today", "created_by": null, "closed_at": null, "closed_label": null,
-            "closed_by": null, "closed_group": null, "version": 1, "allowed_actions": [],
+            "closed_by": null, "closed_group": null, "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
         }))?;
         let at = |position, of, group| Landing { position, of, group };
 

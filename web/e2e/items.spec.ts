@@ -11,6 +11,7 @@ import {
   goTo,
   isPhone,
   itemPane,
+  makeTask,
   openItem,
   pick,
   row,
@@ -313,4 +314,58 @@ test("a note is made a task and its stage is set from the item", async ({ page, 
 
   await closeItem(page);
   await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, with context$/ })).toBeVisible();
+});
+
+test("a task is worked through its steps from the item", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The static build's steps are covered by e2e/local/steps.spec.ts.");
+  await addItem(page, "Rotate the certs");
+  await openItem(page, "Rotate the certs");
+  await makeTask(page, "Rotate the certs");
+  const steps = itemPane(page).getByRole("region", { name: "Steps" });
+
+  // Enter adds a step and keeps the field for the next; Escape closes it and puts the focus back on Add.
+  await steps.getByRole("button", { name: "Add a step" }).click();
+  const field = steps.getByRole("textbox", { name: "New step" });
+  await field.fill("Inventory the certs");
+  await field.press("Enter");
+  await expect(steps.getByRole("textbox", { name: "Step title" })).toHaveValue("Inventory the certs");
+  await expect(field).toBeFocused();
+  await field.fill("Run in staging");
+  await field.press("Enter");
+  await expect(steps.getByRole("textbox", { name: "Step title" })).toHaveCount(2);
+  await field.press("Escape");
+  await expect(steps.getByRole("button", { name: "Add a step" })).toBeFocused();
+  await expect(itemPane(page)).toBeVisible();
+  await expect(steps.getByRole("heading", { name: "Steps 0/2" })).toBeVisible();
+
+  // Ticking the first shows in the item and on the row.
+  await steps.getByRole("checkbox", { name: "Inventory the certs" }).click({ force: true });
+  await expect(steps.getByRole("heading", { name: "Steps 1/2" })).toBeVisible();
+  // The row's link says it to a screen reader too, after the title.
+  await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, 1 of 2 steps ticked$/ })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("listitem").filter({ hasText: "Rotate the certs" })).toContainText(
+    "1/2",
+  );
+
+  // Dropping the second strikes it through and leaves the count; Restore brings it back.
+  await steps.getByRole("button", { name: "Step actions" }).nth(1).click();
+  await page.getByRole("menuitem", { name: "Drop" }).click();
+  await expect(steps.getByRole("heading", { name: "Steps 1/1" })).toBeVisible();
+  await expect(steps.getByRole("textbox", { name: "Step title" }).nth(1)).toHaveCSS(
+    "text-decoration-line",
+    "line-through",
+  );
+  await expect(page.getByRole("main").getByRole("listitem").filter({ hasText: "Rotate the certs" })).toContainText(
+    "1/1",
+  );
+
+  // The same after a reload.
+  await page.reload();
+  const reloaded = itemPane(page).getByRole("region", { name: "Steps" });
+  await expect(reloaded.getByRole("heading", { name: "Steps 1/1" })).toBeVisible();
+  await expect(reloaded.getByRole("checkbox", { name: "Inventory the certs" })).toBeChecked();
+  await expect(reloaded.getByRole("textbox", { name: "Step title" }).nth(1)).toHaveCSS(
+    "text-decoration-line",
+    "line-through",
+  );
 });

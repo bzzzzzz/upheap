@@ -45,6 +45,8 @@ enum Target {
     FreshHeap,
     OpenItem,
     ClosedItem,
+    /// A task with one step, in `{item}` and `{step}`, with the step's version for `If-Match`.
+    TaskWithStep,
     Tag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
@@ -88,6 +90,10 @@ enum RequestBody {
     SignIn,
     NewItem,
     Rename,
+    /// A step to add.
+    NewStep,
+    /// A step ticked.
+    TickStep,
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
@@ -483,6 +489,22 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/steps",
+            edit,
+            Target::TaskWithStep,
+            RequestBody::NewStep,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/heaps/{heap}/items/{item}/steps/{step}",
+            edit,
+            Target::TaskWithStep,
+            RequestBody::TickStep,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps/{heap}/items/{item}/reopen",
             edit,
             Target::ClosedItem,
@@ -804,6 +826,29 @@ impl World {
         Ok((key, done.body["version"].to_string()))
     }
 
+    /// Creates a task with one step as the admin and returns the task's key and the step's version.
+    async fn create_task_with_step(&self) -> Result<(String, String)> {
+        let (key, version) = self.create_item(false).await?;
+        let item_path = format!("{}/items/{key}", self.heap_path());
+        let admin = &self.admin.session;
+        let task = self
+            .app
+            .patch(admin, &item_path, &json!(version), json!({ "kind": "task" }))
+            .await?;
+        anyhow::ensure!(task.status == StatusCode::OK, "make task failed: {}", task.body);
+        let added = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{item_path}/steps"),
+                Some(admin),
+                Some(json!({ "title": "Target step" })),
+            )
+            .await?;
+        anyhow::ensure!(added.status == StatusCode::CREATED, "add step failed: {}", added.body);
+        Ok((key, added.body["steps"][0]["version"].to_string()))
+    }
+
     /// Creates a tag as the admin and returns its ID and version.
     async fn create_tag(&self) -> Result<(String, String)> {
         let created = self
@@ -962,6 +1007,8 @@ impl World {
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
+            RequestBody::NewStep => Some(json!({ "title": "A step" })),
+            RequestBody::TickStep => Some(json!({ "state": "ticked" })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
@@ -1075,6 +1122,11 @@ impl World {
             Target::OpenItem | Target::ClosedItem => {
                 let (key, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item}", &key);
+                if_match = Some(version);
+            }
+            Target::TaskWithStep => {
+                let (key, version) = self.create_task_with_step().await?;
+                path = path.replace("{item}", &key).replace("{step}", "1");
                 if_match = Some(version);
             }
             Target::Tag => {

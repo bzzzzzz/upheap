@@ -25,7 +25,7 @@ order.
 - [x] 2. **Kinds.** An item has a kind and a stage; a note becomes a task in place. `item to-task`, `item show` and
    the web item show them; the person sets the stage by hand; icons mark kind and stage on the row and in the item.
    Done: a note made a task keeps its key, age and history. Covers Items §1, §3, §6.
-- [ ] 3. **Steps.** A task's steps: add, tick, drop, edit, in the API, `step` commands and the web item, with the
+- [x] 3. **Steps.** A task's steps: add, tick, drop, edit, in the API, `step` commands and the web item, with the
    count on the row.
    Done: a task can be worked through by hand from the web app and from the command line. Covers Items §4,
    Review §7.

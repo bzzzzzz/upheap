@@ -2334,6 +2334,281 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Adds a step to a task, at the end or right after the step numbered `after`, and answers with the whole item. The\nnew step is the one with the highest `number`. A task has at most 100 steps, dropped ones included. Adding needs\nno `If-Match`; a step has its own version, and the item's `version` doesn't change.",
+        "operationId": "add_step",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddStepRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`, `item_closed`, `steps_need_task` or `too_many_steps`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `value_unknown` (an `after` of 0) or `step_not_in_item` (`field` `after`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps/{step}": {
+      "patch": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Edits a step of a task and answers with the whole item. `{step}` is the step's number. Send the step's `version`\nin `If-Match`; the item's `version` doesn't change. A step can move from any state to any other.",
+        "operationId": "update_step",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "step",
+            "in": "path",
+            "description": "The step's number within its item: a positive integer, given when the step was added.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 3
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item, or no step with that number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `item_closed` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields or `value_unknown` (a `state` the server doesn't know)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
       "post": {
         "tags": [
@@ -4781,6 +5056,36 @@
         },
         "additionalProperties": false
       },
+      "AddStepRequest": {
+        "type": "object",
+        "description": "A step to add to a task.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "after": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The number of the step the new one goes right after. Left out, the step goes at the end.",
+            "minimum": 1
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text, at most 20,000 characters; blank means none."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 300 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "ArchiveOptionRequest": {
         "type": "object",
         "properties": {
@@ -4859,6 +5164,8 @@
           "heap_unarchived",
           "item_created",
           "item_updated",
+          "step_added",
+          "step_updated",
           "tag_created",
           "tag_updated",
           "saved_view_created",
@@ -6038,6 +6345,27 @@
           "state": {
             "$ref": "#/components/schemas/ItemState"
           },
+          "step_progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StepProgress",
+                "description": "Ticked of open and ticked steps. `null` when the item has no open or ticked step. On every response,\nlists included."
+              }
+            ]
+          },
+          "steps": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "description": "A task's steps in order, dropped ones included; empty for a note. `null` in the ranked list and the closed\nlist, which carry only `step_progress`: read the item for its steps."
+          },
           "tags": {
             "type": "array",
             "items": {
@@ -6063,7 +6391,8 @@
           "edit",
           "change_state",
           "reopen",
-          "make_task"
+          "make_task",
+          "add_step"
         ]
       },
       "ItemOption": {
@@ -7425,6 +7754,122 @@
           "pinned",
           "shown",
           "hidden"
+        ]
+      },
+      "Step": {
+        "type": "object",
+        "description": "One step of a task.",
+        "required": [
+          "id",
+          "number",
+          "title",
+          "state",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepAction"
+            }
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text; `null` when there is none."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The step's number within its item, given when it was added and never changed or reused. The step is named\nby its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/components/schemas/StepState"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the\nitem's.",
+            "minimum": 0
+          }
+        }
+      },
+      "StepAction": {
+        "type": "string",
+        "description": "An action the caller can take on a step. Clients show controls only for these.",
+        "enum": [
+          "edit"
+        ]
+      },
+      "StepPatch": {
+        "type": "object",
+        "description": "A partial edit of a step. Leave a field out to keep it; send `null` to clear the context.",
+        "properties": {
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text; `null` or blank clears it."
+          },
+          "state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StepState"
+              }
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "StepProgress": {
+        "type": "object",
+        "description": "How far a task's steps have got.",
+        "required": [
+          "ticked",
+          "total"
+        ],
+        "properties": {
+          "ticked": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Open and ticked steps. Dropped ones don't count.",
+            "minimum": 0
+          }
+        }
+      },
+      "StepState": {
+        "type": "string",
+        "description": "Where a step stands. A step can move from any state to any other.\n\n- `open`: still to do.\n- `ticked`: done.\n- `dropped`: no longer wanted. The step stays, shown as dropped, and doesn't count in the item's progress.",
+        "enum": [
+          "open",
+          "ticked",
+          "dropped"
         ]
       },
       "Tag": {

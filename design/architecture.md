@@ -76,6 +76,17 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **Optimistic concurrency:** every mutable row carries a `version`. Updates require the expected version and fail
   with `409` otherwise. A parameter is one aggregate: its options and tag links have no version of their own, and
   every change to them takes the parameter's version.
+- **A task's steps are rows of their own** in `item_steps`, each with its own `version`: a step write never bumps the
+  item's, and an item write never bumps a step's, so an agent ticking steps never makes an open edit of the item
+  conflict. A step has a `number`, given when it is added (one past the highest the item has had) and never changed
+  or reused, which is its name (`k3x9a.3`), and a `position` for its place in the order, kept apart so reordering
+  later never renames a step. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
+  assumption that lets an item response carry all of its steps: only a single-item response does, and the ranked
+  and closed lists carry `steps: null` and just the progress, counted in one grouped query per chunk without
+  loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
+  heap lock like any item write, then reads the item and its steps again with locking reads (see
+  [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
+  item are read-only, and come back editable, unchanged, when it is reopened.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -234,8 +245,9 @@ a fixed time.
    Postgres), before touching any other row, so writes in one heap run one after the other and always take locks in
    the same order. The write checks that the heap isn't archived on the row read under that lock, and archiving
    takes the same lock, so no write lands in a heap archived while it waited. Reads that a rule depends on (the
-   blocker chain, a parameter and its options, a saved view) are locking reads too, because on MySQL a plain read
-   before the lock would fix the transaction's snapshot and hide changes that committed while it waited. SQLite has
+   blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
+   reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
+   that committed while it waited. SQLite has
    one writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
    matters, no inconsistent state, holds either way.
 2. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
@@ -420,7 +432,10 @@ the remaining admins.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
    as text and IDs replaced by current names. The raw `diff` is returned too.
-6. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
+6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
+   read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
+   by number and title, and each changed field as `step_title`, `step_context` or `step_state`.
+7. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
    parameter, heap and member, and the whole logs on the heap's and the team's Activity pages. Parameters and heaps
    offer `view_history` only to those who may see their entries, so members aren't shown histories that are always
    empty.
@@ -484,7 +499,8 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
    build sends an item's stage, the local build never does) and `api`'s `trace-and-timeout` feature (the request span
    and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left out, so that code, argon2
    and tokio's blocking pool aren't in the wasm. What changes is which use cases exist;
-   the permission functions in `domain` don't.
+   the permission functions in `domain` don't. Steps are not behind `agents`: the local build has them, as it has
+   kinds.
 6. **Platform.** There is no tokio runtime: `wasm-bindgen-futures` drives the Router in one thread, and shared code
    uses only tokio's task-locals (Async §1 of the principles). The clock is `Date.now()`, since `SystemTime::now()`
    panics on `wasm32-unknown-unknown`; randomness is `getrandom`'s browser backend, chosen by a `cfg` flag in
@@ -546,13 +562,16 @@ configuration, signing in, layout and tests) are the [CLI rules](engineering-pri
 principles; the exit codes are in `crates/cli/src/error.rs`, and the commands and flags in `upheap --help`. This
 section is how it maps onto this API.
 
-1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), tags
+1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
+   task's steps (add, tick, drop, edit), tags
    (list, add, edit), heaps (list, pick a default) and signing in. Teams, members, heap settings, parameters and
    saved-view editing stay in the web app. The local build has no server, so the CLI can't reach it.
 2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
    link without its `/h/`. A pasted link works, short or in the long form the address bar shows after the redirect;
    its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is
-   exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it.
+   exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it. A step
+   is its item and its number, `<item>.<number>` (`k3x9a.3`, `team/heap/k3x9a.3`), split at the last `.` after the
+   last `/`, since a link's host has dots and a key never does; `step add --after` also takes the bare number.
 3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
    server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
    refusals. `item block --by` sets `blocked_by_item_id` in the same request; a bare key there is in the blocked
@@ -576,8 +595,8 @@ section is how it maps onto this API.
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
    (`deserialize_with`), and `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
-   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`
-   are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
+   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
+   and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
    request when converting to the domain type, with `422 value_unknown` naming the field, rather than at parsing
    (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `ItemState`, `Role`,
    and the list view's `StateMode`, `BlockedLayout` and `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
@@ -599,7 +618,7 @@ section is how it maps onto this API.
 4. **API contract:** `openapi.json` and the generated TypeScript types are checked in, and CI fails if either
    changes without being regenerated.
 5. **End to end:** Playwright covers the golden paths (sign up and sign in, add and rank, block and unblock, close
-   and reopen, parameter management) against the real binary on in-memory SQLite, at phone, tablet and desktop
+   and reopen, work a task through its steps, parameter management) against the real binary on in-memory SQLite, at phone, tablet and desktop
    widths. Each test registers its own account, so tests share no data and run in parallel; everything beyond these
    paths is tested lower down. The same paths, without sign-up, run against the local build, with its own tests for
    export, import and the tab lock.

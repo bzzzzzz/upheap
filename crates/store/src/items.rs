@@ -11,7 +11,9 @@ use domain::handle::ItemKey;
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Select,
+};
 
 use crate::StoreError;
 use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
@@ -57,7 +59,28 @@ pub async fn is_key_taken(db: &impl ConnectionTrait, heap_id: HeapId, key: ItemK
 }
 
 pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
-    let row = items::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
+    read_item(db, id, false).await
+}
+
+/// The item `id` with its tags and values, like [`find_item`], with the item row read with a locking read (`FOR
+/// SHARE` on MySQL and Postgres), which sees the latest committed row rather than the transaction's snapshot. A write
+/// that depends on the item's state (closed or open) calls it after [`crate::heaps::lock_heap`], so on MySQL
+/// (REPEATABLE READ) it sees what committed while it waited for the lock. SQLite has no row locks and needs none (see
+/// `lock_heap`).
+///
+/// The tags and values are plain reads, from the same snapshot as the reads that name them in a response, so none of
+/// their IDs is ever missing there. One set while the write waited may be left out of its answer, as for any item
+/// write, and so may a blocker or closer the locked row names that the snapshot doesn't have yet (it shows as
+/// `null`); the next read has them.
+pub async fn find_item_locking(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
+    read_item(db, id, true).await
+}
+
+/// [`find_item`], or with `lock` [`find_item_locking`], which locks the item row only.
+async fn read_item(db: &impl ConnectionTrait, id: ItemId, lock: bool) -> Result<Option<Item>, StoreError> {
+    let row = shared_if(items::Entity::find_by_id(id_to_db(id.as_uuid())), lock)
+        .one(db)
+        .await?;
     let Some(item) = row.map(to_item).transpose()? else {
         return Ok(None);
     };
@@ -66,6 +89,11 @@ pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<I
     attach_values(db, &mut items).await?;
     let [item] = items;
     Ok(Some(item))
+}
+
+/// `query`, as a locking read (`FOR SHARE` on MySQL and Postgres) when `lock` is set.
+pub(crate) fn shared_if<E: EntityTrait>(query: Select<E>, lock: bool) -> Select<E> {
+    if lock { query.lock_shared() } else { query }
 }
 
 /// The items among `ids` that belong to `heap_id`, in no particular order. IDs from other heaps, or unknown ones,

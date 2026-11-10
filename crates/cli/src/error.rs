@@ -38,6 +38,9 @@ pub enum CliError {
         #[source]
         source: ClientError,
     },
+    /// The item a command named has no step by the number it gave.
+    #[error("no step `{name}` in {heap}")]
+    NoSuchStep { name: String, heap: String },
     /// The server refused a change to an item because it moved on or is closed. Carries the item as `team/heap/key`,
     /// for a hint that can be pasted whatever heap is the default.
     #[error("{source}")]
@@ -64,7 +67,12 @@ impl CliError {
         match self {
             Self::Config(_) | Self::TokenStore(_) => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
-            Self::Lookup(LookupError::MalformedHeap { .. } | LookupError::MalformedItem { .. }) => 2,
+            Self::NoSuchStep { .. } => 4,
+            Self::Lookup(
+                LookupError::MalformedHeap { .. }
+                | LookupError::MalformedItem { .. }
+                | LookupError::MalformedStep { .. },
+            ) => 2,
             Self::Lookup(
                 LookupError::UnknownHeap { .. }
                 | LookupError::UnknownDueChoice { .. }
@@ -172,6 +180,10 @@ impl CliError {
                 _,
             ) => Some(format!("add it with `{}`", tag_add_command(name, heap))),
             (Self::NoSuchItem { .. }, _) => Some("`upheap item list` lists the heap's items".to_owned()),
+            (Self::NoSuchStep { name, .. }, _) => Some(format!(
+                "`upheap item show {}` lists the item's steps",
+                name.rsplit_once('.').map_or(name.as_str(), |(item, _)| item)
+            )),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
             (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
                 Some("version_conflict") => Some(format!(

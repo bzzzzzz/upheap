@@ -8,8 +8,11 @@ use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
 use domain::item::{Item, ItemPatch, ItemSummary, NewItem, Stage, StateKind};
 use domain::list_view::{Group, ListView};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
-use domain::permission::{ItemAction, Permission, allowed_item_actions, allowed_stage_choices};
+use domain::permission::{
+    ItemAction, Permission, StepAction, allowed_item_actions, allowed_stage_choices, allowed_step_actions,
+};
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
+use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
@@ -53,6 +56,15 @@ pub struct ItemView {
     pub allowed_actions: Vec<ItemAction>,
     /// The stages the caller may set on it now, in table order (see [`domain::permission::allowed_stage_choices`]).
     pub stage_choices: Vec<Stage>,
+    /// A task's steps in order (empty for a note), or `None` in a list, which carries only `step_progress`: a
+    /// context can be long, and a list row doesn't show it.
+    pub steps: Option<Vec<Step>>,
+    /// Ticked of open and ticked steps; `None` when there are none. Set from `steps` where they are loaded, and
+    /// counted in storage where they aren't.
+    pub step_progress: Option<StepProgress>,
+    /// What the caller may do with each of the steps, the same for all of them (see
+    /// [`domain::permission::allowed_step_actions`]).
+    pub step_actions: Vec<StepAction>,
 }
 
 /// An item's value for one custom parameter, ready to show.
@@ -220,6 +232,7 @@ impl Services {
             };
             let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
             let stage_choices = allowed_stage_choices(&item, &access.heap, role);
+            let step_actions = allowed_step_actions(&item, &access.heap, role);
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
@@ -235,6 +248,10 @@ impl Services {
                     closed_by: None,
                     allowed_actions,
                     stage_choices,
+                    // Lists carry the progress only, counted below for the entries that are listed.
+                    steps: None,
+                    step_progress: None,
+                    step_actions,
                 },
                 position: 0,
                 contributors: entry.contributors,
@@ -249,6 +266,18 @@ impl Services {
             for (index, entry) in entries.iter_mut().enumerate() {
                 entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
             }
+        }
+
+        let mut step_progress = {
+            let listed: Vec<ItemId> = [&pinned, &ranked, &blocked]
+                .into_iter()
+                .flatten()
+                .map(|entry| entry.view.item.id)
+                .collect();
+            store::steps::count_step_progress(&self.db, &listed).await?
+        };
+        for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
+            entry.view.step_progress = step_progress.remove(&entry.view.item.id);
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -339,6 +368,8 @@ impl Services {
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
+        let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
+        let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
@@ -346,6 +377,8 @@ impl Services {
             .map(|item| {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let stage_choices = allowed_stage_choices(&item, &access.heap, role);
+                let step_actions = allowed_step_actions(&item, &access.heap, role);
+                let step_progress = step_progress.remove(&item.id);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
                 let created_by = pick_user(&users, item.created_by);
@@ -360,6 +393,9 @@ impl Services {
                     closed_by,
                     allowed_actions,
                     stage_choices,
+                    steps: None,
+                    step_progress,
+                    step_actions,
                 }
             })
             .collect();
@@ -411,8 +447,9 @@ impl Services {
         tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
         let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
         let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
+        let step_actions = allowed_step_actions(&item, &access.heap, access.membership.role);
         let values = describe_values(&item, &parameters);
-        // New items are open, so they have no blocker and no closer.
+        // New items are open notes, so they have no blocker, no closer and no steps.
         Ok(ItemView {
             item,
             tags,
@@ -422,6 +459,9 @@ impl Services {
             closed_by: None,
             allowed_actions,
             stage_choices,
+            steps: Some(Vec::new()),
+            step_progress: None,
+            step_actions,
         })
     }
 
@@ -430,22 +470,8 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
-        let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, self.now());
-        let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
-        let tags = load_heap_tags(&self.db, item.heap_id, &item.tags).await?;
-        let parameters = store::parameters::list_parameters(&self.db, item.heap_id).await?;
-        let blocked_by = find_blocker(&self.db, &item).await?;
-        let (created_by, closed_by) = find_item_users(&self.db, &item).await?;
-        Ok(ItemView {
-            parameters: describe_values(&item, &parameters),
-            item,
-            tags,
-            blocked_by,
-            created_by,
-            closed_by,
-            allowed_actions,
-            stage_choices,
-        })
+        let steps = store::steps::list_steps(&self.db, item.id).await?;
+        build_item_view(&self.db, &access.heap, access.membership.role, item, steps, self.now()).await
     }
 
     /// Applies a partial edit if the item is still at version `expected`. New tags must belong to the item's
@@ -495,21 +521,8 @@ impl Services {
             check_blocker(&txn, &current, blocker).await?;
         }
         let Some(edited) = edited else {
-            let allowed_actions = allowed_item_actions(&current, &access.heap, role, now);
-            let stage_choices = allowed_stage_choices(&current, &access.heap, role);
-            let tags = load_heap_tags(&txn, current.heap_id, &current.tags).await?;
-            let blocked_by = find_blocker(&txn, &current).await?;
-            let (created_by, closed_by) = find_item_users(&txn, &current).await?;
-            return Ok(ItemView {
-                parameters: describe_values(&current, &parameters),
-                item: current,
-                tags,
-                blocked_by,
-                created_by,
-                closed_by,
-                allowed_actions,
-                stage_choices,
-            });
+            let steps = store::steps::list_steps_locking(&txn, current.id).await?;
+            return build_item_view(&txn, &access.heap, role, current, steps, now).await;
         };
         let saved =
             store::items::update_item(&txn, &edited, expected, now)
@@ -527,27 +540,15 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let tags = load_heap_tags(&txn, saved.heap_id, &saved.tags).await?;
-        let blocked_by = find_blocker(&txn, &saved).await?;
-        let (created_by, closed_by) = find_item_users(&txn, &saved).await?;
+        let steps = store::steps::list_steps_locking(&txn, saved.id).await?;
+        let view = build_item_view(&txn, &access.heap, role, saved, steps, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(heap_id = %saved.heap_id, item_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), "item updated");
-        let allowed_actions = allowed_item_actions(&saved, &access.heap, role, now);
-        let stage_choices = allowed_stage_choices(&saved, &access.heap, role);
-        Ok(ItemView {
-            parameters: describe_values(&saved, &parameters),
-            item: saved,
-            tags,
-            blocked_by,
-            created_by,
-            closed_by,
-            allowed_actions,
-            stage_choices,
-        })
+        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), "item updated");
+        Ok(view)
     }
 
-    fn item_audit_entry(
+    pub(crate) fn item_audit_entry(
         &self,
         heap: &Heap,
         principal: Principal,
@@ -568,6 +569,38 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// The view of `item`, with its `steps`, as `role` sees it in `heap` at `now`. It reads the heap's tags and
+/// parameters, the blocker and the users, so it can run inside the transaction that wrote the item.
+pub(crate) async fn build_item_view(
+    db: &impl ConnectionTrait,
+    heap: &Heap,
+    role: Role,
+    item: Item,
+    steps: Vec<Step>,
+    now: Timestamp,
+) -> Result<ItemView, ServiceError> {
+    let allowed_actions = allowed_item_actions(&item, heap, role, now);
+    let stage_choices = allowed_stage_choices(&item, heap, role);
+    let step_actions = allowed_step_actions(&item, heap, role);
+    let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
+    let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
+    let blocked_by = find_blocker(db, &item).await?;
+    let (created_by, closed_by) = find_item_users(db, &item).await?;
+    Ok(ItemView {
+        parameters: describe_values(&item, &parameters),
+        item,
+        tags,
+        blocked_by,
+        created_by,
+        closed_by,
+        allowed_actions,
+        stage_choices,
+        step_progress: progress(&steps),
+        steps: Some(steps),
+        step_actions,
+    })
 }
 
 /// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker

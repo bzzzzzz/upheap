@@ -28,6 +28,7 @@ mod oauth;
 mod parameters;
 mod paths;
 mod request_id;
+mod steps;
 mod tags;
 mod teams;
 #[cfg(feature = "accounts")]
@@ -179,6 +180,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::routes())
         .merge(due_choices::routes())
         .merge(items::routes())
+        .merge(steps::routes())
         .merge(tags::routes())
         .merge(teams::routes())
         .merge(heaps::routes())

@@ -131,9 +131,15 @@ export function ItemRow({
               <span className="sr-only">
                 {item.kind === "task" && ", task"}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
+                {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
               </span>
             </Link>
             <StageIcon stage={item.stage} />
+            {item.step_progress && (
+              <span aria-hidden="true" className="text-xs text-muted tabular-nums">
+                {item.step_progress.ticked}/{item.step_progress.total}
+              </span>
+            )}
             {item.due && <DueChip due={item.due} />}
             <TagChips tags={item.tags} />
             <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />

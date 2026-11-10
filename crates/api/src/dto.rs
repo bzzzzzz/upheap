@@ -5,7 +5,7 @@
 
 use api_types::common::{
     ContributorDto, DueDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto, ItemTagDto,
-    RankedItemDto, SizeDto, StageDto, UserRefDto,
+    RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, group_closed};
@@ -69,6 +69,13 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),
         closed_by: view.closed_by.as_ref().map(UserRefDto::from),
         closed_group: closed_at.map(|at| group_closed(at, as_of, tz).into()),
+        steps: view.steps.as_ref().map(|steps| {
+            steps
+                .iter()
+                .map(|step| StepDto::new(step, &view.step_actions))
+                .collect()
+        }),
+        step_progress: view.step_progress.map(StepProgressDto::from),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }

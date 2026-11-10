@@ -32,6 +32,7 @@ id_type!(UserId);
 id_type!(TeamId);
 id_type!(HeapId);
 id_type!(ItemId);
+id_type!(StepId);
 id_type!(TagId);
 id_type!(SavedViewId);
 id_type!(InviteLinkId);

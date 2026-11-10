@@ -1,6 +1,6 @@
 //! The item commands: their args and flows, and what they share in `common`.
 
-mod common;
+pub(super) mod common;
 
 pub mod add;
 pub mod edit;

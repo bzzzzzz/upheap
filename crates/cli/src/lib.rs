@@ -37,7 +37,7 @@ pub struct Deps {
     pub env: Environment,
     pub tokens: Arc<dyn TokenStore>,
     pub browser: Box<dyn Browser>,
-    /// Read only by `--description -`.
+    /// Read only by `--description -` and `--context-file -`.
     pub stdin: Box<dyn Read + Send>,
     pub stdout: Box<dyn Write + Send>,
     pub stderr: Box<dyn Write + Send>,
@@ -127,6 +127,9 @@ enum Command {
     /// Items in a heap
     #[command(subcommand)]
     Item(ItemCommand),
+    /// A task's steps
+    #[command(subcommand)]
+    Step(StepCommand),
     /// Tags in a heap
     #[command(subcommand)]
     Tag(TagCommand),
@@ -160,6 +163,18 @@ enum ItemCommand {
     Reopen(commands::item::state::StateArgs),
     /// Make a note a task, in place: it keeps its key, age and history
     ToTask(commands::item::state::StateArgs),
+}
+
+#[derive(Subcommand)]
+enum StepCommand {
+    /// Add a step to a task
+    Add(commands::step::add::AddArgs),
+    /// Tick a step
+    Tick(commands::step::state::StepArgs),
+    /// Drop a step: it stays, shown as dropped
+    Drop(commands::step::state::StepArgs),
+    /// Change a step's title or context
+    Edit(commands::step::edit::EditArgs),
 }
 
 #[derive(Subcommand)]
@@ -203,6 +218,9 @@ impl Command {
                 | ItemCommand::ToTask(args),
             ) => &args.shared,
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
+            Self::Step(StepCommand::Add(args)) => &args.shared,
+            Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
+            Self::Step(StepCommand::Edit(args)) => &args.shared,
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
@@ -288,6 +306,7 @@ fn load_app(
 
 async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), CliError> {
     use commands::item::state::{StateVerb, run_block, run_verb};
+    use commands::step::state::{StepVerb, run_verb as run_step_verb};
     match command {
         Command::Item(ItemCommand::Add(args)) => commands::item::add::run(args, app, out).await,
         Command::Item(ItemCommand::List(args)) => commands::item::list::run(args, app, out).await,
@@ -299,6 +318,10 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
         Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
         Command::Item(ItemCommand::ToTask(args)) => commands::item::to_task::run(args, app, out).await,
+        Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,
+        Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
+        Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
+        Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
@@ -336,7 +359,7 @@ pub(crate) struct App {
 
 impl App {
     /// All of stdin, read to its end as UTF-8.
-    pub async fn read_stdin(&self) -> Result<String, UsageError> {
+    pub async fn read_stdin(&self, flag: &'static str) -> Result<String, UsageError> {
         let stdin = Arc::clone(&self.stdin);
         tokio::task::spawn_blocking(move || {
             let mut text = String::new();
@@ -346,7 +369,7 @@ impl App {
         .await
         .map_err(std::io::Error::other)
         .and_then(|read| read)
-        .map_err(UsageError::UnreadableStdin)
+        .map_err(|source| UsageError::UnreadableStdin { flag, source })
     }
 
     pub fn config_dir(&self) -> Result<&Path, ConfigError> {

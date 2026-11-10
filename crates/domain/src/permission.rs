@@ -60,6 +60,8 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::HeapUnarchived => Permission::ManageHeaps,
         AuditAction::ItemCreated
         | AuditAction::ItemUpdated
+        | AuditAction::StepAdded
+        | AuditAction::StepUpdated
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewCreated
@@ -91,6 +93,8 @@ pub enum ItemAction {
     Reopen,
     /// Make a note a task.
     MakeTask,
+    /// Add a step to a task.
+    AddStep,
 }
 
 /// What `role` can do with `item` in `heap` at `now`. Empty for archived heaps.
@@ -102,7 +106,7 @@ pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp
         let mut actions = vec![ItemAction::Edit, ItemAction::ChangeState];
         match item.kind {
             Kind::Note => actions.push(ItemAction::MakeTask),
-            Kind::Task => {}
+            Kind::Task => actions.push(ItemAction::AddStep),
         }
         return actions;
     }
@@ -118,6 +122,22 @@ pub fn allowed_stage_choices(item: &Item, heap: &Heap, role: Role) -> Vec<Stage>
         return Vec::new();
     }
     item.stage_choices()
+}
+
+/// An action a client may offer on a step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepAction {
+    /// Change the step's title, context or state.
+    Edit,
+}
+
+/// What `role` can do with the steps of `item` in `heap`: edit them while the item is open and the heap is active.
+/// The same for every step of the item.
+pub fn allowed_step_actions(item: &Item, heap: &Heap, role: Role) -> Vec<StepAction> {
+    if item.is_closed() || !can_edit_heap_content(heap, role) {
+        return Vec::new();
+    }
+    vec![StepAction::Edit]
 }
 
 /// An action a client may offer on a tag.
@@ -591,6 +611,32 @@ mod tests {
         expect_that!(
             has_make_task(&item(Kind::Note, false), &heap(true), Role::Member),
             eq(false)
+        );
+    }
+
+    #[gtest]
+    fn steps_are_added_to_an_open_task_and_edited_while_the_item_is_open() {
+        let now = Timestamp::EPOCH;
+        let has_add_step = |item: &Item, heap: &Heap| {
+            allowed_item_actions(item, heap, Role::Member, now).contains(&ItemAction::AddStep)
+        };
+
+        expect_that!(has_add_step(&item(Kind::Task, false), &heap(false)), eq(true));
+        expect_that!(has_add_step(&item(Kind::Note, false), &heap(false)), eq(false));
+        expect_that!(has_add_step(&item(Kind::Task, true), &heap(false)), eq(false));
+        expect_that!(has_add_step(&item(Kind::Task, false), &heap(true)), eq(false));
+
+        expect_that!(
+            allowed_step_actions(&item(Kind::Task, false), &heap(false), Role::Member),
+            elements_are![eq(&StepAction::Edit)]
+        );
+        expect_that!(
+            allowed_step_actions(&item(Kind::Task, true), &heap(false), Role::Member),
+            is_empty()
+        );
+        expect_that!(
+            allowed_step_actions(&item(Kind::Task, false), &heap(true), Role::Member),
+            is_empty()
         );
     }
 

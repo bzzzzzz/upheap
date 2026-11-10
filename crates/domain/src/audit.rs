@@ -17,6 +17,8 @@ pub enum AuditAction {
     HeapUnarchived,
     ItemCreated,
     ItemUpdated,
+    StepAdded,
+    StepUpdated,
     TagCreated,
     TagUpdated,
     SavedViewCreated,
@@ -32,7 +34,7 @@ pub enum AuditAction {
 
 impl AuditAction {
     /// Every action, in the order they are declared.
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 28] = [
         Self::UserRegistered,
         Self::UserUpdated,
         Self::TeamCreated,
@@ -48,6 +50,8 @@ impl AuditAction {
         Self::HeapUnarchived,
         Self::ItemCreated,
         Self::ItemUpdated,
+        Self::StepAdded,
+        Self::StepUpdated,
         Self::TagCreated,
         Self::TagUpdated,
         Self::SavedViewCreated,
@@ -83,6 +87,8 @@ impl AuditAction {
             Self::HeapUnarchived => "heap_unarchived",
             Self::ItemCreated => "item_created",
             Self::ItemUpdated => "item_updated",
+            Self::StepAdded => "step_added",
+            Self::StepUpdated => "step_updated",
             Self::TagCreated => "tag_created",
             Self::TagUpdated => "tag_updated",
             Self::SavedViewCreated => "saved_view_created",

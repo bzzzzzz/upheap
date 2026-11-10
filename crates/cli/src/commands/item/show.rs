@@ -1,7 +1,7 @@
 //! `upheap item show <item>`: one item in full, and with `--history` the changes made to it.
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
-use api_types::common::{ItemDto, KindDto, NeedDto, StageDto};
+use api_types::common::{ItemDto, KindDto, NeedDto, StageDto, StepStateDto};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
@@ -84,6 +84,43 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
         // drops the `\r` of CRLF text, and a tab becomes spaces, as the output would otherwise show it as U+FFFD.
         for line in description.lines() {
             out.line(&line.replace('\t', "    "))?;
+        }
+    }
+    render_steps(item, out)
+}
+
+/// The task's steps, when it has any: a heading with the progress, and a line for each step in order, with its
+/// context under it. Dropped steps say so; they are not in the progress.
+fn render_steps(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
+    // `null` (a list row) reads as no steps; `item show` reads a single item, which always has the array.
+    let steps = item.steps.as_deref().unwrap_or_default();
+    if steps.is_empty() {
+        return Ok(());
+    }
+    out.line("")?;
+    match &item.step_progress {
+        Some(progress) => out.line_toned(&format!("Steps {}/{}", progress.ticked, progress.total), Tone::Strong)?,
+        None => out.line_toned("Steps", Tone::Strong)?,
+    }
+    let names: Vec<String> = steps
+        .iter()
+        .map(|step| format!("{}.{}", item.key, step.number))
+        .collect();
+    let width = names.iter().map(|name| name.chars().count()).max().unwrap_or(0);
+    for (step, name) in steps.iter().zip(&names) {
+        let mark = match step.state {
+            StepStateDto::Open => "[ ]",
+            StepStateDto::Ticked => "[x]",
+            StepStateDto::Dropped => "[-]",
+            StepStateDto::Unknown => "[?]",
+        };
+        let line = format!("{mark} {name:<width$}  {}", step.title);
+        match step.state {
+            StepStateDto::Dropped => out.line_parts(&[(line.trim_end(), Tone::Plain), ("  dropped", Tone::Dim)])?,
+            StepStateDto::Open | StepStateDto::Ticked | StepStateDto::Unknown => out.line(&line)?,
+        }
+        for context_line in step.context.iter().flat_map(|context| context.lines()) {
+            out.line(&format!("        {}", context_line.replace('\t', "    ")))?;
         }
     }
     Ok(())

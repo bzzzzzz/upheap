@@ -7,6 +7,7 @@ use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::{TagDto, TagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
+use domain::step::StepNumber;
 use uuid::Uuid;
 
 /// A heap as the user named it: `team/heap`, or a heap slug alone.
@@ -36,6 +37,16 @@ pub enum ItemName {
     Full { heap: HeapHandle, key: String },
 }
 
+/// A step as the user named it: an item and the step's number, as `k3x9a.3`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StepName {
+    /// The item part as typed, which messages name the item by.
+    pub item_typed: String,
+    pub item: ItemName,
+    /// The step's number: a positive integer.
+    pub number: u32,
+}
+
 /// A due time as the user typed it for `--due`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DueWhen {
@@ -51,6 +62,8 @@ pub enum LookupError {
     MalformedHeap { name: String },
     #[error("`{name}` isn't an item: give its key, team/heap/key, or a link to it")]
     MalformedItem { name: String },
+    #[error("`{name}` isn't a step: give its item and number, such as k3x9a.3")]
+    MalformedStep { name: String },
     #[error("`{typed}` isn't a due time: give a date, YYYY-MM-DD, or one of: {}", known.join(", "))]
     UnknownDueChoice { typed: String, known: Vec<String> },
     #[error("you have no heap `{name}`; `upheap heap list` lists yours")]
@@ -178,6 +191,28 @@ impl ItemName {
             }),
             _ => None,
         }
+    }
+}
+
+impl StepName {
+    /// Reads `<item>.<number>`, where `<item>` is anything [`ItemName::parse`] takes and `<number>` a positive
+    /// integer. It splits at the last `.` after the last `/`, since a link's host and path may hold dots before the
+    /// key, and a key never does.
+    pub fn parse(raw: &str) -> Result<Self, LookupError> {
+        let malformed = || LookupError::MalformedStep { name: raw.to_owned() };
+        let tail_start = raw.rfind('/').map_or(0, |slash| slash + 1);
+        let (key, number) = raw[tail_start..].rsplit_once('.').ok_or_else(malformed)?;
+        let number = StepNumber::parse(number)
+            .map(StepNumber::get)
+            .filter(|_| !key.contains('.'))
+            .ok_or_else(malformed)?;
+        let item_typed = format!("{}{key}", &raw[..tail_start]);
+        let item = ItemName::parse(&item_typed).map_err(|_| malformed())?;
+        Ok(Self {
+            item_typed,
+            item,
+            number,
+        })
     }
 }
 

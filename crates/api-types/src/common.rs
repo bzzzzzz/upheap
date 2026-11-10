@@ -5,8 +5,9 @@
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
 use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
-use domain::permission::ItemAction;
+use domain::permission::{ItemAction, StepAction};
 use domain::ranking::{Contributor, Factor};
+use domain::step::{Step, StepProgress, StepState};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
@@ -236,6 +237,8 @@ pub enum ItemActionDto {
     Reopen,
     /// Make a note a task. Offered for an open note the caller may edit.
     MakeTask,
+    /// Add a step to a task. Offered for an open task the caller may edit.
+    AddStep,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -245,6 +248,118 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::ChangeState => Self::ChangeState,
             ItemAction::Reopen => Self::Reopen,
             ItemAction::MakeTask => Self::MakeTask,
+            ItemAction::AddStep => Self::AddStep,
+        }
+    }
+}
+
+/// Where a step stands. A step can move from any state to any other.
+///
+/// - `open`: still to do.
+/// - `ticked`: done.
+/// - `dropped`: no longer wanted. The step stays, shown as dropped, and doesn't count in the item's progress.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = StepState)]
+pub enum StepStateDto {
+    Open,
+    Ticked,
+    Dropped,
+    /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<StepState> for StepStateDto {
+    fn from(state: StepState) -> Self {
+        match state {
+            StepState::Open => Self::Open,
+            StepState::Ticked => Self::Ticked,
+            StepState::Dropped => Self::Dropped,
+        }
+    }
+}
+
+impl TryFrom<StepStateDto> for StepState {
+    type Error = ValidationError;
+
+    /// Fails on a state this server doesn't know, which a request can carry.
+    fn try_from(state: StepStateDto) -> Result<Self, Self::Error> {
+        match state {
+            StepStateDto::Open => Ok(Self::Open),
+            StepStateDto::Ticked => Ok(Self::Ticked),
+            StepStateDto::Dropped => Ok(Self::Dropped),
+            StepStateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::State }),
+        }
+    }
+}
+
+/// An action the caller can take on a step. Clients show controls only for these.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = StepAction)]
+pub enum StepActionDto {
+    /// Change the step's title, context or state.
+    Edit,
+}
+
+impl From<StepAction> for StepActionDto {
+    fn from(action: StepAction) -> Self {
+        match action {
+            StepAction::Edit => Self::Edit,
+        }
+    }
+}
+
+/// One step of a task.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Step)]
+pub struct StepDto {
+    pub id: Uuid,
+    /// The step's number within its item, given when it was added and never changed or reused. The step is named
+    /// by its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.
+    pub number: u32,
+    pub title: String,
+    /// Plain text; `null` when there is none.
+    pub context: Option<String>,
+    pub state: StepStateDto,
+    /// Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the
+    /// item's.
+    pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<StepActionDto>,
+}
+
+impl StepDto {
+    /// `step` with the `actions` the caller may take on it.
+    pub fn new(step: &Step, actions: &[StepAction]) -> Self {
+        Self {
+            id: *step.id.as_uuid(),
+            number: step.number.get(),
+            title: step.title.as_str().to_owned(),
+            context: step.context.as_ref().map(|context| context.as_str().to_owned()),
+            state: step.state.into(),
+            version: step.version.get(),
+            allowed_actions: actions.iter().copied().map(Into::into).collect(),
+        }
+    }
+}
+
+/// How far a task's steps have got.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = StepProgress)]
+pub struct StepProgressDto {
+    pub ticked: u32,
+    /// Open and ticked steps. Dropped ones don't count.
+    pub total: u32,
+}
+
+impl From<StepProgress> for StepProgressDto {
+    fn from(progress: StepProgress) -> Self {
+        Self {
+            ticked: progress.ticked,
+            total: progress.total,
         }
     }
 }
@@ -439,6 +554,12 @@ pub struct ItemDto {
     /// Which part of the closed list it belongs in. `null` when the item is open. Clients group consecutive items
     /// with the same group.
     pub closed_group: Option<ClosedGroupDto>,
+    /// A task's steps in order, dropped ones included; empty for a note. `null` in the ranked list and the closed
+    /// list, which carry only `step_progress`: read the item for its steps.
+    pub steps: Option<Vec<StepDto>>,
+    /// Ticked of open and ticked steps. `null` when the item has no open or ticked step. On every response,
+    /// lists included.
+    pub step_progress: Option<StepProgressDto>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -614,6 +735,11 @@ mod tests {
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
+                "steps": [{
+                    "id": Uuid::nil(), "number": 1, "title": "Run in staging", "context": null, "state": "parked",
+                    "version": 1, "allowed_actions": ["edit", "reorder"],
+                }],
+                "step_progress": null,
             },
         })
     }
@@ -632,6 +758,9 @@ mod tests {
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
         expect_that!(ranked.item.kind, eq(KindDto::Unknown));
         expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
+        let steps = ranked.item.steps.or_fail()?;
+        expect_that!(steps[0].state, eq(StepStateDto::Unknown));
+        expect_that!(steps[0].allowed_actions, elements_are![eq(&StepActionDto::Edit)]);
         Ok(())
     }
 
@@ -657,6 +786,7 @@ mod tests {
         expect_that!(serde_json::to_value(ClosedGroupDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(KindDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(StageDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(StepStateDto::Unknown), err(anything()));
     }
 
     #[gtest]
