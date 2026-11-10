@@ -223,8 +223,9 @@ function StepRow({
 /**
  * "Add a step", which opens a one-line field in place. Enter adds the step and keeps the field for the next one; leaving
  * the field with text adds it too and closes the field; leaving it empty, or Escape, closes it without adding, and
- * Escape puts the focus back on the button. The typed title stays until the server has taken the step, so a refused
- * add loses nothing: the text is still in the field (or comes back when the field is opened again).
+ * Escape puts the focus back on the button. Enter clears the field at once, so the next step can be typed while the
+ * first is saved; a refused add puts its title back when the field is still empty, so it loses nothing (it shows again
+ * when the field is opened again, if the field was closed meanwhile).
  */
 function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
   const [adding, setAdding] = useState(false);
@@ -233,8 +234,6 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
   // Escape closes the field, and the blur that may follow it must not add what was typed.
   const cancelled = useRef(false);
   const returnFocus = useRef(false);
-  // Titles sent and not answered yet, so pressing Enter again doesn't add the same one twice.
-  const inFlight = useRef(new Set<string>());
 
   useEffect(() => {
     if (!adding && returnFocus.current) {
@@ -261,12 +260,11 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
 
   const takeDraft = () => {
     const title = draft.trim();
-    if (title === "" || inFlight.current.has(title)) return;
-    inFlight.current.add(title);
+    if (title === "") return;
+    setDraft("");
     void onAdd(title).then((added) => {
-      inFlight.current.delete(title);
-      // Whatever has been typed since the add started stays.
-      if (added) setDraft((current) => (current.trim() === title ? "" : current));
+      // Whatever has been typed since stays; the refused title comes back only into an empty field.
+      if (!added) setDraft((current) => (current.trim() === "" ? title : current));
     });
   };
 
