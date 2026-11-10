@@ -299,7 +299,7 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
     mutationFn: async ({ step, patch }: { step: Step; patch: StepPatch }) => {
       const cached = queryClient
         .getQueryData<Item>(itemKey(heap, taskKey))
-        ?.steps.find((candidate) => candidate.number === step.number);
+        ?.steps?.find((candidate) => candidate.number === step.number);
       const version = Math.max(step.version, cached?.version ?? 0);
       return unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps/{step}", {

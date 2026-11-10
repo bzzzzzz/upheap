@@ -5957,7 +5957,6 @@
           "parameters",
           "created_at",
           "created_label",
-          "steps",
           "version",
           "allowed_actions"
         ],
@@ -6128,16 +6127,19 @@
               },
               {
                 "$ref": "#/components/schemas/StepProgress",
-                "description": "Ticked of open and ticked steps. `null` when the item has no open or ticked step."
+                "description": "Ticked of open and ticked steps. `null` when the item has no open or ticked step. On every response,\nlists included."
               }
             ]
           },
           "steps": {
-            "type": "array",
+            "type": [
+              "array",
+              "null"
+            ],
             "items": {
               "$ref": "#/components/schemas/Step"
             },
-            "description": "A task's steps in order, dropped ones included; empty for a note."
+            "description": "A task's steps in order, dropped ones included; empty for a note. `null` in the ranked list and the closed\nlist, which carry only `step_progress`: read the item for its steps."
           },
           "tags": {
             "type": "array",

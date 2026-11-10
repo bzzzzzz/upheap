@@ -229,14 +229,22 @@ pub struct StepProgress {
     pub total: u32,
 }
 
+impl StepProgress {
+    /// The progress of a task with `ticked` ticked steps among `total` open and ticked ones, or `None` when
+    /// `total` is 0. The one place that rule lives, for counts read from storage and for a full list of steps.
+    pub fn from_counts(ticked: usize, total: usize) -> Option<Self> {
+        (total > 0).then(|| Self {
+            ticked: u32::try_from(ticked).unwrap_or(u32::MAX),
+            total: u32::try_from(total).unwrap_or(u32::MAX),
+        })
+    }
+}
+
 /// The progress of `steps`, or `None` when none is open or ticked.
 pub fn progress(steps: &[Step]) -> Option<StepProgress> {
     let ticked = steps.iter().filter(|step| step.state == StepState::Ticked).count();
     let total = steps.iter().filter(|step| step.state != StepState::Dropped).count();
-    (total > 0).then(|| StepProgress {
-        ticked: u32::try_from(ticked).unwrap_or(u32::MAX),
-        total: u32::try_from(total).unwrap_or(u32::MAX),
-    })
+    StepProgress::from_counts(ticked, total)
 }
 
 #[cfg(test)]

@@ -92,7 +92,9 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
 /// The task's steps, when it has any: a heading with the progress, and a line for each step in order, with its
 /// context under it. Dropped steps say so; they are not in the progress.
 fn render_steps(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
-    if item.steps.is_empty() {
+    // `null` (a list row) reads as no steps; `item show` reads a single item, which always has the array.
+    let steps = item.steps.as_deref().unwrap_or_default();
+    if steps.is_empty() {
         return Ok(());
     }
     out.line("")?;
@@ -100,13 +102,12 @@ fn render_steps(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
         Some(progress) => out.line_toned(&format!("Steps {}/{}", progress.ticked, progress.total), Tone::Strong)?,
         None => out.line_toned("Steps", Tone::Strong)?,
     }
-    let names: Vec<String> = item
-        .steps
+    let names: Vec<String> = steps
         .iter()
         .map(|step| format!("{}.{}", item.key, step.number))
         .collect();
     let width = names.iter().map(|name| name.chars().count()).max().unwrap_or(0);
-    for (step, name) in item.steps.iter().zip(&names) {
+    for (step, name) in steps.iter().zip(&names) {
         let mark = match step.state {
             StepStateDto::Open => "[ ]",
             StepStateDto::Ticked => "[x]",

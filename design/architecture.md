@@ -80,11 +80,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   conflict. A step has a `number`, given when it is added (one past the highest the item has had) and never changed
   or reused, which is its name (`k3x9a.3`), and a `position` for its place in the order, kept apart so reordering
   later never renames a step. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
-  assumption that lets every response that carries an item carry all of its steps, the ranked list included, in
-  chunked `IN` queries as tags are; if it stops holding, list rows would carry only the progress and the item
-  would load its steps itself. Progress is ticked of open plus ticked, so dropped steps don't count. A step write
-  takes the heap lock like any item write, reads the item and its steps again under it, and answers with the whole
-  item. Steps of a closed item are read-only, and come back editable, unchanged, when it is reopened.
+  assumption that lets an item response carry all of its steps: only a single-item response does, and the ranked
+  and closed lists carry `steps: null` and just the progress, counted in one grouped query per chunk without
+  loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
+  heap lock like any item write, then reads the item and its steps again with locking reads (see
+  [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
+  item are read-only, and come back editable, unchanged, when it is reopened.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -243,8 +244,9 @@ a fixed time.
    Postgres), before touching any other row, so writes in one heap run one after the other and always take locks in
    the same order. The write checks that the heap isn't archived on the row read under that lock, and archiving
    takes the same lock, so no write lands in a heap archived while it waited. Reads that a rule depends on (the
-   blocker chain, a parameter and its options, a saved view) are locking reads too, because on MySQL a plain read
-   before the lock would fix the transaction's snapshot and hide changes that committed while it waited. SQLite has
+   blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
+   reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
+   that committed while it waited. SQLite has
    one writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
    matters, no inconsistent state, holds either way.
 2. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item

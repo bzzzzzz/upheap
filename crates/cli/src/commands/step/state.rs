@@ -84,6 +84,7 @@ pub async fn run_verb(verb: StepVerb, args: StepArgs, app: &App, out: &mut Outpu
                 .value
                 .steps
                 .iter()
+                .flatten()
                 .find(|moved_step| moved_step.number == name.number)
                 .map_or((step_name(&item.value, step), step.title.clone()), |moved_step| {
                     (step_name(&moved.value, moved_step), moved_step.title.clone())

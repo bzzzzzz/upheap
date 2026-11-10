@@ -317,7 +317,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       {entry && entry.contributors.length > 0 && <WhyItRanks entry={entry} />}
 
-      {item.kind === "task" && <ItemSteps heapRef={heapRef} item={item} />}
+      <ItemSteps heapRef={heapRef} item={item} />
 
       <NeedPicker
         value={item.need}

@@ -89,9 +89,9 @@ fn is_stale_or_closed(err: &ClientError) -> bool {
     matches!(err, ClientError::Problem { problem, .. } if matches!(problem.code.as_str(), "version_conflict" | "item_closed"))
 }
 
-/// Step `number` of `item`, if it has one.
+/// Step `number` of `item`, if it has one. Only a single-item response carries steps; a list row has `null`.
 pub(super) fn find_step(item: &ItemDto, number: u32) -> Option<&StepDto> {
-    item.steps.iter().find(|step| step.number == number)
+    item.steps.iter().flatten().find(|step| step.number == number)
 }
 
 /// A step's name: its item's key and its number, as `k3x9a.3`.

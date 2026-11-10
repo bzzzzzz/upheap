@@ -5,11 +5,12 @@
 
 use api_types::steps::AddStepDto;
 use clap::Args;
+use domain::step::StepNumber;
 
 use super::read_context;
 use crate::commands::item::common::locate_item;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
-use crate::lookup::{HeapHandle, ItemName, LookupError, StepName, parse_step_number};
+use crate::lookup::{HeapHandle, ItemName, LookupError, StepName};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -43,8 +44,8 @@ impl After {
     /// A bare number, or a step name.
     fn parse(raw: &str) -> Result<Self, LookupError> {
         if raw.bytes().all(|byte| byte.is_ascii_digit()) {
-            return parse_step_number(raw)
-                .map(Self::Number)
+            return StepNumber::parse(raw)
+                .map(|number| Self::Number(number.get()))
                 .ok_or_else(|| LookupError::MalformedStep { name: raw.to_owned() });
         }
         Ok(Self::Step {
@@ -105,7 +106,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     };
     let added = api.post_step(&args.item, &at.key, &body).await?;
     // Numbers only grow, so the step just added has the highest.
-    let step = added.value.steps.iter().max_by_key(|step| step.number);
+    let step = added.value.steps.iter().flatten().max_by_key(|step| step.number);
     match (out.mode(), step) {
         (Mode::Json, _) => out.json(&added.body)?,
         (Mode::Quiet, Some(step)) => out.line(&format!("{}.{}", added.value.key, step.number))?,

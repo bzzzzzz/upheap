@@ -33,12 +33,13 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
-        // Read again under the heap lock: the item may have been closed or its steps changed while this waited.
-        let item = store::items::find_item(&txn, item_id)
+        // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
+        // the first read above, not what committed while this waited for the lock.
+        let item = store::items::find_item_locking(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
         check_steps_editable(&item)?;
-        let steps = store::steps::list_steps(&txn, item.id).await?;
+        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
         let placement = place_step(&item, &steps, fields.after)?;
 
         let now = self.now();
@@ -89,11 +90,12 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
-        // Read again under the heap lock: the item may have been closed or the step changed while this waited.
-        let item = store::items::find_item(&txn, item_id)
+        // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
+        // the first read above, not what committed while this waited for the lock.
+        let item = store::items::find_item_locking(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let steps = store::steps::list_steps(&txn, item.id).await?;
+        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
         let current = steps
             .iter()
             .find(|step| step.number == number)

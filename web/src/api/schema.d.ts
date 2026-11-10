@@ -1315,8 +1315,11 @@ export interface components {
             stage_choices: components["schemas"]["Stage"][];
             state: components["schemas"]["ItemState"];
             step_progress?: null | components["schemas"]["StepProgress"];
-            /** @description A task's steps in order, dropped ones included; empty for a note. */
-            steps: components["schemas"]["Step"][];
+            /**
+             * @description A task's steps in order, dropped ones included; empty for a note. `null` in the ranked list and the closed
+             *     list, which carry only `step_progress`: read the item for its steps.
+             */
+            steps?: components["schemas"]["Step"][] | null;
             /** @description By name. */
             tags: components["schemas"]["ItemTag"][];
             title: string;

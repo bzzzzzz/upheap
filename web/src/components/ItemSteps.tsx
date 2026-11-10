@@ -10,7 +10,9 @@ import { MenuEntry, MenuPopover } from "./Menu";
 /**
  * A task's steps (ux.md, The item §3): a checklist, inline at every width, each step saving as it's changed. Only the
  * server's `allowed_actions` decide what can be done: ticking, editing and dropping need `edit` on the step, adding
- * needs `add_step` on the item. A step that is dropped stays in the list, struck through, and can be restored.
+ * needs `add_step` on the item, and the server offers that only for a task, so this renders nothing for a note. A step
+ * that is dropped stays in the list, struck through, and can be restored. `item` is a single-item response, the only
+ * kind that carries the steps; a list row has `steps: null`, which reads as none.
  */
 export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const add = useAddStep(heapRef, item.key);
@@ -19,7 +21,9 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const [shown, setShown] = useState<ReadonlySet<number>>(new Set());
   const canAdd = item.allowed_actions.includes("add_step");
 
-  if (item.steps.length === 0 && !canAdd) return null;
+  const steps = item.steps ?? [];
+
+  if (steps.length === 0 && !canAdd) return null;
 
   const toggleContext = (number: number) =>
     setShown((current) => {
@@ -36,9 +40,9 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       <h3 className="text-xs font-medium text-ink-soft">
         {progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}
       </h3>
-      {item.steps.length > 0 && (
+      {steps.length > 0 && (
         <ul className="flex flex-col">
-          {item.steps.map((step) => (
+          {steps.map((step) => (
             <StepRow
               key={step.id}
               step={step}
@@ -49,7 +53,16 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
           ))}
         </ul>
       )}
-      {canAdd && <AddStep onAdd={(title) => add.mutate({ title })} />}
+      {canAdd && (
+        <AddStep
+          onAdd={(title) =>
+            add.mutateAsync({ title }).then(
+              () => true,
+              () => false,
+            )
+          }
+        />
+      )}
       {failed?.error && (
         <p role="alert" className="text-sm text-overdue-ink">
           {itemProblem(failed.error)}
@@ -210,15 +223,18 @@ function StepRow({
 /**
  * "Add a step", which opens a one-line field in place. Enter adds the step and keeps the field for the next one; leaving
  * the field with text adds it too and closes the field; leaving it empty, or Escape, closes it without adding, and
- * Escape puts the focus back on the button.
+ * Escape puts the focus back on the button. The typed title stays until the server has taken the step, so a refused
+ * add loses nothing: the text is still in the field (or comes back when the field is opened again).
  */
-function AddStep({ onAdd }: { onAdd: (title: string) => void }) {
+function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
   // Escape closes the field, and the blur that may follow it must not add what was typed.
   const cancelled = useRef(false);
   const returnFocus = useRef(false);
+  // Titles sent and not answered yet, so pressing Enter again doesn't add the same one twice.
+  const inFlight = useRef(new Set<string>());
 
   useEffect(() => {
     if (!adding && returnFocus.current) {
@@ -245,8 +261,13 @@ function AddStep({ onAdd }: { onAdd: (title: string) => void }) {
 
   const takeDraft = () => {
     const title = draft.trim();
-    if (title !== "") onAdd(title);
-    setDraft("");
+    if (title === "" || inFlight.current.has(title)) return;
+    inFlight.current.add(title);
+    void onAdd(title).then((added) => {
+      inFlight.current.delete(title);
+      // Whatever has been typed since the add started stays.
+      if (added) setDraft((current) => (current.trim() === title ? "" : current));
+    });
   };
 
   return (

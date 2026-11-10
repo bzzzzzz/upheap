@@ -7,6 +7,7 @@ use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::{TagDto, TagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
+use domain::step::StepNumber;
 use uuid::Uuid;
 
 /// A heap as the user named it: `team/heap`, or a heap slug alone.
@@ -201,7 +202,8 @@ impl StepName {
         let malformed = || LookupError::MalformedStep { name: raw.to_owned() };
         let tail_start = raw.rfind('/').map_or(0, |slash| slash + 1);
         let (key, number) = raw[tail_start..].rsplit_once('.').ok_or_else(malformed)?;
-        let number = parse_step_number(number)
+        let number = StepNumber::parse(number)
+            .map(StepNumber::get)
             .filter(|_| !key.contains('.'))
             .ok_or_else(malformed)?;
         let item_typed = format!("{}{key}", &raw[..tail_start]);
@@ -212,14 +214,6 @@ impl StepName {
             number,
         })
     }
-}
-
-/// A step number written in digits: positive, without a sign or a leading zero.
-pub fn parse_step_number(raw: &str) -> Option<u32> {
-    if raw.starts_with('0') || raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    raw.parse().ok()
 }
 
 impl DueWhen {

@@ -68,6 +68,25 @@ pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<I
     Ok(Some(item))
 }
 
+/// The item `id` with its tags and values, like [`find_item`], read with a locking read (`FOR SHARE` on MySQL and
+/// Postgres), which sees the latest committed row rather than the transaction's snapshot. A write that depends on
+/// the item's state (closed or open) calls it after [`crate::heaps::lock_heap`], so on MySQL (REPEATABLE READ) it
+/// sees what committed while it waited for the lock. SQLite has no row locks and needs none (see `lock_heap`).
+pub async fn find_item_locking(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
+    let row = items::Entity::find_by_id(id_to_db(id.as_uuid()))
+        .lock_shared()
+        .one(db)
+        .await?;
+    let Some(item) = row.map(to_item).transpose()? else {
+        return Ok(None);
+    };
+    let mut items = [item];
+    attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
+    let [item] = items;
+    Ok(Some(item))
+}
+
 /// The items among `ids` that belong to `heap_id`, in no particular order. IDs from other heaps, or unknown ones,
 /// are left out.
 pub async fn list_item_summaries(

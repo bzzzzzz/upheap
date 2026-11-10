@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Item, Need, NewItem, Title};
-use domain::step::{NewStep, Step, StepContext, StepNumber, StepPatch, StepPlacement, StepState};
+use domain::step::{NewStep, Step, StepContext, StepNumber, StepPatch, StepPlacement, StepProgress, StepState};
 use domain::team::Team;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User};
@@ -105,7 +105,6 @@ async fn steps_read_back_in_position_order_as_written() -> Result<()> {
     store::steps::insert_step(&db, &second).await?;
     store::steps::insert_step(&db, &step(item_id, 1, 0, "Inventory the certs")?).await?;
     let listed = store::steps::list_steps(&db, item_id).await?;
-    let by_item = store::steps::list_steps_for_items(&db, &[item_id, ItemId::from_uuid(Uuid::now_v7())]).await?;
 
     // Assert
     expect_that!(
@@ -113,8 +112,32 @@ async fn steps_read_back_in_position_order_as_written() -> Result<()> {
         elements_are![eq(&1), eq(&2)]
     );
     expect_that!(listed[1], eq(&second));
-    expect_that!(by_item.get(&item_id), some(eq(&listed)));
-    expect_that!(by_item, len(eq(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn progress_counts_ticked_of_open_and_ticked_steps_per_item() -> Result<()> {
+    // Arrange
+    let (db, item_id) = item_in_new_database().await?;
+    for (number, state) in [
+        (1, StepState::Ticked),
+        (2, StepState::Open),
+        (3, StepState::Ticked),
+        (4, StepState::Dropped),
+    ] {
+        let mut row = step(item_id, number, number - 1, "A step")?;
+        row.state = state;
+        store::steps::insert_step(&db, &row).await?;
+    }
+    let other = ItemId::from_uuid(Uuid::now_v7());
+
+    // Act
+    let progress = store::steps::count_step_progress(&db, &[item_id, other]).await?;
+
+    // Assert
+    expect_that!(progress.get(&item_id), some(eq(&StepProgress { ticked: 2, total: 3 })));
+    expect_that!(progress, len(eq(1)));
     Ok(())
 }
 

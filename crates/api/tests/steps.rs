@@ -599,7 +599,7 @@ async fn a_state_the_server_does_not_know_and_a_field_it_does_not_have_are_refus
 
 #[gtest]
 #[tokio::test]
-async fn the_lists_carry_each_tasks_steps_and_progress() -> Result<()> {
+async fn the_lists_carry_each_tasks_progress_but_not_its_steps() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = task().await?;
     add(&app, &session, &heap, &key, json!({ "title": "One" })).await?;
@@ -640,10 +640,11 @@ async fn the_lists_carry_each_tasks_steps_and_progress() -> Result<()> {
         .context("note not listed")?;
 
     // Assert
-    expect_that!(numbers(listed_task), elements_are![eq(&1)]);
+    expect_that!(listed_task["steps"], eq(&Value::Null));
     expect_that!(listed_task["step_progress"], eq(&json!({ "ticked": 1, "total": 1 })));
     expect_that!(actions(listed_task), contains(eq(&"add_step")));
-    expect_that!(listed_note["steps"], eq(&json!([])));
+    expect_that!(listed_note["steps"], eq(&Value::Null));
+    expect_that!(listed_note["step_progress"], eq(&Value::Null));
     expect_that!(actions(listed_note), not(contains(eq(&"add_step"))));
 
     // Act: close the task and read the closed list.
@@ -665,13 +666,19 @@ async fn the_lists_carry_each_tasks_steps_and_progress() -> Result<()> {
         .await?;
 
     // Assert
-    expect_that!(closed.body["items"][0]["steps"][0]["state"], eq(&json!("ticked")));
+    expect_that!(closed.body["items"][0]["steps"], eq(&Value::Null));
     expect_that!(
         closed.body["items"][0]["step_progress"],
         eq(&json!({ "ticked": 1, "total": 1 }))
     );
-    expect_that!(closed.body["items"][0]["steps"][0]["allowed_actions"], eq(&json!([])));
-    expect_that!(step_version(&closed.body["items"][0], 1), eq(&json!(2)));
+
+    // Act: the item itself carries the steps, read-only now.
+    let item = get(&app, &session, &heap, &key).await?;
+
+    // Assert
+    expect_that!(item["steps"][0]["state"], eq(&json!("ticked")));
+    expect_that!(item["steps"][0]["allowed_actions"], eq(&json!([])));
+    expect_that!(step_version(&item, 1), eq(&json!(2)));
     Ok(())
 }
 

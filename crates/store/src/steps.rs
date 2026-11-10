@@ -4,11 +4,11 @@
 use std::collections::HashMap;
 
 use domain::item::Title;
-use domain::step::{Step, StepContext, StepNumber, StepState};
+use domain::step::{Step, StepContext, StepNumber, StepProgress, StepState};
 use domain::{ItemId, StepId, Version};
 use sea_orm::{
     ActiveValue::Set,
-    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder,
+    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
     sea_query::{Expr, ExprTrait},
 };
 
@@ -55,28 +55,83 @@ pub async fn list_steps(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Ve
     rows.into_iter().map(to_step).collect()
 }
 
-/// The steps of each of `item_ids` in position order, in one query per [`IN_LIST_CHUNK`] items. Items with no
-/// steps are left out. Size assumption: a task has at most [`domain::step::MAX_STEPS`] steps, so a page of items
-/// reads at most that many rows each.
-pub async fn list_steps_for_items(
+/// The steps of `item_id` in position order, read with a locking read (`FOR SHARE` on MySQL and Postgres), which
+/// sees the latest committed rows rather than the transaction's snapshot. A step write calls it after
+/// [`crate::heaps::lock_heap`], so on MySQL (REPEATABLE READ) it doesn't work from the snapshot fixed by an earlier
+/// plain read: two racing adds then can't pick the same number, and the cap of
+/// [`domain::step::MAX_STEPS`] holds. SQLite has no row locks and needs none (see `lock_heap`).
+pub async fn list_steps_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Vec<Step>, StoreError> {
+    let rows = item_steps::Entity::find()
+        .filter(item_steps::Column::ItemId.eq(id_to_db(item_id.as_uuid())))
+        .order_by_asc(item_steps::Column::Position)
+        .order_by_asc(item_steps::Column::Number)
+        .lock_shared()
+        .all(db)
+        .await?;
+    rows.into_iter().map(to_step).collect()
+}
+
+/// The progress of each of `item_ids`, counted in one grouped query per [`IN_LIST_CHUNK`] items, without loading
+/// the steps. Items with no open or ticked step are left out.
+pub async fn count_step_progress(
     db: &impl ConnectionTrait,
     item_ids: &[ItemId],
-) -> Result<HashMap<ItemId, Vec<Step>>, StoreError> {
+) -> Result<HashMap<ItemId, StepProgress>, StoreError> {
     let ids: Vec<String> = item_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
-    let mut steps: HashMap<ItemId, Vec<Step>> = HashMap::new();
+    let mut counts: HashMap<ItemId, (usize, usize)> = HashMap::new();
     for chunk in ids.chunks(IN_LIST_CHUNK) {
         let rows = item_steps::Entity::find()
+            .select_only()
+            .column_as(item_steps::Column::ItemId, "group_key")
+            .column_as(item_steps::Column::State, "state")
+            .column_as(item_steps::Column::Id.count(), "count")
             .filter(item_steps::Column::ItemId.is_in(chunk.iter().map(String::as_str)))
-            .order_by_asc(item_steps::Column::Position)
-            .order_by_asc(item_steps::Column::Number)
+            .filter(item_steps::Column::State.ne(StepState::Dropped.code()))
+            .group_by(item_steps::Column::ItemId)
+            .group_by(item_steps::Column::State)
+            .into_model::<StateCount>()
             .all(db)
             .await?;
         for row in rows {
-            let step = to_step(row)?;
-            steps.entry(step.item_id).or_default().push(step);
+            let read = RowReader {
+                table: TABLE,
+                id: &row.group_key,
+            };
+            let state = StepState::from_code(&row.state)
+                .ok_or_else(|| read.corrupt(format!("unknown state {:?}", row.state)))?;
+            let count = usize::try_from(row.count).unwrap_or(usize::MAX);
+            let entry = counts.entry(ItemId::from_uuid(read.uuid(&row.group_key)?)).or_default();
+            entry.1 = entry.1.saturating_add(count);
+            if state == StepState::Ticked {
+                entry.0 = entry.0.saturating_add(count);
+            }
         }
     }
-    Ok(steps)
+    Ok(counts
+        .into_iter()
+        .filter_map(|(id, (ticked, total))| StepProgress::from_counts(ticked, total).map(|progress| (id, progress)))
+        .collect())
+}
+
+/// One group of [`count_step_progress`]'s query: an item, a step state and how many of its steps are in it.
+struct StateCount {
+    group_key: String,
+    state: String,
+    count: i64,
+}
+
+impl sea_orm::FromQueryResult for StateCount {
+    fn from_query_result(row: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
+        // As in `GroupCount`: the local build's proxy types a small count as a 32-bit integer.
+        let count = row
+            .try_get::<i64>(pre, "count")
+            .or_else(|_| row.try_get::<i32>(pre, "count").map(i64::from))?;
+        Ok(Self {
+            group_key: row.try_get(pre, "group_key")?,
+            state: row.try_get(pre, "state")?,
+            count,
+        })
+    }
 }
 
 /// Writes `step` if the stored row still has version `expected`, and returns it with its new version.

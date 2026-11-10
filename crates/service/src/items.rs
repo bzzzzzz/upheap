@@ -12,7 +12,7 @@ use domain::permission::{
     ItemAction, Permission, StepAction, allowed_item_actions, allowed_stage_choices, allowed_step_actions,
 };
 use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
-use domain::step::Step;
+use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
@@ -56,8 +56,12 @@ pub struct ItemView {
     pub allowed_actions: Vec<ItemAction>,
     /// The stages the caller may set on it now, in table order (see [`domain::permission::allowed_stage_choices`]).
     pub stage_choices: Vec<Stage>,
-    /// A task's steps in order; empty for a note.
-    pub steps: Vec<Step>,
+    /// A task's steps in order (empty for a note), or `None` in a list, which carries only `step_progress`: a
+    /// context can be long, and a list row doesn't show it.
+    pub steps: Option<Vec<Step>>,
+    /// Ticked of open and ticked steps; `None` when there are none. Set from `steps` where they are loaded, and
+    /// counted in storage where they aren't.
+    pub step_progress: Option<StepProgress>,
     /// What the caller may do with each of the steps, the same for all of them (see
     /// [`domain::permission::allowed_step_actions`]).
     pub step_actions: Vec<StepAction>,
@@ -244,8 +248,9 @@ impl Services {
                     closed_by: None,
                     allowed_actions,
                     stage_choices,
-                    // Loaded below for the entries that are listed, not for the ones filtered out.
-                    steps: Vec::new(),
+                    // Lists carry the progress only, counted below for the entries that are listed.
+                    steps: None,
+                    step_progress: None,
                     step_actions,
                 },
                 position: 0,
@@ -263,16 +268,16 @@ impl Services {
             }
         }
 
-        let mut steps = {
+        let mut step_progress = {
             let listed: Vec<ItemId> = [&pinned, &ranked, &blocked]
                 .into_iter()
                 .flatten()
                 .map(|entry| entry.view.item.id)
                 .collect();
-            store::steps::list_steps_for_items(&self.db, &listed).await?
+            store::steps::count_step_progress(&self.db, &listed).await?
         };
         for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
-            entry.view.steps = steps.remove(&entry.view.item.id).unwrap_or_default();
+            entry.view.step_progress = step_progress.remove(&entry.view.item.id);
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -364,7 +369,7 @@ impl Services {
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
         let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
-        let mut steps = store::steps::list_steps_for_items(&self.db, &item_ids).await?;
+        let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
         let items = items
@@ -373,7 +378,7 @@ impl Services {
                 let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
                 let stage_choices = allowed_stage_choices(&item, &access.heap, role);
                 let step_actions = allowed_step_actions(&item, &access.heap, role);
-                let steps = steps.remove(&item.id).unwrap_or_default();
+                let step_progress = step_progress.remove(&item.id);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
                 let created_by = pick_user(&users, item.created_by);
@@ -388,7 +393,8 @@ impl Services {
                     closed_by,
                     allowed_actions,
                     stage_choices,
-                    steps,
+                    steps: None,
+                    step_progress,
                     step_actions,
                 }
             })
@@ -453,7 +459,8 @@ impl Services {
             closed_by: None,
             allowed_actions,
             stage_choices,
-            steps: Vec::new(),
+            steps: Some(Vec::new()),
+            step_progress: None,
             step_actions,
         })
     }
@@ -590,7 +597,8 @@ pub(crate) async fn build_item_view(
         closed_by,
         allowed_actions,
         stage_choices,
-        steps,
+        step_progress: progress(&steps),
+        steps: Some(steps),
         step_actions,
     })
 }

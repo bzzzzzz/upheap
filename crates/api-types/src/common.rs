@@ -554,9 +554,11 @@ pub struct ItemDto {
     /// Which part of the closed list it belongs in. `null` when the item is open. Clients group consecutive items
     /// with the same group.
     pub closed_group: Option<ClosedGroupDto>,
-    /// A task's steps in order, dropped ones included; empty for a note.
-    pub steps: Vec<StepDto>,
-    /// Ticked of open and ticked steps. `null` when the item has no open or ticked step.
+    /// A task's steps in order, dropped ones included; empty for a note. `null` in the ranked list and the closed
+    /// list, which carry only `step_progress`: read the item for its steps.
+    pub steps: Option<Vec<StepDto>>,
+    /// Ticked of open and ticked steps. `null` when the item has no open or ticked step. On every response,
+    /// lists included.
     pub step_progress: Option<StepProgressDto>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
@@ -756,11 +758,9 @@ mod tests {
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
         expect_that!(ranked.item.kind, eq(KindDto::Unknown));
         expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
-        expect_that!(ranked.item.steps[0].state, eq(StepStateDto::Unknown));
-        expect_that!(
-            ranked.item.steps[0].allowed_actions,
-            elements_are![eq(&StepActionDto::Edit)]
-        );
+        let steps = ranked.item.steps.or_fail()?;
+        expect_that!(steps[0].state, eq(StepStateDto::Unknown));
+        expect_that!(steps[0].allowed_actions, elements_are![eq(&StepActionDto::Edit)]);
         Ok(())
     }
 
