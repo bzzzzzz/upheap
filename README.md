@@ -118,6 +118,8 @@ cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-we
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
 cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
+cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
+cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- auth logout
 ```

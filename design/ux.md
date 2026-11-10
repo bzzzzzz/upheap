@@ -193,8 +193,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    server's contributors ("Due this week · small effort"). On a wide screen the effort and impact sizes sit at the
    right edge. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
    line up), and an item with context or defined has a page or a clipboard icon after it. The row shows no words for
-   them; a screen reader hears them after the title ("Rotate the certs, task, defined"). The static build never
-   shows a stage icon.
+   them; a screen reader hears them after the title ("Rotate the certs, task, defined"). A task with steps shows how
+   many are ticked, small and muted, after the stage icon (`2/5`; the static build, which shows no stage icon, has it
+   in the same place), and a screen reader hears ", 2 of 5 steps ticked" after the title. Dropped steps don't
+   count, and a task without an open or ticked step shows nothing. The static build never shows a stage icon.
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
@@ -232,7 +234,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    alone when the item is closed or in the static build), then the state (the likeliest next state as the main
    button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
    bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
-   line), then "Why it's #3" from the contributors, then the need's
+   line), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
    four steps, effort and impact as S M L XL buttons, due, tags, parameters, the description and the history. On a
    phone due, tags, parameters and the description are rows of label and value, each opening a sheet; the
    description saves as its sheet closes.
@@ -254,6 +256,16 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    else has Copy link.
 9. "Why it's #3" shows the contributors with their `share_percent` as bars, and nothing more.
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), next to a History link.
+11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
+    heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
+    checkbox that ticks and unticks it, the title edited in place (Enter or leaving the field saves, Escape or a
+    blank title puts it back), a chevron that shows its context (a plain-text field, saved on leaving it, closed to
+    begin with) and ⋯ with Drop, or Restore on a dropped step. A dropped step is struck through and muted, with a
+    dash in place of its checkbox, and stays in the list. "Add a step" opens a one-line field in place: Enter adds
+    the step and keeps the field for the next, leaving it with text adds the step and closes it, Escape closes it
+    without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
+    it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
+    steps and the count to read, with no checkbox to change, no ⋯ and no Add.
 
 ## Adding an item
 
