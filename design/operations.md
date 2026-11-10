@@ -37,9 +37,8 @@ every setting in the table above, so a manual change to one of them is undone on
 workflow instead. Settings the workflow doesn't list keep their value on the service, and so does the public
 (`allUsers`) binding, which isn't part of a revision.
 
-The workflow signs in through Workload Identity Federation
-([decisions.md](decisions.md#21-deploys-sign-in-through-workload-identity-federation)): GitHub's OIDC token is
-exchanged for the `github-deploy` service account, so no key is stored anywhere. Only `deploy.yml`, run from `main`
+The workflow signs in through Workload Identity Federation, not a service-account key in a repository secret:
+GitHub's OIDC token is exchanged for the `github-deploy` service account, so there is no key to leak or rotate. Only `deploy.yml`, run from `main`
 of this repository, can sign in; the repository is matched by its numeric id, which a renamed or recreated
 repository wouldn't share. The deploy job's actions are pinned to commits, since they run while it holds the
 credential.

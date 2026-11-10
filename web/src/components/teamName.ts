@@ -4,9 +4,9 @@ import { soleTeam, useMe } from "../api/queries";
 type NamedTeam = { name: string; personal: boolean };
 
 /**
- * Whether the team shows as "<display name>'s team" rather than its stored name (design/decisions.md, 31): a personal
- * team among others, whose stored name is its owner's and reads as a person. Alone, as in the local build, there is no
- * list of teams to tell it from, so it keeps its own name ("My heaps").
+ * Whether the team shows as "<display name>'s team" rather than its stored name (design/ux.md, Teams and Team): a
+ * personal team among others, whose stored name is its owner's and reads as a person. Alone, as in the local build,
+ * there is no list of teams to tell it from, so it keeps its own name ("My heaps").
  */
 export function namedForOwner(team: NamedTeam, me: Me): boolean {
   return team.personal && soleTeam(me) === undefined;

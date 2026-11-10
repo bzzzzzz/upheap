@@ -1,9 +1,67 @@
-# Getting in: design
+# Getting in
 
 How a person gets an account, gets into a team, and keeps being able to sign in: invite links, password change and
-password reset. Designed by the steps of the maintainer's design method. Scale: a feature area, so Value is short
-and [product.md](../product.md), [ux.md](../ux.md) and [architecture.md](../architecture.md) are given. Step
-agreed: 6. The design is agreed, its core commitments are in product.md, and stage 1 is next.
+password reset. Today a teammate gets in only if registration is open, and a forgotten password is a lost account.
+It serves Product Invite links, Teams §6, and Accounts and sign-in §2 and §5 to §7, where Product is
+[product.md](../product.md).
+
+## Progress
+
+Two stages, a pull request per piece. Nothing is built yet. Rules and scenarios are numbered as in Behaviours,
+Interface entries as in its inventory, and Kept as in the list under Golden path.
+
+### Stage 1: the golden path, end to end
+
+An admin makes a link, a newcomer creates an account through it on a closed server and lands in the team, a
+second person with an account joins through the same link, and the link stops after a week. Five pieces, in
+this order.
+
+- [ ] 1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
+   readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
+   are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
+   hides the team from an outsider, with rows in the access-control table test; a personal team has none;
+   scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Product Invite links §1 to §3, the making
+   and revoking half of §6, and Kept 1 and 2.
+- [ ] 2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
+   state (rule 5). A signed-in user joins as a member (rules 6 and 7), a person removed since the link was made is
+   refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
+   are tests; a direct add still works as before. Product Invite links §5, the signed-in half of §4, the rest of
+   §6, Teams §6, and Kept 3 and 5 to 7.
+- [ ] 3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
+   (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
+   on a closed server is still refused. Product Invite links §4 (the rest of it), Accounts §2, and Kept 4 and 8.
+- [ ] 4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
+   Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
+   the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
+   it.
+- [ ] 5. **The invite page, and the path as a test.** Signed out with Create account and Sign in, signed in with the
+   confirm, and the page for a link that can't be used (Interface 2 to 4), with the landing rule. Done when: a
+   Playwright golden path runs the whole of stage 1 against a server with registration closed, at three widths:
+   an admin makes a link, a newcomer creates an account and lands in the heap, a second user signs in and joins,
+   and a revoked link says so.
+
+Deployment needs no piece: production already runs with registration closed, and the path is what makes that
+usable. Each pull request ticks its piece here.
+
+### Stage 2: the rest of the first set
+
+- [ ] 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
+- [ ] 2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
+   without History; Product Accounts §5; Kept 9; rules 13 to 15; scenario 7).
+- [ ] 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
+   (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10).
+- [ ] 4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §7; Kept 12; rules 21
+   and 22).
+
+The pull request that builds the last piece dissolves this doc: the flows into ux.md, the concepts and rules into
+architecture.md, a choice into decisions.md only if it passes the bar there, the ideas worth keeping into the
+tracker, and the file goes.
+
+## Design
+
+Designed by the steps of the maintainer's design method, all six agreed. Scale: a feature area, so Value is short
+and [product.md](../product.md), [ux.md](../ux.md) and [architecture.md](../architecture.md) are given. The
+sections keep the method's names and numbers; its sixth, the stages, is Progress above.
 
 ## Constraints
 
@@ -100,7 +158,7 @@ The operator acts from outside the app and has no account because of it.
 
 ### Out
 
-Each of these is in Later, not in the commitments.
+Each of these is in Ideas, not in the commitments.
 
 1. Email of any kind: inviting by address, reset by mail, verifying an address, changing one.
 2. Links for one person or one use, and links into a single heap.
@@ -240,7 +298,7 @@ One per step that asks something new of the product. Steps that use what's built
 ### Not core
 
 1. Getting rid of an account that came in through a link and shouldn't exist. The admin removes the person from
-   the team; the account stays, with its empty personal team. Deactivating one is in Later.
+   the team; the account stays, with its empty personal team. Deactivating one is in Ideas.
 2. Telling a person they were added directly, or asking them first.
 3. Turning down an invitation. Not opening the link is the answer.
 4. The first account on a closed server (Out §4).
@@ -410,7 +468,7 @@ differ in necessity.
 | 11 | Sign-in page: a contact line the operator sets, for "who runs this server" | P3.1 | 1 | 2 | |
 | 12 | Command-line client: say why a sign-in ended after a password change | P1.3 | 1 | 2 | |
 
-**The first set** is entries 1 to 9. Entries 10 to 12 are in Later: today's "registration is closed" error, a
+**The first set** is entries 1 to 9. Entries 10 to 12 are in Ideas: today's "registration is closed" error, a
 general "ask whoever runs this server", and the client's existing "sign in again" do the job.
 
 **Layout by frequency.** Nothing here is used several times a session, so nothing is added to the list, the
@@ -554,57 +612,6 @@ configuration, and needs the database and the server's address from it.
 Exit: 0 made; 2 no user given; 3 no such user; 5 the database can't be reached.
 ```
 
-## 6. Stages
-
-### Stage 1: the golden path, end to end
-
-An admin makes a link, a newcomer creates an account through it on a closed server and lands in the team, a
-second person with an account joins through the same link, and the link stops after a week. Five pieces, one pull
-request each, in this order. Product is product.md; rules and scenarios are numbered as in Behaviours.
-
-1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
-   readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
-   are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
-   hides the team from an outsider, with rows in the access-control table test; a personal team has none;
-   scenario 2 is a test; the suites pass on SQLite, MySQL and Postgres. Product Invite links §1 to §3, the making
-   and revoking half of §6, and Kept 1 and 2.
-2. **Opening a link and joining.** Anyone holding a link reads the team's name, the maker's name and the link's
-   state (rule 5). A signed-in user joins as a member (rules 6 and 7), a person removed since the link was made is
-   refused (rule 8), and the join is in the audit log naming the link (rule 20). Done when: scenarios 3, 4 and 6
-   are tests; a direct add still works as before. Product Invite links §5, the signed-in half of §4, the rest of
-   §6, Teams §6, and Kept 3 and 5 to 7.
-3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
-   (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
-   on a closed server is still refused. Product Invite links §4 (the rest of it), Accounts §2, and Kept 4 and 8.
-4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
-   Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
-   the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
-   it.
-5. **The invite page, and the path as a test.** Signed out with Create account and Sign in, signed in with the
-   confirm, and the page for a link that can't be used (Interface 2 to 4), with the landing rule. Done when: a
-   Playwright golden path runs the whole of stage 1 against a server with registration closed, at three widths:
-   an admin makes a link, a newcomer creates an account and lands in the heap, a second user signs in and joins,
-   and a revoked link says so.
-
-Deployment needs no piece: production already runs with registration closed, and the path is what makes that
-usable. Each pull request updates the Getting in row in progress.md.
-
-### Stage 2: the rest of the first set
-
-1. **Past links and each link's history** on the Team page (the rest of Interface 1).
-2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
-   without History; Product Accounts §5; Kept 9; rules 13 to 15; scenario 7).
-3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
-   (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10).
-4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §7; Kept 12; rules 21
-   and 22).
-5. **This doc dissolves:** the flows into ux.md, the concepts and rules into architecture.md, the choices into
-   decisions.md, and the file goes.
-
-### Later
-
-The Later list at the end of this doc. Nothing there is a commitment.
-
 ## Parked
 
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
@@ -614,9 +621,9 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - The shape of the invite and reset addresses, under architecture.md's rule for handles in URLs: for the
   implementation.
 
-## Later
+## Ideas
 
-Ideas outside the scope. Not commitments.
+Outside the scope. Not commitments.
 
 - Optional SMTP: reset and invitations by email, with address verification.
 - Changing an account's email address.

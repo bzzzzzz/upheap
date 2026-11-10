@@ -172,7 +172,9 @@ tabs.
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
 The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". From 8 unarchived
 heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
-opened in this browser, not the one on screen, as chips on a phone. Search gives a flat list with the team and an
+opened in this browser, not the one on screen, as chips on a phone. Recent and the folds are kept in localStorage,
+since a "last opened" on the server would cost a write on every heap visit and wouldn't work in the local build;
+they don't follow the user to another device. Search gives a flat list with the team and an
 "archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
 clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
 it. On a tablet it is a popover beside the rail.
@@ -199,8 +201,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `x` marks
    done; `N` and `/` stay.
 5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
-6. Saved views are hidden in the web app for now; the API keeps them, so a client can bring them back
-   ([decisions.md](decisions.md#27-saved-views-are-hidden-in-the-web-app-until-they-fit-the-filters-panel)).
+6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
+   Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they
+   return, "Save as view…" goes in the Filters panel.
 7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in), then Narrow down (tags, need,
    effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
@@ -296,8 +299,9 @@ they name. After sign-up, the empty heap offers the next two steps, Add your fir
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.
 
 Among other teams, the personal team shows everywhere as "<name>'s team", by the user's display name whatever it is
-stored as, so it has no Rename. Alone, as in the local build, it keeps its own name ("My heaps")
-([decisions.md](decisions.md), 31).
+stored as, so it has no Rename. Alone, as in the local build, it keeps its own name ("My heaps"). The label is the
+web app's: the stored name is unchanged, because storing "\<name\>'s team" would need a migration and wouldn't
+follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
 Activity) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
