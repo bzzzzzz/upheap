@@ -742,7 +742,7 @@ function PhoneMemberRow({
 }) {
   const setRole = useSetMemberRole(team.slug);
   const [open, setOpen] = useState(false);
-  const [asked, setConfirming] = useState<Asking["kind"] | null>(null);
+  const [asked, setAsked] = useState<Asking["kind"] | null>(null);
   const [history, setHistory] = useState(false);
   const questionId = useId();
   const can = (action: TeamMember["allowed_actions"][number]) => member.allowed_actions.includes(action);
@@ -757,7 +757,7 @@ function PhoneMemberRow({
   const name = memberName(member, you);
   const close = () => {
     setOpen(false);
-    setConfirming(null);
+    setAsked(null);
     setHistory(false);
     removing.reset();
     setRole.reset();
@@ -812,7 +812,7 @@ function PhoneMemberRow({
                 // The confirm replaced the row that asked; focus goes back to it.
                 if (confirming === "remove") returnToRemoveRow();
                 else returnToDemoteRow();
-                setConfirming(null);
+                setAsked(null);
                 removing.reset();
                 setRole.reset();
               }}
@@ -834,7 +834,7 @@ function PhoneMemberRow({
                 disabled={setRole.isPending}
                 onClick={() =>
                   asksFirst
-                    ? setConfirming("demote")
+                    ? setAsked("demote")
                     : setRole.mutate({ username: member.username, role: roleChange }, { onSuccess: close })
                 }
                 className={sheetRowClass}
@@ -859,7 +859,7 @@ function PhoneMemberRow({
               <button
                 ref={removeRow}
                 type="button"
-                onClick={() => setConfirming("remove")}
+                onClick={() => setAsked("remove")}
                 className={`${sheetRowClass} rounded-t-none border-t border-line text-overdue-ink`}
               >
                 Remove from {team.name}…
