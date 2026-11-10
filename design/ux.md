@@ -262,7 +262,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
 8. A link sign beside the title copies the item's short link, and the key (`k3x9a`) shows in the header. Nothing
    else has Copy link.
-9. "Why it's #3" shows the contributors with their `share_percent` as bars, and nothing more.
+9. "Why it's #3" shows the contributors with their `share_percent` as bars. Below them, "Held back by" lists what
+   keeps the item from ranking higher: a low need, no due date, unset sizes, in that order and without bars, each
+   taking an editor to its field (a link on a wide screen; a row on a phone, where the due one opens the Due
+   sheet). A reader sees the same lines as text. The item shown first in its list has none, nor does a blocker
+   ranked by what it blocks, nor any item while the list is sorted by something other than priority. The list row
+   doesn't show them.
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), next to a History link.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a

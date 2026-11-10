@@ -11,7 +11,7 @@ use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, W
 use domain::permission::{
     ItemAction, Permission, StepAction, allowed_item_actions, allowed_stage_choices, allowed_step_actions,
 };
-use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
+use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, rank};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -94,6 +94,7 @@ pub struct RankedEntry {
     /// 1-based position within its group, in the order the group is listed.
     pub position: u32,
     pub contributors: Vec<Contributor>,
+    pub held_back_by: Vec<HeldBack>,
 }
 
 /// The heap's non-closed items, ranked at `as_of`, then filtered, grouped and sorted by a [`ListView`].
@@ -255,6 +256,7 @@ impl Services {
                 },
                 position: 0,
                 contributors: entry.contributors,
+                held_back_by: entry.held_back_by,
             });
         }
         for (group, entries) in [
@@ -265,6 +267,17 @@ impl Services {
             view.sort(group, entries, |entry| &entry.view.item, &parameters);
             for (index, entry) in entries.iter_mut().enumerate() {
                 entry.position = u32::try_from(index + 1).unwrap_or(u32::MAX);
+            }
+            // The item shown first is "Why it's #1", and nothing holds a first item back. Under another sort, such as
+            // by due date, the fields don't move an item in the list, so none holds it back. The domain doesn't know
+            // the list's filters, groups and sort, so this is where both are known.
+            let cleared = if view.in_priority_order(group) {
+                1
+            } else {
+                entries.len()
+            };
+            for entry in entries.iter_mut().take(cleared) {
+                entry.held_back_by.clear();
             }
         }
 

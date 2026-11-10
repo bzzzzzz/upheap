@@ -4,8 +4,8 @@
 //! that crate doesn't depend on, or the request's time and timezone.
 
 use api_types::common::{
-    ContributorDto, DueDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto, ItemTagDto,
-    RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    ContributorDto, DueDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto,
+    ItemTagDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, group_closed};
@@ -85,6 +85,7 @@ pub(crate) fn to_ranked_dto(entry: RankedEntry, as_of: Timestamp, tz: &TimeZone)
     RankedItemDto {
         position: entry.position,
         contributors: entry.contributors.into_iter().map(ContributorDto::from).collect(),
+        held_back_by: entry.held_back_by.into_iter().map(HeldBackDto::from).collect(),
         item: to_item_dto(entry.view, as_of, tz),
     }
 }
