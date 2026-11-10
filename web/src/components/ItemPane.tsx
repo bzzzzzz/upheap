@@ -250,12 +250,37 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const parameters = useParameters(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const descriptionId = useId();
+  // The fields a "Held back by" entry takes the user to, and the phone's open sheet, which the Due entry opens.
+  const needId = useId();
+  const effortId = useId();
+  const impactId = useId();
+  const dueId = useId();
+  const [openSheet, setOpenSheet] = useState<string | null>(null);
+  // Set when the Due sheet was opened from "Held back by", whose row goes away once the due date is set.
+  const dueFromHeldBack = useRef(false);
+  const setSheet = (field: string | null) => {
+    setOpenSheet(field);
+    if (field === null && dueFromHeldBack.current) {
+      dueFromHeldBack.current = false;
+      // After the sheet's own focus restore, which would land on the row that is gone: two frames on.
+      requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(dueId)?.focus()));
+    }
+  };
 
   const closed = isClosed(item.state);
   const canEdit = item.allowed_actions.includes("edit") && !closed;
   const canReopen = item.allowed_actions.includes("reopen");
   const canChangeState = item.allowed_actions.includes("change_state") || canReopen;
   const save = (patch: ItemPatch) => update.mutate({ item, patch });
+
+  const fix = (gap: HeldBackGap) => {
+    if (gap === "need") focusField(needId, "[data-selected]", "button");
+    else if (gap === "size") focusField(item.effort ? impactId : effortId, "button");
+    else if (phone) {
+      dueFromHeldBack.current = true;
+      setOpenSheet("due");
+    } else focusField(dueId, "button", "input");
+  };
 
   const saveText = (field: "title" | "description", text: string) => {
     if (field === "title") {
@@ -318,47 +343,66 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       <WaitsForYou heapRef={heapRef} item={item} />
 
-      {entry && entry.contributors.length > 0 && <WhyItRanks entry={entry} />}
+      {entry && (entry.contributors.length > 0 || entry.held_back_by.length > 0) && (
+        <WhyItRanks entry={entry} onFix={canEdit ? fix : undefined} phone={phone} />
+      )}
 
       <ItemSteps heapRef={heapRef} item={item} />
 
-      <NeedPicker
-        value={item.need}
-        disabled={!canEdit}
-        onChange={(need) => {
-          if (need !== item.need) save({ need });
-        }}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ChoiceButtons
-          label="Effort"
-          options={SIZE_OPTIONS}
-          value={item.effort ?? null}
+      <div id={needId} className="contents">
+        <NeedPicker
+          value={item.need}
           disabled={!canEdit}
-          onChange={(effort) => save({ effort })}
-        />
-        <ChoiceButtons
-          label="Impact"
-          options={SIZE_OPTIONS}
-          value={item.impact ?? null}
-          disabled={!canEdit}
-          onChange={(impact) => save({ impact })}
+          onChange={(need) => {
+            if (need !== item.need) save({ need });
+          }}
         />
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div id={effortId} className="contents">
+          <ChoiceButtons
+            label="Effort"
+            options={SIZE_OPTIONS}
+            value={item.effort ?? null}
+            disabled={!canEdit}
+            onChange={(effort) => save({ effort })}
+          />
+        </div>
+        <div id={impactId} className="contents">
+          <ChoiceButtons
+            label="Impact"
+            options={SIZE_OPTIONS}
+            value={item.impact ?? null}
+            disabled={!canEdit}
+            onChange={(impact) => save({ impact })}
+          />
+        </div>
+      </div>
+
       {phone ? (
-        <FieldRows heapRef={heapRef} item={item} canEdit={canEdit} save={save} saveText={saveText} />
+        <FieldRows
+          heapRef={heapRef}
+          item={item}
+          canEdit={canEdit}
+          save={save}
+          saveText={saveText}
+          open={openSheet}
+          setOpen={setSheet}
+          dueRowId={dueId}
+        />
       ) : (
         <>
-          <DuePicker
-            value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
-            current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
-            disabled={!canEdit}
-            onChange={(due) => {
-              if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
-            }}
-          />
+          <div id={dueId} className="contents">
+            <DuePicker
+              value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
+              current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
+              disabled={!canEdit}
+              onChange={(due) => {
+                if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
+              }}
+            />
+          </div>
 
           <TagPicker
             heapRef={heapRef}
@@ -449,15 +493,22 @@ function FieldRows({
   canEdit,
   save,
   saveText,
+  open,
+  setOpen,
+  dueRowId,
 }: {
   heapRef: HeapRef;
   item: Item;
   canEdit: boolean;
   save: (patch: ItemPatch) => void;
   saveText: (field: "title" | "description", text: string) => void;
+  /** Which sheet is open, kept by the caller so "Held back by" can open the Due sheet. */
+  open: string | null;
+  setOpen: (field: string | null) => void;
+  /** The id of the Due row, where focus goes when its sheet was opened from "Held back by". */
+  dueRowId: string;
 }) {
   const parameters = useParameters(heapRef);
-  const [open, setOpen] = useState<string | null>(null);
   const close = () => setOpen(null);
   const sheet = (field: string) => ({ isOpen: open === field, onClose: close, aside: item.title });
 
@@ -466,7 +517,7 @@ function FieldRows({
 
   return (
     <div className="-mt-2 flex flex-col border-t border-line/60">
-      <FieldRow label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
+      <FieldRow id={dueRowId} label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
       <FieldRow label="Tags" value={tags} disabled={!canEdit} onOpen={() => setOpen("tags")} />
       {item.parameters.map((current) => {
         const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
@@ -539,6 +590,7 @@ function FieldRows({
  * field that can't be changed is a plain row showing all of its value, as there's no sheet to read the rest in.
  */
 function FieldRow({
+  id,
   label,
   value,
   empty = "None",
@@ -546,6 +598,7 @@ function FieldRow({
   disabled,
   onOpen,
 }: {
+  id?: string;
   label: string;
   value: string | null;
   empty?: string;
@@ -568,6 +621,7 @@ function FieldRow({
   }
   return (
     <button
+      id={id}
       type="button"
       onClick={onOpen}
       className={`${rowClass} items-center outline-none focus-visible:outline-2 focus-visible:outline-accent`}
@@ -705,34 +759,115 @@ function AddedBy({ item }: { item: Item }) {
   );
 }
 
+type HeldBackGap = RankedItem["held_back_by"][number]["gap"];
+
+/** What each kind of gap offers: the link's text on a wide screen, and what its control is called. */
+const FIX_ACTIONS: Partial<Record<HeldBackGap, { link: string; name: string }>> = {
+  need: { link: "Change", name: "Change need" },
+  due: { link: "Set due", name: "Set due date" },
+  size: { link: "Set sizes", name: "Set sizes" },
+};
+
+/** Brings the first element inside `id` that matches one of the selectors into view and focuses it. */
+function focusField(id: string, ...selectors: string[]) {
+  const field = document.getElementById(id);
+  const target = selectors.reduce<HTMLElement | null>(
+    (found, selector) => found ?? field?.querySelector<HTMLElement>(selector) ?? null,
+    null,
+  );
+  if (!target) return;
+  target.scrollIntoView({ block: "nearest" });
+  target.focus({ preventScroll: true });
+}
+
 /**
- * Why the item ranks where it does (ux.md, The item §9): each contributor, with a bar for its share of the
- * item's priority.
+ * Why the item ranks where it does (ux.md, The item §9): each contributor, with a bar for its share of the item's
+ * priority, then what holds it back, each taking an editor to its field: a link on a wide screen, a row on a phone.
+ * Without `onFix` the entries are text.
  */
-function WhyItRanks({ entry }: { entry: RankedItem }) {
+function WhyItRanks({
+  entry,
+  onFix,
+  phone,
+}: {
+  entry: RankedItem;
+  onFix: ((gap: HeldBackGap) => void) | undefined;
+  phone: boolean;
+}) {
   const headingId = useId();
+  const heldBackId = useId();
+  const hasContributors = entry.contributors.length > 0;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2.5">
       <h3 id={headingId} className="text-xs font-medium text-ink-soft">
         Why it's #{entry.position}
       </h3>
-      <ul className="flex flex-col gap-2">
-        {entry.contributors.map((contributor, index) => (
-          // A factor can come up more than once, such as two parameters.
-          <li key={index} className="flex flex-col gap-1">
-            <span className="text-sm">
-              {contributor.label}
-              <span className="sr-only">, {contributor.share_percent}% of its priority</span>
-            </span>
-            <span aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-line">
-              <span
-                className="block h-full rounded-full bg-accent"
-                style={{ width: `${contributor.share_percent}%` }}
-              />
-            </span>
-          </li>
-        ))}
-      </ul>
+      {hasContributors && (
+        <ul className="flex flex-col gap-2">
+          {entry.contributors.map((contributor, index) => (
+            // A factor can come up more than once, such as two parameters.
+            <li key={index} className="flex flex-col gap-1">
+              <span className="text-sm">
+                {contributor.label}
+                <span className="sr-only">, {contributor.share_percent}% of its priority</span>
+              </span>
+              <span aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-line">
+                <span
+                  className="block h-full rounded-full bg-accent"
+                  style={{ width: `${contributor.share_percent}%` }}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {entry.held_back_by.length > 0 && (
+        <div className={hasContributors ? "mt-1 flex flex-col gap-2 border-t border-line pt-2.5" : "contents"}>
+          <h4 id={heldBackId} className="text-xs font-medium text-ink-soft">
+            Held back by
+          </h4>
+          <ul
+            aria-labelledby={heldBackId}
+            className={phone ? "flex flex-col divide-y divide-line" : "flex flex-col gap-1.5"}
+          >
+            {entry.held_back_by.map((held, index) => {
+              const action = FIX_ACTIONS[held.gap];
+              if (!onFix || !action) {
+                return (
+                  <li key={index} className={phone ? "flex min-h-11 items-center py-2 text-sm" : "text-sm"}>
+                    {held.label}
+                  </li>
+                );
+              }
+              return phone ? (
+                <li key={index}>
+                  <button
+                    type="button"
+                    aria-label={`${held.label}. ${action.name}`}
+                    onClick={() => onFix(held.gap)}
+                    className="flex min-h-11 w-full items-center gap-3 py-2 text-left text-sm outline-none focus-visible:outline-2 focus-visible:outline-accent"
+                  >
+                    <span className="min-w-0 flex-1">{held.label}</span>
+                    <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
+                  </button>
+                </li>
+              ) : (
+                <li key={index} className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 text-sm">{held.label}</span>
+                  <button
+                    type="button"
+                    aria-label={action.name}
+                    onClick={() => onFix(held.gap)}
+                    className="shrink-0 rounded-md px-1.5 py-0.5 text-sm font-medium text-accent-ink hover:bg-accent-soft pointer-coarse:min-h-11 pointer-coarse:px-3"
+                  >
+                    {action.link}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

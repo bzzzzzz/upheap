@@ -236,11 +236,16 @@ impl ListView {
     /// Sorts `group`, which is in priority order, by [`Self::sort`]. The sort is stable, so ties keep priority
     /// order. Grouped blocked items always stay in priority order (product.md, List items §3). `parameters` are the
     /// heap's parameters; a sort by a parameter that isn't among them, or is archived, keeps priority order.
+    /// Whether `group` is listed in priority order: under the priority sort, and always for blocked items.
+    pub fn in_priority_order(&self, group: Group) -> bool {
+        self.sort == SortKey::Priority || group == Group::Blocked
+    }
+
     pub fn sort<T>(&self, group: Group, entries: &mut [T], item: impl Fn(&T) -> &Item, parameters: &[Parameter]) {
-        let key = self.sort;
-        if key == SortKey::Priority || group == Group::Blocked {
+        if self.in_priority_order(group) {
             return;
         }
+        let key = self.sort;
         let parameter = key
             .parameter()
             .and_then(|id| parameters.iter().find(|p| p.id == id && !p.is_archived()));

@@ -25,7 +25,7 @@ request, and they don't depend on each other, so they can go in any order and at
    activity, so landing this first means they get checked at phone width too.
    Done when: Activity, the heap's and the team's, fits a phone without horizontal scroll, checked at the
    Playwright phone width.
-- [ ] 5. **What holds an item back.** An item's contributors say why it's where it is, not why it isn't higher
+- [x] 5. **What holds an item back.** An item's contributors say why it's where it is, not why it isn't higher
    (Product Priority §9). Name what's missing or low too: no due time, unset sizes, a low need. Work with agents
    changes the ranking only in stage 2, so this doesn't collide with stage 1.
    Done when: an item missing a due time, or with an unset size or a low need, says so beside its contributors in

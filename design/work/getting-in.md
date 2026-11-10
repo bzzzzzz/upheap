@@ -34,7 +34,7 @@ this order.
    Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
    the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
    it.
-- [ ] 5. **The invite page, and the path as a test.** Signed out with Create account and Sign in, signed in with the
+- [x] 5. **The invite page, and the path as a test.** Signed out with Create account and Sign in, signed in with the
    confirm, and the page for a link that can't be used (Interface 2 to 4), with the landing rule. Done when: a
    Playwright golden path runs the whole of stage 1 against a server with registration closed, at three widths:
    an admin makes a link, a newcomer creates an account and lands in the heap, a second user signs in and joins,

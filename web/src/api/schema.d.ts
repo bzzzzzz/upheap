@@ -1359,6 +1359,14 @@ export interface components {
              */
             parameters: components["schemas"]["Parameter"][];
         };
+        /** @description One thing keeping an item from ranking higher, which the person could change. */
+        HeldBack: {
+            gap: components["schemas"]["HeldBackGap"];
+            /** @description Ready to show, for example "No due date". */
+            label: string;
+        };
+        /** @enum {string} */
+        HeldBackGap: "need" | "due" | "size";
         /**
          * @description What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no
          *     members, no maker username or email.
@@ -1969,6 +1977,11 @@ export interface components {
         RankedItem: {
             /** @description The biggest reasons for the position, largest first. */
             contributors: components["schemas"]["Contributor"][];
+            /**
+             * @description What keeps the item from ranking higher, in a fixed order: need, due date, sizes. Empty for the top item.
+             *     Only things a person could change, and only while the heap's weight for them is above 0.
+             */
+            held_back_by: components["schemas"]["HeldBack"][];
             item: components["schemas"]["Item"];
             /**
              * Format: int32
