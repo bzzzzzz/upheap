@@ -36,8 +36,14 @@ fn to_invite_link_dto(view: InviteLinkView, as_of: Timestamp, tz: &TimeZone) -> 
         created_at: view.link.created_at.as_millis(),
         ends_at: ends_at.as_millis(),
         ends_label: describe_date(ends_at, as_of, tz),
+        created_label: describe_date(view.link.created_at, as_of, tz),
+        joined_count: view.joined_count,
         revoked_by: view.revoked_by.as_ref().map(UserRefDto::from),
         revoked_at: view.link.revocation.map(|revocation| revocation.at.as_millis()),
+        revoked_label: view
+            .link
+            .revocation
+            .map(|revocation| describe_date(revocation.at, as_of, tz)),
         version: view.link.version.get(),
         allowed_actions: view
             .allowed_actions

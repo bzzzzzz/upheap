@@ -66,9 +66,16 @@ pub struct InviteLinkDto {
     pub ends_at: i64,
     /// `ends_at` as a date in the request's timezone: "today", "tomorrow" or "16 Nov".
     pub ends_label: String,
+    /// `created_at` as a date in the request's timezone: "today", "yesterday" or "2 Nov".
+    pub created_label: String,
+    /// How many people joined the team through the link, ever. People who have since left or been removed still
+    /// count; someone who was already a member when they opened it does not.
+    pub joined_count: u32,
     pub revoked_by: Option<UserRefDto>,
     /// UTC milliseconds.
     pub revoked_at: Option<i64>,
+    /// `revoked_at` as a date in the request's timezone; `null` unless the link is `revoked`.
+    pub revoked_label: Option<String>,
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<InviteLinkActionDto>,

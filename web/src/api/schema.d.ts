@@ -1335,6 +1335,8 @@ export interface components {
             created_at: number;
             /** @description Who made it, by their display name now, even if they have left the team. */
             created_by: components["schemas"]["UserRef"];
+            /** @description `created_at` as a date in the request's timezone: "today", "yesterday" or "2 Nov". */
+            created_label: string;
             /**
              * Format: int64
              * @description UTC milliseconds: a week after `created_at`.
@@ -1345,11 +1347,19 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
+             * Format: int32
+             * @description How many people joined the team through the link, ever. People who have since left or been removed still
+             *     count; someone who was already a member when they opened it does not.
+             */
+            joined_count: number;
+            /**
              * Format: int64
              * @description UTC milliseconds.
              */
             revoked_at?: number | null;
             revoked_by?: null | components["schemas"]["UserRef"];
+            /** @description `revoked_at` as a date in the request's timezone; `null` unless the link is `revoked`. */
+            revoked_label?: string | null;
             state: components["schemas"]["InviteLinkState"];
             /**
              * @description The secret, only while the link is `working`; `null` once it has ended or been revoked. A client builds the

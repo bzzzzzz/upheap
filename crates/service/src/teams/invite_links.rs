@@ -44,6 +44,8 @@ pub struct InviteLinkView {
     /// The maker, by their name now, even if they have left the team.
     pub created_by: User,
     pub revoked_by: Option<User>,
+    /// How many people have joined the team through the link, ever, including those who have since left.
+    pub joined_count: u32,
     pub allowed_actions: Vec<InviteLinkAction>,
 }
 
@@ -381,6 +383,14 @@ async fn load_views(
         .into_iter()
         .map(|user| (user.id, user))
         .collect();
+    // The links are all one team's.
+    let joins = match links.first() {
+        Some(first) => {
+            let link_ids: Vec<InviteLinkId> = links.iter().map(|link| link.id).collect();
+            store::audit::count_joins_by_invite_link(db, first.team_id, &link_ids).await?
+        }
+        None => HashMap::new(),
+    };
     links
         .into_iter()
         .map(|link| {
@@ -391,6 +401,7 @@ async fn load_views(
                 allowed_actions: allowed_invite_link_actions(&link, role, now),
                 created_by,
                 revoked_by,
+                joined_count: joins.get(&link.id).copied().unwrap_or(0),
                 link,
             })
         })

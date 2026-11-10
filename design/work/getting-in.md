@@ -45,7 +45,7 @@ usable. Each pull request ticks its piece here.
 
 ### Stage 2: the rest of the first set
 
-- [ ] 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
+- [x] 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
 - [ ] 2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
    without History; Product Accounts §5; Kept 9; rules 13 to 15; scenario 7).
 - [ ] 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
