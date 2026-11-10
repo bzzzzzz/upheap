@@ -8,6 +8,7 @@ use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
+use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
@@ -218,6 +219,15 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::Team(TeamError::PersonalTeam { .. }) => {
             simple(StatusCode::CONFLICT, "personal_team", Category::Conflict)
+        }
+        ServiceError::InviteLink(InviteLinkError::Ended { .. }) => {
+            simple(StatusCode::CONFLICT, "invite_link_ended", Category::Conflict)
+        }
+        ServiceError::InviteLink(InviteLinkError::Revoked { .. }) => {
+            simple(StatusCode::CONFLICT, "invite_link_revoked", Category::Conflict)
+        }
+        ServiceError::InviteLink(InviteLinkError::RemovedSinceMade { .. }) => {
+            simple(StatusCode::FORBIDDEN, "removed_from_team", Category::Permission)
         }
         ServiceError::UserNotFound { .. } => Classified {
             field: Some("user_id"),

@@ -71,7 +71,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   so even an accidental `DELETE` fails instead of removing related rows. Relationship rows follow the same rule:
   taking a tag off an item sets `item_tags.removed_at`, and clearing a parameter value sets its `option_id` to
   `NULL`. Team membership is the one exception: removing a member deletes the `team_members` row, and the audit log
-  keeps the history.
+  keeps the history. The log is also where a removal is remembered: joining through an invite link reads the person's
+  last `member_removed` entry, so a link made before it doesn't let them back in.
 - **Optimistic concurrency:** every mutable row carries a `version`. Updates require the expected version and fail
   with `409` otherwise. A parameter is one aggregate: its options and tag links have no version of their own, and
   every change to them takes the parameter's version.
@@ -404,12 +405,16 @@ the remaining admins.
    `last_used_at`, the creation time of the family's newest token (the sign-in or its latest refresh), and
    `device_name`, which the client sent with the code exchange. It also carries the wording, in the request's time
    zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`.
-   `DELETE /me/sign-ins/{id}` revokes the family as
-   `/oauth/revoke` does, answers `204` again for one already ended, and `404` for an unknown id or another user's,
-   which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
+   `DELETE /me/sign-ins/{id}` revokes the family as `/oauth/revoke` does, answers `204` again for one that ended
+   within the last day (after that it's gone, point 7), and `404` for an unknown id or another user's, which it
+   doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
    it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
    authorization request, so the consent page never shows it: a familiar name there could make a phishing request
    look legitimate.
+7. Codes, families and their tokens are authentication plumbing, so each successful code exchange deletes a few
+   that ended over a day ago: expired codes, and families that are revoked or have no refresh token left unused and
+   unexpired. The day keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh
+   tokens of a live family stay, since they detect reuse.
 
 ## Audit log
 

@@ -303,6 +303,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::MemberRemoved, _) => ("removed member", true),
         // Only the member themselves leaves.
         (AuditAction::MemberLeft, _) => ("left the team", false),
+        // The entry is about the link, so the line reads "Sam joined through Ana's invite link".
+        (AuditAction::MemberJoined, _) => ("joined through", true),
         (AuditAction::HeapCreated, _) => ("created heap", true),
         (AuditAction::HeapUpdated, _) => ("changed heap", true),
         (AuditAction::HeapArchived, _) => ("archived heap", true),
@@ -341,6 +343,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         AuditAction::UserRegistered
         | AuditAction::TeamCreated
         | AuditAction::MemberAdded
+        | AuditAction::MemberJoined
         | AuditAction::HeapCreated
         | AuditAction::ItemCreated
         | AuditAction::StepAdded
@@ -818,6 +821,10 @@ mod tests {
         expect_that!(
             describe_action(AuditAction::MemberAdded, false),
             eq(("added member", true))
+        );
+        expect_that!(
+            describe_action(AuditAction::MemberJoined, false),
+            eq(("joined through", true))
         );
     }
 

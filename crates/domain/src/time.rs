@@ -44,6 +44,11 @@ impl Timestamp {
         self.0.checked_add(duration.0).and_then(Self::from_millis)
     }
 
+    /// Returns `None` when the result would leave the supported range.
+    pub fn checked_sub(self, duration: Duration) -> Option<Self> {
+        self.0.checked_sub(duration.0).and_then(Self::from_millis)
+    }
+
     /// The last millisecond of `date` in `tz`, which is how dates without a time are stored.
     ///
     /// Returns `None` when the date is at the very end of the supported range.
@@ -125,6 +130,20 @@ mod tests {
         let stored = Timestamp::at_end_of_day(date, &tz).expect("in range");
 
         expect_that!(stored.to_jiff().to_string(), eq("2027-03-12T22:59:59.999Z"));
+    }
+
+    #[gtest]
+    fn subtracting_a_duration_moves_back_and_stops_at_the_range_end() {
+        let now = Timestamp::from_millis(2 * MILLIS_PER_DAY).expect("in range");
+
+        expect_that!(
+            now.checked_sub(Duration::from_days(1)),
+            some(eq(Timestamp::from_millis(MILLIS_PER_DAY).expect("in range")))
+        );
+        expect_that!(
+            Timestamp::EPOCH.checked_sub(Duration::from_days(i64::MAX / MILLIS_PER_DAY)),
+            none()
+        );
     }
 
     #[gtest]

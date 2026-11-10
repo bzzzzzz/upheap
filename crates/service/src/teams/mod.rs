@@ -15,7 +15,7 @@ use domain::team::{Membership, Role, Team};
 use domain::user::User;
 use domain::{HeapId, TeamId, Timestamp, UserId};
 #[cfg(feature = "accounts")]
-pub use invite_links::InviteLinkView;
+pub use invite_links::{InvitationView, InviteLinkView, InviteViewer};
 #[cfg(feature = "accounts")]
 pub use manage::{MemberAdded, TeamPatch};
 use store::audit::NewAuditEntry;
