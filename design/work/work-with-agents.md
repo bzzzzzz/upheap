@@ -127,7 +127,7 @@ is resolved or turned into a task.
    An agent or a person can attach one.
 2. **Core.** An item with an open question waits for the person. An agent never picks it up.
 3. **Core.** The person can see everything that waits for them, across their heaps, in one place.
-4. **Core.** Answering a question, or saying a request is done, closes it. When an item's last open question
+4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last open question
    closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
 
@@ -269,7 +269,7 @@ week), setup (once or rarely) or recovery.
 
 1. Open the list of what waits for me, across all my heaps, in priority order.
 2. Open one: the question or request, with the item and its context beside it.
-3. Answer the question, or do what was requested and say it's done.
+3. Answer the question, or do what was requested and say it's done, or say it can't be done.
 4. When that was the item's last open question, the item goes back to the agent. Next one.
 
 **P4. Decide at a stable state.** Loop.
@@ -402,7 +402,7 @@ From the steps above that ask something of the product.
 | 1 | Person | Adds a note or a reminder with a title and one more field | A ranked item, at once | P1 |
 | 2 | Person | Opens a heap | One list in priority order, each item showing its kind, who has it, and whether it waits for them | P2 |
 | 3 | Person | Opens what waits for them | Every open question and request across their heaps, in priority order | P3 |
-| 4 | Person | Answers a question or says a request is done | The question closes, and the item returns to the agent when it was the last | P3 |
+| 4 | Person | Answers a question, or says a request is done or can't be done | The question closes, and the item returns to the agent when it was the last | P3 |
 | 5 | Person | Looks for what reached a stable state | In the agents' progress, the items that wait for their decision | P4 |
 | 6 | Person | Reads an item at a stable state | What the agent made: context, steps, new tasks, blocks | P4 |
 | 7 | Person | Sends an item on, one state or all the way | The item is in the agent's queue | P4 |
@@ -485,7 +485,7 @@ on it is an ordinary open item.
 | Kind | Asked with | Closed by |
 | --- | --- | --- |
 | Question | Text | An answer in text |
-| Request | What to do | "Done", with an optional line |
+| Request | What to do | "Done" or "can't be done", with an optional line |
 | Review | A link to the work | "Approved" or "changes asked", with an optional line |
 
 A question is open, closed, or withdrawn (the asker no longer needs it). Its answer can be changed while its
@@ -573,7 +573,9 @@ change it makes carries the run it was made in.
 2. When an item's last open question closes and its turn is open, the item is back in the queue.
 3. Changing an answer on an open item with an open turn puts the item back in the queue, with the change marked
    as new. On a closed item an answer can't be changed; the person reopens the item first.
-4. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
+4. A request closed as "can't be done" goes back to the agent like any answer. The agent finds another way, or
+   asks what to do instead; it doesn't ask for the same thing again.
+5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
    queue is: the item's score times the person's weight for its heap.
 
 **Review**
