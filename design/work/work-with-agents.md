@@ -127,8 +127,8 @@ is resolved or turned into a task.
    An agent or a person can attach one.
 2. **Core.** An item with an open question waits for the person. An agent never picks it up.
 3. **Core.** The person can see everything that waits for them, across their heaps, in one place.
-4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last open question
-   closes, the item goes back to whoever asked.
+4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last
+   open question closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
 
 **Review**
