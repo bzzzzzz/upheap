@@ -11,6 +11,8 @@ In flight. Each track's doc holds its progress.
   AI agents through the CLI.
 - [Side tasks](side-tasks.md): backups, old OAuth rows, confirmations, Activity at phone width, and what holds an
   item back. Small pieces beside the two tracks.
+- [Smaller changes](smaller-changes.md): refactors that take out the places where one fact is written several
+  times, so a feature touches fewer files and none the compiler doesn't check.
 
 ## Next
 
