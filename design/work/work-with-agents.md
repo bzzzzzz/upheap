@@ -479,8 +479,8 @@ step or a heap (Kinds and moves).
 **Step.** Belongs to a task. A title, a context, a place in the order, and an origin when it was made from a
 note. It is open, ticked or dropped. A dropped step stays visible as dropped; steps are never deleted.
 
-**Reminder.** An item of kind reminder with a date. Before the date it is in no list and no queue. From the date
-on it is an ordinary open item.
+**Reminder.** An item of kind reminder with a date. Before the date it is out of the ranked list and the queue,
+and still found by search. From the date on it is an ordinary open item.
 
 **Question.** Belongs to an item, and may name one of its steps. Every question has one shape:
 
@@ -541,7 +541,8 @@ change it makes carries the run it was made in.
 1. All kinds are ranked by the same factors. Who has an item doesn't change its place.
 2. A reminder's date is its exact deadline, and its age counts from that date. So on its date it arrives ranked
    as due today, not as an old item.
-3. Before its date a reminder is in no list, search or count. The person finds it in a list of reminders to come.
+3. Before its date a reminder is out of the ranked list, the queue and the counts. Search finds it, shown as a
+   reminder with its date, and the person can see all reminders to come in a list of their own.
 
 **Opening a turn**
 
