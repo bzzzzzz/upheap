@@ -4,13 +4,13 @@ What's in flight, what's next, and ideas. Last reviewed 2026-11-09.
 
 ## Tracks
 
-In flight. Each has a doc with its own progress.
+In flight. Each track's doc holds its progress.
 
-- [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 2 next.
+- [Getting in](getting-in.md): invite links, password change and reset.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
-  AI agents through the CLI. Stage 1 of 2, piece 3 next.
+  AI agents through the CLI.
 - [Side tasks](side-tasks.md): backups, old OAuth rows, confirmations, Activity at phone width, and what holds an
-  item back. Small pieces beside the two tracks, none started.
+  item back. Small pieces beside the two tracks.
 
 ## Next
 

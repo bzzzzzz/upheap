@@ -34,8 +34,10 @@ Rules for the docs:
    mechanisms and reasons, and link to the rest.
 2. **Status lives in `design/work/` only,** as state, not history.
    [design/work/README.md](design/work/README.md) is the tracker: the tracks in flight with a line each, what's
-   next, and ideas, in about sixty lines at most. Each track's progress is in its own doc. Nothing lists what's
-   built: the code and product.md say that, and the pull requests are the history.
+   next, and ideas, in about sixty lines at most. A track's line is its link and what it is, never its progress:
+   no stage, piece or "next" there, so pieces of different tracks don't conflict over the tracker. Each track's
+   progress is in its own doc only. Nothing lists what's built: the code and product.md say that, and the pull
+   requests are the history.
 3. **A track's doc is temporary.** `design/work/<track>.md` holds one piece of work while it's built: what it is,
    its progress, its design, its open questions and its ideas. A long design goes in a file of its own beside it,
    `<track>-design.md`, so the track's doc stays short and is only status. Nothing outside `work/` links into
