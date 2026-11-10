@@ -5,6 +5,7 @@ use domain::item::{Due, Item, Kind, Stage};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
 use domain::saved_view::SavedView;
+use domain::step::Step;
 use domain::tag::Tag;
 use domain::{OptionId, ParameterId};
 use serde_json::{Map, Value, json};
@@ -25,6 +26,38 @@ pub(crate) fn describe_new_item(item: &Item) -> Value {
 /// Changed fields between two versions of an item, as `{"field": {"before": …, "after": …}}`.
 pub(crate) fn diff_items(before: &Item, after: &Item) -> Value {
     diff_fields(item_fields(before), item_fields(after))
+}
+
+/// The fields of a newly added step, for its `step_added` entry. The step is named by its number and title; the
+/// context is left out when there is none.
+pub(crate) fn describe_new_step(step: &Step) -> Value {
+    let mut fields = Map::new();
+    fields.insert("step".into(), step_name(step));
+    if let Some(context) = &step.context {
+        fields.insert("step_context".into(), json!(context.as_str()));
+    }
+    Value::Object(fields)
+}
+
+/// Changed fields between two versions of a step, in the shape of [`diff_items`], led by the step's name as it is
+/// after the change.
+pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
+    let fields = |step: &Step| {
+        let mut fields = Map::new();
+        fields.insert("step_title".into(), json!(step.title.as_str()));
+        fields.insert("step_context".into(), json!(step.context.as_ref().map(|c| c.as_str())));
+        fields.insert("step_state".into(), json!(step.state.code()));
+        fields
+    };
+    let Value::Object(mut changes) = diff_fields(fields(before), fields(after)) else {
+        return Value::Null;
+    };
+    changes.insert("step".into(), step_name(after));
+    Value::Object(changes)
+}
+
+fn step_name(step: &Step) -> Value {
+    json!({ "number": step.number.get(), "title": step.title.as_str() })
 }
 
 /// The change to an item that archiving `from` switched to `to`, in the shape of [`diff_items`] but naming only

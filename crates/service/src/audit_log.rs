@@ -10,6 +10,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::due::{describe_due_date, describe_time};
 use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
+use domain::step::StepState;
 use domain::team::Role;
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
@@ -308,6 +309,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::HeapUnarchived, _) => ("unarchived heap", true),
         (AuditAction::ItemCreated, _) => ("added item", true),
         (AuditAction::ItemUpdated, _) => ("edited item", true),
+        (AuditAction::StepAdded, _) => ("added a step to", true),
+        (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
@@ -340,6 +343,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::MemberAdded
         | AuditAction::HeapCreated
         | AuditAction::ItemCreated
+        | AuditAction::StepAdded
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
@@ -352,6 +356,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
         | AuditAction::ItemUpdated
+        | AuditAction::StepUpdated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewUpdated
         | AuditAction::SavedViewArchived
@@ -363,7 +368,11 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 24] = [
+const FIELD_ORDER: [&str; 28] = [
+    "step",
+    "step_title",
+    "step_context",
+    "step_state",
     "title",
     "kind",
     "stage",
@@ -482,6 +491,10 @@ fn has_no_value(value: &Value) -> bool {
 
 fn describe_field(field: &str) -> &str {
     match field {
+        "step" => "Step",
+        "step_title" => "Step title",
+        "step_context" => "Step context",
+        "step_state" => "Step state",
         "title" => "Title",
         "kind" => "Kind",
         "stage" => "Stage",
@@ -518,6 +531,9 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "kind" => describe_kind(Kind::from_code(value.as_str()?)?).to_owned(),
         "stage" => describe_stage(Stage::from_code(value.as_str()?)?).to_owned(),
         "state" => describe_state(StateKind::from_code(value.as_str()?)?).to_owned(),
+        // A step is named by its title; its number is in the diff for API clients.
+        "step" => value.get("title")?.as_str()?.to_owned(),
+        "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
@@ -566,6 +582,14 @@ const fn describe_state(state: StateKind) -> &'static str {
         StateKind::Blocked => "Blocked",
         StateKind::Done => "Done",
         StateKind::WontDo => "Won't do",
+    }
+}
+
+const fn describe_step_state(state: StepState) -> &'static str {
+    match state {
+        StepState::Open => "Open",
+        StepState::Ticked => "Ticked",
+        StepState::Dropped => "Dropped",
     }
 }
 
@@ -794,6 +818,69 @@ mod tests {
         expect_that!(
             describe_action(AuditAction::MemberAdded, false),
             eq(("added member", true))
+        );
+    }
+
+    #[gtest]
+    fn a_step_added_shows_its_title_and_context() {
+        let diff = json!({ "step": { "number": 3, "title": "Run in staging" }, "step_context": "Use the blue stack" });
+
+        let changes = describe_changes(
+            &entry(AuditAction::StepAdded, EntityType::Item, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![
+                eq(&change("step", "Step", None, Some("Run in staging"))),
+                eq(&change(
+                    "step_context",
+                    "Step context",
+                    None,
+                    Some("Use the blue stack")
+                )),
+            ]
+        );
+        expect_that!(
+            describe_action(AuditAction::StepAdded, false),
+            eq(("added a step to", true))
+        );
+    }
+
+    #[gtest]
+    fn a_step_change_names_the_step_first_then_what_changed() {
+        let diff = json!({
+            "step_state": { "before": "open", "after": "ticked" },
+            "step_title": { "before": "Run in staging", "after": "Run in prod" },
+            "step": { "number": 3, "title": "Run in prod" },
+            "step_context": { "before": "old", "after": null },
+        });
+
+        let changes = describe_changes(
+            &entry(AuditAction::StepUpdated, EntityType::Item, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![
+                eq(&change("step", "Step", None, Some("Run in prod"))),
+                eq(&change(
+                    "step_title",
+                    "Step title",
+                    Some("Run in staging"),
+                    Some("Run in prod")
+                )),
+                eq(&change("step_context", "Step context", Some("old"), None)),
+                eq(&change("step_state", "Step state", Some("Open"), Some("Ticked"))),
+            ]
+        );
+        expect_that!(
+            describe_action(AuditAction::StepUpdated, false),
+            eq(("changed a step of", true))
         );
     }
 }

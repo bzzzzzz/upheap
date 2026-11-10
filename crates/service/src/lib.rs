@@ -24,6 +24,7 @@ pub mod parameters;
 mod personal;
 mod random;
 pub mod saved_views;
+pub mod steps;
 pub mod tags;
 pub mod teams;
 #[cfg(feature = "accounts")]

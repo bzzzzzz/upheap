@@ -17,6 +17,7 @@ pub mod permission;
 pub mod ranking;
 pub mod saved_view;
 pub mod sign_in;
+pub mod step;
 pub mod tag;
 pub mod team;
 pub mod text;
@@ -24,7 +25,9 @@ pub mod time;
 pub mod user;
 pub mod validation;
 
-pub use ids::{HeapId, InviteLinkId, ItemId, OptionId, ParameterId, SavedViewId, TagId, TeamId, TokenFamilyId, UserId};
+pub use ids::{
+    HeapId, InviteLinkId, ItemId, OptionId, ParameterId, SavedViewId, StepId, TagId, TeamId, TokenFamilyId, UserId,
+};
 pub use time::{Duration, Timestamp};
 pub use validation::ValidationError;
 

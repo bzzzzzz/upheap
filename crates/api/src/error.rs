@@ -11,6 +11,7 @@ use domain::ValidationError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
+use domain::step::StepError;
 use domain::team::TeamError;
 use domain::validation::Field;
 use service::ServiceError;
@@ -177,6 +178,16 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Item(ItemError::StageNeedsTask { .. }) => Classified {
             field: Some("stage"),
             ..simple(StatusCode::CONFLICT, "stage_needs_task", Category::Conflict)
+        },
+        ServiceError::Step(StepError::NeedsTask { .. }) => {
+            simple(StatusCode::CONFLICT, "steps_need_task", Category::Conflict)
+        }
+        ServiceError::Step(StepError::TooMany { .. }) => {
+            simple(StatusCode::CONFLICT, "too_many_steps", Category::Conflict)
+        }
+        ServiceError::Step(StepError::AfterNotFound { .. }) => Classified {
+            field: Some("after"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "step_not_in_item", Category::Caller)
         },
         ServiceError::Item(ItemError::NotBlocked { .. }) => Classified {
             field: Some("blocked_by_item_id"),

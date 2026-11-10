@@ -663,3 +663,62 @@ async fn an_items_history_names_kind_and_stage_changes_and_leaves_the_defaults_o
     expect_that!(created, not(contains(eq(&"stage"))));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn an_items_history_names_the_steps_added_and_ticked() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = app.new_item(&session, &heap, json!({ "title": "Rotate keys" })).await?;
+    let id = item["id"].as_str().context("no id")?;
+    let item_url = app.item_url(&id).await?;
+    app.clock.advance(domain::Duration::from_millis(1));
+    app.patch(&session, &item_url, &item["version"], json!({ "kind": "task" }))
+        .await?;
+    app.clock.advance(domain::Duration::from_millis(1));
+    app.send(
+        Method::POST,
+        &format!("{item_url}/steps"),
+        Some(&session),
+        Some(json!({ "title": "Run in staging" })),
+    )
+    .await?;
+    app.clock.advance(domain::Duration::from_millis(1));
+    app.patch(
+        &session,
+        &format!("{item_url}/steps/1"),
+        &json!(1),
+        json!({ "state": "ticked" }),
+    )
+    .await?;
+
+    // Act
+    let history = app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={id}", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    let ticked = &history.body["entries"][0];
+    expect_that!(ticked["phrase"], eq(&json!("changed a step of")));
+    expect_that!(ticked["entity"]["label"], eq(&json!("Rotate keys")));
+    expect_that!(
+        ticked["changes"],
+        eq(&json!([
+            { "field": "step", "label": "Step", "before": null, "after": "Run in staging" },
+            { "field": "step_state", "label": "Step state", "before": "Open", "after": "Ticked" },
+        ]))
+    );
+    let added = &history.body["entries"][1];
+    expect_that!(added["phrase"], eq(&json!("added a step to")));
+    expect_that!(
+        added["changes"],
+        eq(&json!([{ "field": "step", "label": "Step", "before": null, "after": "Run in staging" }]))
+    );
+    Ok(())
+}

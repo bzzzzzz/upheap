@@ -19,6 +19,7 @@ pub mod proxy;
 pub mod saved_views;
 pub mod sessions;
 pub mod sign_in_attempts;
+pub mod steps;
 pub mod tags;
 pub mod teams;
 #[cfg(feature = "testing")]
