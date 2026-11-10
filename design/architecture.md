@@ -398,10 +398,10 @@ the remaining admins.
    it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
    authorization request, so the consent page never shows it: a familiar name there could make a phishing request
    look legitimate.
-7. Codes, families and their tokens are authentication plumbing, so each code exchange deletes a few that ended over a
-   day ago: expired codes, and families that are revoked or have no refresh token left unused and unexpired. The day
-   keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh tokens of a live
-   family stay, since they detect reuse.
+7. Codes, families and their tokens are authentication plumbing, so each successful code exchange deletes a few
+   that ended over a day ago: expired codes, and families that are revoked or have no refresh token left unused and
+   unexpired. The day keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh
+   tokens of a live family stay, since they detect reuse.
 
 ## Audit log
 

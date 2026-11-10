@@ -143,11 +143,10 @@ impl Services {
     /// it isn't the client. Past its lifetime it's only refused, so a code left in a browser's history can't end the
     /// sign-in it started at any later time.
     ///
-    /// It also removes a few codes and sign-ins that ended over [`KEEP_ENDED_GRANTS_FOR`] ago.
+    /// A successful exchange also removes a few codes and sign-ins that ended over [`KEEP_ENDED_GRANTS_FOR`] ago.
     pub async fn exchange_authorization_code(&self, exchange: CodeExchange<'_>) -> Result<TokenPair, ServiceError> {
         require_client(exchange.client_id)?;
         let now = self.now();
-        self.delete_ended_grants(now).await;
         let code_hash = exchange.code.to_hash();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let code = store::oauth::find_auth_code(&txn, &code_hash)
@@ -196,6 +195,9 @@ impl Services {
         let pair = issue_pair(&txn, family_id, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(user_id = %code.user_id, %family_id, client_id = exchange.client_id, "authorization code exchanged");
+        // After a successful exchange only: a failed one costs the caller nothing more, so a stream of bad codes
+        // can't make the server scan its tokens for each.
+        self.delete_ended_grants(now).await;
         Ok(pair)
     }
 
@@ -284,7 +286,7 @@ impl Services {
     }
 
     /// Ends one of the caller's sign-ins by revoking its token family, as [`Services::revoke_token`] does. Succeeds
-    /// when it was ended already. Fails with [`ServiceError::NotFound`] for a family that doesn't exist or isn't the
+    /// when it was ended already, until a code exchange removes it [`KEEP_ENDED_GRANTS_FOR`] after it ended. Fails with [`ServiceError::NotFound`] for a family that doesn't exist or isn't the
     /// caller's, which the answer doesn't tell apart.
     pub async fn end_sign_in(&self, principal: Principal, family_id: TokenFamilyId) -> Result<(), ServiceError> {
         let family = store::oauth::find_token_family(&self.db, family_id)

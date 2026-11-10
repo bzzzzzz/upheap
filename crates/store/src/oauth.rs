@@ -6,7 +6,7 @@
 //! exactly one marks it used. Revocation is per family: a token is good only while its family isn't revoked.
 //!
 //! These rows are authentication plumbing, not something a person made, so once they can't be used they are deleted
-//! rather than kept (design/engineering-principles.md, Data §4): a table that only grows costs the operator for rows
+//! rather than kept (design/engineering-principles.md, Nothing is deleted §1): a table that only grows costs the operator for rows
 //! nobody can use. They go a day after they end, so a retry still hears why it was refused.
 
 use std::collections::HashMap;
