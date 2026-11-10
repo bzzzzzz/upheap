@@ -1,7 +1,7 @@
 # Work with agents: design
 
-Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents. It replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design
-method. Step agreed: 1 (value).
+Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents. It
+replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design method. Step agreed: 1 (value).
 
 ## Constraints
 
@@ -170,8 +170,8 @@ is resolved or turned into a task.
 
 ### Out
 
-How a pushed reminder or a critical case reaches the person, how the person says what is critical, more than one kind of agent, and who in a team
-answers a question. See Ideas.
+How a pushed reminder or a critical case reaches the person, how the person says what is critical, more than one
+kind of agent, and who in a team answers a question. See Ideas.
 
 ## 3. Workflows
 
