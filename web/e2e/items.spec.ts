@@ -369,3 +369,54 @@ test("a task is worked through its steps from the item", async ({ page, localBui
     "line-through",
   );
 });
+
+test("the item says what holds it back, and each entry takes you to its field", async ({ page }) => {
+  await addItem(page, "Renew the certificate", { need: "Critical", effort: "S", impact: "XL" });
+  await addItem(page, "Dark mode", { need: "Idea" });
+  await openItem(page, "Dark mode");
+  const pane = itemPane(page);
+  const heldBack = pane.getByRole("list", { name: "Held back by" });
+  await expect(heldBack.getByRole("listitem")).toContainText([
+    "Need: Idea",
+    "No due date",
+    "Effort and impact not set",
+  ]);
+
+  // Sizes: the Effort buttons come first, and picking one changes the entry once the server has ranked again.
+  await pane.getByRole("button", { name: /Set sizes/ }).click();
+  const effort = pane.getByRole("radiogroup", { name: "Effort", exact: true });
+  await expect(effort.getByRole("radio", { name: "S", exact: true })).toBeFocused();
+  await effort.getByRole("radio", { name: "M", exact: true }).click();
+  await expect(heldBack).toContainText("Impact not set, counts as S");
+  await expect(heldBack).not.toContainText("Effort and impact not set");
+
+  // Need: the picked step has the focus, and the entry goes once the need isn't low.
+  await pane.getByRole("button", { name: /Change need/ }).click();
+  const need = pane.getByRole("radiogroup", { name: "Need", exact: true });
+  await expect(need.getByRole("radio", { name: "Idea", exact: true })).toBeFocused();
+  await need.getByRole("radio", { name: "Expected", exact: true }).click();
+  await expect(heldBack).not.toContainText("Need: Idea");
+
+  // Due: the picker on a wide screen, the Due sheet on a phone.
+  await pane.getByRole("button", { name: /Set due date/ }).click();
+  if (isPhone(page)) {
+    const sheet = page.getByRole("dialog", { name: "Due", exact: true });
+    await sheet.getByRole("radio", { name: "Exact date", exact: true }).click();
+    await sheet.getByLabel("Exact due date").fill(dayFromToday(5));
+    await closeField(page);
+  } else {
+    const due = pane.getByRole("radiogroup", { name: "Due", exact: true });
+    await expect(due.locator(":focus")).toHaveCount(1);
+    await due.getByRole("radio", { name: "Exact date", exact: true }).click();
+    await pane.getByLabel("Exact due date").fill(dayFromToday(5));
+  }
+  await expect(heldBack).not.toContainText("No due date");
+});
+
+test("the item that ranks first says nothing holds it back", async ({ page }) => {
+  await addItem(page, "Dark mode", { need: "Idea", effort: "S", impact: "XL" });
+  await openItem(page, "Dark mode");
+
+  await expect(itemPane(page).getByRole("heading", { name: "Why it's #1" })).toBeVisible();
+  await expect(itemPane(page).getByText("Held back by")).toHaveCount(0);
+});

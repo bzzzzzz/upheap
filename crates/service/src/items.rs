@@ -11,7 +11,7 @@ use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, W
 use domain::permission::{
     ItemAction, Permission, StepAction, allowed_item_actions, allowed_stage_choices, allowed_step_actions,
 };
-use domain::ranking::{CURRENT_FORMULA, Contributor, ItemForRanking, rank};
+use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, rank};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -94,6 +94,7 @@ pub struct RankedEntry {
     /// 1-based position within its group, in the order the group is listed.
     pub position: u32,
     pub contributors: Vec<Contributor>,
+    pub held_back_by: Vec<HeldBack>,
 }
 
 /// The heap's non-closed items, ranked at `as_of`, then filtered, grouped and sorted by a [`ListView`].
@@ -255,6 +256,7 @@ impl Services {
                 },
                 position: 0,
                 contributors: entry.contributors,
+                held_back_by: entry.held_back_by,
             });
         }
         for (group, entries) in [

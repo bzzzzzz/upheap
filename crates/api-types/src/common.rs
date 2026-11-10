@@ -6,7 +6,7 @@ use domain::due::ClosedGroup;
 use domain::heap::Heap;
 use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{ItemAction, StepAction};
-use domain::ranking::{Contributor, Factor};
+use domain::ranking::{Contributor, Factor, Gap, HeldBack};
 use domain::step::{Step, StepProgress, StepState};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -613,6 +613,45 @@ impl From<Contributor> for ContributorDto {
     }
 }
 
+/// One thing keeping an item from ranking higher, which the person could change.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = HeldBack)]
+pub struct HeldBackDto {
+    pub gap: HeldBackGapDto,
+    /// Ready to show, for example "No due date".
+    pub label: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = HeldBackGap)]
+pub enum HeldBackGapDto {
+    /// The need is an idea or nice to have.
+    Need,
+    /// There is no due date.
+    Due,
+    /// Effort or impact is unset.
+    Size,
+    /// A gap this client doesn't know: one the server added later. Clients show the entry's `label`, which the
+    /// server writes. Only read, never sent, so it isn't in the API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<HeldBack> for HeldBackDto {
+    fn from(held_back: HeldBack) -> Self {
+        let gap = match held_back.gap {
+            Gap::Need => HeldBackGapDto::Need,
+            Gap::Due => HeldBackGapDto::Due,
+            Gap::Size => HeldBackGapDto::Size,
+        };
+        Self {
+            gap,
+            label: held_back.label,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = RankedItem)]
 pub struct RankedItemDto {
@@ -620,6 +659,9 @@ pub struct RankedItemDto {
     pub position: u32,
     /// The biggest reasons for the position, largest first.
     pub contributors: Vec<ContributorDto>,
+    /// What keeps the item from ranking higher, in a fixed order: need, due date, sizes. Empty for the top item.
+    /// Only things a person could change, and only while the heap's weight for them is above 0.
+    pub held_back_by: Vec<HeldBackDto>,
     pub item: ItemDto,
 }
 
@@ -729,6 +771,10 @@ mod tests {
                 { "factor": "momentum", "label": "Picked up again", "share_percent": 60 },
                 { "factor": "need", "label": "Critical", "share_percent": 40 },
             ],
+            "held_back_by": [
+                { "gap": "momentum", "label": "Too calm" },
+                { "gap": "due", "label": "No due date" },
+            ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
                 "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
@@ -755,6 +801,8 @@ mod tests {
         expect_that!(ranked.contributors[0].factor, eq(FactorDto::Unknown));
         expect_that!(ranked.contributors[0].label, eq("Picked up again"));
         expect_that!(ranked.contributors[1].factor, eq(FactorDto::Need));
+        expect_that!(ranked.held_back_by[0].gap, eq(HeldBackGapDto::Unknown));
+        expect_that!(ranked.held_back_by[1].gap, eq(HeldBackGapDto::Due));
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
         expect_that!(ranked.item.kind, eq(KindDto::Unknown));
         expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));

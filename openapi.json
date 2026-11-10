@@ -6071,6 +6071,31 @@
           }
         }
       },
+      "HeldBack": {
+        "type": "object",
+        "description": "One thing keeping an item from ranking higher, which the person could change.",
+        "required": [
+          "gap",
+          "label"
+        ],
+        "properties": {
+          "gap": {
+            "$ref": "#/components/schemas/HeldBackGap"
+          },
+          "label": {
+            "type": "string",
+            "description": "Ready to show, for example \"No due date\"."
+          }
+        }
+      },
+      "HeldBackGap": {
+        "type": "string",
+        "enum": [
+          "need",
+          "due",
+          "size"
+        ]
+      },
       "Invitation": {
         "type": "object",
         "description": "What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no\nmembers, no maker username or email.",
@@ -7473,6 +7498,7 @@
         "required": [
           "position",
           "contributors",
+          "held_back_by",
           "item"
         ],
         "properties": {
@@ -7482,6 +7508,13 @@
               "$ref": "#/components/schemas/Contributor"
             },
             "description": "The biggest reasons for the position, largest first."
+          },
+          "held_back_by": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeldBack"
+            },
+            "description": "What keeps the item from ranking higher, in a fixed order: need, due date, sizes. Empty for the top item.\nOnly things a person could change, and only while the heap's weight for them is above 0."
           },
           "item": {
             "$ref": "#/components/schemas/Item"

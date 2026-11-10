@@ -115,3 +115,41 @@ async fn a_critical_item_ranks_above_an_idea_and_says_why() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_ranked_item_says_what_holds_it_back_and_the_top_one_says_nothing() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    app.new_item(
+        &session,
+        &heap,
+        json!({ "title": "Renew the certificate", "need": "critical", "effort": "s", "impact": "xl" }),
+    )
+    .await?;
+    app.new_item(&session, &heap, json!({ "title": "Dark mode", "need": "idea" }))
+        .await?;
+
+    // Act
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(list.body["ranked"][0]["held_back_by"], eq(&json!([])));
+    expect_that!(
+        list.body["ranked"][1]["held_back_by"],
+        eq(&json!([
+            { "gap": "need", "label": "Need: Idea" },
+            { "gap": "due", "label": "No due date" },
+            { "gap": "size", "label": "Effort and impact not set" },
+        ]))
+    );
+    Ok(())
+}
