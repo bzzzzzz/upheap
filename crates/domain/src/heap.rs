@@ -2,7 +2,7 @@
 
 use crate::handle::Handle;
 use crate::parameter::Weight;
-use crate::text::Name;
+use crate::text::{Context, Name};
 use crate::{HeapId, TeamId, Timestamp, Version};
 
 /// The heap's ranking weights. Each weight scales one factor's influence relative to the others; `0` turns the
@@ -88,6 +88,8 @@ pub struct Heap {
     pub slug: Handle,
     pub name: Name,
     pub policy: HeapPolicy,
+    /// What the project is and where its work lives, as written; `None` when nobody has written one.
+    pub context: Option<Context>,
     /// `None` while the heap is active.
     pub archived_at: Option<Timestamp>,
     pub version: Version,

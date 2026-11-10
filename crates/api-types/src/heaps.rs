@@ -1,4 +1,4 @@
-//! Heaps: reading, renaming, archiving and unarchiving them.
+//! Heaps: reading, renaming, archiving and unarchiving them, and writing their context.
 
 use domain::heap::HeapPolicy;
 use domain::permission::HeapAction;
@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::common::double_option;
 use crate::parameters::ParameterDto;
 
 /// An action the caller can take on a heap.
@@ -16,6 +17,8 @@ pub enum HeapActionDto {
     Rename,
     Archive,
     Unarchive,
+    /// Write the heap's context, on `PATCH` with `context`. Every member has it while the heap is active.
+    EditContext,
     /// Change the heap's weights and its parameters' weights, on `PATCH …/weights`.
     EditWeights,
     ViewHistory,
@@ -27,6 +30,7 @@ impl From<HeapAction> for HeapActionDto {
             HeapAction::Rename => Self::Rename,
             HeapAction::Archive => Self::Archive,
             HeapAction::Unarchive => Self::Unarchive,
+            HeapAction::EditContext => Self::EditContext,
             HeapAction::EditWeights => Self::EditWeights,
             HeapAction::ViewHistory => Self::ViewHistory,
         }
@@ -67,6 +71,9 @@ pub struct HeapDto {
     /// Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`.
     pub slug: String,
     pub name: String,
+    /// What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
+    /// written: plain text for now, Markdown later. `null` when nobody has written one.
+    pub context: Option<String>,
     /// When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
     pub archived_at: Option<i64>,
     /// Items the heap's list shows by default, before filters: open and in progress ones, as the list's
@@ -89,6 +96,11 @@ pub struct HeapPatchDto {
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old
     /// slug stop working.
     pub slug: Option<String>,
+    /// At most 20,000 characters, trimmed; blank or `null` clears it. Any member may change it; the name and slug
+    /// need an admin.
+    #[serde(default, deserialize_with = "double_option")]
+    #[schema(value_type = Option<String>, nullable)]
+    pub context: Option<Option<String>>,
 }
 
 /// New weights for the heap and its parameters, saved together. Leave a weight out to keep it.

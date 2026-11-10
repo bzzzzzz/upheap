@@ -99,6 +99,7 @@ impl Services {
             slug: Handle::parse(FIRST_HEAP_SLUG, Field::Slug)?,
             name: Name::parse(FIRST_HEAP_NAME)?,
             policy: HeapPolicy::default(),
+            context: None,
             archived_at: None,
             version: Version::INITIAL,
         };

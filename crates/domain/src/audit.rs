@@ -13,6 +13,7 @@ pub enum AuditAction {
     MemberJoined,
     HeapCreated,
     HeapUpdated,
+    HeapContextUpdated,
     HeapArchived,
     HeapUnarchived,
     ItemCreated,
@@ -34,7 +35,7 @@ pub enum AuditAction {
 
 impl AuditAction {
     /// Every action, in the order they are declared.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::UserRegistered,
         Self::UserUpdated,
         Self::TeamCreated,
@@ -46,6 +47,7 @@ impl AuditAction {
         Self::MemberJoined,
         Self::HeapCreated,
         Self::HeapUpdated,
+        Self::HeapContextUpdated,
         Self::HeapArchived,
         Self::HeapUnarchived,
         Self::ItemCreated,
@@ -83,6 +85,7 @@ impl AuditAction {
             Self::MemberJoined => "member_joined",
             Self::HeapCreated => "heap_created",
             Self::HeapUpdated => "heap_updated",
+            Self::HeapContextUpdated => "heap_context_updated",
             Self::HeapArchived => "heap_archived",
             Self::HeapUnarchived => "heap_unarchived",
             Self::ItemCreated => "item_created",

@@ -8,7 +8,7 @@ use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
 use domain::parameter::{ParameterPatch, Weight};
 use domain::permission::{Permission, allowed_heap_actions};
-use domain::text::Name;
+use domain::text::{Context, Name};
 use domain::validation::Field;
 use domain::{HeapId, ParameterId, TeamId, Timestamp, ValidationError, Version};
 use serde_json::json;
@@ -24,11 +24,12 @@ use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
 use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view};
 use crate::{Principal, ServiceError, Services};
 
-/// A change to a heap's name and slug. `None` leaves it as it is.
+/// A change to a heap's name, slug and context. `None` leaves a field as it is; `Some(None)` clears the context.
 #[derive(Clone, Debug, Default)]
 pub struct HeapPatch {
     pub name: Option<Name>,
     pub slug: Option<Handle>,
+    pub context: Option<Option<Context>>,
 }
 
 /// New weights for a heap and its parameters, saved together. `None` and unlisted parameters keep their weights.
@@ -91,6 +92,7 @@ impl Services {
             slug,
             name,
             policy: HeapPolicy::default(),
+            context: None,
             archived_at: None,
             version: Version::INITIAL,
         };
@@ -122,9 +124,13 @@ impl Services {
         load_heap_view(&self.db, access.heap, access.membership.role).await
     }
 
-    /// Changes the heap's name or slug if it is still at version `expected`. An archived heap is read-only, so this
-    /// fails with [`ServiceError::HeapArchived`]. A patch that changes nothing succeeds without an audit entry. A
-    /// slug another heap of the team has fails with [`ServiceError::HandleTaken`].
+    /// Changes the heap's name, slug or context if it is still at version `expected`. The name and slug need
+    /// [`Permission::ManageHeaps`] and the context [`Permission::EditItems`]; a patch that sets a field the caller
+    /// may not change fails with [`ServiceError::Forbidden`] and saves nothing. An archived heap is read-only, so
+    /// this fails with [`ServiceError::HeapArchived`]. A patch that changes nothing succeeds without an audit entry
+    /// or a new version. A save moves the version once; a name or slug change writes `heap_updated` and a context
+    /// change `heap_context_updated`, both when both change. A slug another heap of the team has fails with
+    /// [`ServiceError::HandleTaken`].
     pub async fn update_heap(
         &self,
         principal: Principal,
@@ -133,7 +139,15 @@ impl Services {
         expected: Version,
     ) -> Result<HeapView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let access = authorize_heap(&txn, principal, heap_id, Permission::ManageHeaps).await?;
+        let access = authorize_heap(&txn, principal, heap_id, Permission::ViewHeap).await?;
+        let role = access.membership.role;
+        let renames = patch.name.is_some() || patch.slug.is_some();
+        if renames || patch.context.is_none() {
+            require(role, Permission::ManageHeaps)?;
+        }
+        if patch.context.is_some() {
+            require(role, Permission::EditItems)?;
+        }
         let current = lock(&txn, heap_id).await?;
         ensure_active(&current)?;
         if current.version != expected {
@@ -142,10 +156,10 @@ impl Services {
                 current: current.version,
             });
         }
-        let role = access.membership.role;
         let name = patch.name.filter(|name| *name != current.name);
         let slug = patch.slug.filter(|slug| *slug != current.slug);
-        if name.is_none() && slug.is_none() {
+        let context = patch.context.filter(|context| *context != current.context);
+        if name.is_none() && slug.is_none() && context.is_none() {
             return load_heap_view(&txn, current, role).await;
         }
 
@@ -162,25 +176,57 @@ impl Services {
                 json!({ "before": current.slug.as_str(), "after": slug.as_str() }),
             );
         }
-        let renamed = Heap {
+        let context_diff = context.as_ref().map(|after| {
+            json!({ "context": {
+                "before": current.context.as_ref().map(Context::as_str),
+                "after": after.as_ref().map(Context::as_str),
+            } })
+        });
+        let edited = Heap {
             name: name.unwrap_or_else(|| current.name.clone()),
             slug: slug.unwrap_or_else(|| current.slug.clone()),
+            context: context.unwrap_or_else(|| current.context.clone()),
             ..current.clone()
         };
         // Counted before the commit, so a saved change is never reported as failed. Renaming doesn't change it.
         let open_count = count_heap_open_items(&txn, heap_id).await?;
         let now = self.now();
-        let saved = self
-            .save_heap(
-                txn,
-                principal,
-                &renamed,
-                expected,
-                AuditAction::HeapUpdated,
-                diff.into(),
-                now,
-            )
-            .await?;
+        // The heap's row is written once, with the first entry; a second entry for the context joins it.
+        let (saved, context_diff) = if diff.is_empty() {
+            let Some(context_diff) = context_diff else {
+                return load_heap_view(&txn, current, role).await;
+            };
+            let saved = self
+                .write_heap(
+                    &txn,
+                    principal,
+                    &edited,
+                    expected,
+                    AuditAction::HeapContextUpdated,
+                    context_diff,
+                    now,
+                )
+                .await?;
+            (saved, None)
+        } else {
+            let saved = self
+                .write_heap(
+                    &txn,
+                    principal,
+                    &edited,
+                    expected,
+                    AuditAction::HeapUpdated,
+                    diff.into(),
+                    now,
+                )
+                .await?;
+            (saved, context_diff)
+        };
+        if let Some(context_diff) = context_diff {
+            let entry = self.heap_audit_entry(principal, &saved, AuditAction::HeapContextUpdated, context_diff, now);
+            store::audit::insert_audit_entry(&txn, &entry).await?;
+        }
+        txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
         Ok(to_heap_view(saved, role, open_count))
     }
@@ -392,4 +438,13 @@ async fn lock(txn: &store::DatabaseTransaction, heap_id: HeapId) -> Result<Heap,
     store::heaps::lock_heap(txn, heap_id)
         .await?
         .ok_or(ServiceError::NotFound)
+}
+
+/// `Forbidden` unless `role` has `permission`.
+fn require(role: domain::team::Role, permission: Permission) -> Result<(), ServiceError> {
+    if permission.is_granted_to(role) {
+        Ok(())
+    } else {
+        Err(ServiceError::Forbidden(permission))
+    }
 }

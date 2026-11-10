@@ -9,7 +9,7 @@ use axum::extract::State;
 use domain::handle::Handle;
 use domain::heap::HeapPolicyPatch;
 use domain::parameter::Weight;
-use domain::text::Name;
+use domain::text::{Context, Name};
 use domain::validation::Field;
 use domain::{ParameterId, Version};
 use service::ServiceError;
@@ -40,6 +40,7 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         team_id: *heap.team_id.as_uuid(),
         slug: heap.slug.to_string(),
         name: heap.name.as_str().to_owned(),
+        context: heap.context.as_ref().map(|context| context.as_str().to_owned()),
         archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
@@ -56,6 +57,11 @@ fn to_heap_patch(body: &HeapPatchDto) -> Result<HeapPatch, ServiceError> {
             .as_deref()
             .map(|raw| Handle::parse(raw, Field::Slug))
             .transpose()?,
+        context: match &body.context {
+            None => None,
+            Some(None) => Some(None),
+            Some(Some(raw)) => Some(Context::parse(raw)?),
+        },
     })
 }
 
@@ -98,7 +104,9 @@ async fn get_heap(State(state): State<AppState>, path: HeapPath) -> Result<Json<
     Ok(Json(to_heap_dto(view)))
 }
 
-/// Renames the heap or changes its slug. Admins only; send the heap's `version` in `If-Match`.
+/// Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and
+/// slug need an admin, the context any member. A body that sets a field the caller may not change is refused whole
+/// with 403, and saves nothing. A save that changes nothing succeeds and keeps the version.
 #[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}", tag = "heaps", security(("session" = [])),
     params(HeapParams, IfMatchHeader), request_body = HeapPatchDto,
     responses(

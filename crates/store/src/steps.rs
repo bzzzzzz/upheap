@@ -4,7 +4,8 @@
 use std::collections::HashMap;
 
 use domain::item::Title;
-use domain::step::{Step, StepContext, StepNumber, StepProgress, StepState};
+use domain::step::{Step, StepNumber, StepProgress, StepState};
+use domain::text::Context;
 use domain::{ItemId, StepId, Version};
 use sea_orm::{
     ActiveValue::Set,
@@ -195,7 +196,7 @@ fn to_step(row: item_steps::Model) -> Result<Step, StoreError> {
     let state =
         StepState::from_code(&row.state).ok_or_else(|| read.corrupt(format!("unknown state {:?}", row.state)))?;
     let context = match row.context.as_deref() {
-        Some(raw) => StepContext::parse(raw).map_err(|e| read.corrupt(e.to_string()))?,
+        Some(raw) => Context::parse(raw).map_err(|e| read.corrupt(e.to_string()))?,
         None => None,
     };
     Ok(Step {

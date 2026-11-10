@@ -722,3 +722,63 @@ async fn an_items_history_names_the_steps_added_and_ticked() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_context_change_is_visible_to_members_and_described_as_context() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (admin, _) = app.register("admin@example.test").await?;
+    let (member, _) = app.register("member@example.test").await?;
+    let (team, heap) = app.shared_heap(&admin).await?;
+    let (_, member_id) = team_and_user(&app, &member).await?;
+    app.add_member(&team, &member_id, Role::Member).await?;
+    let path = app.heap_url(&heap).await?;
+    let current = app.send(Method::GET, &path, Some(&member), None).await?;
+    app.patch(
+        &member,
+        &path,
+        &current.body["version"],
+        json!({ "context": "Docs in the wiki" }),
+    )
+    .await?;
+    let item = app.new_item(&admin, &heap, json!({ "title": "Item" })).await?;
+    let item_id = item["id"].as_str().context("no id")?;
+    app.patch(
+        &admin,
+        &app.item_url(item_id).await?,
+        &item["version"],
+        json!({ "description": "Why it matters" }),
+    )
+    .await?;
+
+    // Act
+    let member_log = app
+        .send(Method::GET, &format!("{path}/audit"), Some(&member), None)
+        .await?;
+    let item_log = app
+        .send(
+            Method::GET,
+            &format!("{path}/audit?entity_id={item_id}"),
+            Some(&admin),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(actions(&member_log.body), contains(eq(&"heap_context_updated")));
+    let entry = member_log.body["entries"]
+        .as_array()
+        .and_then(|entries| entries.iter().find(|e| e["action"] == "heap_context_updated"))
+        .context("no entry")?;
+    expect_that!(entry["phrase"], eq(&json!("changed the context of heap")));
+    expect_that!(
+        entry["changes"],
+        eq(&json!([{ "field": "context", "label": "Context", "before": null, "after": "Docs in the wiki" }]))
+    );
+    expect_that!(
+        item_log.body["entries"][0]["changes"],
+        eq(&json!([{ "field": "description", "label": "Context", "before": null, "after": "Why it matters" }]))
+    );
+    Ok(())
+}

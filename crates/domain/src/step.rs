@@ -4,7 +4,7 @@
 //! (architecture.md, Data model). They are never deleted: a dropped step stays, shown as dropped.
 
 use crate::item::{Item, ItemError, Kind, Title};
-use crate::validation::{Field, ValidationError};
+use crate::text::Context;
 use crate::{ItemId, StepId, Timestamp, Version};
 
 /// The most steps one task has, dropped ones included. This is the size assumption that lets every response that
@@ -74,33 +74,6 @@ impl StepState {
     }
 }
 
-/// Background for a step, as plain text for now: blank means none, at most 20,000 characters.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StepContext(String);
-
-impl StepContext {
-    pub const MAX_CHARS: usize = 20_000;
-
-    /// Blank input means "no context" and gives `None`. Surrounding whitespace is kept off.
-    pub fn parse(raw: &str) -> Result<Option<Self>, ValidationError> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Ok(None);
-        }
-        if trimmed.chars().count() > Self::MAX_CHARS {
-            return Err(ValidationError::TooLong {
-                field: Field::Context,
-                max: Self::MAX_CHARS,
-            });
-        }
-        Ok(Some(Self(trimmed.to_owned())))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
     pub id: StepId,
@@ -110,7 +83,7 @@ pub struct Step {
     /// renames a step. Positions are not necessarily consecutive.
     pub position: u32,
     pub title: Title,
-    pub context: Option<StepContext>,
+    pub context: Option<Context>,
     pub state: StepState,
     pub created_at: Timestamp,
     pub version: Version,
@@ -120,7 +93,7 @@ pub struct Step {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewStep {
     pub title: Title,
-    pub context: Option<StepContext>,
+    pub context: Option<Context>,
     /// The step to come right after, or `None` for the end.
     pub after: Option<StepNumber>,
 }
@@ -129,7 +102,7 @@ pub struct NewStep {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StepPatch {
     pub title: Option<Title>,
-    pub context: Option<Option<StepContext>>,
+    pub context: Option<Option<Context>>,
     pub state: Option<StepState>,
 }
 
@@ -427,12 +400,12 @@ mod tests {
 
         let with_context = open
             .apply_patch(&StepPatch {
-                context: Some(StepContext::parse("Use the blue stack").expect("valid")),
+                context: Some(Context::parse("Use the blue stack").expect("valid")),
                 ..StepPatch::default()
             })
             .expect("changed");
         expect_that!(
-            with_context.context.as_ref().map(StepContext::as_str),
+            with_context.context.as_ref().map(Context::as_str),
             some(eq("Use the blue stack"))
         );
         let cleared = with_context
@@ -478,21 +451,5 @@ mod tests {
         for bad in ["", "0", "-1", "+1", "abc", "1.5", "03", " 3", "99999999999"] {
             expect_that!(StepNumber::parse(bad), none());
         }
-    }
-
-    #[gtest]
-    fn context_is_trimmed_and_blank_means_none() {
-        expect_that!(StepContext::parse("  \n "), ok(none()));
-        expect_that!(
-            StepContext::parse(" hi ").map(|context| context.map(|context| context.as_str().to_owned())),
-            ok(some(eq("hi")))
-        );
-        expect_that!(
-            StepContext::parse(&"x".repeat(20_001)),
-            err(eq(&ValidationError::TooLong {
-                field: Field::Context,
-                max: 20_000
-            }))
-        );
     }
 }

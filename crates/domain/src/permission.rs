@@ -60,6 +60,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::HeapUnarchived => Permission::ManageHeaps,
         AuditAction::ItemCreated
         | AuditAction::ItemUpdated
+        | AuditAction::HeapContextUpdated
         | AuditAction::StepAdded
         | AuditAction::StepUpdated
         | AuditAction::TagCreated
@@ -378,6 +379,8 @@ pub enum HeapAction {
     Archive,
     /// Make an archived heap writable again.
     Unarchive,
+    /// Write the heap's context. Offered to every member while the heap is active.
+    EditContext,
     /// Change the heap's ranking weights, and its parameters' weights, together. Not offered while it is archived.
     EditWeights,
     /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
@@ -385,15 +388,24 @@ pub enum HeapAction {
     ViewHistory,
 }
 
-/// What `role` can do with `heap`. An archived heap allows only unarchiving and reading its history.
+/// What `role` can do with `heap`. An archived heap allows only unarchiving and reading its history, and a member
+/// may only write its context.
 pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
+    let can_edit_context = !heap.is_archived() && Permission::EditItems.is_granted_to(role);
     if !Permission::ManageHeaps.is_granted_to(role) {
-        return Vec::new();
+        return if can_edit_context {
+            vec![HeapAction::EditContext]
+        } else {
+            Vec::new()
+        };
     }
     if heap.is_archived() {
         return vec![HeapAction::Unarchive, HeapAction::ViewHistory];
     }
     let mut actions = vec![HeapAction::Rename, HeapAction::Archive];
+    if can_edit_context {
+        actions.push(HeapAction::EditContext);
+    }
     if can_configure(heap, role) {
         actions.push(HeapAction::EditWeights);
     }
@@ -440,6 +452,7 @@ mod tests {
             slug: Handle::parse("ops", Field::Slug).expect("valid"),
             name: Name::parse("Ops").expect("valid"),
             policy: crate::heap::HeapPolicy::default(),
+            context: None,
             archived_at: archived.then_some(Timestamp::EPOCH),
             version: Version::INITIAL,
         }
@@ -452,11 +465,16 @@ mod tests {
             elements_are![
                 eq(&HeapAction::Rename),
                 eq(&HeapAction::Archive),
+                eq(&HeapAction::EditContext),
                 eq(&HeapAction::EditWeights),
                 eq(&HeapAction::ViewHistory)
             ]
         );
-        expect_that!(allowed_heap_actions(&heap(false), Role::Member), is_empty());
+        expect_that!(
+            allowed_heap_actions(&heap(false), Role::Member),
+            elements_are![eq(&HeapAction::EditContext)]
+        );
+        expect_that!(allowed_heap_actions(&heap(true), Role::Member), is_empty());
         expect_that!(
             allowed_heap_actions(&heap(true), Role::Admin),
             elements_are![eq(&HeapAction::Unarchive), eq(&HeapAction::ViewHistory)]

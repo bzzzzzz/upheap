@@ -101,6 +101,8 @@ enum RequestBody {
     NewView,
     /// A team, heap or saved view name.
     Name,
+    /// A new context for the heap.
+    HeapContext,
     /// A new need weight for the heap.
     Weights,
     /// A ranking preview with the stored weights.
@@ -403,6 +405,15 @@ fn endpoints() -> Vec<Endpoint> {
             manage_heap(true),
             Target::HeapVersion,
             RequestBody::Name,
+            StatusCode::OK,
+        ),
+        // The same route again: a context needs only EditItems, a name needs ManageHeaps.
+        row(
+            Method::PATCH,
+            "/teams/{team}/heaps/{heap}",
+            edit,
+            Target::HeapVersion,
+            RequestBody::HeapContext,
             StatusCode::OK,
         ),
         row(
@@ -1013,6 +1024,7 @@ impl World {
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
             RequestBody::Name => Some(json!({ "name": self.unique_name("name") })),
+            RequestBody::HeapContext => Some(json!({ "context": "Where the work is reviewed" })),
             RequestBody::Weights => Some(json!({ "need": 11 })),
             RequestBody::RankingPreview => Some(json!({})),
             RequestBody::AddMember => Some(json!({ "user_id": user })),
