@@ -36,6 +36,7 @@ export type ListSort = Schemas["ListSort"];
 export type Team = Schemas["Team"];
 export type TeamMember = Schemas["TeamMember"];
 export type Role = Schemas["Role"];
+export type InviteLink = Schemas["InviteLink"];
 export type Heap = Schemas["Heap"];
 export type UserMatch = Schemas["UserMatch"];
 export type User = Schemas["User"];

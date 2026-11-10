@@ -30,7 +30,7 @@ this order.
 - [x] 3. **Creating an account from a link.** One act makes the account, its personal team and heap, and the membership
    (rules 10 to 12), with registration open or closed. Done when: scenarios 1 and 5 are tests; plain registration
    on a closed server is still refused. Product Invite links §4 (the rest of it), Accounts §2, and Kept 4 and 8.
-- [ ] 4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
+- [x] 4. **Team page: invite links.** For an admin, the Invite link button and the working links as rows with Copy and
    Revoke, the revoke confirmed inline (Interface 1, without past links and History). The team's activity shows
    the new lines (Interface 5). Done when: it works at phone, tablet and wide widths, and a member sees none of
    it.
