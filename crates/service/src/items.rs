@@ -521,7 +521,7 @@ impl Services {
             check_blocker(&txn, &current, blocker).await?;
         }
         let Some(edited) = edited else {
-            let steps = store::steps::list_steps(&txn, current.id).await?;
+            let steps = store::steps::list_steps_locking(&txn, current.id).await?;
             return build_item_view(&txn, &access.heap, role, current, steps, now).await;
         };
         let saved =
@@ -540,7 +540,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps(&txn, saved.id).await?;
+        let steps = store::steps::list_steps_locking(&txn, saved.id).await?;
         let view = build_item_view(&txn, &access.heap, role, saved, steps, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 

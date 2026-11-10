@@ -11,7 +11,9 @@ use domain::handle::ItemKey;
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Select,
+};
 
 use crate::StoreError;
 use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
@@ -57,34 +59,36 @@ pub async fn is_key_taken(db: &impl ConnectionTrait, heap_id: HeapId, key: ItemK
 }
 
 pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
-    let row = items::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
-    let Some(item) = row.map(to_item).transpose()? else {
-        return Ok(None);
-    };
-    let mut items = [item];
-    attach_tags(db, &mut items).await?;
-    attach_values(db, &mut items).await?;
-    let [item] = items;
-    Ok(Some(item))
+    read_item(db, id, false).await
 }
 
-/// The item `id` with its tags and values, like [`find_item`], read with a locking read (`FOR SHARE` on MySQL and
-/// Postgres), which sees the latest committed row rather than the transaction's snapshot. A write that depends on
-/// the item's state (closed or open) calls it after [`crate::heaps::lock_heap`], so on MySQL (REPEATABLE READ) it
-/// sees what committed while it waited for the lock. SQLite has no row locks and needs none (see `lock_heap`).
+/// The item `id` with its tags and values, like [`find_item`], read with locking reads (`FOR SHARE` on MySQL and
+/// Postgres) of the item, its tags and its values, which see the latest committed rows rather than the
+/// transaction's snapshot. A write that depends on the item's state (closed or open), or answers with the item,
+/// calls it after [`crate::heaps::lock_heap`], so on MySQL (REPEATABLE READ) it sees what committed while it waited
+/// for the lock. SQLite has no row locks and needs none (see `lock_heap`).
 pub async fn find_item_locking(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
-    let row = items::Entity::find_by_id(id_to_db(id.as_uuid()))
-        .lock_shared()
+    read_item(db, id, true).await
+}
+
+/// [`find_item`], or with `lock` [`find_item_locking`].
+async fn read_item(db: &impl ConnectionTrait, id: ItemId, lock: bool) -> Result<Option<Item>, StoreError> {
+    let row = shared_if(items::Entity::find_by_id(id_to_db(id.as_uuid())), lock)
         .one(db)
         .await?;
     let Some(item) = row.map(to_item).transpose()? else {
         return Ok(None);
     };
     let mut items = [item];
-    attach_tags(db, &mut items).await?;
-    attach_values(db, &mut items).await?;
+    attach_tags(db, &mut items, lock).await?;
+    attach_values(db, &mut items, lock).await?;
     let [item] = items;
     Ok(Some(item))
+}
+
+/// `query`, as a locking read (`FOR SHARE`) when `lock` is set.
+pub(crate) fn shared_if<E: EntityTrait>(query: Select<E>, lock: bool) -> Select<E> {
+    if lock { query.lock_shared() } else { query }
 }
 
 /// The items among `ids` that belong to `heap_id`, in no particular order. IDs from other heaps, or unknown ones,
@@ -144,8 +148,8 @@ pub async fn list_items_in_states(
         .into_iter()
         .map(to_item)
         .collect::<Result<Vec<_>, _>>()?;
-    attach_tags(db, &mut items).await?;
-    attach_values(db, &mut items).await?;
+    attach_tags(db, &mut items, false).await?;
+    attach_values(db, &mut items, false).await?;
     Ok(items)
 }
 
@@ -209,8 +213,8 @@ pub async fn list_closed_items(
         .into_iter()
         .map(to_item)
         .collect::<Result<Vec<_>, _>>()?;
-    attach_tags(db, &mut items).await?;
-    attach_values(db, &mut items).await?;
+    attach_tags(db, &mut items, false).await?;
+    attach_values(db, &mut items, false).await?;
     Ok(items)
 }
 
@@ -290,7 +294,7 @@ async fn sync_values(
 }
 
 /// Fills in each item's set values.
-async fn attach_values(db: &impl ConnectionTrait, items: &mut [Item]) -> Result<(), StoreError> {
+async fn attach_values(db: &impl ConnectionTrait, items: &mut [Item], lock: bool) -> Result<(), StoreError> {
     let index: HashMap<String, usize> = items
         .iter()
         .enumerate()
@@ -298,11 +302,10 @@ async fn attach_values(db: &impl ConnectionTrait, items: &mut [Item]) -> Result<
         .collect();
     let keys: Vec<&String> = index.keys().collect();
     for chunk in keys.chunks(IN_LIST_CHUNK) {
-        let rows = item_parameter_values::Entity::find()
+        let query = item_parameter_values::Entity::find()
             .filter(item_parameter_values::Column::ItemId.is_in(chunk.iter().map(|k| k.as_str())))
-            .filter(item_parameter_values::Column::OptionId.is_not_null())
-            .all(db)
-            .await?;
+            .filter(item_parameter_values::Column::OptionId.is_not_null());
+        let rows = shared_if(query, lock).all(db).await?;
         for row in rows {
             let read = RowReader {
                 table: "item_parameter_values",
@@ -329,7 +332,7 @@ async fn sync_tags(
     now: Timestamp,
 ) -> Result<(), StoreError> {
     let mut current = [(item_id, BTreeSet::new())];
-    load_active_tags(db, &mut current).await?;
+    load_active_tags(db, &mut current, false).await?;
     let [(_, current)] = current;
     let removed: Vec<String> = current.difference(tags).map(|id| id_to_db(id.as_uuid())).collect();
     if !removed.is_empty() {
@@ -376,17 +379,21 @@ async fn add_tags(
 }
 
 /// Fills in each item's current tags.
-async fn attach_tags(db: &impl ConnectionTrait, items: &mut [Item]) -> Result<(), StoreError> {
+async fn attach_tags(db: &impl ConnectionTrait, items: &mut [Item], lock: bool) -> Result<(), StoreError> {
     let mut sets: Vec<(ItemId, BTreeSet<TagId>)> = items.iter().map(|item| (item.id, BTreeSet::new())).collect();
-    load_active_tags(db, &mut sets).await?;
+    load_active_tags(db, &mut sets, lock).await?;
     for (item, (_, tags)) in items.iter_mut().zip(sets) {
         item.tags = tags;
     }
     Ok(())
 }
 
-/// Fills each `(item, set)` pair with the item's tags that haven't been removed.
-async fn load_active_tags(db: &impl ConnectionTrait, sets: &mut [(ItemId, BTreeSet<TagId>)]) -> Result<(), StoreError> {
+/// Fills each `(item, set)` pair with the item's tags that haven't been removed, with locking reads when `lock` is set.
+async fn load_active_tags(
+    db: &impl ConnectionTrait,
+    sets: &mut [(ItemId, BTreeSet<TagId>)],
+    lock: bool,
+) -> Result<(), StoreError> {
     let index: HashMap<String, usize> = sets
         .iter()
         .enumerate()
@@ -394,11 +401,10 @@ async fn load_active_tags(db: &impl ConnectionTrait, sets: &mut [(ItemId, BTreeS
         .collect();
     let keys: Vec<&String> = index.keys().collect();
     for chunk in keys.chunks(IN_LIST_CHUNK) {
-        let rows = item_tags::Entity::find()
+        let query = item_tags::Entity::find()
             .filter(item_tags::Column::ItemId.is_in(chunk.iter().map(|k| k.as_str())))
-            .filter(item_tags::Column::RemovedAt.is_null())
-            .all(db)
-            .await?;
+            .filter(item_tags::Column::RemovedAt.is_null());
+        let rows = shared_if(query, lock).all(db).await?;
         for row in rows {
             let read = RowReader {
                 table: "item_tags",

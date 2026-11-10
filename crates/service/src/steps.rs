@@ -58,7 +58,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps(&txn, item.id).await?;
+        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
         let view = build_item_view(&txn, &access.heap, access.membership.role, item, steps, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
@@ -128,7 +128,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps(&txn, item.id).await?;
+        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
         let view = build_item_view(&txn, &access.heap, role, item, steps, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 

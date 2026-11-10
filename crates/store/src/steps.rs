@@ -46,13 +46,7 @@ pub async fn shift_positions_after(
 
 /// The steps of `item_id` in position order.
 pub async fn list_steps(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Vec<Step>, StoreError> {
-    let rows = item_steps::Entity::find()
-        .filter(item_steps::Column::ItemId.eq(id_to_db(item_id.as_uuid())))
-        .order_by_asc(item_steps::Column::Position)
-        .order_by_asc(item_steps::Column::Number)
-        .all(db)
-        .await?;
-    rows.into_iter().map(to_step).collect()
+    read_steps(db, item_id, false).await
 }
 
 /// The steps of `item_id` in position order, read with a locking read (`FOR SHARE` on MySQL and Postgres), which
@@ -61,13 +55,16 @@ pub async fn list_steps(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Ve
 /// plain read: two racing adds then can't pick the same number, and the cap of
 /// [`domain::step::MAX_STEPS`] holds. SQLite has no row locks and needs none (see `lock_heap`).
 pub async fn list_steps_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Vec<Step>, StoreError> {
-    let rows = item_steps::Entity::find()
+    read_steps(db, item_id, true).await
+}
+
+/// [`list_steps`], or with `lock` [`list_steps_locking`].
+async fn read_steps(db: &impl ConnectionTrait, item_id: ItemId, lock: bool) -> Result<Vec<Step>, StoreError> {
+    let query = item_steps::Entity::find()
         .filter(item_steps::Column::ItemId.eq(id_to_db(item_id.as_uuid())))
         .order_by_asc(item_steps::Column::Position)
-        .order_by_asc(item_steps::Column::Number)
-        .lock_shared()
-        .all(db)
-        .await?;
+        .order_by_asc(item_steps::Column::Number);
+    let rows = crate::items::shared_if(query, lock).all(db).await?;
     rows.into_iter().map(to_step).collect()
 }
 
