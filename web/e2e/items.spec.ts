@@ -9,6 +9,7 @@ import {
   expectOrder,
   field,
   goTo,
+  isPhone,
   itemPane,
   openItem,
   pick,
@@ -247,10 +248,10 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
 
   // The toast from adding it stays under the sheet, which keeps its bar of states usable.
   await expect(page.getByRole("status").filter({ hasText: "Added “Plan the offsite”" })).toBeVisible();
-  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More states" }).click();
-  await expect(page.getByRole("dialog", { name: "More states" })).toBeVisible();
+  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "More", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "More states" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "More", exact: true })).toHaveCount(0);
 
   // The description saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
   await (await field(page, "Description")).getByLabel("Description").fill("Venue first");
@@ -268,9 +269,48 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
   await expect(pane.getByRole("button", { name: "Tags travel" })).toBeVisible();
 
   // Won't do is under ⋯ at the end of the bar; a closed item shows all its fields, unchangeable.
-  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More states" }).click();
-  await page.getByRole("dialog", { name: "More states" }).getByRole("button", { name: "Won't do" }).click();
+  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("dialog", { name: "More", exact: true }).getByRole("button", { name: "Won't do" }).click();
   await expect(pane.getByText("Venue, then dates", { exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: /^Description/ })).toHaveCount(0);
   await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
+});
+
+test("a note is made a task and its stage is set from the item", async ({ page, localBuild }) => {
+  test.skip(localBuild, "The static build has no stage; kind.spec.ts in e2e/local covers it.");
+  await addItem(page, "Rotate the certs");
+  await openItem(page, "Rotate the certs");
+  const pane = itemPane(page);
+  const phone = isPhone(page);
+  await expect(pane.getByText("Note · As written", { exact: true })).toBeVisible();
+
+  // Making a note a task asks first, naming it: a task can't go back.
+  const more = pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true });
+  await more.click();
+  if (phone)
+    await page
+      .getByRole("dialog", { name: "More", exact: true })
+      .getByRole("button", { name: "Make it a task…" })
+      .click();
+  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Make “Rotate the certs” a task?" });
+  await expect(confirm).toContainText("A task can't go back to a note.");
+  await confirm.getByRole("button", { name: "Make it a task" }).click();
+  await expect(pane.getByText("Task · As written", { exact: true })).toBeVisible();
+
+  // The stage saves at once. A task can be defined, and offers no second Make it a task.
+  await more.click();
+  if (phone) {
+    const sheet = page.getByRole("dialog", { name: "More", exact: true });
+    await expect(sheet.getByRole("button", { name: "Make it a task…" })).toHaveCount(0);
+    await sheet.getByRole("radio", { name: "With context" }).click();
+  } else {
+    const menu = page.getByRole("menu", { name: "More" });
+    await expect(menu.getByRole("menuitem", { name: "Make it a task…" })).toHaveCount(0);
+    await menu.getByRole("menuitemradio", { name: "With context" }).click();
+  }
+  await expect(pane.getByText("Task · With context", { exact: true })).toBeVisible();
+
+  await closeItem(page);
+  await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, with context$/ })).toBeVisible();
 });

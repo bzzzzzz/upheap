@@ -42,6 +42,8 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
         shown.stdout.lines().next(),
         some(eq(&format!("{}  Rotate the staging certs", key(&items[0])?)))
     );
+    expect_that!(value_of(&shown.stdout, "Kind"), some(eq("note")));
+    expect_that!(value_of(&shown.stdout, "Stage"), some(eq("as written")));
     expect_that!(value_of(&shown.stdout, "State"), some(eq("open")));
     expect_that!(value_of(&shown.stdout, "Need"), some(eq("critical")));
     expect_that!(value_of(&shown.stdout, "Effort"), some(eq("s")));

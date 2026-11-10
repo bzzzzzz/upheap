@@ -1,7 +1,7 @@
 //! `upheap item show <item>`: one item in full, and with `--history` the changes made to it.
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
-use api_types::common::{ItemDto, NeedDto};
+use api_types::common::{ItemDto, KindDto, NeedDto, StageDto};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
@@ -91,10 +91,12 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
 
 /// The item's labelled fields, as rows of label and value. Unset sizes, due time, tags and the rest are left out.
 fn fields(item: &ItemDto) -> Vec<Vec<Cell>> {
-    let mut rows = vec![
-        vec![Cell::new("State"), Cell::new(state_text(item.state))],
-        vec![Cell::new("Need"), Cell::new(need_text(item.need))],
-    ];
+    let mut rows = vec![vec![Cell::new("Kind"), Cell::new(kind_text(item.kind))]];
+    if let Some(stage) = item.stage {
+        rows.push(vec![Cell::new("Stage"), Cell::new(stage_text(stage))]);
+    }
+    rows.push(vec![Cell::new("State"), Cell::new(state_text(item.state))]);
+    rows.push(vec![Cell::new("Need"), Cell::new(need_text(item.need))]);
     if let Some(effort) = item.effort {
         rows.push(vec![Cell::new("Effort"), Cell::new(size_text(effort))]);
     }
@@ -156,6 +158,23 @@ fn with_author(label: &str, by: Option<&api_types::common::UserRefDto>) -> Strin
     match by {
         Some(user) => format!("{label} by {}", user.display_name),
         None => label.to_owned(),
+    }
+}
+
+fn kind_text(kind: KindDto) -> &'static str {
+    match kind {
+        KindDto::Note => "note",
+        KindDto::Task => "task",
+        KindDto::Unknown => "unknown",
+    }
+}
+
+fn stage_text(stage: StageDto) -> &'static str {
+    match stage {
+        StageDto::AsWritten => "as written",
+        StageDto::WithContext => "with context",
+        StageDto::Defined => "defined",
+        StageDto::Unknown => "unknown",
     }
 }
 

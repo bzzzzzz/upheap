@@ -829,11 +829,15 @@ States: no count at zero. Local build: neither entry, and today's tabs.
 
 ```
 ALL WIDTHS · List row (W1)                            constant · core
-│ ○ 3  Rotate the certs  2/5   [due] [tags]               with an agent │
+│ ○ 3 ☑ Rotate the certs ▤ 2/5  [due] [tags]              with an agent │
 │      Due this week · small effort                                     │
-│ ○ 4  Paint the fence         [tags]                     waits for you │
-│ ○ 5  Renew the domain  reminder                                       │
-Marks: a task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
+│ ○ 4   Paint the fence         [tags]                    waits for you │
+│ ○ 5   Renew the domain  reminder                                      │
+Marks: a task shows a checklist icon before the title (a note shows none, and the slot stays so titles line up),
+       and after the title the stage: with context a page, defined a clipboard with a check, as written none.
+       No words on the row; a screen reader hears them. The step count joins after the stage icon; the local
+       build shows no stage icon.
+       A task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
        The end of the row says "with an agent" or "waits for you", and nothing when it's the person's.
 States: the state circle and the swipes work as today. On an item an agent holds they ask first, since
         changing its state takes it back and that can't be undone.
@@ -882,7 +886,7 @@ Next likely action: the next row.
 WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Rotate the certs                                    k3x9a  link   [✕]  │
-│ task · defined                                                         │
+│ ☑ Task · ▤ Defined                    the icons with their words       │
 │ state buttons, as today                                                │
 │                                                                        │
 │ WAITS FOR YOU   only with an open question, a stuck turn or a closed   │
@@ -910,8 +914,9 @@ WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 │                  links, cost                                           │
 │ History              as today; an agent's change is marked as one      │
 │                                                                        │
-│ ⋯  Won't do · Make it a task · Stage: as written, with context,        │
-│    defined                                                             │
+│ ⋯  More: Won't do · Make it a task… (asks first: a task can't go back  │
+│    to a note) · Stage: as written, with context, defined (Defined      │
+│    only on a task). A stage change saves silently.                     │
 └────────────────────────────────────────────────────────────────────────┘
 Who has it, by state:
   Yours, open:           "With you."  [Send to an agent ▾]  to <the next state>, or all the way,

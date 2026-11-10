@@ -1158,12 +1158,19 @@ export interface components {
              * @example k3x9a
              */
             key: string;
+            kind: components["schemas"]["Kind"];
             need: components["schemas"]["Need"];
             /**
              * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
              *     by parameter name.
              */
             parameters: components["schemas"]["ItemParameter"][];
+            stage?: null | components["schemas"]["Stage"];
+            /**
+             * @description The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
+             *     Empty when the item is closed, when the caller can't edit it, and in a build without the stage.
+             */
+            stage_choices: components["schemas"]["Stage"][];
             state: components["schemas"]["ItemState"];
             /** @description By name. */
             tags: components["schemas"]["ItemTag"][];
@@ -1178,7 +1185,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "change_state" | "reopen";
+        ItemAction: "edit" | "change_state" | "reopen" | "make_task";
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -1209,6 +1216,8 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            /** @description A note can become a task; `"note"` on a task is refused. Applied before `stage`. `null` is refused. */
+            kind?: components["schemas"]["Kind"];
             /** @description Need can be changed but not cleared; `null` is refused. */
             need?: components["schemas"]["Need"];
             /**
@@ -1218,6 +1227,8 @@ export interface components {
             parameter_values?: {
                 [key: string]: string | null;
             };
+            /** @description `"defined"` needs a task, or `kind` set to `"task"` in the same patch. `null` is refused. */
+            stage?: components["schemas"]["Stage"];
             state?: null | components["schemas"]["ItemState"];
             /** @description Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused. */
             tag_ids?: string[];
@@ -1243,6 +1254,11 @@ export interface components {
             id: string;
             name: string;
         };
+        /**
+         * @description What an item is. A note becomes a task in place; a task never goes back to a note.
+         * @enum {string}
+         */
+        Kind: "note" | "task";
         LinkTagsRequest: {
             /** @description Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all. */
             tag_ids: string[];
@@ -1692,6 +1708,15 @@ export interface components {
          * @enum {string}
          */
         Size: "s" | "m" | "l" | "xl";
+        /**
+         * @description How far an item has been prepared, from least to most. Set by hand.
+         *
+         *     - `as_written`: just as it was put down.
+         *     - `with_context`: background has been added.
+         *     - `defined`: clear enough to start on. Only a task can be defined.
+         * @enum {string}
+         */
+        Stage: "as_written" | "with_context" | "defined";
         /**
          * @description Where items in one state go in the list.
          * @enum {string}
@@ -3096,7 +3121,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived` */
+            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3105,7 +3130,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
+            /** @description Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
             422: {
                 headers: {
                     [name: string]: unknown;

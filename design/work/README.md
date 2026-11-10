@@ -8,7 +8,7 @@ In flight. Each has a doc with its own progress.
 
 - [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 1 next.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
-  AI agents through the CLI. Stage 1 of 2, piece 2 next.
+  AI agents through the CLI. Stage 1 of 2, piece 3 next.
 
 ## Next
 

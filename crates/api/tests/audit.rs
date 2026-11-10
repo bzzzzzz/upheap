@@ -607,3 +607,59 @@ async fn pages_follow_on_across_different_times() -> Result<()> {
     expect_that!(second["next_cursor"], eq(&Value::Null));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn an_items_history_names_kind_and_stage_changes_and_leaves_the_defaults_out_of_its_creation() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = app.new_item(&session, &heap, json!({ "title": "Rotate keys" })).await?;
+    let id = item["id"].as_str().context("no id")?;
+    app.clock.advance(domain::Duration::from_millis(1));
+    let task = app
+        .patch(
+            &session,
+            &app.item_url(&id).await?,
+            &item["version"],
+            json!({ "kind": "task" }),
+        )
+        .await?;
+    app.clock.advance(domain::Duration::from_millis(1));
+    app.patch(
+        &session,
+        &app.item_url(&id).await?,
+        &task.body["version"],
+        json!({ "stage": "with_context" }),
+    )
+    .await?;
+
+    // Act
+    let history = app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={id}", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(
+        history.body["entries"][0]["changes"],
+        eq(&json!([{ "field": "stage", "label": "Stage", "before": "As written", "after": "With context" }]))
+    );
+    expect_that!(
+        history.body["entries"][1]["changes"],
+        eq(&json!([{ "field": "kind", "label": "Kind", "before": "Note", "after": "Task" }]))
+    );
+    let created: Vec<&str> = history.body["entries"][2]["changes"]
+        .as_array()
+        .context("no changes")?
+        .iter()
+        .filter_map(|change| change["field"].as_str())
+        .collect();
+    expect_that!(created, not(contains(eq(&"kind"))));
+    expect_that!(created, not(contains(eq(&"stage"))));
+    Ok(())
+}

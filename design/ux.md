@@ -191,7 +191,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 1. A row is one or two lines: a state circle, the position, the title, the due chip and tags, and below them the
    server's contributors ("Due this week · small effort"). On a wide screen the effort and impact sizes sit at the
-   right edge.
+   right edge. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
+   line up), and an item with context or defined has a page or a clipboard icon after it. The row shows no words for
+   them; a screen reader hears them after the title ("Rotate the certs, task, defined"). The static build never
+   shows a stage icon.
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
@@ -225,9 +228,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it,
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
-2. It opens with the state (the likeliest next state as the main button, then the others, with Won't do under ⋯, on
-   a wide screen; on a phone the same buttons sit in a bar at the bottom of the sheet, the main one wider, with Won't
-   do under ⋯, and the state is a line under the title), then "Why it's #3" from the contributors, then the need's
+2. It opens with the kind line under the title ("Task · With context": the icons with their words, and the kind
+   alone when the item is closed or in the static build), then the state (the likeliest next state as the main
+   button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
+   bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
+   line), then "Why it's #3" from the contributors, then the need's
    four steps, effort and impact as S M L XL buttons, due, tags, parameters, the description and the history. On a
    phone due, tags, parameters and the description are rows of label and value, each opening a sheet; the
    description saves as its sheet closes.
@@ -239,7 +244,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 5. Closing it (✕, Escape, or Back) goes back where it was opened from: Back when the app opened it, the list when it
    was opened from a link. Opening another row while one is open replaces it in the history.
 6. The main button is the likeliest next state: Start for open, Done for in progress, Unblock for blocked. The other
-   states are next to it, and Won't do is under ⋯.
+   states are next to it. ⋯ is named More and holds Won't do, Make it a task… and Stage, each only when the server
+   allows it; with none to show, ⋯ is absent. Make it a task asks first, naming the item, since a task can't go
+   back to a note. Stage lists as written and with context, and defined on a task only (a note says "Defined needs
+   a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
 8. A link sign beside the title copies the item's short link, and the key (`k3x9a`) shows in the header. Nothing

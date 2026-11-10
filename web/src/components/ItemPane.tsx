@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Check, ChevronDown, ChevronRight, ChevronUp, Ellipsis, Link2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, Link2, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Button, Menu, MenuTrigger, ToggleButtonGroup } from "react-aria-components";
+import { ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
@@ -13,12 +13,22 @@ import { blockerCandidatesFor } from "./blockerCandidates";
 import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker, DueRows } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
-import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import { ItemMore } from "./ItemMore";
+import { KindIcon, StageIcon } from "./kindIcons";
+import {
+  changeLabel,
+  isClosed,
+  KIND_LABELS,
+  NEXT_STATES,
+  SIZE_LABELS,
+  SIZES,
+  STAGE_LABELS,
+  STATE_LABELS,
+} from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
-import { MenuEntry, MenuPopover } from "./Menu";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
-import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
+import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 import { useUserName } from "./userName";
 
@@ -282,6 +292,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         <CopyItemLink heapRef={heapRef} itemKey={item.key} />
       </div>
 
+      <KindLine item={item} />
+
       {phone ? (
         <StateLine item={item} canReopen={canReopen} />
       ) : (
@@ -290,6 +302,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           disabled={!canChangeState}
           canReopen={canReopen}
           onChange={(state) => state !== item.state && save({ state })}
+          save={save}
         />
       )}
       {item.state === "blocked" && (
@@ -414,6 +427,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           disabled={!canChangeState}
           canReopen={canReopen}
           onChange={(state) => state !== item.state && save({ state })}
+          save={save}
         />
       )}
     </div>
@@ -631,6 +645,31 @@ function DescriptionEditor({ description, onSave }: { description: string; onSav
   );
 }
 
+/**
+ * What the item is and how far it has been prepared, under its title at every width (ux.md, The item §2): the icons
+ * with their words. Closed items and the static build show the kind only, as the server sends no stage for them.
+ */
+function KindLine({ item }: { item: Item }) {
+  return (
+    <p className="-mt-2 flex items-center gap-1.5 text-sm text-muted">
+      <span title={KIND_LABELS[item.kind]} className="flex items-center gap-1.5">
+        <KindIcon kind={item.kind} />
+        {KIND_LABELS[item.kind]}
+      </span>
+      {item.stage && (
+        <>
+          {" "}
+          <span aria-hidden="true">·</span>{" "}
+          <span title={STAGE_LABELS[item.stage]} className="flex items-center gap-1.5">
+            <StageIcon stage={item.stage} />
+            {STAGE_LABELS[item.stage]}
+          </span>
+        </>
+      )}
+    </p>
+  );
+}
+
 /** What state the item is in, as a phone shows it above the fields; its buttons are in the bar at the bottom. */
 function StateLine({ item, canReopen }: { item: Item; canReopen: boolean }) {
   const closed = isClosed(item.state);
@@ -692,7 +731,7 @@ function WhyItRanks({ entry }: { entry: RankedItem }) {
 
 /**
  * The item's state and the ways out of it (ux.md, The item §6): the likeliest next state as the main button,
- * the other states beside it, and Won't do under ⋯, as it's rarely the one wanted. A closed item says when it closed,
+ * the other states beside it, and ⋯ (More) with Won't do, Make it a task and the Stage, as they're rarely the ones wanted. A closed item says when it closed,
  * and offers Reopen while it still can be. As a `bar`, for a phone, the buttons sit at the bottom of the sheet within
  * reach of the thumb, the main one wider, and the state itself is a line under the title (ux.md, The item §2).
  */
@@ -701,12 +740,14 @@ function StateActions({
   disabled,
   canReopen,
   onChange,
+  save,
   variant = "inline",
 }: {
   item: Item;
   disabled: boolean;
   canReopen: boolean;
   onChange: (state: ItemState) => void;
+  save: (patch: ItemPatch) => void;
   variant?: "inline" | "bar";
 }) {
   const labelId = useId();
@@ -734,24 +775,7 @@ function StateActions({
     actions = (
       <>
         {[main, ...others].map((state) => button(state, state === main, disabled))}
-        {bar ? (
-          <MoreStatesSheet item={item} disabled={disabled} onChange={onChange} />
-        ) : (
-          <MenuTrigger>
-            <Button
-              aria-label="More states"
-              isDisabled={disabled}
-              className="flex size-9 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[disabled]:opacity-50 data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11"
-            >
-              <Ellipsis aria-hidden="true" className="size-4" />
-            </Button>
-            <MenuPopover placement="bottom end">
-              <Menu aria-label="More states" className="outline-none" onAction={() => onChange("wont_do")}>
-                <MenuEntry id="wont_do">{changeLabel(item.state, "wont_do")}</MenuEntry>
-              </Menu>
-            </MenuPopover>
-          </MenuTrigger>
-        )}
+        <ItemMore item={item} variant={bar ? "bar" : "inline"} save={save} />
       </>
     );
   }
@@ -781,47 +805,6 @@ function StateActions({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
     </div>
-  );
-}
-
-/**
- * Won't do from the phone's bar, in a sheet that opens as the finger lifts. A menu opens as it's pressed and picks
- * the entry the finger lifts over, and on a phone its sheet comes up right under the ⋯ at the bottom of the screen.
- */
-function MoreStatesSheet({
-  item,
-  disabled,
-  onChange,
-}: {
-  item: Item;
-  disabled: boolean;
-  onChange: (state: ItemState) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="More states"
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-        className="flex size-13 items-center justify-center rounded-[14px] bg-sunken text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
-      >
-        <Ellipsis aria-hidden="true" className="size-5" />
-      </button>
-      <Sheet title="More states" isOpen={open} onClose={() => setOpen(false)} aside={item.title}>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            onChange("wont_do");
-          }}
-          className={`${sheetRowClass} mb-1`}
-        >
-          {changeLabel(item.state, "wont_do")}
-        </button>
-      </Sheet>
-    </>
   );
 }
 

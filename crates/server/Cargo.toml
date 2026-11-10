@@ -19,7 +19,7 @@ postgres = ["store/postgres"]
 
 [dependencies]
 anyhow.workspace = true
-api = { workspace = true, features = ["accounts", "trace-and-timeout"] }
+api = { workspace = true, features = ["accounts", "agents", "trace-and-timeout"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 domain.workspace = true
 mime_guess.workspace = true
