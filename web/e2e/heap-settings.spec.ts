@@ -229,3 +229,39 @@ test("the heap's context is written in General: Edit, Save, Cancel and clearing 
   await expect(empty).toBeVisible();
   await expect(edit).toBeFocused();
 });
+
+test("a context saved by someone else meanwhile is shown above the draft, which a second Save then saves", async ({
+  page,
+  heapPath,
+  localBuild,
+}) => {
+  test.skip(localBuild, "The local build has no context card.");
+  await goTo(page, "Settings");
+  const card = page.getByRole("region", { name: "Context", exact: true });
+  const field = page.getByLabel("Heap context");
+  await card.getByRole("button", { name: "Edit" }).click();
+  await field.fill("My version");
+
+  // Another member saves a context while the form is open, through the API with the page's session.
+  const url = `/api/v1${heapPath}`;
+  const current = await page.request.get(url);
+  expect(current.ok()).toBe(true);
+  const { version } = await current.json();
+  const patched = await page.request.patch(url, {
+    headers: { "x-csrf-protection": "1", "If-Match": `"${version}"` },
+    data: { context: "Their version" },
+  });
+  expect(patched.ok()).toBe(true);
+
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByRole("heading", { name: "Saved meanwhile" })).toBeVisible();
+  await expect(card.getByText("Their version", { exact: true })).toBeVisible();
+  await expect(field).toHaveValue("My version");
+  await expect(card.getByRole("alert")).toContainText("Someone else changed the context while you were editing.");
+
+  // The second Save replaces theirs with the draft.
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(field).toHaveCount(0);
+  await expect(card.getByText("My version", { exact: true })).toBeVisible();
+  await expect(card.getByText("Their version")).toHaveCount(0);
+});

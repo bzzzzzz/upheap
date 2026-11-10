@@ -2,7 +2,7 @@ import { Link, Outlet } from "@tanstack/react-router";
 import { localDatabase } from "#local-database";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { Heap, HeapRef } from "../api/client";
+import { ApiProblem, type Heap, type HeapRef } from "../api/client";
 import { useHeap, useSetHeapArchived, useUpdateHeap } from "../api/queries";
 import { BASE } from "../basePath";
 import { HistoryDisclosure } from "../components/AuditHistory";
@@ -198,6 +198,8 @@ function HeapContextCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  // Set when a save finds the context changed meanwhile; the heap is refetched, so `heap.context` is theirs.
+  const [conflicted, setConflicted] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   // Set when the form closes, so focus goes to the Edit button once it is back.
@@ -216,12 +218,21 @@ function HeapContextCard({
   const close = () => {
     refocus.current = true;
     setEditing(false);
+    setConflicted(false);
+    update.reset();
   };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    update.mutate({ heap, patch: { context: draft.trim() === "" ? null : draft } }, { onSuccess: close });
+    update.mutate(
+      { heap, patch: { context: draft.trim() === "" ? null : draft } },
+      {
+        onSuccess: close,
+        onError: (e) => setConflicted(e instanceof ApiProblem && e.code === "version_conflict"),
+      },
+    );
   };
   const error = update.variables && "context" in update.variables.patch ? update.error : null;
+  const conflictShown = conflicted && error instanceof ApiProblem && error.code === "version_conflict";
 
   return (
     <section aria-labelledby="heap-context" className={cardClass}>
@@ -230,6 +241,14 @@ function HeapContextCard({
       </h2>
       {editing ? (
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-center gap-2">
+          {conflicted && (
+            <div className="w-full">
+              <h3 className="text-sm/normal font-medium text-ink">Saved meanwhile</h3>
+              <p className="mt-1 rounded-md border border-line bg-canvas p-3 text-sm/normal break-words whitespace-pre-wrap text-ink-soft">
+                {heap.context ?? "No context."}
+              </p>
+            </div>
+          )}
           <textarea
             ref={textarea}
             aria-label="Heap context"
@@ -244,7 +263,14 @@ function HeapContextCard({
           <button type="button" onClick={close} className={`${compactButtonClass.quiet} max-sm:flex-1`}>
             Cancel
           </button>
-          <ProblemText error={error} className="text-overdue-ink" />
+          {conflictShown ? (
+            <p role="alert" className="basis-full text-sm text-overdue-ink">
+              Someone else changed the context while you were editing. Their version is above; Save again to replace it
+              with yours, or Cancel to keep theirs.
+            </p>
+          ) : (
+            <ProblemText error={error} className="text-overdue-ink" />
+          )}
         </form>
       ) : (
         <>
@@ -261,6 +287,7 @@ function HeapContextCard({
               ref={editButton}
               type="button"
               onClick={() => {
+                update.reset();
                 setDraft(heap.context ?? "");
                 setEditing(true);
               }}
