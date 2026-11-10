@@ -132,8 +132,9 @@ is resolved or turned into a task.
 4. **Core.** Answering a question, or saying a request is done or can't be done, closes it. When an item's last
    open question closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
-6. A question can be answered where it's read. It says, in a few lines, what the person needs to know to
-   answer it, and the item's context and the heap's are one step away from it.
+6. A question comes short and long. The short version is a line that someone who knows the work can answer
+   at once. The long version adds what anyone else needs to know first, and the item's context and the heap's
+   are one step away from it.
 
 **Review**
 
@@ -486,9 +487,9 @@ and still found by search. From the date on it is an ordinary open item.
 
 **Question.** Belongs to an item, and may name one of its steps. Every question has one shape:
 
-- **What is asked:** free text, written to stand on its own: the question or the action, and under it the
-  background needed to answer, summed up from the item's context and the heap's. An agent writes that
-  summary as part of asking.
+- **What is asked,** short: a line with the question or the action, enough for someone who is up to date.
+- **The details,** optional: the long version, with the background needed to answer, summed up from the
+  item's context and the heap's. An agent writes it as part of asking.
 - **Choices,** optional: a list of options to pick from, either one of them or any number.
 - **The reply:** the options picked, if there are choices, and a free-text comment. With no choices the comment
   is the answer; with choices it is optional.
@@ -504,7 +505,7 @@ Whoever asks writes the text and the choices. Two kinds come with their choices 
 A question is open, closed by a reply, or withdrawn (the asker no longer needs it). Its reply can be changed
 while its item is open.
 
-**Text.** Contexts, what a question asks and the comment in a reply are Markdown. The web app shows them
+**Text.** Contexts, a question's details and the comment in a reply are Markdown. The web app shows them
 rendered and edits them as Markdown; the command-line client reads and writes the Markdown itself.
 
 **Turn.** One piece of an agent's work on one item: from the stable state it's at to the next. It has a
@@ -818,8 +819,8 @@ The local build has no agents: it gets what works without one (W1, W4, W5, W12, 
 1. **Waiting for me and Agents are above the heaps,** since both are across heaps. Waiting carries its count. On
    a phone they take two of the four tabs, and Closed and Settings, used weekly and rarely, move into More.
 2. **A reply is given in the row,** in Waiting and in the item alike, without opening anything. The row
-   holds what's needed to answer: the question with the background its asker summed up, and the item's
-   context and the heap's folded right under it.
+   shows the short question and its reply, so someone up to date answers at a glance. Opening it shows the
+   details, with the item's context and the heap's folded under them.
 3. **In the item, what the person is likeliest to act on comes first:** an open question, then who has the item
    with the one action that fits, then the steps, then the context. What is read now and then (where it came
    from, closed questions, runs) is folded at the bottom, one step away.
@@ -871,10 +872,10 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 │   [Approved] [Changes asked]     comment, optional                     │
 │                                                                        │
 │ Question · Paint the fence · House                                     │
-│   "Which colour?"                                                      │
-│   "The fence is cedar, last stained in 2022. The shed beside it is     │
-│   white. Green needs a primer coat first."                             │
-│   Context ▸  the item's · the heap's                                   │
+│   "Which colour?"                                          Details ▾   │
+│     "The fence is cedar, last stained in 2022. The shed beside it      │
+│     is white. Green needs a primer coat first."                        │
+│     Context ▸  the item's · the heap's                                 │
 │   ( ) White  ( ) Green                                                 │
 │   comment, optional                                    [Reply]         │
 │                                                                        │
@@ -889,8 +890,9 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 │   Waits for "Pick a host", closed as won't do     [Unblock] [Open]     │
 └────────────────────────────────────────────────────────────────────────┘
 One row per open question, so an item with two has two rows. The item's title opens the item.
-Every row has the same parts: what is asked, the background the asker wrote under it, and Context, which
-unfolds the item's context and the heap's in place, rendered. The other rows above show them left out.
+A row shows the short question and its reply. Details, shown open on the second row, unfolds the long
+version in place, rendered, and under it Context, which unfolds the item's context and the heap's. A
+question asked without details has only Context there.
 A question with no choices: the comment is the answer, and Reply stays off until it has text.
 A question with choices: pick one, or any number when the asker allowed it.
 States: empty ("Nothing waits for you"); loading; a failed refresh keeps the rows.
@@ -1096,6 +1098,7 @@ Steps 2/4
 Questions
   k3x9a.q1  Question · closed · changed since your last run
             "Which CA?"  →  Internal. "Use the 2026 root."
+              <its details, when it has them>
   k3x9a.q2  Review, round 1 · changes asked
             https://example.com/pull/12  →  "See the comments there."
 
@@ -1119,9 +1122,11 @@ upheap step drop k3x9a.4
 upheap step edit k3x9a.3 [--title "..."] [--context-file f]
 upheap item start k3x9a                                    as today
 
-upheap question ask k3x9a "Which CA?" [--choice Internal --choice "Let's Encrypt"] [--many] [--step k3x9a.3]
-upheap question request k3x9a "Create a staging token and store it in the vault." [--step k3x9a.3]
-upheap question review k3x9a https://example.com/pull/12 [--piece "the script"] [--text "..."]
+upheap question ask k3x9a "Which CA?" [--details-file f] [--choice Internal --choice "Let's Encrypt"]
+                                      [--many] [--step k3x9a.3]
+upheap question request k3x9a "Put a staging token in the vault." [--details-file f] [--step k3x9a.3]
+upheap question review k3x9a https://example.com/pull/12 "The script and the runbook" [--details-file f]
+                                      [--piece "the script"]
 
 upheap item add "Write the script" --task --from n8c2d --need expected --age keep [--blocked-by k3x9a]
 upheap item to-step n8c2d --task k3x9a                     closes the note as became
@@ -1138,9 +1143,8 @@ upheap work reached --result "Rotation script merged." [--link https://example.c
            with the same link is that piece's next round. It's needed only when a piece moves to a new
            link.
 --many     the person may pick any number of the choices; without it, one.
-The text of a question, a request or a review carries its own background: `work run`'s instructions tell
-the agent to sum up, under what it asks, what the person needs from the item's context and the heap's.
-A long text comes from a file, like a context: --text-file f, in place of the text.
+The quoted text is the short version, one line. --details-file is the long one, in Markdown: `work run`'s
+instructions tell the agent to sum up there what the person needs from the item's context and the heap's.
 Each prints one line saying what changed, and --quiet prints the key of what was made.
 `item became` is refused while nothing was made from the item.
 `work reached` takes no item: the run knows it.
