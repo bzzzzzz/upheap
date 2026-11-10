@@ -443,6 +443,9 @@ From the steps above that ask something of the product.
 item, its **origin**. A heap is *defined* once the turn that made it ends, and *complete* while it has no open
 item. Both are read off its items; neither is stored.
 
+**Heap weight.** A number each person gives each of their heaps, one by default. It says how much that heap
+matters to them against their other heaps, and is theirs alone: teammates in a shared heap each have their own.
+
 **Item.** As today, and: a **kind** (note, task or reminder), a **context**, and an **origin** when it was made
 from another item. Its work state is today's, with one more closed state:
 
@@ -512,8 +515,10 @@ change it makes carries the run it was made in.
    task the same way.
 2. A note that becomes several tasks, a step of an existing task, or a heap is closed as became. What it became
    keeps it as origin.
-3. Everything made from a note, the items of a heap made from it included, takes its need, and its age counts
-   from the note's creation, so splitting a note never sends its work to the back.
+3. Need and age are decided at each split, for each thing made, the items of a new heap included: its need,
+   and whether its age counts from the note's creation or from now. Nothing is inherited silently. A person
+   splitting by hand picks both. An agent picks them when the note's context or the person's line settles it,
+   and otherwise asks before its turn ends. An agent never gives a need above the note's.
 4. A step can only be added to an open task in the same heap. A heap made from a note is in the note's team,
    with prepare off.
 5. No other move changes a kind. A task doesn't go back to a note.
@@ -537,19 +542,24 @@ change it makes carries the run it was made in.
 **The agent's queue**
 
 1. An item is in the queue when it has an open turn, doesn't wait for the person, isn't blocked, isn't claimed,
-   and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and comes
-   right after its source in the order of §2.
-2. The queue's order is the heap's ranking. Across heaps, the heaps are taken in the order the person named
-   them: a later heap's items come up only when the earlier heaps have nothing.
-3. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
+   and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and starts
+   with its source's weight.
+2. The queue is one list over all the given heaps. An item's place is its priority score in its own heap,
+   times the weight the person running `upheap work` gave that heap. So the top items of every heap get worked,
+   and raising a heap's weight moves all of its items up.
+3. **Started work comes first.** An item whose turn already has a run, and which is ready to go on, gets a large
+   boost in the queue: large enough that only something much more important passes it. Half-done work is
+   finished before new work of about the same importance is begun. The size of the boost is a number in the
+   formula, like the others.
+4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
-4. A run ends in one of three ways: **reached**, with its result; **asked**, having attached at least one
+5. A run ends in one of three ways: **reached**, with its result; **asked**, having attached at least one
    question; or **failed**. A claim that lapses counts as failed.
-5. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
+6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
    in the table and has no open question. Otherwise the run counts as failed.
-6. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
+7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
    wrong. The person retries it or takes it back.
-7. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
+8. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
 
 **All the way**
 
@@ -563,7 +573,8 @@ change it makes carries the run it was made in.
 2. When an item's last open question closes and its turn is open, the item is back in the queue.
 3. Changing an answer on an open item with an open turn puts the item back in the queue, with the change marked
    as new. On a closed item an answer can't be changed; the person reopens the item first.
-4. "What waits for me" is every item that waits for the person, in each of their heaps, in ranking order.
+4. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
+   queue is: the item's score times the person's weight for its heap.
 
 **Review**
 
@@ -591,7 +602,8 @@ change it makes carries the run it was made in.
 1. Read everything in the heaps `upheap work` was given.
 2. Write only inside a run that holds a claim: the item's context, steps and state, questions on it, and the
    moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item.
-3. Set effort, impact and due time on what it makes. Never need: it's inherited, and only the person changes it.
+3. Set effort, impact and due time on what it makes, and its need at a split (Kinds and moves §3). It never
+   changes the need of an item that exists.
 4. Never: close anything as won't do, close anything as done except a task under Review §2, answer a question,
    change a heap's context or settings once the turn that made the heap has ended, or touch tags' and
    parameters' definitions.
@@ -628,22 +640,25 @@ change it makes carries the run it was made in.
 Each walked by hand through the rules above.
 
 1. **An old idea against a new critical task.** A three-week-old idea note and a critical task added today both
-   have open turns. Queue §2: the heap's ranking. Critical pulls far harder than three weeks of an idea's slow
-   ageing, so the task is next. The idea is taken when nothing above it is in the queue.
-2. **A half-done task against something new and higher.** Task A is mid-turn after an answer; note B, ranked
-   higher, gets a go-ahead. Queue §2 has no rule for carrying on first, so B is next and A waits. Accepted: the
-   ranking is the one authority, and a half-done pile only grows while more important work keeps arriving.
+   have open turns, neither started. Queue §2: both are in one heap, so its weight changes nothing and the
+   heap's ranking decides. Critical pulls far harder than three weeks of an idea's slow ageing, so the task is
+   next. The idea is taken when nothing above it is in the queue.
+2. **A half-done task against something new.** Task A is mid-turn after an answer; note B gets a go-ahead.
+   Queue §3: A is started and ready, so it has the boost. B a little above A in the heap: A is next, and B
+   waits one run. B critical against an A that is nice to have: B passes the boost and is next. Accepted: started
+   work is finished first unless what arrives is much more important.
 3. **Splitting.** A two-month-old "expected" note is sent all the way. The agent makes tasks A, B, C, with B
-   blocked by A and C by B. Moves §2: the note is closed as became. Moves §3: all three are expected and two
-   months old. All the way §2: each gets a turn. Queue §1: only A is in the queue. A's review is approved, A is
-   done, Blocks §2 frees B, and B is next.
+   blocked by A and C by B. Moves §2: the note is closed as became. Moves §3: the note's context says all three
+   serve the same promise, so the agent gives each "expected" and the note's age, without asking. All the way
+   §2: each gets a turn. Queue §1: only A is in the queue. A's review is approved, A is done, Blocks §2 frees B,
+   and B is next.
 4. **Taken back mid-run.** The agent has ticked two of five steps and asked a question. The person takes the
    task back. Person §1: the turn ends, the question is withdrawn, the two ticks stay. The run's next write is
    refused. The task is with the person, in progress, two of five.
-5. **A run dies.** Three steps ticked, then the machine sleeps. Queue §4: the claim lapses, failed. The task is
-   in the queue again; the next run reads three ticked steps and carries on. Dies twice more: Queue §6, stuck,
+5. **A run dies.** Three steps ticked, then the machine sleeps. Queue §5: the claim lapses, failed. The task is
+   in the queue again; the next run reads three ticked steps and carries on. Dies twice more: Queue §7, stuck,
    and it shows in what waits for the person.
-6. **Two loops at once.** `upheap work` runs on two machines over the same heap. Both ask for next. Queue §3: the
+6. **Two loops at once.** `upheap work` runs on two machines over the same heap. Both ask for next. Queue §4: the
    first gets the top item and its claim; Queue §1 keeps it out of the second's queue, which gets the next one.
 7. **Two reviews, one approved.** A task lands as two pull requests. The person approves the first and asks for
    changes on the second. Review §2: not done. Review §3: the agent reworks the second and asks again, round 2.
@@ -662,11 +677,17 @@ Each walked by hand through the rules above.
 12. **Editing under the agent.** While an agent prepares a note, the person rewrites its title. Person §3: fine.
     The agent's write of the context is refused as stale; it reads the note again and writes a context for the
     new title.
+13. **Two heaps.** The person weights "Work" 2 and "House" 1. House's top item scores 50 and Work's third
+    scores 30. Queue §2: 30 × 2 = 60 beats 50, so Work's third is taken before House's first. They raise House
+    to 3: its top item is now 150 and leads the queue.
+14. **A split with nothing to go on.** A note with context is sent on and the agent finds two unrelated pieces
+    of work in it. Moves §3: nothing settles their need, so it asks one question listing both, and the turn ends
+    only after the answer.
 
 Two scenarios changed the rules: 10 added "closing by hand takes it back first", and 11 added Blocks §3. A
 review of this step added six more: the stage as something set, not worked out; the latest round of each piece
 deciding done; agents never closing a note as done; a refused blocker counting as waiting; heaps an agent made
-joining the queue; and need passing to everything made from a note.
+joining the queue; and need being settled for everything made from a note.
 
 ### Choices
 
@@ -682,9 +703,13 @@ joining the queue; and need passing to everything made from a note.
    agent's change reads as its member's.
 4. **D. Turns and runs are stored,** not derived from the audit log. The queue, the claim, the cost and the
    progress page all read them.
-5. **The ranking alone orders the queue,** not "finish what's started first". One authority, as for the person.
-6. **Heaps in the order named,** not a merged order. Heaps have no common scale until the view across heaps is
-   designed; that design can replace this rule.
+5. **Started work gets a boost in the ranking,** not a rule of its own. "Always finish first" would let a
+   trivial half-done item hold up something critical; ranking alone leaves a pile of half-done things.
+6. **D. Heaps are compared by score times a weight the person sets,** not taken in a fixed order or one loop
+   per heap. The top of every heap gets attention, and one number moves a heap. It assumes scores from
+   different heaps can be compared as they are, which holds while heaps keep similar factor weights; a heap
+   with unusual weights or many custom parameters will sit higher or lower than it should, and its heap weight
+   is the correction. This is also the mechanism for the view across heaps in the tracker's Next list.
 7. **One blocker per item,** as today, not several. Chains cover the cases an agent produces, and several
    blockers change the ranking's inheritance.
 8. **Reached is checked against the table,** not taken from the agent. A rule decides whether a turn ended.
@@ -714,6 +739,7 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - The exact reach of "all the way" when a turn spawns tasks, notes and heaps. To be iterated on while building.
 - Whether a done task that an agent thinks needs follow-up makes a new note.
 - How many failed runs stop the retries, and how long before a claim lapses.
+- Whether heap scores need normalising before the heap weight is applied.
 - When the reached check fails a run, the agent is told which condition it missed.
 - A heap's cost can come in more than one unit, and the interface has to show that.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
