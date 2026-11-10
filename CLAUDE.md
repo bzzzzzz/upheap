@@ -24,27 +24,33 @@ Build, run and check commands are in [README.md](README.md).
 
 Read [design/engineering-principles.md](design/engineering-principles.md) before writing code. **Must follow.**
 Where code and principles disagree, fix one of them. [design/architecture.md](design/architecture.md) explains how
-it's built and why, and [design/decisions.md](design/decisions.md) records the choices that could have gone another
-way. [design/README.md](design/README.md) indexes every doc and says what each is for.
+it's built and why, and [design/decisions.md](design/decisions.md) records the few choices that are costly to
+reverse. [design/README.md](design/README.md) indexes every doc and says what each is for.
 
 Rules for the docs:
 
 1. **One home per fact.** What code or a generated file states, no doc repeats: endpoints are in `openapi.json`,
    error codes in `crates/api/src/error.rs`, the schema in the migrations, configuration in README.md. Docs explain
    mechanisms and reasons, and link to the rest.
-2. **Status lives in [design/work/progress.md](design/work/progress.md) only,** as state, not history: one line
-   per area, no changelogs, no test counts. Update the row for the area you changed. The pull requests are the
-   history.
-3. **A design doc for unbuilt work is temporary.** It lives in `design/work/` while the work is built, and nothing
-   outside `work/` links into it but CLAUDE.md and the index: code and the permanent docs cite the permanent doc
-   that holds a mechanism, or nothing until one does. Once built, the mechanisms worth keeping move into
-   architecture.md or the module docs, the choices into decisions.md, its status into progress.md, and the file
-   goes. Git remembers it.
-4. **Open questions** about built things go in progress.md's one list. A design doc for unbuilt work keeps its own
-   until it's built.
+2. **Status lives in `design/work/` only,** as state, not history.
+   [design/work/README.md](design/work/README.md) is the tracker: the tracks in flight with a line each, what's
+   next, and ideas, in about sixty lines at most. Each track's progress is in its own doc. Nothing lists what's
+   built: the code and product.md say that, and the pull requests are the history.
+3. **A track's doc is temporary.** `design/work/<track>.md` holds one piece of work while it's built: what it is,
+   its progress, its design, its open questions and its ideas. Nothing outside `work/` links into it but CLAUDE.md
+   and the index: code and the permanent docs cite the permanent doc that holds a mechanism, or nothing until one
+   does. Once built, the mechanisms worth keeping move into architecture.md or the module docs, what passes rule 4
+   into product.md and decisions.md, the ideas left over into the tracker, and the file goes. Git remembers it.
+4. **product.md and decisions.md hold the core only.** product.md takes a promise to a user, stated as an outcome,
+   that only a product change could break: not how a screen behaves, an edge case or an error state. decisions.md
+   takes a choice that had a real alternative someone would propose again, is costly to reverse, and has a reason
+   the code can't show: not a name, a label, wording, or anything one pull request can undo. The rest belongs in
+   the track's doc, ux.md, architecture.md, a code comment or the pull request's description. When in doubt, leave
+   it out, and name every entry added to either doc in the pull request's description.
 
 When asked to write a "doc", write it as a Markdown file in `design/`, or in `design/work/` for unbuilt work, and
-add it to `design/README.md`, not as an external document (Claude Docs, Notion, Google Docs).
+add it to `design/README.md`, and to the tracker when it's a track, not as an external document (Claude Docs,
+Notion, Google Docs).
 
 ## Git
 
