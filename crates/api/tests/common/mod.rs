@@ -495,6 +495,18 @@ impl TestApp {
             .collect()
     }
 
+    /// How many rows `table` holds. Read straight from the database, like [`TestApp::audit_entries`], so it sees rows
+    /// no endpoint lists. `table` is spliced into the query, so pass a literal.
+    pub async fn count_rows(&self, table: &str) -> Result<i64> {
+        let sql = format!("SELECT COUNT(*) AS n FROM {table}");
+        let row = self
+            .db
+            .query_one_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?
+            .context("no count row")?;
+        Ok(row.try_get("", "n")?)
+    }
+
     /// Archives or unarchives a heap straight in the database, without the version change or audit entry of the
     /// endpoints, so the access-control test can wrap any call in it.
     pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {

@@ -174,8 +174,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it was
-         *     ended already. A bearer token may end its own sign-in; its next request is then refused as signed out.
+         * Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it ended
+         *     within the last day; one that ended earlier is gone and answers 404. A bearer token may end its own sign-in; its next request is then refused as signed out.
          */
         delete: operations["end_sign_in"];
         options?: never;
@@ -2416,7 +2416,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Ended, or ended already */
+            /** @description Ended, or ended within the last day */
             204: {
                 headers: {
                     [name: string]: unknown;

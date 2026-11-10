@@ -330,6 +330,55 @@ async fn codes_and_access_tokens_expire() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn an_exchange_removes_codes_and_sign_ins_that_ended_a_day_ago() -> Result<()> {
+    // Arrange: A is signed in and ended, B is signed in, and one approved code is never exchanged.
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (_, a_refresh) = app.sign_in_cli(&session).await?;
+    app.sign_in_cli(&session).await?;
+    revoke(&app, &a_refresh).await?;
+    app.approve_cli(&session).await?;
+    app.clock.advance(Duration::from_days(2));
+
+    // Act
+    let (_, c_refresh) = app.sign_in_cli(&session).await?;
+
+    // Assert: only C's code, and B and C with a pair each, remain.
+    expect_that!(app.count_rows("oauth_auth_codes").await?, eq(1));
+    expect_that!(app.count_rows("oauth_token_families").await?, eq(2));
+    expect_that!(app.count_rows("oauth_tokens").await?, eq(4));
+    expect_that!(refresh(&app, &c_refresh).await?.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_ended_sign_in_stays_ended_without_error_for_a_day() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let tokens = sign_in_named(&app, &session, Some("ada-laptop")).await?;
+    let id = text(&list_sign_ins(&app, &session).await?[0]["id"]);
+    let path = format!("/api/v1/me/sign-ins/{id}");
+    app.send(Method::DELETE, &path, Some(&session), None).await?;
+    app.clock.advance(Duration::from_hours(12));
+    app.sign_in_cli(&session).await?;
+
+    // Act
+    let within_the_day = app.send(Method::DELETE, &path, Some(&session), None).await?;
+    app.clock.advance(Duration::from_days(1));
+    app.sign_in_cli(&session).await?;
+    let after_the_day = app.send(Method::DELETE, &path, Some(&session), None).await?;
+
+    // Assert
+    expect_that!(within_the_day.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(after_the_day.status, eq(StatusCode::NOT_FOUND));
+    expect_dead(&app, &tokens).await?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_consent_page_can_check_a_request_before_approving_it() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

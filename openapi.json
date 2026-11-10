@@ -533,7 +533,7 @@
         "tags": [
           "me"
         ],
-        "summary": "Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it was\nended already. A bearer token may end its own sign-in; its next request is then refused as signed out.",
+        "summary": "Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it ended\nwithin the last day; one that ended earlier is gone and answers 404. A bearer token may end its own sign-in; its next request is then refused as signed out.",
         "operationId": "end_sign_in",
         "parameters": [
           {
@@ -549,7 +549,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Ended, or ended already"
+            "description": "Ended, or ended within the last day"
           },
           "401": {
             "description": "`unauthenticated`",

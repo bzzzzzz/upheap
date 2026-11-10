@@ -71,12 +71,12 @@ async fn list_sign_ins(
     }))
 }
 
-/// Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it was
-/// ended already. A bearer token may end its own sign-in; its next request is then refused as signed out.
+/// Ends one of the caller's sign-ins: its access and refresh tokens stop working at once. Succeeds when it ended
+/// within the last day; one that ended earlier is gone and answers 404. A bearer token may end its own sign-in; its next request is then refused as signed out.
 #[utoipa::path(delete, path = "/me/sign-ins/{id}", tag = "me", security(("session" = [])),
     params(SignInParams),
     responses(
-        (status = 204, description = "Ended, or ended already"),
+        (status = 204, description = "Ended, or ended within the last day"),
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 404, description = "No such sign-in, or it isn't the caller's", body = Problem),
     ))]
