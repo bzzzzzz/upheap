@@ -753,58 +753,59 @@ as it was before stays in the item's history.
 
 ### Inventory
 
-F is frequency and N is necessity, both 1 to 5 by the method's scale, for the server build. The local build has
-no agents: it gets what works without one (W1, W4, W5, W12, W15 and W17) and none of the rest.
+Frequency is Constant (several times a session), Daily, Weekly, Sometimes or Once. Necessity is Core (no
+workaround), Enabler (done painfully without it), Nice to have or Polish. Both are rated for the server build.
+The local build has no agents: it gets what works without one (W1, W4, W5, W12, W15 and W17) and none of the rest.
 
 **Web app**
 
-| # | Entry | Flows | F | N | Why, for 4 and 5 |
-| --- | --- | --- | :---: | :---: | --- |
-| W1 | List row: step count, reminder mark, who has it | P2 | 5 | 5 | Without the marks an item an agent holds looks free to take |
-| W2 | Waiting for me, across heaps | P3, P14, A5 | 5 | 5 | Every agent turn that asks stops until the person finds the question |
-| W3 | Replying: a question, a request, a review | P3, P14 | 5 | 5 | The only way an item goes back to the agent |
-| W4 | Item: context as Markdown | P4, P5 | 4 | 5 | It is what the agent reads and what it writes |
-| W5 | Item: steps | P4, P5 | 5 | 5 | A task is its steps |
-| W6 | Item: who has it, send on, take back, changes asked, retry | P4, P11, P12 | 5 | 5 | Nothing reaches an agent without the go-ahead |
-| W7 | Item: closed questions with their replies, change a reply | P13 | 3 | 4 | A wrong answer has no other fix |
-| W8 | Item: what it came from and what it became | P4, P10 | 3 | 4 | After a split it's the only way from the note to its tasks |
-| W9 | Item: runs with result, links and cost, and the total | P10, A5 | 3 | 4 | Asked and failed runs, and why a turn is stuck, are nowhere else |
-| W10 | Agents: progress across heaps, and what waits for a decision | P4, P10 | 4 | 5 | P4 starts here; a prepared note is otherwise found only by scrolling |
-| W11 | Navigation: Waiting for me and Agents | all | 5 | 5 | Both are across heaps and have no place today |
-| W12 | Add: a reminder with its date | P1 | 3 | 4 | A reminder can't be made otherwise |
-| W13 | Heap settings: context, agents prepare | P8 | 1 | 5 | Golden path step 1 |
-| W14 | Heap settings: my weight for this heap | Queue §2 | 2 | 4 | With two heaps it's the only way to say which comes first |
-| W15 | The list: reminders to come, and search finding them | P6 | 2 | 4 | A reminder with a wrong date can't be found to fix |
-| W16 | Closed: items closed as became | P11 | 2 | 4 | Reopening one within its week starts here |
-| W17 | Item: make a note or a reminder a task | P6, P7 | 3 | 4 | P6 dead-ends: a due reminder can't become a task |
-| W18 | Item: attach a question by hand | P7 | 2 | 2 | |
-| W19 | Item: split a note by hand into tasks, a step or a heap | P7 | 2 | 3 | |
-| W20 | Steps: reorder by dragging | P5 | 2 | 2 | |
-| W21 | Activity and history: a mark on what an agent changed | P10, story 19 | 2 | 4 | Otherwise an agent's wrong edit reads as the person's own |
-| W22 | Heap: its total cost | P10, story 25 | 2 | 4 | The only place the cost of a whole project is seen |
+| # | Entry | Flows | Frequency | Necessity | Why, for Core and Enabler |
+| --- | --- | --- | --- | --- | --- |
+| W1 | List row: step count, reminder mark, who has it | P2 | Constant | Core | Without the marks an item an agent holds looks free to take |
+| W2 | Waiting for me, across heaps | P3, P14, A5 | Constant | Core | Every agent turn that asks stops until the person finds the question |
+| W3 | Replying: a question, a request, a review | P3, P14 | Constant | Core | The only way an item goes back to the agent |
+| W4 | Item: context as Markdown | P4, P5 | Daily | Core | It is what the agent reads and what it writes |
+| W5 | Item: steps | P4, P5 | Constant | Core | A task is its steps |
+| W6 | Item: who has it, send on, take back, changes asked, retry | P4, P11, P12 | Constant | Core | Nothing reaches an agent without the go-ahead |
+| W7 | Item: closed questions with their replies, change a reply | P13 | Weekly | Enabler | A wrong answer has no other fix |
+| W8 | Item: what it came from and what it became | P4, P10 | Weekly | Enabler | After a split it's the only way from the note to its tasks |
+| W9 | Item: runs with result, links and cost, and the total | P10, A5 | Weekly | Enabler | Asked and failed runs, and why a turn is stuck, are nowhere else |
+| W10 | Agents: progress across heaps, and what waits for a decision | P4, P10 | Daily | Core | P4 starts here; a prepared note is otherwise found only by scrolling |
+| W11 | Navigation: Waiting for me and Agents | all | Constant | Core | Both are across heaps and have no place today |
+| W12 | Add: a reminder with its date | P1 | Weekly | Enabler | A reminder can't be made otherwise |
+| W13 | Heap settings: context, agents prepare | P8 | Once | Core | Golden path step 1 |
+| W14 | Heap settings: my weight for this heap | Queue §2 | Sometimes | Enabler | With two heaps it's the only way to say which comes first |
+| W15 | The list: reminders to come, and search finding them | P6 | Sometimes | Enabler | A reminder with a wrong date can't be found to fix |
+| W16 | Closed: items closed as became | P11 | Sometimes | Enabler | Reopening one within its week starts here |
+| W17 | Item: make a note or a reminder a task | P6, P7 | Weekly | Enabler | P6 dead-ends: a due reminder can't become a task |
+| W18 | Item: attach a question by hand | P7 | Sometimes | Polish | |
+| W19 | Item: split a note by hand into tasks, a step or a heap | P7 | Sometimes | Nice to have | |
+| W20 | Steps: reorder by dragging | P5 | Sometimes | Polish | |
+| W21 | Activity and history: a mark on what an agent changed | P10, story 19 | Sometimes | Enabler | Otherwise an agent's wrong edit reads as the person's own |
+| W22 | Heap: its total cost | P10, story 25 | Sometimes | Enabler | The only place the cost of a whole project is seen |
 
 **Command-line client**
 
-| # | Entry | Flows | F | N | Why, for 4 and 5 |
-| --- | --- | --- | :---: | :---: | --- |
-| C1 | `work run`: the loop | P9, A1 to A5 | 5 | 5 | It is how an agent gets work |
-| C2 | `work next`: what's next, without taking it | A1 | 3 | 4 | The promise that "next" is a rule can be checked, and a person's own loop needs it |
-| C3 | `item show` and `heap show` with everything an agent reads | A1 | 5 | 5 | The agent starts every run by reading |
-| C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | 5 | 5 | Filling in context is the first turn of every note |
-| C5 | `step add`, `tick`, `drop`, `edit` | A1 | 5 | 5 | Doing a task is ticking its steps |
-| C6 | `question ask`, `request`, `review` | A2, A6 | 5 | 5 | The agent's only way to reach the person |
-| C7 | `work reached`: the run says what it reached and made | A1 | 5 | 5 | A turn ends no other way |
-| C8 | `item to-task` | A1 | 4 | 5 | Golden path step 6 |
-| C9 | Splitting: `item add --from`, `item became` | A4 | 3 | 5 | Golden path step 6 |
-| C10 | `item to-step` | A4 | 2 | 4 | A core move with no other way for an agent |
-| C11 | `heap add --from` | A4 | 2 | 4 | A core move with no other way for an agent |
-| C12 | What a run is refused, and what it's told | A5, P12 | 3 | 5 | An agent that isn't told why repeats the same write |
-| C13 | The person's side: `item send`, `item take-back`, `question list`, `question reply` | P3, P4 | 3 | 3 | |
-| C14 | `item list` showing kind and who has it | P2 | 3 | 3 | |
-| C15 | `item add --reminder` | P1 | 2 | 3 | |
-| C16 | `work queue`: the whole queue, with why each is where it is | A1 | 2 | 2 | |
-| C17 | `work log`: the agents' progress | P10 | 2 | 2 | |
-| C18 | `step reopen`, `step move` | A1 | 2 | 2 | |
+| # | Entry | Flows | Frequency | Necessity | Why, for Core and Enabler |
+| --- | --- | --- | --- | --- | --- |
+| C1 | `work run`: the loop | P9, A1 to A5 | Constant | Core | It is how an agent gets work |
+| C2 | `work next`: what's next, without taking it | A1 | Weekly | Enabler | The promise that "next" is a rule can be checked, and a person's own loop needs it |
+| C3 | `item show` and `heap show` with everything an agent reads | A1 | Constant | Core | The agent starts every run by reading |
+| C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | Constant | Core | Filling in context is the first turn of every note |
+| C5 | `step add`, `tick`, `drop`, `edit` | A1 | Constant | Core | Doing a task is ticking its steps |
+| C6 | `question ask`, `request`, `review` | A2, A6 | Constant | Core | The agent's only way to reach the person |
+| C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | A turn ends no other way |
+| C8 | `item to-task` | A1 | Daily | Core | Golden path step 6 |
+| C9 | Splitting: `item add --from`, `item became` | A4 | Weekly | Core | Golden path step 6 |
+| C10 | `item to-step` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
+| C11 | `heap add --from` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
+| C12 | What a run is refused, and what it's told | A5, P12 | Weekly | Core | An agent that isn't told why repeats the same write |
+| C13 | The person's side: `item send`, `item take-back`, `question list`, `question reply` | P3, P4 | Weekly | Nice to have | |
+| C14 | `item list` showing kind and who has it | P2 | Weekly | Nice to have | |
+| C15 | `item add --reminder` | P1 | Sometimes | Nice to have | |
+| C16 | `work queue`: the whole queue, with why each is where it is | A1 | Sometimes | Polish | |
+| C17 | `work log`: the agents' progress | P10 | Sometimes | Polish | |
+| C18 | `step reopen`, `step move` | A1 | Sometimes | Polish | |
 
 **The first set** is W1 to W17, W21, W22 and C1 to C12. W18 to W20 and C13 to C18 are ideas.
 
@@ -825,7 +826,7 @@ no agents: it gets what works without one (W1, W4, W5, W12, W15 and W17) and non
 One wireframe per screen; entries that share a screen share a wireframe.
 
 ```
-ALL WIDTHS · Navigation (W11)                         frequency 5 · necessity 5
+ALL WIDTHS · Navigation (W11)                         constant · core
 Wide sidebar, tablet rail              Phone tabs
 ┌────────────────────────┐             ┌──────────────────────────────────────┐
 │ Waiting for me       3 │             │ Open   Waiting 3   [+]  Agents  More │
@@ -842,7 +843,7 @@ States: no count at zero. Local build: neither entry, and today's tabs.
 ```
 
 ```
-ALL WIDTHS · List row (W1)                            frequency 5 · necessity 5
+ALL WIDTHS · List row (W1)                            constant · core
 │ ○ 3  Rotate the certs  2/5   [due] [tags]               with an agent │
 │      Due this week · small effort                                     │
 │ ○ 4  Paint the fence         [tags]                     waits for you │
@@ -855,7 +856,7 @@ Next likely action: open the item.
 ```
 
 ```
-ALL WIDTHS · Waiting for me (W2, W3)                  frequency 5 · necessity 5
+ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Waiting for me · 5                 all heaps, most important first     │
 │                                                                        │
@@ -886,7 +887,7 @@ Next likely action: the next row.
 ```
 
 ```
-WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   frequency 5 · necessity 5
+WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Rotate the certs                                    k3x9a  link   [✕]  │
 │ task · defined                                                         │
@@ -938,7 +939,7 @@ Next likely action: reply when something waits; otherwise send on, or tick a ste
 ```
 
 ```
-ALL WIDTHS · Agents (W10)                             frequency 4 · necessity 5
+ALL WIDTHS · Agents (W10)                             daily · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Agents                                                                 │
 │                                                                        │
@@ -968,7 +969,7 @@ Next likely action: open the first item under Your decision.
 ```
 
 ```
-DIALOG, PHONE SHEET · Add (W12)                       frequency 5 · necessity 5; reminder 3 · 4
+DIALOG, PHONE SHEET · Add (W12)                       constant · core; reminder: weekly · enabler
 │ Add to Work ▾                                                          │
 │ [Note] [Reminder]                    Note is picked                    │
 │ Title                                                                  │
@@ -981,7 +982,7 @@ States: for a reminder, Add stays off until a date is picked. The toast says whe
 ```
 
 ```
-ALL WIDTHS · Heap settings, General (W13, W14)        frequency 2 · necessity 5
+ALL WIDTHS · Heap settings, General (W13, W14)        sometimes · core
 │ Name, link name                                          as today      │
 │ Context                              rendered Markdown     [Edit]      │
 │ Agents prepare new notes             off / on                          │
@@ -998,7 +999,7 @@ Local build: none of these.
 ```
 
 ```
-ALL WIDTHS · The list, reminders to come (W15)        frequency 2 · necessity 4
+ALL WIDTHS · The list, reminders to come (W15)        sometimes · enabler
 Filters › Show gains "Reminders to come": Hidden (the default) or Shown.
 Shown: a group of their own under the list, by date, soonest first. A row has the reminder mark, the
        title and the date, and no position. It opens the item, where the date can be changed.
@@ -1007,7 +1008,7 @@ No note counts the hidden ones: they aren't part of the list yet.
 ```
 
 ```
-ALL WIDTHS · Closed (W16)                             frequency 2 · necessity 4
+ALL WIDTHS · Closed (W16)                             sometimes · enabler
 │ Certs are a mess       Became 3 tasks · today by an agent    [Reopen]  │
 A third outcome beside Done and Won't do. The title opens the item, which lists what it became.
 Reopen works within the week, as for any closed item, and what it became stays.
@@ -1028,7 +1029,7 @@ starts the agent tool. A command with it set writes as an agent, inside that run
 is the person's own.
 
 ```
-C1 · upheap work run --tool <tool> [--heap <heap>]... [--once]     frequency 5 · necessity 5
+C1 · upheap work run --tool <tool> [--heap <heap>]... [--once]     constant · core
 
 $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
@@ -1049,7 +1050,7 @@ Exits:  0 stopped by the person, or --once done; 2 no heap named and no default;
 ```
 
 ```
-C2 · upheap work next [--heap <heap>]...                           frequency 3 · necessity 4
+C2 · upheap work next [--heap <heap>]...                           weekly · enabler
 
 $ upheap work next --heap work --heap house
 k3x9a  Rotate the certs   Work   task → done   started, ready to go on
@@ -1061,7 +1062,7 @@ It takes nothing: no claim, no run. --quiet prints the key, or nothing. Exit 0 e
 ```
 
 ```
-C3 · upheap item show <item>, upheap heap show [<heap>]            frequency 5 · necessity 5
+C3 · upheap item show <item>, upheap heap show [<heap>]            constant · core
 
 $ upheap item show k3x9a
 k3x9a  Rotate the certs
@@ -1096,7 +1097,7 @@ Context
 ```
 
 ```
-C4 to C11 · What an agent writes                                   frequency 5 · necessity 5
+C4 to C11 · What an agent writes                                   constant · core
 
 upheap item edit k3x9a --context-file context.md
 upheap item to-task k3x9a                                  a note or a reminder, in place
@@ -1131,7 +1132,7 @@ Each prints one line saying what changed, and --quiet prints the key of what was
 ```
 
 ```
-C12 · What a run is refused                                        frequency 3 · necessity 5
+C12 · What a run is refused                                        weekly · core
 
 Each is exit 3 with the server's message and code, and a hint saying what to do next.
 
