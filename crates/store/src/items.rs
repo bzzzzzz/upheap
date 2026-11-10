@@ -70,7 +70,8 @@ pub async fn find_item(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<I
 ///
 /// The tags and values are plain reads, from the same snapshot as the reads that name them in a response, so none of
 /// their IDs is ever missing there. One set while the write waited may be left out of its answer, as for any item
-/// write; the next read has it.
+/// write, and so may a blocker or closer the locked row names that the snapshot doesn't have yet (it shows as
+/// `null`); the next read has them.
 pub async fn find_item_locking(db: &impl ConnectionTrait, id: ItemId) -> Result<Option<Item>, StoreError> {
     read_item(db, id, true).await
 }
