@@ -279,6 +279,25 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
     it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
     steps and the count to read, with no checkbox to change, no ⋯ and no Add.
+12. **Waits for you**, while the item is open and has open questions, is the one tinted, outlined block in the item
+    (the accent at a low fill, a 2 px accent border), under the state buttons and above "Why it's #3", the same on
+    the pane, the tablet panel and, inline at the top, the phone sheet. One row per open question, in number
+    order, separated by a thin rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and
+    `· step "<title>"` when it names one, the short text in semibold, "Details ▸" when it has details (opening them
+    in place), then the reply controls. A question without choices has an "Answer" field and Reply, off until the
+    answer has text. With choices it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until
+    something is picked. A request has "Comment, optional" and two buttons, Done and Can't be done, which reply as
+    soon as they are pressed, sharing one row on a phone. On a phone Reply spans the width, and every control is
+    44 px.
+13. After a reply there is no toast: the row leaves Waits for you and joins Questions, the focus goes to the next
+    row's first control, else to the item, and a polite live region says Replied to “<text>”. While it is
+    sending, that row's buttons are off. If it fails the row stays with its picks and comment and the reason shows
+    under it. If someone else replied first, the row leaves and the section says "Someone else replied to “…”
+    meanwhile." until the next reply. In an archived heap a row shows its text and details with no controls. A
+    closed item has no Waits for you: its open questions read in Questions, marked "Open: reopen the item to reply."
+14. **Questions n**, a closed disclosure just above History, lists the answered questions (and on a closed item the
+    open ones) in number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as
+    written>` and "<who>, <when>" in quiet text. It only reads; changing a reply is later.
 
 ## Adding an item
 

@@ -9,8 +9,10 @@ use domain::item::{Item, ItemPatch, ItemSummary, NewItem, Stage, StateKind};
 use domain::list_view::{Group, ListView};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
-    ItemAction, Permission, StepAction, allowed_item_actions, allowed_stage_choices, allowed_step_actions,
+    ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
+    allowed_stage_choices, allowed_step_actions,
 };
+use domain::question::Question;
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, rank};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
@@ -65,6 +67,19 @@ pub struct ItemView {
     /// What the caller may do with each of the steps, the same for all of them (see
     /// [`domain::permission::allowed_step_actions`]).
     pub step_actions: Vec<StepAction>,
+    /// The item's questions in number order, or `None` in a list, which doesn't carry them.
+    pub questions: Option<Vec<QuestionView>>,
+}
+
+/// A question with the users it names and what the caller may do with it.
+#[derive(Debug)]
+pub struct QuestionView {
+    pub question: Question,
+    /// Who asked it, when that is known.
+    pub asked_by: Option<User>,
+    /// Who replied, when it's answered and that is known.
+    pub replied_by: Option<User>,
+    pub allowed_actions: Vec<QuestionAction>,
 }
 
 /// An item's value for one custom parameter, ready to show.
@@ -253,6 +268,7 @@ impl Services {
                     steps: None,
                     step_progress: None,
                     step_actions,
+                    questions: None,
                 },
                 position: 0,
                 contributors: entry.contributors,
@@ -409,6 +425,7 @@ impl Services {
                     steps: None,
                     step_progress,
                     step_actions,
+                    questions: None,
                 }
             })
             .collect();
@@ -475,6 +492,7 @@ impl Services {
             steps: Some(Vec::new()),
             step_progress: None,
             step_actions,
+            questions: Some(Vec::new()),
         })
     }
 
@@ -484,7 +502,16 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let steps = store::steps::list_steps(&self.db, item.id).await?;
-        build_item_view(&self.db, &access.heap, access.membership.role, item, steps, self.now()).await
+        let questions = store::questions::list_questions(&self.db, item.id).await?;
+        build_item_view(
+            &self.db,
+            &access.heap,
+            access.membership.role,
+            item,
+            ItemChildren { steps, questions },
+            self.now(),
+        )
+        .await
     }
 
     /// Applies a partial edit if the item is still at version `expected`. New tags must belong to the item's
@@ -534,8 +561,8 @@ impl Services {
             check_blocker(&txn, &current, blocker).await?;
         }
         let Some(edited) = edited else {
-            let steps = store::steps::list_steps_locking(&txn, current.id).await?;
-            return build_item_view(&txn, &access.heap, role, current, steps, now).await;
+            let children = ItemChildren::read_locking(&txn, current.id).await?;
+            return build_item_view(&txn, &access.heap, role, current, children, now).await;
         };
         let saved =
             store::items::update_item(&txn, &edited, expected, now)
@@ -553,8 +580,8 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps_locking(&txn, saved.id).await?;
-        let view = build_item_view(&txn, &access.heap, role, saved, steps, now).await?;
+        let children = ItemChildren::read_locking(&txn, saved.id).await?;
+        let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), "item updated");
@@ -584,16 +611,34 @@ impl Services {
     }
 }
 
-/// The view of `item`, with its `steps`, as `role` sees it in `heap` at `now`. It reads the heap's tags and
-/// parameters, the blocker and the users, so it can run inside the transaction that wrote the item.
+/// What an item owns in rows of their own, which a single-item response carries whole.
+pub(crate) struct ItemChildren {
+    pub steps: Vec<Step>,
+    pub questions: Vec<Question>,
+}
+
+impl ItemChildren {
+    /// The steps and questions of `item_id` as they are now, with locking reads (see
+    /// [`store::steps::list_steps_locking`]). A write calls it after the heap lock.
+    pub(crate) async fn read_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Self, StoreError> {
+        Ok(Self {
+            steps: store::steps::list_steps_locking(db, item_id).await?,
+            questions: store::questions::list_questions_locking(db, item_id).await?,
+        })
+    }
+}
+
+/// The view of `item`, with its steps and questions, as `role` sees it in `heap` at `now`. It reads the heap's tags
+/// and parameters, the blocker and the users, so it can run inside the transaction that wrote the item.
 pub(crate) async fn build_item_view(
     db: &impl ConnectionTrait,
     heap: &Heap,
     role: Role,
     item: Item,
-    steps: Vec<Step>,
+    children: ItemChildren,
     now: Timestamp,
 ) -> Result<ItemView, ServiceError> {
+    let ItemChildren { steps, questions } = children;
     let allowed_actions = allowed_item_actions(&item, heap, role, now);
     let stage_choices = allowed_stage_choices(&item, heap, role);
     let step_actions = allowed_step_actions(&item, heap, role);
@@ -601,6 +646,7 @@ pub(crate) async fn build_item_view(
     let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
     let blocked_by = find_blocker(db, &item).await?;
     let (created_by, closed_by) = find_item_users(db, &item).await?;
+    let questions = build_question_views(db, heap, role, &item, questions).await?;
     Ok(ItemView {
         parameters: describe_values(&item, &parameters),
         item,
@@ -613,7 +659,45 @@ pub(crate) async fn build_item_view(
         step_progress: progress(&steps),
         steps: Some(steps),
         step_actions,
+        questions: Some(questions),
     })
+}
+
+/// `questions` of `item` with the users who asked and replied, and what `role` may do with each. The questions of
+/// an item are few ([`domain::question::MAX_QUESTIONS`]) and so are the people who answer them.
+async fn build_question_views(
+    db: &impl ConnectionTrait,
+    heap: &Heap,
+    role: Role,
+    item: &Item,
+    questions: Vec<Question>,
+) -> Result<Vec<QuestionView>, ServiceError> {
+    let ids: Vec<UserId> = questions
+        .iter()
+        .flat_map(|question| {
+            [
+                question.asked_by,
+                question.reply.as_ref().and_then(|reply| reply.replied_by),
+            ]
+        })
+        .flatten()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let users: HashMap<UserId, User> = store::users::list_users(db, &ids)
+        .await?
+        .into_iter()
+        .map(|user| (user.id, user))
+        .collect();
+    Ok(questions
+        .into_iter()
+        .map(|question| QuestionView {
+            allowed_actions: allowed_question_actions(item, heap, role, question.state()),
+            asked_by: pick_user(&users, question.asked_by),
+            replied_by: pick_user(&users, question.reply.as_ref().and_then(|reply| reply.replied_by)),
+            question,
+        })
+        .collect())
 }
 
 /// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker

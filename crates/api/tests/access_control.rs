@@ -47,6 +47,8 @@ enum Target {
     ClosedItem,
     /// A task with one step, in `{item}` and `{step}`, with the step's version for `If-Match`.
     TaskWithStep,
+    /// An item with one open question, in `{item}` and `{question}`, with the question's version for `If-Match`.
+    ItemWithQuestion,
     Tag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
@@ -94,6 +96,10 @@ enum RequestBody {
     NewStep,
     /// A step ticked.
     TickStep,
+    /// A question to ask.
+    NewQuestion,
+    /// The reply to the target question, which has no choices.
+    ReplyToQuestion,
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
@@ -524,6 +530,22 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/questions",
+            edit,
+            Target::OpenItem,
+            RequestBody::NewQuestion,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/heaps/{heap}/items/{item}/questions/{question}",
+            edit,
+            Target::ItemWithQuestion,
+            RequestBody::ReplyToQuestion,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps/{heap}/items/{item}/reopen",
             edit,
             Target::ClosedItem,
@@ -868,6 +890,22 @@ impl World {
         Ok((key, added.body["steps"][0]["version"].to_string()))
     }
 
+    /// Creates an item with one open question as the admin and returns the item's key and the question's version.
+    async fn create_item_with_question(&self) -> Result<(String, String)> {
+        let (key, _) = self.create_item(false).await?;
+        let asked = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/items/{key}/questions", self.heap_path()),
+                Some(&self.admin.session),
+                Some(json!({ "kind": "question", "text": "Which CA?" })),
+            )
+            .await?;
+        anyhow::ensure!(asked.status == StatusCode::CREATED, "ask failed: {}", asked.body);
+        Ok((key, asked.body["questions"][0]["version"].to_string()))
+    }
+
     /// Creates a tag as the admin and returns its ID and version.
     async fn create_tag(&self) -> Result<(String, String)> {
         let created = self
@@ -1028,6 +1066,8 @@ impl World {
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
             RequestBody::NewStep => Some(json!({ "title": "A step" })),
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
+            RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
+            RequestBody::ReplyToQuestion => Some(json!({ "reply": { "comment": "Internal" } })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
@@ -1147,6 +1187,11 @@ impl World {
             Target::TaskWithStep => {
                 let (key, version) = self.create_task_with_step().await?;
                 path = path.replace("{item}", &key).replace("{step}", "1");
+                if_match = Some(version);
+            }
+            Target::ItemWithQuestion => {
+                let (key, version) = self.create_item_with_question().await?;
+                path = path.replace("{item}", &key).replace("{question}", "1");
                 if_match = Some(version);
             }
             Target::Tag => {

@@ -4,6 +4,7 @@ use domain::heap::HeapPolicy;
 use domain::item::{Due, Item, Kind, Stage};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
+use domain::question::Question;
 use domain::saved_view::SavedView;
 use domain::step::Step;
 use domain::tag::Tag;
@@ -54,6 +55,50 @@ pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
     };
     changes.insert("step".into(), step_name(after));
     Value::Object(changes)
+}
+
+/// The fields of a newly asked question, for its `question_asked` entry. Details, choices, `many` and the step are
+/// left out when there are none.
+pub(crate) fn describe_new_question(question: &Question) -> Value {
+    let mut fields = Map::new();
+    fields.insert("question".into(), json!(question.number.get()));
+    fields.insert("question_kind".into(), json!(question.kind.code()));
+    fields.insert("question_text".into(), json!(question.text.as_str()));
+    if let Some(details) = &question.details {
+        fields.insert("question_details".into(), json!(details.as_str()));
+    }
+    if !question.choices.is_empty() {
+        fields.insert("question_choices".into(), json!(question.choices.labels()));
+    }
+    if question.many {
+        fields.insert("question_many".into(), json!(true));
+    }
+    if let Some(step) = question.step {
+        fields.insert("question_step".into(), json!(step.get()));
+    }
+    Value::Object(fields)
+}
+
+/// The reply to a question, for its `question_answered` entry: the labels picked, joined, and the comment, each
+/// `null` when there is none.
+pub(crate) fn describe_reply(question: &Question) -> Value {
+    let reply = question.reply.as_ref();
+    let picked: Vec<&str> = reply
+        .map(|reply| {
+            reply
+                .picked
+                .iter()
+                .filter_map(|index| question.choices.labels().get(usize::try_from(*index).ok()?))
+                .map(String::as_str)
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({
+        "question": question.number.get(),
+        "question_text": question.text.as_str(),
+        "reply": (!picked.is_empty()).then(|| picked.join(", ")),
+        "reply_comment": reply.and_then(|reply| reply.comment.as_ref()).map(|comment| comment.as_str()),
+    })
 }
 
 fn step_name(step: &Step) -> Value {

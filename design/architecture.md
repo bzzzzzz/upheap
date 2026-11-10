@@ -87,6 +87,16 @@ The tables and columns are in the migrations. These are the conventions they fol
   heap lock like any item write, then reads the item and its steps again with locking reads (see
   [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
   item are read-only, and come back editable, unchanged, when it is reopened.
+- **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
+  a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
+  highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
+  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`). An item has at most 100,
+  so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
+  the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
+  whole item. A closed item takes neither, and its open questions come back replyable, unchanged, when it is
+  reopened. An item waits for the person while it is open and has an open question; that is derived, not stored. A
+  request is a question whose choices the server fixes as Done and Can't be done, so every kind shares one reply
+  shape. `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -439,7 +449,9 @@ the remaining admins.
    as text and IDs replaced by current names. The raw `diff` is returned too.
 6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
    read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
-   by number and title, and each changed field as `step_title`, `step_context` or `step_state`.
+   by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A question's are
+   recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
+   question's number and text and, once answered, the labels picked and the comment.
 7. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
    parameter, heap and member, and the whole logs on the heap's and the team's Activity pages. Parameters and heaps
    offer `view_history` only to those who may see their entries, so members aren't shown histories that are always
@@ -568,7 +580,7 @@ principles; the exit codes are in `crates/cli/src/error.rs`, and the commands an
 section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), tags
+   task's steps (add, tick, drop, edit), an item's questions (ask, request), tags
    (list, add, edit), heaps (list, pick a default) and signing in. Teams, members, heap settings, parameters and
    saved-view editing stay in the web app. The local build has no server, so the CLI can't reach it.
 2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
@@ -598,7 +610,8 @@ section is how it maps onto this API.
 7. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
-   (`deserialize_with`), and `Factor` (contributors), `HeldBackGap` and `ClosedGroup` read an unknown value as `Unknown`, a variant
+   (`deserialize_with`), and `Factor` (contributors), `HeldBackGap`, `ClosedGroup` and the audit log's `AuditAction`
+   read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
    CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
    and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a

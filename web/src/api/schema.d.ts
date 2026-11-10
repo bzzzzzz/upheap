@@ -460,6 +460,48 @@ export interface paths {
         patch: operations["update_item"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asks a question or makes a request on an open item, and answers with the whole item. The new question is the one
+         *     with the highest `number`. An item has at most 100 questions, answered ones included. Asking needs no
+         *     `If-Match`; a question has its own version, and the item's `version` doesn't change.
+         */
+        post: operations["ask_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions/{question}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the
+         *     question's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is
+         *     `question_answered`. Replying to an open question of a closed item is `item_closed`.
+         */
+        patch: operations["reply_to_question"];
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen": {
         parameters: {
             query?: never;
@@ -952,12 +994,32 @@ export interface components {
             /** @description Every option in use, exactly once, in the new order (highest priority first) and with its label. */
             options: components["schemas"]["OptionArrangement"][];
         };
+        /** @description A question or request to put on an item. */
+        AskQuestionRequest: {
+            /**
+             * @description For a `question`: none, or from 2 to 10 labels to pick from, each 1 to 100 characters on one line, no two the
+             *     same ignoring case. Not for a `request`, which always has `Done` and `Can't be done`.
+             */
+            choices?: string[] | null;
+            /** @description The long version: plain text, at most 20,000 characters; blank means none. */
+            details?: string | null;
+            kind: components["schemas"]["QuestionKind"];
+            /** @description Whether any number of choices may be picked. Only with `choices`. Defaults to `false`. */
+            many?: boolean | null;
+            /**
+             * Format: int32
+             * @description The number of one of the item's steps this is about.
+             */
+            step?: number | null;
+            /** @description The short version: 1 to 300 characters, on one line. */
+            text: string;
+        };
         /**
          * @description What was done. Each action is shown to those who may take it: members see item, tag and saved view changes,
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1435,6 +1497,11 @@ export interface components {
              *     by parameter name.
              */
             parameters: components["schemas"]["ItemParameter"][];
+            /**
+             * @description The item's questions and requests in number order, answered ones included. `null` in the ranked list and the
+             *     closed list: read the item for its questions.
+             */
+            questions?: components["schemas"]["Question"][] | null;
             stage?: null | components["schemas"]["Stage"];
             /**
              * @description The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
@@ -1461,7 +1528,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step";
+        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question";
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -1818,6 +1885,95 @@ export interface components {
             /** @description Short human-readable summary. May change; don't match on it. */
             title: string;
         };
+        /** @description One question or request on an item. */
+        Question: {
+            allowed_actions: components["schemas"]["QuestionAction"][];
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            asked_at: number;
+            asked_by?: null | components["schemas"]["UserRef"];
+            /** @description When it was asked, ready to show: "today", "2 days ago". */
+            asked_label: string;
+            /**
+             * @description The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
+             *     `Can't be done`.
+             */
+            choices: string[];
+            /** @description The long version, plain text; `null` when there is none. */
+            details?: string | null;
+            kind: components["schemas"]["QuestionKind"];
+            /** @description Whether any number of choices may be picked, not just one. */
+            many: boolean;
+            /**
+             * Format: int32
+             * @description The question's number within its item, given when it was asked and never changed or reused. The question is
+             *     named by its item's key and this number, as `k3x9a.q2`, and its path is `…/items/{key}/questions/{number}`.
+             */
+            number: number;
+            reply?: null | components["schemas"]["QuestionReply"];
+            state: components["schemas"]["QuestionState"];
+            /**
+             * Format: int32
+             * @description The number of the item's step this is about, which may have been dropped since.
+             */
+            step?: number | null;
+            /** @description The short version: one line. */
+            text: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.
+             */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on a question. Clients show controls only for these.
+         * @enum {string}
+         */
+        QuestionAction: "reply";
+        /**
+         * @description What is being asked.
+         *
+         *     - `question`: free text, or a pick among `choices`.
+         *     - `request`: something to do, replied to with Done (pick 0) or Can't be done (pick 1).
+         * @enum {string}
+         */
+        QuestionKind: "question" | "request";
+        /** @description An edit of a question. For now the only edit is the reply. */
+        QuestionPatch: {
+            reply?: null | components["schemas"]["QuestionReplyRequest"];
+        };
+        /** @description The reply to a question. */
+        QuestionReply: {
+            /** @description Plain text; `null` when there is none. */
+            comment?: string | null;
+            /** @description Indices into the question's `choices`, ascending. Empty for a question without choices. */
+            picked: number[];
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            replied_at: number;
+            replied_by?: null | components["schemas"]["UserRef"];
+            /** @description When it was replied to, ready to show: "today", "2 days ago". */
+            replied_label: string;
+        };
+        /** @description A reply to a question. */
+        QuestionReplyRequest: {
+            /** @description Plain text, at most 20,000 characters. Required for a question without choices; otherwise optional. */
+            comment?: string | null;
+            /**
+             * @description Indices into the question's `choices`: none for a question without choices, one for a request or a question
+             *     that takes one pick, one or more when it takes `many`. Ascending or not, without repeats.
+             */
+            picked?: number[];
+        };
+        /**
+         * @description Whether a question still waits for a reply.
+         * @enum {string}
+         */
+        QuestionState: "open" | "answered";
         RankedItem: {
             /** @description The biggest reasons for the position, largest first. */
             contributors: components["schemas"]["Contributor"][];
@@ -3627,6 +3783,177 @@ export interface operations {
                 };
             };
             /** @description Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ask_question: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskQuestionRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived`, `item_closed` or `too_many_questions` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `value_unknown` (a `step` of 0) or `step_not_in_item` (`field` `step`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reply_to_question: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+                /**
+                 * @description The question's number within its item: a positive integer, given when the question was asked.
+                 * @example 2
+                 */
+                question: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such item or question */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `question_answered`, `item_closed` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields: no `reply`, `pick_invalid` (`field` `picked`: out of range, repeated, none picked, or more than one where only one may be) */
             422: {
                 headers: {
                     [name: string]: unknown;

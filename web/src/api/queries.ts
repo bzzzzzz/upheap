@@ -35,6 +35,8 @@ import {
   type ParameterPatch,
   type RankingPreviewRequest,
   type Role,
+  type Question,
+  type QuestionReply,
   type Step,
   type StepPatch,
   type Tag,
@@ -316,6 +318,35 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/**
+ * Replies to a question of the item `itemId` (its key). Not optimistic: the item the server returns, with the question
+ * answered, is written into the cache. A failure fetches the item again, so a question someone else answered meanwhile
+ * shows as answered. Each question has its own version, which only a reply moves, so replies to different questions
+ * don't wait for each other.
+ */
+export function useReplyToQuestion(heap: HeapRef, itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ question, reply }: { question: Question; reply: QuestionReply }) => {
+      const cached = queryClient
+        .getQueryData<Item>(itemKey(heap, itemId))
+        ?.questions?.find((candidate) => candidate.number === question.number);
+      const version = Math.max(question.version, cached?.version ?? 0);
+      return unwrap(
+        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions/{question}", {
+          params: {
+            path: { ...heap, item: itemId, question: String(question.number) },
+            header: { "If-Match": `"${version}"` },
+          },
+          body: { reply },
+        }),
+      );
+    },
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onError: () => queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) }),
   });
 }
 

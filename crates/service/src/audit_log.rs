@@ -10,6 +10,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::due::{describe_due_date, describe_time};
 use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
+use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
@@ -315,6 +316,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::ItemUpdated, _) => ("edited item", true),
         (AuditAction::StepAdded, _) => ("added a step to", true),
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
+        (AuditAction::QuestionAsked, _) => ("asked a question on", true),
+        (AuditAction::QuestionAnswered, _) => ("answered a question on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
@@ -349,6 +352,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapCreated
         | AuditAction::ItemCreated
         | AuditAction::StepAdded
+        | AuditAction::QuestionAsked
+        | AuditAction::QuestionAnswered
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
@@ -374,11 +379,20 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 29] = [
+const FIELD_ORDER: [&str; 38] = [
     "step",
     "step_title",
     "step_context",
     "step_state",
+    "question",
+    "question_kind",
+    "question_text",
+    "question_details",
+    "question_choices",
+    "question_many",
+    "question_step",
+    "reply",
+    "reply_comment",
     "title",
     "kind",
     "stage",
@@ -503,6 +517,15 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "step_title" => "Step title",
         "step_context" => "Step context",
         "step_state" => "Step state",
+        "question" => "Question",
+        "question_kind" => "Kind",
+        "question_text" => "Question text",
+        "question_details" => "Details",
+        "question_choices" => "Choices",
+        "question_many" => "Pick any",
+        "question_step" => "Step",
+        "reply" => "Reply",
+        "reply_comment" => "Comment",
         "title" => "Title",
         "kind" => "Kind",
         "stage" => "Stage",
@@ -544,6 +567,10 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         // A step is named by its title; its number is in the diff for API clients.
         "step" => value.get("title")?.as_str()?.to_owned(),
         "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
+        // A question is named by its number, as `q2`, after its item's key.
+        "question" => format!("q{}", value.as_u64()?),
+        "question_kind" => describe_question_kind(QuestionKind::from_code(value.as_str()?)?).to_owned(),
+        "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
@@ -592,6 +619,13 @@ const fn describe_state(state: StateKind) -> &'static str {
         StateKind::Blocked => "Blocked",
         StateKind::Done => "Done",
         StateKind::WontDo => "Won't do",
+    }
+}
+
+const fn describe_question_kind(kind: QuestionKind) -> &'static str {
+    match kind {
+        QuestionKind::Question => "Question",
+        QuestionKind::Request => "Request",
     }
 }
 

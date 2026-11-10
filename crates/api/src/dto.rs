@@ -5,12 +5,12 @@
 
 use api_types::common::{
     ContributorDto, DueDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto,
-    ItemTagDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, group_closed};
 use jiff::tz::TimeZone;
-use service::items::{ItemView, ParameterValue, RankedEntry};
+use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry};
 use utoipa::IntoParams;
 
 fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
@@ -76,8 +76,41 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .collect()
         }),
         step_progress: view.step_progress.map(StepProgressDto::from),
+        questions: view.questions.map(|questions| {
+            questions
+                .into_iter()
+                .map(|question| to_question_dto(question, as_of, tz))
+                .collect()
+        }),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+    }
+}
+
+fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZone) -> QuestionDto {
+    let question = view.question;
+    let replied_by = view.replied_by.as_ref().map(UserRefDto::from);
+    QuestionDto {
+        number: question.number.get(),
+        kind: question.kind.into(),
+        text: question.text.as_str().to_owned(),
+        details: question.details.as_ref().map(|details| details.as_str().to_owned()),
+        choices: question.choices.labels().to_vec(),
+        many: question.many,
+        step: question.step.map(|step| step.get()),
+        state: question.state().into(),
+        asked_by: view.asked_by.as_ref().map(UserRefDto::from),
+        asked_at: question.asked_at.as_millis(),
+        asked_label: describe_ago(question.asked_at, as_of, tz),
+        reply: question.reply.map(|reply| QuestionReplyDto {
+            picked: reply.picked,
+            comment: reply.comment.as_ref().map(|comment| comment.as_str().to_owned()),
+            replied_by,
+            replied_at: reply.replied_at.as_millis(),
+            replied_label: describe_ago(reply.replied_at, as_of, tz),
+        }),
+        version: question.version.get(),
+        allowed_actions: view.allowed_actions.into_iter().map(Into::into).collect(),
     }
 }
 

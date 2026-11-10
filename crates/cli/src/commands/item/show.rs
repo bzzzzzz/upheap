@@ -1,7 +1,9 @@
 //! `upheap item show <item>`: one item in full, and with `--history` the changes made to it.
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
-use api_types::common::{ItemDto, KindDto, NeedDto, StageDto, StepStateDto};
+use api_types::common::{
+    ItemDto, KindDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
+};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
@@ -85,7 +87,8 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
             out.line(&line)?;
         }
     }
-    render_steps(item, out)
+    render_steps(item, out)?;
+    render_questions(item, out)
 }
 
 /// The task's steps, when it has any: a heading with the progress, and a line for each step in order, with its
@@ -123,6 +126,95 @@ fn render_steps(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// The item's questions and requests, when it has any, in number order: a line with the question's name, kind, state
+/// and step, then its text, details, choices and reply, aligned under the name.
+fn render_questions(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
+    // `null` (a list row) reads as no questions; `item show` reads a single item, which always has the array.
+    let questions = item.questions.as_deref().unwrap_or_default();
+    if questions.is_empty() {
+        return Ok(());
+    }
+    out.line("")?;
+    out.line_toned("Questions", Tone::Strong)?;
+    let names: Vec<String> = questions
+        .iter()
+        .map(|question| format!("{}.q{}", item.key, question.number))
+        .collect();
+    let width = names.iter().map(|name| name.chars().count()).max().unwrap_or(0);
+    let indent = " ".repeat(2 + width + 2);
+    for (question, name) in questions.iter().zip(&names) {
+        let mut head = format!(
+            "{} · {}",
+            question_kind_text(question.kind),
+            question_state_text(question.state)
+        );
+        if let Some(step) = question.step {
+            head.push_str(&format!(" · step {}.{step}", item.key));
+        }
+        out.line(&format!("  {name:<width$}  {head}"))?;
+        for line in question_lines(question) {
+            out.line(&format!("{indent}{line}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// What goes under a question's head line, each line relative to the column the text starts at.
+fn question_lines(question: &QuestionDto) -> Vec<String> {
+    let mut lines = vec![question.text.replace('\t', "    ")];
+    for line in question.details.iter().flat_map(|details| details.lines()) {
+        lines.push(format!("  {}", line.replace('\t', "    ")));
+    }
+    // A request always has Done and Can't be done, which the reader knows.
+    if question.kind != QuestionKindDto::Request && !question.choices.is_empty() {
+        let how = if question.many { "pick any" } else { "pick one" };
+        lines.push(format!("Choices ({how}): {}", question.choices.join(" · ")));
+    }
+    if let Some(reply) = &question.reply {
+        let picked: Vec<&str> = reply
+            .picked
+            .iter()
+            .filter_map(|index| question.choices.get(usize::try_from(*index).ok()?))
+            .map(String::as_str)
+            .collect();
+        let mut arrow = String::from("→");
+        if !picked.is_empty() {
+            arrow.push_str(&format!(" {}", picked.join(", ")));
+        }
+        let comment_lines: Vec<String> = reply
+            .comment
+            .iter()
+            .flat_map(|comment| comment.lines())
+            .map(|line| line.replace('\t', "    "))
+            .collect();
+        match comment_lines.as_slice() {
+            [] => lines.push(arrow),
+            [only] => lines.push(format!("{arrow} \"{only}\"")),
+            many => {
+                lines.push(arrow);
+                lines.extend(many.iter().map(|line| format!("  {line}")));
+            }
+        }
+    }
+    lines
+}
+
+const fn question_kind_text(kind: QuestionKindDto) -> &'static str {
+    match kind {
+        QuestionKindDto::Question => "Question",
+        QuestionKindDto::Request => "Request",
+        QuestionKindDto::Unknown => "Other",
+    }
+}
+
+const fn question_state_text(state: QuestionStateDto) -> &'static str {
+    match state {
+        QuestionStateDto::Open => "open",
+        QuestionStateDto::Answered => "answered",
+        QuestionStateDto::Unknown => "unknown",
+    }
 }
 
 /// The item's labelled fields, as rows of label and value. Unset sizes, due time, tags and the rest are left out.

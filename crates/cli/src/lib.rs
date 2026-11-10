@@ -130,6 +130,9 @@ enum Command {
     /// A task's steps
     #[command(subcommand)]
     Step(StepCommand),
+    /// Questions and requests on an item
+    #[command(subcommand)]
+    Question(QuestionCommand),
     /// Tags in a heap
     #[command(subcommand)]
     Tag(TagCommand),
@@ -175,6 +178,14 @@ enum StepCommand {
     Drop(commands::step::state::StepArgs),
     /// Change a step's title or context
     Edit(commands::step::edit::EditArgs),
+}
+
+#[derive(Subcommand)]
+enum QuestionCommand {
+    /// Ask a question on an item, to be answered in free text or by picking a choice
+    Ask(commands::question::ask::AskArgs),
+    /// Ask for something to do on an item; it is replied to with Done or Can't be done
+    Request(commands::question::ask::RequestArgs),
 }
 
 #[derive(Subcommand)]
@@ -225,6 +236,8 @@ impl Command {
             Self::Step(StepCommand::Add(args)) => &args.shared,
             Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
+            Self::Question(QuestionCommand::Ask(args)) => &args.shared,
+            Self::Question(QuestionCommand::Request(args)) => &args.shared,
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
@@ -328,6 +341,8 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
+        Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
+        Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
