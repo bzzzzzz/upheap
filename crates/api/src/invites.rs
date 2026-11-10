@@ -1,7 +1,9 @@
 //! Opening an invite link and joining a team through it, by the link's token. The local build has no teams to join,
 //! so it leaves these out (the `accounts` feature).
 
-use api_types::invite_links::{InvitationDto, InviteLinkStateDto, InviteViewerDto, InviteViewerStatusDto};
+use api_types::invite_links::{
+    InvitationActionDto, InvitationDto, InviteLinkStateDto, InviteViewerDto, InviteViewerStatusDto,
+};
 use api_types::teams::TeamDto;
 use axum::Json;
 use axum::extract::State;
@@ -33,21 +35,9 @@ pub(crate) struct InviteTokenParams {
     token: String,
 }
 
-/// The length of a token: 256 random bits as unpadded base64url.
-const TOKEN_LENGTH: usize = 43;
-
 /// The token in the path. One that can't be a token names nothing, so it is `404` without reading the database.
 fn parse_token(params: InviteTokenParams) -> Result<InviteToken, ServiceError> {
-    let valid = params.token.len() == TOKEN_LENGTH
-        && params
-            .token
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-    if valid {
-        Ok(InviteToken::new(params.token))
-    } else {
-        Err(ServiceError::NotFound)
-    }
+    InviteToken::parse(&params.token).ok_or(ServiceError::NotFound)
 }
 
 fn to_invitation_dto(view: InvitationView) -> InvitationDto {
@@ -61,6 +51,11 @@ fn to_invitation_dto(view: InvitationView) -> InvitationDto {
         created_by_name: view.created_by.display_name.as_str().to_owned(),
         state: InviteLinkStateDto::from(view.state),
         viewer: viewer.map(|(status, team_slug)| InviteViewerDto { status, team_slug }),
+        allowed_actions: view
+            .allowed_actions
+            .into_iter()
+            .map(InvitationActionDto::from)
+            .collect(),
     }
 }
 

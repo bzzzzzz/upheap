@@ -344,9 +344,6 @@
         "security": [
           {
             "session": []
-          },
-          {
-            "bearer": []
           }
         ]
       }
@@ -5685,9 +5682,16 @@
         "required": [
           "team_name",
           "created_by_name",
-          "state"
+          "state",
+          "allowed_actions"
         ],
         "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InvitationAction"
+            }
+          },
           "created_by_name": {
             "type": "string",
             "description": "The display name of whoever made the link, now, even if they have left the team."
@@ -5712,6 +5716,13 @@
             ]
           }
         }
+      },
+      "InvitationAction": {
+        "type": "string",
+        "description": "An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.",
+        "enum": [
+          "join"
+        ]
       },
       "InviteLink": {
         "type": "object",

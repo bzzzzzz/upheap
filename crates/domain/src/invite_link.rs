@@ -28,9 +28,23 @@ pub enum InviteLinkError {
 #[derive(Clone, PartialEq, Eq)]
 pub struct InviteToken(String);
 
+/// The length of a token: 256 random bits as unpadded base64url. `service::auth::random_token` makes them and the
+/// store's `invite_links.token` column is this wide; both are written out there, so a change here needs both.
+pub const INVITE_TOKEN_LENGTH: usize = 43;
+
 impl InviteToken {
     pub fn new(token: String) -> Self {
         Self(token)
+    }
+
+    /// A token read from outside (a link's path): exactly [`INVITE_TOKEN_LENGTH`] base64url characters, which is
+    /// what 256 random bits as unpadded base64url come to. `None` for anything else, since it can't name a link.
+    /// The length check also keeps trailing spaces out of the lookup, which MySQL's PAD SPACE comparison would
+    /// otherwise treat as equal to the token without them.
+    pub fn parse(raw: &str) -> Option<Self> {
+        let valid = raw.len() == INVITE_TOKEN_LENGTH
+            && raw.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        valid.then(|| Self(raw.to_owned()))
     }
 
     /// The secret itself, for the responses that show it and for storing it.
@@ -236,6 +250,21 @@ mod tests {
         };
         let result = revoked.check_join(revoked.created_at, Some(at(Duration::from_days(2))));
         expect_that!(result, err(matches_pattern!(InviteLinkError::Revoked { .. })));
+    }
+
+    #[gtest]
+    fn a_token_is_43_base64url_characters() {
+        let token = "a".repeat(INVITE_TOKEN_LENGTH - 2) + "-_";
+        expect_that!(
+            InviteToken::parse(&token).map(|t| t.expose().to_owned()),
+            some(eq(&token))
+        );
+        expect_that!(InviteToken::parse(&token[1..]), none());
+        expect_that!(InviteToken::parse(&format!("{token}a")), none());
+        expect_that!(InviteToken::parse(&format!("{} ", &token[1..])), none());
+        expect_that!(InviteToken::parse(&format!("{}+", &token[1..])), none());
+        expect_that!(InviteToken::parse(&format!("{}é", &token[2..])), none());
+        expect_that!(InviteToken::parse(""), none());
     }
 
     #[gtest]

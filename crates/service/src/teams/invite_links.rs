@@ -18,7 +18,9 @@ use std::collections::HashMap;
 
 use domain::audit::{AuditAction, EntityType};
 use domain::invite_link::{InviteLink, InviteLinkState, InviteToken, Revocation};
-use domain::permission::{InviteLinkAction, Permission, allowed_invite_link_actions};
+use domain::permission::{
+    InvitationAction, InviteLinkAction, Permission, allowed_invitation_actions, allowed_invite_link_actions,
+};
 use domain::team::{Membership, Role, Team};
 use domain::user::User;
 use domain::{InviteLinkId, TeamId, Timestamp, UserId, Version};
@@ -47,7 +49,6 @@ pub struct InviteLinkView {
 /// An invite link as someone holding it sees it: what the team and the maker are called, and where the link stands.
 #[derive(Debug)]
 pub struct InvitationView {
-    pub link: InviteLink,
     /// Where the link is in its life, as of the moment the view was made.
     pub state: InviteLinkState,
     pub team: Team,
@@ -55,6 +56,7 @@ pub struct InvitationView {
     pub created_by: User,
     /// The caller's standing in the team; `None` when the caller isn't signed in.
     pub viewer: Option<InviteViewer>,
+    pub allowed_actions: Vec<InvitationAction>,
 }
 
 /// A signed-in person's standing in the team a link is for.
@@ -96,16 +98,24 @@ impl Services {
                     "link names a user that does not exist",
                 )
             })?;
-        let viewer = match principal {
-            Some(principal) => Some(load_viewer(&self.db, &link, principal).await?),
-            None => None,
+        let now = self.now();
+        let (viewer, allowed_actions) = match principal {
+            Some(principal) => {
+                let (viewer, removed_at) = load_viewer(&self.db, &link, principal).await?;
+                let is_member = viewer == InviteViewer::Member;
+                (
+                    Some(viewer),
+                    allowed_invitation_actions(&link, Some(is_member), now, removed_at),
+                )
+            }
+            None => (None, allowed_invitation_actions(&link, None, now, None)),
         };
         Ok(InvitationView {
-            state: link.state(self.now()),
-            link,
+            state: link.state(now),
             team,
             created_by,
             viewer,
+            allowed_actions,
         })
     }
 
@@ -317,34 +327,32 @@ async fn load_views(
 
 fn find_user(users: &HashMap<UserId, User>, id: UserId) -> Result<User, ServiceError> {
     // The foreign keys on invite_links guarantee the user rows.
-    users.get(&id).cloned().ok_or_else(|| {
-        StoreError::CorruptRow {
-            table: "invite_links",
-            id: id.to_string(),
-            problem: "link names a user that does not exist".to_owned(),
-        }
-        .into()
-    })
+    users
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| missing("invite_links", id.to_string(), "link names a user that does not exist"))
 }
 
-/// Where `principal` stands in the link's team, for the page that opens the link.
+/// Where `principal` stands in the link's team, for the page that opens the link, and their last removal from the
+/// team (`None` for a member, who has no use for it).
 async fn load_viewer(
     db: &impl ConnectionTrait,
     link: &InviteLink,
     principal: Principal,
-) -> Result<InviteViewer, ServiceError> {
+) -> Result<(InviteViewer, Option<Timestamp>), ServiceError> {
     if store::teams::find_membership(db, link.team_id, principal.user_id)
         .await?
         .is_some()
     {
-        return Ok(InviteViewer::Member);
+        return Ok((InviteViewer::Member, None));
     }
     let removed_at = last_removed_at(db, link.team_id, principal.user_id).await?;
-    Ok(if link.admits_after_removal(removed_at) {
+    let viewer = if link.admits_after_removal(removed_at) {
         InviteViewer::NotMember
     } else {
         InviteViewer::Removed
-    })
+    };
+    Ok((viewer, removed_at))
 }
 
 /// When `user_id` was last removed from the team by an admin, or `None` if never. Leaving by choice is a different

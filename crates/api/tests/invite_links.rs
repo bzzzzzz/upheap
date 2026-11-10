@@ -589,7 +589,13 @@ async fn anyone_holding_a_link_sees_the_team_and_maker_names_and_nothing_else() 
     expect_that!(opened.status, eq(StatusCode::OK));
     expect_that!(
         opened.body,
-        eq(&json!({ "team_name": "Ops", "created_by_name": "Ana", "state": "working", "viewer": null }))
+        eq(&json!({
+            "team_name": "Ops",
+            "created_by_name": "Ana",
+            "state": "working",
+            "viewer": null,
+            "allowed_actions": []
+        }))
     );
     Ok(())
 }
@@ -969,5 +975,87 @@ async fn an_expired_session_opens_the_link_as_signed_out() -> Result<()> {
     // Assert
     expect_that!(opened.status, eq(StatusCode::OK));
     expect_that!(opened.body["viewer"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn joining_is_offered_only_to_a_signed_in_outsider_the_link_admits() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let token = new_token(&setup).await?;
+    let (sam, _) = newcomer(&setup, "sam@example.test", "Sam").await?;
+    let (mia, _) = join(&setup, "mia@example.test", "Mia", Role::Member).await?;
+    let (ben, ben_id) = join(&setup, "ben@example.test", "Ben", Role::Member).await?;
+    setup.app.clock.advance(Duration::from_days(1));
+    remove(&setup, &ben_id).await?;
+    let revoked = make(&setup, &setup.ana).await?;
+    let revoked_token = revoked.body["token"].as_str().context("no token")?.to_owned();
+    revoke(&setup, &setup.ana, &id_of(&revoked.body)?).await?;
+
+    // Act
+    let outsider = open(&setup, &token, Some(&sam)).await?;
+    let signed_out = open(&setup, &token, None).await?;
+    let member = open(&setup, &token, Some(&mia)).await?;
+    let removed = open(&setup, &token, Some(&ben)).await?;
+    let after_revoking = open(&setup, &revoked_token, Some(&sam)).await?;
+    setup.app.clock.advance(Duration::from_days(7));
+    let after_a_week = open(&setup, &token, Some(&sam)).await?;
+
+    // Assert
+    expect_that!(outsider.body["allowed_actions"], eq(&json!(["join"])));
+    expect_that!(signed_out.body["allowed_actions"], eq(&json!([])));
+    expect_that!(member.body["allowed_actions"], eq(&json!([])));
+    expect_that!(removed.body["allowed_actions"], eq(&json!([])));
+    expect_that!(after_revoking.body["allowed_actions"], eq(&json!([])));
+    expect_that!(after_a_week.body["allowed_actions"], eq(&json!([])));
+    Ok(())
+}
+
+/// A newcomer joining while an admin revokes the link: whichever the team lock lets in first decides. Either the
+/// join came first (`201`, the member is in and `member_joined` is not newer than `invite_link_revoked`), or the
+/// revocation did and the join is refused `409 invite_link_revoked` with the newcomer outside the team.
+#[gtest]
+#[tokio::test]
+async fn a_join_racing_a_revocation_never_succeeds_after_it() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let made = make(&setup, &setup.ana).await?;
+    let id = id_of(&made.body)?;
+    let token = made.body["token"].as_str().context("no token")?.to_owned();
+    let (sam, sam_id) = newcomer(&setup, "sam@example.test", "Sam").await?;
+
+    // Act
+    let (joined, revoked) = tokio::join!(
+        join_through(&setup, &token, Some(&sam)),
+        revoke(&setup, &setup.ana, &id)
+    );
+    let (joined, revoked) = (joined?, revoked?);
+
+    // Assert
+    expect_that!(revoked.status, eq(StatusCode::OK));
+    expect_that!(revoked.body["state"], eq(&json!("revoked")));
+    let team = setup
+        .app
+        .send(Method::GET, &setup.team_url, Some(&setup.ana), None)
+        .await?;
+    let entries = team_audit(&setup, &setup.ana, &format!("?entity_id={id}")).await?;
+    let created_at = |action: &str| {
+        entries
+            .iter()
+            .find(|entry| entry["action"] == json!(action))
+            .and_then(|entry| entry["created_at"].as_i64())
+    };
+    if joined.status == StatusCode::CREATED {
+        expect_that!(role_of(&team.body, &sam_id), some(eq("member")));
+        let (joined_at, revoked_at) = (created_at("member_joined"), created_at("invite_link_revoked"));
+        expect_that!(joined_at.is_some() && revoked_at.is_some(), eq(true));
+        expect_that!(joined_at <= revoked_at, eq(true));
+    } else {
+        expect_that!(joined.status, eq(StatusCode::CONFLICT));
+        expect_that!(joined.body["code"], eq(&json!("invite_link_revoked")));
+        expect_that!(role_of(&team.body, &sam_id), none());
+        expect_that!(created_at("member_joined"), none());
+    }
     Ok(())
 }

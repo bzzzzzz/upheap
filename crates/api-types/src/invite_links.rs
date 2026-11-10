@@ -1,7 +1,7 @@
 //! A team's invite links.
 
 use domain::invite_link::InviteLinkState;
-use domain::permission::InviteLinkAction;
+use domain::permission::{InvitationAction, InviteLinkAction};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -92,6 +92,25 @@ pub struct InvitationDto {
     pub state: InviteLinkStateDto,
     /// The caller's standing in the team; `null` when the request has no signed-in user.
     pub viewer: Option<InviteViewerDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<InvitationActionDto>,
+}
+
+/// An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = InvitationAction)]
+pub enum InvitationActionDto {
+    /// Offered to a signed-in person outside the team while the link works and doesn't predate their removal.
+    Join,
+}
+
+impl From<InvitationAction> for InvitationActionDto {
+    fn from(action: InvitationAction) -> Self {
+        match action {
+            InvitationAction::Join => Self::Join,
+        }
+    }
 }
 
 /// A signed-in person's standing in the team a link is for.

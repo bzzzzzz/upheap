@@ -1212,6 +1212,7 @@ export interface components {
          *     members, no maker username or email.
          */
         Invitation: {
+            allowed_actions: components["schemas"]["InvitationAction"][];
             /** @description The display name of whoever made the link, now, even if they have left the team. */
             created_by_name: string;
             /** @description Where the link is in its life. `ended` and `revoked` are shown too, so the page can say which. */
@@ -1220,6 +1221,11 @@ export interface components {
             team_name: string;
             viewer?: null | components["schemas"]["InviteViewer"];
         };
+        /**
+         * @description An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+         * @enum {string}
+         */
+        InvitationAction: "join";
         /** @description An invite link: whoever holds its token can join the team until it ends or is revoked. */
         InviteLink: {
             allowed_actions: components["schemas"]["InviteLinkAction"][];
