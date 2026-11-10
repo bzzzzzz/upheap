@@ -34,15 +34,15 @@ pub struct AddArgs {
     pub shared: SharedArgs,
 }
 
-/// The step `--after` names.
-enum After {
+/// A step as `--after` or `question ask --step` takes it: a bare number, or a name.
+pub(crate) enum StepRef {
     Number(u32),
     Step { typed: String, name: StepName },
 }
 
-impl After {
+impl StepRef {
     /// A bare number, or a step name.
-    fn parse(raw: &str) -> Result<Self, LookupError> {
+    pub(crate) fn parse(raw: &str) -> Result<Self, LookupError> {
         if raw.bytes().all(|byte| byte.is_ascii_digit()) {
             return StepNumber::parse(raw)
                 .map(|number| Self::Number(number.get()))
@@ -55,7 +55,7 @@ impl After {
     }
 
     /// The step's number, once it's known to be a step of the item `item` (as typed) with `key` in `heap`.
-    fn number_in(&self, item: &str, key: &str, heap: &HeapHandle) -> Result<u32, UsageError> {
+    pub(crate) fn number_in(&self, item: &str, key: &str, heap: &HeapHandle) -> Result<u32, UsageError> {
         match self {
             Self::Number(number) => Ok(*number),
             Self::Step { typed, name } => {
@@ -82,7 +82,7 @@ impl After {
 /// Adds the step. Human output names it; `--quiet` prints its name and `--json` the item.
 pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let name = ItemName::parse(&args.item)?;
-    let after = args.after.as_deref().map(After::parse).transpose()?;
+    let after = args.after.as_deref().map(StepRef::parse).transpose()?;
     let at = locate_item(&args.item, name, args.heap.name.as_deref(), app)?;
     let context = match &args.context_file {
         Some(path) => Some(read_context(path, app).await?),

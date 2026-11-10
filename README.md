@@ -123,6 +123,8 @@ cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
+cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
+cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
 cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- auth logout
 ```
