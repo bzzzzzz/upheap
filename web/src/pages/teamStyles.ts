@@ -6,7 +6,7 @@ export const cardClass =
 /** The ⋯ that opens a row's or the title's actions: 30 px on a wide screen, 44 px to a finger. */
 export const moreButtonClass =
   "flex size-[30px] shrink-0 items-center justify-center rounded-[7px] text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:size-11 max-sm:size-11 max-sm:rounded-xl";
-/** Make admin and Make member: bordered and small (WideTeam). */
+/** Make admin, Make member and Copy: bordered and small (WideTeam). */
 export const roleButtonClass =
   "shrink-0 rounded-[7px] border border-line bg-surface px-2.5 py-[5px] text-xs text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-40 pointer-coarse:min-h-11";
 export const dangerTextButtonClass =

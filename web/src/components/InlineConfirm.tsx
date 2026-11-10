@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 
-import { compactButtonClass } from "../components/buttons";
-import { ProblemText } from "../components/ProblemText";
+import { compactButtonClass } from "./buttons";
+import { ProblemText } from "./ProblemText";
 
 /**
  * The inline confirm of a wide screen (ux.md, Rules §1), for removing someone, giving up your admin role or revoking an
@@ -32,9 +32,10 @@ export function InlineConfirm({
       aria-labelledby={questionId}
       tabIndex={-1}
       onKeyDown={(event) => {
+        // Cancel can't stop a request that is on its way, so neither Escape nor Cancel acts until it answers.
         if (event.key === "Escape") {
           event.preventDefault();
-          onCancel();
+          if (!pending) onCancel();
         }
       }}
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-overdue-ink/25 bg-overdue-soft px-3.5 py-2.5 text-[13px] outline-none focus-visible:outline-2 focus-visible:outline-accent"
@@ -43,7 +44,12 @@ export function InlineConfirm({
         {question}
       </p>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={onCancel} className={`${compactButtonClass.quiet} py-1.5 text-[13px]`}>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onCancel}
+          className={`${compactButtonClass.quiet} py-1.5 text-[13px] disabled:opacity-40`}
+        >
           Cancel
         </button>
         <button

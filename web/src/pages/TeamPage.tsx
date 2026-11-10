@@ -22,6 +22,7 @@ import { useArchiveHeap } from "../components/archiveHeap";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
+import { InlineConfirm } from "../components/InlineConfirm";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
@@ -30,7 +31,6 @@ import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { namedForOwner, useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
-import { InlineConfirm } from "./InlineConfirm";
 import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
 
@@ -437,6 +437,8 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
   const remove = useRemoveMember(team.slug);
   const setRole = useSetMemberRole(team.slug);
   const makingLink = useMakeInviteLink(team.slug);
+  const canAddMember = team.allowed_actions.includes("add_member");
+  const canInvite = canManageInviteLinks(team);
   const [asking, setAsking] = useState<Asking | null>(null);
   const askButtons = useRef(new Map<string, HTMLButtonElement>());
   const heading = useRef<HTMLHeadingElement>(null);
@@ -498,14 +500,17 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
       <h2 ref={heading} tabIndex={-1} id="team-members" className={sectionTitleClass}>
         Members · {team.members.length}
       </h2>
-      <div className={phone ? "flex flex-col gap-2.5" : "flex items-start gap-2"}>
-        {team.allowed_actions.includes("add_member") && (
-          <div className="min-w-0 flex-1">
-            <AddMember team={team} phone={phone} />
-          </div>
-        )}
-        {canManageInviteLinks(team) && <InviteLinkButton making={makingLink} phone={phone} />}
-      </div>
+      {(canAddMember || canInvite) && (
+        <div className={phone ? "flex flex-col gap-2.5" : "flex items-start gap-2"}>
+          {canAddMember && (
+            <div className="min-w-0 flex-1">
+              <AddMember team={team} phone={phone} />
+            </div>
+          )}
+          {canInvite && <InviteLinkButton making={makingLink} phone={phone} />}
+        </div>
+      )}
+      <ProblemText error={makingLink.error} className="text-overdue-ink" />
       <InviteLinks team={team} making={makingLink} phone={phone} />
       <ul className={cardClass}>
         {team.members.map((member) => {

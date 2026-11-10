@@ -389,8 +389,8 @@ a modal on a wide screen and a sheet on a phone. How the data is kept is in
 ## Rules
 
 1. **Confirmations.** A reversible change acts at once and offers Undo in a toast: state changes, archiving a heap,
-   a view or a parameter. A change that can't be undone, or that affects other people, asks first, in a dialog on a
-   wide screen or a sheet on a phone, and names the object: removing a member, giving up your own admin role,
+   a view or a parameter. A change that can't be undone, or that affects other people, asks first, inline or in a
+   dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own admin role,
    revoking an invite link, replacing all local data, and discarding a typed title.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's state buttons sit in a bar at its bottom; on a wide screen they're the main button plus the others.

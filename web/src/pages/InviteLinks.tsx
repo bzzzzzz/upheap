@@ -5,13 +5,15 @@ import type { InviteLink, Team } from "../api/client";
 import { useCreateInviteLink, useInviteLinks, useMe, useRevokeInviteLink } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { inviteLink, useCopyText } from "../components/copyLink";
+import { InlineConfirm } from "../components/InlineConfirm";
 import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useReturnFocus } from "../components/useConfirmation";
-import { InlineConfirm } from "./InlineConfirm";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass } from "./teamStyles";
 
-const REVOKE_QUESTION = "Revoke this link? It stops working at once. People who joined through it stay.";
+/** "Revoke Ana Ruiz's link that ends 16 Nov? It stops working at once. …": names the link, as ux.md Rules §1 asks. */
+const revokeQuestion = (link: InviteLink, you: boolean) =>
+  `Revoke ${you ? "your" : `${link.created_by.display_name}'s`} link that ends ${link.ends_label}? It stops working at once. People who joined through it stay.`;
 
 /** Whether the caller may make and revoke the team's invite links, from what the server allows (ux.md, Teams and Team). */
 export function canManageInviteLinks(team: Team): boolean {
@@ -132,7 +134,6 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
           })}
         </ul>
       )}
-      <ProblemText error={making.error} className="text-overdue-ink" />
       <p role="status" className="text-[13px] text-ink-soft empty:sr-only">
         {copied ? "Link copied." : null}
       </p>
@@ -213,7 +214,7 @@ function LinkRow({
     return (
       <li className="p-1">
         <InlineConfirm
-          question={REVOKE_QUESTION}
+          question={revokeQuestion(link, you)}
           confirmLabel="Revoke"
           pending={revoke.isPending}
           error={revoke.error}
@@ -289,6 +290,8 @@ function PhoneLinkRow({
   // A failed copy from the visible Copy opens the sheet, which holds the address to copy by hand.
   const showSheet = open || manual;
   const close = () => {
+    // A revoke on its way can't be stopped by closing.
+    if (revoke.isPending) return;
     setOpen(false);
     onCloseManual();
     if (confirming) onCancel();
@@ -331,7 +334,7 @@ function PhoneLinkRow({
         {confirming ? (
           <div className="flex flex-col gap-2 px-1 pb-1">
             <p id={questionId} className="px-2 pb-1 text-[15px] text-ink">
-              {REVOKE_QUESTION}
+              {revokeQuestion(link, you)}
             </p>
             <button
               type="button"
@@ -344,12 +347,13 @@ function PhoneLinkRow({
             </button>
             <button
               type="button"
+              disabled={revoke.isPending}
               onClick={() => {
                 // The confirm replaced the row that asked; focus goes back to it.
                 returnToRevokeRow();
                 onCancel();
               }}
-              className="min-h-13 rounded-xl border border-line text-[15px] text-ink"
+              className="min-h-13 rounded-xl border border-line text-[15px] text-ink disabled:opacity-40"
             >
               Cancel
             </button>

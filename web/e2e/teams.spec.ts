@@ -411,7 +411,8 @@ test("Enter waits for the results of what was typed, not the ones still on scree
 
 const inviteLinks = (page: Page) => page.getByRole("region", { name: "Invite links" });
 const inviteLinkButton = (page: Page) => page.getByRole("button", { name: "Invite link", exact: true });
-const REVOKE_QUESTION = "Revoke this link? It stops working at once. People who joined through it stay.";
+const REVOKE_QUESTION =
+  /^Revoke your link that ends .+\? It stops working at once\. People who joined through it stay\.$/;
 
 test("an admin makes, copies and revokes an invite link", async ({ page, context, localBuild }) => {
   test.skip(localBuild, SERVER_ONLY);
@@ -533,4 +534,28 @@ test("a copy the browser refuses shows the link to copy by hand", async ({ page,
   await expect(inviteLinks(page).getByRole("status")).toBeEmpty();
   await field.press("Escape");
   await expect(field).toHaveCount(0);
+});
+
+test("a phone copies an older link from its ⋯ sheet", async ({ page, context, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  test.skip(!isPhone(page), "The sheet is the phone's.");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createTeam(page, "Older");
+  const links = inviteLinks(page);
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  const listed = await page.request.get(`/api/v1${new URL(page.url()).pathname}/invite-links`);
+  const first = ((await listed.json()) as { links: { token: string }[] }).links[0]?.token;
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(2);
+
+  // The older link is the second row, and has no visible Copy.
+  const older = links.getByRole("listitem").nth(1);
+  await expect(older.getByRole("button", { name: "Copy", exact: true })).toHaveCount(0);
+  await older.getByRole("button", { name: /^Actions for the link / }).click();
+  await page.getByRole("dialog", { name: "Invite link" }).getByRole("button", { name: "Copy link" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(links.getByRole("status")).toHaveText("Link copied.");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(`${new URL(page.url()).origin}/invite/${first}`);
 });
