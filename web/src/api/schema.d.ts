@@ -666,6 +666,47 @@ export interface paths {
         patch: operations["update_weights"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/invite-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The team's invite links, every one made and past, newest first. Working ones carry their token, so they can be
+         *     copied again. Admins only. A personal team has none.
+         */
+        get: operations["list_invite_links"];
+        put?: never;
+        /** Makes an invite link that works for a week. Admins only. Any number of links can work at once. */
+        post: operations["create_invite_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/invite-links/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stops an invite link working at once. Any admin of the team can, not only the one who made it. Answers `200`
+         *     with the link as it is when it was revoked or had ended already.
+         */
+        post: operations["revoke_invite_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/leave": {
         parameters: {
             query?: never;
@@ -792,7 +833,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -814,7 +855,7 @@ export interface components {
          * @description The kind of thing an entry is about. Members are `user`.
          * @enum {string}
          */
-        AuditEntityType: "user" | "team" | "heap" | "item" | "tag" | "saved_view" | "parameter";
+        AuditEntityType: "user" | "team" | "heap" | "item" | "tag" | "saved_view" | "parameter" | "invite_link";
         AuditEntry: {
             action: components["schemas"]["AuditAction"];
             actor: components["schemas"]["UserRef"];
@@ -1122,6 +1163,54 @@ export interface components {
              */
             parameters: components["schemas"]["Parameter"][];
         };
+        /** @description An invite link: whoever holds its token can join the team until it ends or is revoked. */
+        InviteLink: {
+            allowed_actions: components["schemas"]["InviteLinkAction"][];
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            created_at: number;
+            /** @description Who made it, by their display name now, even if they have left the team. */
+            created_by: components["schemas"]["UserRef"];
+            /**
+             * Format: int64
+             * @description UTC milliseconds: a week after `created_at`.
+             */
+            ends_at: number;
+            /** @description `ends_at` as a date in the request's timezone: "today", "tomorrow" or "16 Nov". */
+            ends_label: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            revoked_at?: number | null;
+            revoked_by?: null | components["schemas"]["UserRef"];
+            state: components["schemas"]["InviteLinkState"];
+            /**
+             * @description The secret, only while the link is `working`; `null` once it has ended or been revoked. A client builds the
+             *     link to share from it: `{origin}/invite/{token}`.
+             */
+            token?: string | null;
+            /** Format: int32 */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on an invite link.
+         * @enum {string}
+         */
+        InviteLinkAction: "revoke";
+        /** @description A team's invite links, newest first. */
+        InviteLinkList: {
+            links: components["schemas"]["InviteLink"][];
+        };
+        /**
+         * @description Where an invite link is in its life. `ended` and `revoked` are final.
+         * @enum {string}
+         */
+        InviteLinkState: "working" | "ended" | "revoked";
         Item: {
             allowed_actions: components["schemas"]["ItemAction"][];
             blocked_by?: null | components["schemas"]["ItemRef"];
@@ -1758,7 +1847,7 @@ export interface components {
          * @description An action the caller can take on a team.
          * @enum {string}
          */
-        TeamAction: "rename" | "change_slug" | "add_member" | "create_heap" | "leave";
+        TeamAction: "rename" | "change_slug" | "add_member" | "manage_invite_links" | "create_heap" | "leave";
         TeamMember: {
             allowed_actions: components["schemas"]["MemberAction"][];
             display_name: string;
@@ -4303,6 +4392,177 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_invite_links: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkList"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_invite_link: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLink"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_invite_link: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /** @description The invite link's `id`, from the list. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLink"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such team, or the team has no such link */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

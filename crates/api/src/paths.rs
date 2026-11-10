@@ -6,6 +6,8 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 #[cfg(feature = "accounts")]
+use domain::InviteLinkId;
+#[cfg(feature = "accounts")]
 use domain::UserId;
 use domain::handle::{Handle, ItemKey};
 use domain::validation::Field;
@@ -14,6 +16,8 @@ use serde::Deserialize;
 use service::handles::HeapRef;
 use service::{Principal, ServiceError};
 use utoipa::IntoParams;
+#[cfg(feature = "accounts")]
+use uuid::Uuid;
 
 use crate::extract::{ApiPath, CurrentUser};
 use crate::{ApiError, AppState};
@@ -62,6 +66,17 @@ pub(crate) struct MemberParams {
     /// The user's username, which needn't be a member's.
     #[param(example = "eugene")]
     username: String,
+}
+
+#[cfg(feature = "accounts")]
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+pub(crate) struct InviteLinkParams {
+    /// The team's slug.
+    #[param(example = "my-team")]
+    team: String,
+    /// The invite link's `id`, from the list.
+    id: String,
 }
 
 /// `{team}`: a team the caller belongs to.
@@ -146,6 +161,34 @@ impl FromRequestParts<AppState> for MemberPath {
             principal,
             team_id,
             user_id,
+        })
+    }
+}
+
+/// `{team}/invite-links/{id}`: a team the caller belongs to, and the id of one of its invite links, which may not
+/// exist. Only team management names invite links, and it needs accounts.
+#[cfg(feature = "accounts")]
+pub(crate) struct InviteLinkPath {
+    pub principal: Principal,
+    pub team_id: TeamId,
+    pub link_id: InviteLinkId,
+}
+
+#[cfg(feature = "accounts")]
+impl FromRequestParts<AppState> for InviteLinkPath {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+        let ApiPath(params) = ApiPath::<InviteLinkParams>::from_request_parts(parts, state).await?;
+        let team_id = state.services.resolve_team(principal, &handle(&params.team)?).await?;
+        let link_id = Uuid::parse_str(&params.id)
+            .map(InviteLinkId::from_uuid)
+            .map_err(|_| ServiceError::NotFound)?;
+        Ok(Self {
+            principal,
+            team_id,
+            link_id,
         })
     }
 }

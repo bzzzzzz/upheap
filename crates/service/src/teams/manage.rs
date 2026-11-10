@@ -36,9 +36,9 @@ pub struct TeamPatch {
 }
 
 /// A team locked for a membership change, with its memberships read under the lock.
-struct LockedTeam {
-    team: Team,
-    members: Vec<Membership>,
+pub(super) struct LockedTeam {
+    pub(super) team: Team,
+    pub(super) members: Vec<Membership>,
 }
 
 impl LockedTeam {
@@ -347,7 +347,7 @@ impl Services {
 /// after the lock sees every change that committed before it, including the caller's own demotion or removal.
 ///
 /// Non-members get [`ServiceError::NotFound`], like a team that doesn't exist.
-async fn lock_team_for(
+pub(super) async fn lock_team_for(
     db: &impl ConnectionTrait,
     principal: Principal,
     team_id: TeamId,

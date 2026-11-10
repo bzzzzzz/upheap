@@ -93,7 +93,13 @@ async fn a_new_team_has_its_creator_as_admin_and_no_heaps() -> Result<()> {
     expect_that!(team["members"][0]["allowed_actions"], eq(&json!([])));
     expect_that!(
         team["allowed_actions"],
-        eq(&json!(["rename", "change_slug", "add_member", "create_heap"]))
+        eq(&json!([
+            "rename",
+            "change_slug",
+            "add_member",
+            "manage_invite_links",
+            "create_heap"
+        ]))
     );
     let names: Vec<&str> = me.body["teams"]
         .as_array()
@@ -196,14 +202,27 @@ async fn the_last_admin_cannot_leave_be_demoted_or_removed_until_another_is_prom
     expect_that!(member(&promoted.body, &grace_id)["role"], eq(&json!("admin")));
     expect_that!(
         promoted.body["allowed_actions"],
-        eq(&json!(["rename", "change_slug", "add_member", "create_heap", "leave"]))
+        eq(&json!([
+            "rename",
+            "change_slug",
+            "add_member",
+            "manage_invite_links",
+            "create_heap",
+            "leave"
+        ]))
     );
     expect_that!(left_after.status, eq(StatusCode::NO_CONTENT));
     expect_that!(get_team(&app, &ada, &team).await?.status, eq(StatusCode::NOT_FOUND));
     expect_that!(as_grace.body["members"].as_array().map(Vec::len), some(eq(1)));
     expect_that!(
         as_grace.body["allowed_actions"],
-        eq(&json!(["rename", "change_slug", "add_member", "create_heap"]))
+        eq(&json!([
+            "rename",
+            "change_slug",
+            "add_member",
+            "manage_invite_links",
+            "create_heap"
+        ]))
     );
     let actions: Vec<String> = app.audit_entries(&ada_id).await?.into_iter().map(|(a, _)| a).collect();
     expect_that!(actions.last(), some(eq("member_left")));

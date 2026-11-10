@@ -25,11 +25,13 @@ pub enum AuditAction {
     ParameterUpdated,
     ParameterArchived,
     OptionArchived,
+    InviteLinkCreated,
+    InviteLinkRevoked,
 }
 
 impl AuditAction {
     /// Every action, in the order they are declared.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 25] = [
         Self::UserRegistered,
         Self::UserUpdated,
         Self::TeamCreated,
@@ -53,6 +55,8 @@ impl AuditAction {
         Self::ParameterUpdated,
         Self::ParameterArchived,
         Self::OptionArchived,
+        Self::InviteLinkCreated,
+        Self::InviteLinkRevoked,
     ];
 
     /// The action stored as `code`, or `None` for a string no version of the application wrote.
@@ -85,6 +89,8 @@ impl AuditAction {
             Self::ParameterUpdated => "parameter_updated",
             Self::ParameterArchived => "parameter_archived",
             Self::OptionArchived => "option_archived",
+            Self::InviteLinkCreated => "invite_link_created",
+            Self::InviteLinkRevoked => "invite_link_revoked",
         }
     }
 }
@@ -100,11 +106,13 @@ pub enum EntityType {
     SavedView,
     /// A custom parameter, its options and its tag links.
     Parameter,
+    /// A team's invite link.
+    InviteLink,
 }
 
 impl EntityType {
     /// Every entity type, in the order they are declared.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::User,
         Self::Team,
         Self::Heap,
@@ -112,6 +120,7 @@ impl EntityType {
         Self::Tag,
         Self::SavedView,
         Self::Parameter,
+        Self::InviteLink,
     ];
 
     /// The entity type stored as `code`, or `None` for a string no version of the application wrote.
@@ -128,6 +137,7 @@ impl EntityType {
             Self::Tag => "tag",
             Self::SavedView => "saved_view",
             Self::Parameter => "parameter",
+            Self::InviteLink => "invite_link",
         }
     }
 }

@@ -143,7 +143,37 @@ impl Services {
             names.insert(*heap.id.as_uuid(), heap.name.as_str());
         }
         self.insert_user_names(&mut names, &entries).await?;
+        self.insert_invite_link_names(&mut names, team_id, &entries).await?;
         Ok(present_page(entries, next, &names, tz))
+    }
+
+    /// Names the invite links `entries` are about after their makers' display names now: "Ana's invite link".
+    async fn insert_invite_link_names(
+        &self,
+        names: &mut Names,
+        team_id: TeamId,
+        entries: &[AuditEntry],
+    ) -> Result<(), ServiceError> {
+        let about: BTreeSet<Uuid> = collect_entity_ids(entries, EntityType::InviteLink).collect();
+        if about.is_empty() {
+            return Ok(());
+        }
+        let links: Vec<_> = store::invite_links::list_invite_links(&self.db, team_id)
+            .await?
+            .into_iter()
+            .filter(|link| about.contains(link.id.as_uuid()))
+            .collect();
+        let makers: Vec<UserId> = links.iter().map(|link| link.created_by).collect();
+        let makers = store::users::list_users(&self.db, &makers).await?;
+        for link in &links {
+            if let Some(maker) = makers.iter().find(|user| user.id == link.created_by) {
+                names.insert(
+                    *link.id.as_uuid(),
+                    &format!("{}'s invite link", maker.display_name.as_str()),
+                );
+            }
+        }
+        Ok(())
     }
 
     async fn read_page(
@@ -286,6 +316,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::ParameterUpdated, _) => ("changed parameter", true),
         (AuditAction::ParameterArchived, _) => ("archived parameter", true),
         (AuditAction::OptionArchived, _) => ("archived an option of", true),
+        (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
+        (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
     }
 }
 
@@ -309,7 +341,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::ItemCreated
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
-        | AuditAction::ParameterCreated => DiffShape::Created,
+        | AuditAction::ParameterCreated
+        | AuditAction::InviteLinkCreated => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated
@@ -323,7 +356,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::SavedViewArchived
         | AuditAction::ParameterUpdated
         | AuditAction::ParameterArchived
-        | AuditAction::OptionArchived => DiffShape::Changed,
+        | AuditAction::OptionArchived
+        | AuditAction::InviteLinkRevoked => DiffShape::Changed,
     }
 }
 
@@ -357,6 +391,11 @@ const FIELD_ORDER: [&str; 22] = [
 const UNSHOWN_FIELDS: [&str; 1] = ["archived_at"];
 
 fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<AuditChange> {
+    // The phrase says it all ("made an invite link"), and the diff holds a raw end time and link states, which
+    // have no short form worth showing.
+    if entry.entity_type == EntityType::InviteLink {
+        return Vec::new();
+    }
     let Value::Object(fields) = &entry.diff else {
         return Vec::new();
     };

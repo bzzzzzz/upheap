@@ -3960,6 +3960,272 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/invite-links": {
+      "get": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "The team's invite links, every one made and past, newest first. Working ones carry their token, so they can be\ncopied again. Admins only. A personal team has none.",
+        "operationId": "list_invite_links",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Makes an invite link that works for a week. Admins only. Any number of links can work at once.",
+        "operationId": "create_invite_link",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`personal_team`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/invite-links/{id}/revoke": {
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Stops an invite link working at once. Any admin of the team can, not only the one who made it. Answers `200`\nwith the link as it is when it was revoked or had ended already.",
+        "operationId": "revoke_invite_link",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The invite link's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such team, or the team has no such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/leave": {
       "post": {
         "tags": [
@@ -4452,7 +4718,9 @@
           "parameter_created",
           "parameter_updated",
           "parameter_archived",
-          "option_archived"
+          "option_archived",
+          "invite_link_created",
+          "invite_link_revoked"
         ]
       },
       "AuditChange": {
@@ -4517,7 +4785,8 @@
           "item",
           "tag",
           "saved_view",
-          "parameter"
+          "parameter",
+          "invite_link"
         ]
       },
       "AuditEntry": {
@@ -5257,6 +5526,114 @@
             "description": "The heap's parameters in use, by name, with their new versions: what `GET …/parameters` lists as\n`parameters`."
           }
         }
+      },
+      "InviteLink": {
+        "type": "object",
+        "description": "An invite link: whoever holds its token can join the team until it ends or is revoked.",
+        "required": [
+          "id",
+          "state",
+          "created_by",
+          "created_at",
+          "ends_at",
+          "ends_label",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteLinkAction"
+            }
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/UserRef",
+            "description": "Who made it, by their display name now, even if they have left the team."
+          },
+          "ends_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: a week after `created_at`."
+          },
+          "ends_label": {
+            "type": "string",
+            "description": "`ends_at` as a date in the request's timezone: \"today\", \"tomorrow\" or \"16 Nov\"."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revoked_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "revoked_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/InviteLinkState"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The secret, only while the link is `working`; `null` once it has ended or been revoked. A client builds the\nlink to share from it: `{origin}/invite/{token}`."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "InviteLinkAction": {
+        "type": "string",
+        "description": "An action the caller can take on an invite link.",
+        "enum": [
+          "revoke"
+        ]
+      },
+      "InviteLinkList": {
+        "type": "object",
+        "description": "A team's invite links, newest first.",
+        "required": [
+          "links"
+        ],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteLink"
+            }
+          }
+        }
+      },
+      "InviteLinkState": {
+        "type": "string",
+        "description": "Where an invite link is in its life. `ended` and `revoked` are final.",
+        "enum": [
+          "working",
+          "ended",
+          "revoked"
+        ]
       },
       "Item": {
         "type": "object",
@@ -6944,6 +7321,7 @@
           "rename",
           "change_slug",
           "add_member",
+          "manage_invite_links",
           "create_heap",
           "leave"
         ]

@@ -16,7 +16,7 @@ An admin makes a link, a newcomer creates an account through it on a closed serv
 second person with an account joins through the same link, and the link stops after a week. Five pieces, in
 this order.
 
-- [ ] 1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
+- [x] 1. **Invite links on the server.** An admin makes a link for a team, sees the team's links with the working ones
    readable, and revokes one. A link is working, ended or revoked by rules 1 to 4 and 9, and making and revoking
    are in the team's audit log (rule 19). Done when: the API does all three for an admin, refuses a member and
    hides the team from an outsider, with rows in the access-control table test; a personal team has none;

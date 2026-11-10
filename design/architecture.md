@@ -90,6 +90,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   one unique index. The personal team can't take members, and its slug never changes.
 - **Archived options always name their replacement** (`archived_at` and `replaced_by_option_id` are set together),
   so a stored value can always be followed to an option in use.
+- **Invite links keep their token readable**, unlike session tokens and OAuth secrets, which are stored hashed: a
+  link is sent around for a week and admins copy it again, so the server must be able to show it. A leaked database
+  therefore holds working links, each worth a membership for at most a week; revoking one ends it. A link's end is
+  derived from `created_at` and one constant in `domain`, not stored.
 - **Portable SQL in practice.** The differences met so far, which new SQL has to respect: in `ON CONFLICT DO
   UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
   their columns with the table; Postgres pads `char(n)` and reads it back padded, so every `char` column holds

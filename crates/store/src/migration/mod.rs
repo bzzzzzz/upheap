@@ -17,6 +17,7 @@ mod m20261114_000011_item_creator;
 mod m20261115_000012_item_closer;
 mod m20261116_000013_oauth;
 mod m20261117_000014_token_family_device;
+mod m20261118_000015_invite_links;
 
 pub struct Migrator;
 
@@ -38,6 +39,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261115_000012_item_closer::Migration),
             Box::new(m20261116_000013_oauth::Migration),
             Box::new(m20261117_000014_token_family_device::Migration),
+            Box::new(m20261118_000015_invite_links::Migration),
         ]
     }
 }

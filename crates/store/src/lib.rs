@@ -9,6 +9,7 @@ mod codes;
 mod entities;
 mod error;
 pub mod heaps;
+pub mod invite_links;
 pub mod items;
 mod migration;
 pub mod oauth;
