@@ -150,8 +150,10 @@ is resolved or turned into a task.
 
 **Handing work to an agent**
 
-1. **Core.** The person sends an item on by telling the agent to go one stable state further, or all the way to
-   done.
+1. **Core.** The person sends an item on by telling the agent to go one stable state further, or all the way.
+   "All the way" covers the item and the tasks made from it, up to done. A new heap made on the way is left at
+   its defined state, for the person to send on. How far it reaches when work spawns more work is settled while
+   building it, not here.
 2. **Core.** A heap can be set so agents prepare what's added without being asked: each new item is taken to its
    next stable state. Preparing never includes doing a defined task; that always needs the person's word.
 3. **Core.** Outside those two cases an agent never picks an item up.
@@ -230,6 +232,7 @@ kind of agent, and who in a team answers a question. See Ideas.
 Thoughts from a lower level than the step that met them. One line each, not discussed until their step.
 
 - How "go one further" and "all the way" are stored on an item.
+- The exact reach of "all the way" when a turn spawns tasks, notes and heaps. To be iterated on while building.
 - Whether a done task that an agent thinks needs follow-up makes a new note.
 - What an agent's actions look like in the audit log, and which account it signs in as.
 - Whether a checklist step can hold a question of its own.
