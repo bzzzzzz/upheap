@@ -267,7 +267,7 @@ async fn heap_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Re
 
 #[gtest]
 #[tokio::test]
-async fn heap_edit_needs_exactly_one_flag_and_a_readable_file() -> Result<()> {
+async fn heap_edit_does_nothing_without_a_flag_and_refuses_both_or_an_unreadable_file() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let ada = ada_with_teams(&server).await?;
@@ -290,7 +290,11 @@ async fn heap_edit_needs_exactly_one_flag_and_a_readable_file() -> Result<()> {
     let archived = cli.run(&["heap", "edit", "ada/old", "--no-context"]).await;
 
     // Assert
-    expect_that!(none.exited(2), eq(true));
+    expect_that!(none.exited(0), eq(true));
+    expect_that!(
+        none.stdout,
+        eq("Nothing to change: give --context-file or --no-context.\n")
+    );
     expect_that!(both.exited(2), eq(true));
     expect_that!(missing.exited(2), eq(true));
     expect_that!(missing.stderr, contains_substring("/nonexistent/context.txt"));

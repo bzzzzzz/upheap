@@ -1169,7 +1169,7 @@ export interface components {
             team_id: string;
             /**
              * Format: int32
-             * @description Send back in `If-Match` when renaming or changing weights.
+             * @description Send back in `If-Match` when renaming or changing the context or weights.
              */
             version: number;
             /** @description The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`. */

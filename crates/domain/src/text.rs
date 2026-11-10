@@ -14,6 +14,15 @@ pub(crate) fn parse_required(raw: &str, field: Field, max: usize) -> Result<Stri
     Ok(trimmed.to_owned())
 }
 
+/// Trims `raw` for a long text that may be left out: blank gives `None`, and more than `max` characters is too long.
+pub(crate) fn parse_optional(raw: &str, field: Field, max: usize) -> Result<Option<String>, ValidationError> {
+    match parse_required(raw, field, max) {
+        Ok(text) => Ok(Some(text)),
+        Err(ValidationError::Empty { .. }) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// A team or heap name: trimmed, 1 to 100 characters.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Name(String);
@@ -39,17 +48,7 @@ impl Context {
 
     /// Blank input means "no context" and gives `None`. Surrounding whitespace is kept off.
     pub fn parse(raw: &str) -> Result<Option<Self>, ValidationError> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Ok(None);
-        }
-        if trimmed.chars().count() > Self::MAX_CHARS {
-            return Err(ValidationError::TooLong {
-                field: Field::Context,
-                max: Self::MAX_CHARS,
-            });
-        }
-        Ok(Some(Self(trimmed.to_owned())))
+        parse_optional(raw, Field::Context, Self::MAX_CHARS).map(|text| text.map(Self))
     }
 
     pub fn as_str(&self) -> &str {

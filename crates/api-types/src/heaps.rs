@@ -81,7 +81,7 @@ pub struct HeapDto {
     pub open_count: u32,
     /// The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`.
     pub weights: HeapWeightsDto,
-    /// Send back in `If-Match` when renaming or changing weights.
+    /// Send back in `If-Match` when renaming or changing the context or weights.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<HeapActionDto>,

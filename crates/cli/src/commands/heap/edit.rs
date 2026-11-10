@@ -12,7 +12,7 @@ use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
 #[derive(Args, Debug)]
-#[command(group(ArgGroup::new("change").required(true).args(["context_file", "no_context"])))]
+#[command(group(ArgGroup::new("change").args(["context_file", "no_context"])))]
 pub struct EditArgs {
     /// team/heap, or a heap slug only one of your teams has. Without it, the default heap
     #[arg(value_name = "HEAP")]
@@ -30,6 +30,12 @@ pub struct EditArgs {
 /// Sets the context from the file as read (the server trims it, so an empty file clears it), or clears it. Human
 /// output says whether anything changed; `--quiet` prints nothing and `--json` the heap.
 pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
+    if args.context_file.is_none() && !args.no_context {
+        if out.mode() == Mode::Human {
+            out.line("Nothing to change: give --context-file or --no-context.")?;
+        }
+        return Ok(());
+    }
     let name = named_heap(args.heap.as_deref(), app)?;
     let context = match &args.context_file {
         Some(path) => Some(read_context(path, app).await?),

@@ -427,7 +427,7 @@ the remaining admins.
    heap's context, and display name changes; admins additionally see heap, parameter, team and membership changes. Leaving a team is a
    membership change, so only admins see it, although any member may leave.
 4. The heap log reads what is recorded against the heap. The team log reads the team's own entries and the heaps'
-   own entries (created, renamed, archived), but not what happens inside the heaps. With `entity_id`, either reads
+   own entries (created, renamed, archived, context changed), but not what happens inside the heaps. With `entity_id`, either reads
    one entity's history.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after

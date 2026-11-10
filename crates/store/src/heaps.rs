@@ -71,8 +71,8 @@ pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<H
     row.map(to_heap).transpose()
 }
 
-/// Writes the slug, name, context, weights and archive time if the stored row still has version `expected`, and returns the
-/// heap with its new version. Returns `None` when the stored version differs, and fails with
+/// Writes the slug, name, context, weights and archive time if the stored row still has version `expected`, and
+/// returns the heap with its new version. Returns `None` when the stored version differs, and fails with
 /// [`StoreError::Duplicate`] when another heap of the team has the slug.
 pub async fn update_heap(
     db: &impl ConnectionTrait,

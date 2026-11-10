@@ -125,7 +125,8 @@ impl Services {
     }
 
     /// What happened to `team_id` itself that the caller may see: its name and members, display names, and its
-    /// heaps being created, renamed and archived. What happens inside a heap is in [`Self::list_heap_audit`].
+    /// heaps being created, renamed, archived and given a new context. What happens inside a heap is in
+    /// [`Self::list_heap_audit`].
     pub async fn list_team_audit(
         &self,
         principal: Principal,
