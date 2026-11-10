@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import { ApiProblem, type Invitation, type Team } from "../api/client";
@@ -137,7 +137,9 @@ function Opened({
   }
   return (
     <AuthCard>
-      {state !== "working" ? (
+      {viewer?.status === "member" && viewer.team_slug ? (
+        <AlreadyIn slug={viewer.team_slug} land={land} />
+      ) : state !== "working" ? (
         <Notice
           moveFocus={moveFocus}
           heading={state === "ended" ? "This invite link has ended." : "This invite link was revoked."}
@@ -147,8 +149,6 @@ function Opened({
           </p>
           <p className="text-sm text-ink-soft">Ask the team for a new one.</p>
         </Notice>
-      ) : viewer?.status === "member" && viewer.team_slug ? (
-        <AlreadyIn slug={viewer.team_slug} land={land} />
       ) : viewer?.status === "removed" ? (
         <Notice moveFocus={moveFocus} heading={`You were removed from ${team}.`}>
           <p className="text-sm text-ink-soft">This link can't add you back. Ask one of the team's admins.</p>
@@ -178,21 +178,13 @@ function Heading({ children, moveFocus }: { children: ReactNode; moveFocus: Move
 
 /** A link that can't be used, in words and the way back: Open Upheap sends a signed-out visitor on to sign-in. */
 function Notice({ heading, moveFocus, children }: { heading: string; moveFocus: MoveFocus; children?: ReactNode }) {
-  const router = useRouter();
   return (
     <div className="flex flex-col gap-3">
       <Heading moveFocus={moveFocus}>{heading}</Heading>
       {children}
-      <a
-        href={router.buildLocation({ to: "/" }).href}
-        onClick={(event) => {
-          event.preventDefault();
-          void router.navigate({ to: "/" });
-        }}
-        className={`${authButtonClass} mt-1 flex items-center justify-center`}
-      >
+      <Link to="/" className={`${authButtonClass} mt-1 flex items-center justify-center`}>
         Open Upheap
-      </a>
+      </Link>
     </div>
   );
 }
@@ -245,7 +237,8 @@ function Confirm({
       )}
       <button
         type="button"
-        disabled={join.isPending}
+        // Stays disabled once joined, until the landing replaces the page.
+        disabled={join.isPending || join.isSuccess}
         onClick={() =>
           join.mutate(undefined, {
             onSuccess: ({ team: joined, created }) =>
@@ -254,7 +247,7 @@ function Confirm({
         }
         className={authButtonClass}
       >
-        Join {team}
+        {join.isPending || join.isSuccess ? "Joining…" : `Join ${team}`}
       </button>
       <p className="text-center text-sm text-ink-soft">
         Not you?{" "}

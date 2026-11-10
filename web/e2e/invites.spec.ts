@@ -106,9 +106,16 @@ closed(
       // Ana revokes the link, and it says so to whoever opens it after.
       await page.goto(teamPath);
       await revokeFirstLink(page);
-      await newcomer.goto(link);
-      await expect(newcomer.getByRole("heading", { name: "This invite link was revoked." })).toBeVisible();
-      await expect(newcomer.getByText("It was for Acme, from Ana Ruiz.")).toBeVisible();
+      // (A member who opens it lands on the team instead; a fresh context is signed out.)
+      const visitorContext = await person();
+      try {
+        const visitor = await visitorContext.newPage();
+        await visitor.goto(link);
+        await expect(visitor.getByRole("heading", { name: "This invite link was revoked." })).toBeVisible();
+        await expect(visitor.getByText("It was for Acme, from Ana Ruiz.")).toBeVisible();
+      } finally {
+        await visitorContext.close();
+      }
     } finally {
       await Promise.all([ana.close(), newcomerContext.close(), samContext.close()]);
     }

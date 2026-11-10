@@ -20,9 +20,12 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
 /** What Create account sends. */
 type RegisterBody = { email: string; username: string; display_name: string; password: string };
 
-/** A request that creates an account: `useRegister`'s shape, which the invite page replaces with its own. */
+/**
+ * A request that creates an account, which the invite page uses in place of `useRegister`. It takes no callback: it
+ * moves on by itself when it succeeds, where `onSignedIn` is for the default request.
+ */
 export type RegisterRequest = {
-  mutate: (body: RegisterBody, options: { onSuccess: () => void }) => void;
+  mutate: (body: RegisterBody) => void;
   error: Error | null;
   isPending: boolean;
   reset: () => void;
@@ -67,7 +70,12 @@ export function AuthPage({
   // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
   const signIn = useSignIn();
   const defaultRegister = useRegister();
-  const register = registerOverride ?? defaultRegister;
+  const register: RegisterRequest = registerOverride ?? {
+    mutate: (body) => defaultRegister.mutate(body, { onSuccess: onSignedIn }),
+    error: defaultRegister.error,
+    isPending: defaultRegister.isPending,
+    reset: defaultRegister.reset,
+  };
   const pending = signIn.isPending || register.isPending;
   const selectMode = (key: Key) => {
     setMode(key === "register" ? "register" : "sign_in");
@@ -96,15 +104,12 @@ export function AuthPage({
       onSubmit={() =>
         formMode === "sign_in"
           ? signIn.mutate({ login: values.login, password: values.password }, { onSuccess: onSignedIn })
-          : register.mutate(
-              {
-                display_name: values.display_name,
-                username: values.username,
-                email: values.email,
-                password: values.password,
-              },
-              { onSuccess: onSignedIn },
-            )
+          : register.mutate({
+              display_name: values.display_name,
+              username: values.username,
+              email: values.email,
+              password: values.password,
+            })
       }
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}

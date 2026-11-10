@@ -5,6 +5,7 @@ import { test as base } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,7 +15,7 @@ import { PASSWORD, uniqueUser } from "./fixtures";
 export type SeededUser = { display_name: string; email: string; username: string };
 
 export type ClosedServer = {
-  /** Where the server listens, such as `http://127.0.0.1:8300`. */
+  /** Where the server listens, such as `http://127.0.0.1:41234`. */
   baseURL: string;
   /** Ana Ruiz, who is to make the team and its link. */
   admin: SeededUser;
@@ -23,7 +24,21 @@ export type ClosedServer = {
 };
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
-const BINARY = resolve(process.env.CARGO_TARGET_DIR ?? "../target", "debug", "upheap-server");
+const REPOSITORY_ROOT = resolve("..");
+const BINARY = resolve(REPOSITORY_ROOT, process.env.CARGO_TARGET_DIR ?? "target", "debug", "upheap-server");
+
+/** A port nothing listens on, asked of the OS, so a server left over from an earlier run is never mistaken for ours. */
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 function start(baseURL: string, databaseUrl: string, allowRegistration: boolean): ChildProcess {
   const url = new URL(baseURL);
@@ -78,8 +93,8 @@ async function register(baseURL: string, display_name: string): Promise<SeededUs
 }
 
 /**
- * `closedServer`, one per worker, started the first time a test asks for it: the real binary on a port of its own
- * (8300 and the worker's index) and a SQLite file in the OS temp directory, deleted at the end. It starts with
+ * `closedServer`, one per worker, started the first time a test asks for it: the real binary on a free port the
+ * OS picked and a SQLite file in the OS temp directory, deleted at the end. It starts with
  * registration open, registers Ana Ruiz and Sam Ortiz, stops, and starts again on the same file with registration
  * closed, as a production server got there.
  *
@@ -91,11 +106,11 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
   closedServer: [
     // Playwright reads a fixture's needs from its destructured first argument, and this one needs none.
     // eslint-disable-next-line no-empty-pattern
-    async ({}, use, workerInfo) => {
+    async ({}, use) => {
       if (!existsSync(BINARY)) {
         throw new Error(`${BINARY} is missing. The suite's web server builds it: run the tests with \`npm run e2e\`.`);
       }
-      const baseURL = `http://127.0.0.1:${8300 + workerInfo.parallelIndex}`;
+      const baseURL = `http://127.0.0.1:${await findFreePort()}`;
       const directory = await mkdtemp(join(tmpdir(), "upheap-e2e-"));
       const databaseUrl = `sqlite://${join(directory, "heap.db")}?mode=rwc`;
       let server: ChildProcess | undefined;
