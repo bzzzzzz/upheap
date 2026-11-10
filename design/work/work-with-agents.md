@@ -1,7 +1,6 @@
 # Work with agents: design
 
-Upheap as the place where a person's projects keep their ideas, tasks and progress, worked on together with AI
-agents. It replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design
+Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents. It replaces the pitch in [product.md](../product.md). In progress, by the steps of the maintainer's design
 method. Step agreed: 1 (value).
 
 ## Constraints
@@ -14,41 +13,51 @@ method. Step agreed: 1 (value).
 5. An agent both refines work and does it. (Owner.)
 6. One person uses agents by running a server for themselves. The browser-only build stays as it is, without
    agents. (Owner.)
-7. This pitch replaces the one in product.md. (Owner.)
-8. What's built stays: the ranking and its factors, need, states, tags, the audit log, nothing deleted, the stack.
+7. This pitch replaces the one in product.md, and it is still a ranked todo list holding more work than can be
+   done. Agents are how part of that work gets done, not what the product is. (Owner.)
+8. Upheap waits for the person and doesn't interrupt. It pushes only what they asked for, such as a reminder, or
+   what is critical to act on fast. (Owner.)
+9. What's built stays: the ranking and its factors, need, states, tags, the audit log, nothing deleted, the stack.
    (Repository.)
 
 ## 1. Value
 
 ### Who it's for and the problem
 
-Upheap is for a person who runs several projects and hands part of the work to AI agents. Today the ideas, plans
-and progress of such a project sit in text files inside it. Every agent and every branch edits the same files, so
-parallel work collides, and the person can't see or steer any of it away from their desk. An agent that needs an
-answer has nowhere to ask, and the person has no single place that says what is waiting for them.
+Upheap is a ranked todo list for a person, or a team's owner, with more work than can ever be done. Everything
+goes in: ideas, tasks, things to remember. Upheap ranks it all and keeps the ranking current, so the owner always
+knows what matters right now and what is on the horizon, and accepts that the bottom of the list may never
+happen.
 
-Upheap holds that moving part. A heap is a project: its context, and everything to do in it, ranked. Ideas go in
-as notes. A note grows into a task, or into a project of its own. Agents pick up what is marked for them, do it or
-come back with questions, and the person answers from wherever they are. The project's own files keep only what it
-is, not how far along it is.
+Part of that work can be handed to AI agents. Today doing so costs the owner time of its own: deciding what the
+agent takes next, feeding it the background, tracking progress in text files inside the project where parallel
+work collides, and doing the boilerplate between steps. Upheap takes that over. A heap carries the project's
+context, the ranking decides what an agent picks up, and an agent that needs the owner leaves a question on the
+item and moves on. The project's own files keep what it is, not how far along it is.
+
+Upheap waits for the person. It shows what's important and what needs them when they come and look, and it
+doesn't interrupt.
 
 ### The questions it answers
 
-1. What should I work on now? (As today.)
-2. What is waiting for me: which questions and requests only I can deal with?
-3. What should the agent pick up next? (Answered the same way every time, without asking a model.)
-4. Where has this idea got to: still a note, a task under way, or a project?
-5. Why is this here, and why isn't it higher? (As today.)
+1. What's important right now, and what should I work on? (As today.)
+2. What's on the horizon?
+3. Why is this here, and why isn't it higher? (As today.)
+4. What is waiting for me: which questions and requests only I can deal with?
+5. What should the agent pick up next? (Answered the same way every time, without asking a model.)
 
 ### What it is not
 
-1. **Not an agent runner.** It doesn't host models, hold prompts or manage their tools. It hands an agent an item
+1. **Not a plan that gets finished.** The heap holds more than can be done. It orders the work; it doesn't
+   promise all of it.
+2. **Not something that interrupts.** Information appears when the person asks for it. Upheap pushes only what
+   they asked to be pushed, such as a reminder, and the rare thing that is critical to act on fast.
+3. **Not an agent runner.** It doesn't host models, hold prompts or manage their tools. It hands an agent an item
    with its context and takes back the result.
-2. **Not a wiki or a document store.** A heap's context is short and points at where the knowledge lives: a
+4. **Not a wiki or a document store.** A heap's context is short and points at where the knowledge lives: a
    repository, a wiki, a drive.
-3. **Not a team project tracker.** No assignees, sprints, boards or reports. One ranked list per heap, as today.
-4. **Not a chat.** A question is attached to an item, is answered once, and stays with the item.
-5. **Not a calendar.** A reminder comes into the list on its date. It doesn't notify.
+5. **Not a team project tracker.** No assignees, sprints, boards or reports. One ranked list per heap, as today.
+6. **Not a chat.** A question is attached to an item, is answered once, and stays with the item.
 
 ### The shape of the offering
 
@@ -110,6 +119,15 @@ is resolved or turned into a task.
    closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
 
+**Waiting, not interrupting**
+
+1. **Core.** Nothing reaches the person unless they look: a question, a finished task and an agent's progress all
+   wait in Upheap until then.
+2. **Core.** Two things may be pushed: what the person asked to be pushed, such as a reminder on its date, and
+   what is critical to act on fast. Which cases count as critical is decided one by one, and the list stays
+   short.
+3. An agent that has to wait for the person goes on to the next item it can work on.
+
 **Handing work to an agent**
 
 1. **Core.** The person marks an item for agents. An agent never picks up an unmarked one.
@@ -153,7 +171,8 @@ is resolved or turned into a task.
 
 ### Out
 
-Notifications, more than one kind of agent, and who in a team answers a question. See Ideas.
+How a pushed reminder or a critical case reaches the person, more than one kind of agent, and who in a team
+answers a question. See Ideas.
 
 ## 3. Workflows
 
@@ -177,6 +196,6 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 
 Outside the scope. Not commitments.
 
-- Notifications when something starts waiting for the person.
+- The channel for what is pushed: a reminder on its date, and the critical cases.
 - Several kinds of agent, with items marked for one of them.
 - A person in a shared heap picking who answers a question.
