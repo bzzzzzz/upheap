@@ -22,6 +22,7 @@ import { useArchiveHeap } from "../components/archiveHeap";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
+import { InlineConfirm } from "../components/InlineConfirm";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
@@ -30,6 +31,8 @@ import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { namedForOwner, useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
+import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
+import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
 
 /** Name and link name forms in the design tokens, as on Account. */
 const nameFormClasses: NameFormClasses = {
@@ -38,17 +41,6 @@ const nameFormClasses: NameFormClasses = {
   cancel: compactButtonClass.quiet,
   problem: "text-overdue-ink",
 };
-
-const sectionTitleClass = "min-w-0 flex-1 text-[15px] font-semibold outline-none";
-const cardClass = "divide-y divide-line rounded-xl border border-line bg-surface p-1 max-sm:rounded-[14px] max-sm:p-0";
-/** The ⋯ that opens a row's or the title's actions: 30 px on a wide screen, 44 px to a finger. */
-const moreButtonClass =
-  "flex size-[30px] shrink-0 items-center justify-center rounded-[7px] text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:size-11 max-sm:size-11 max-sm:rounded-xl";
-/** Make admin and Make member: bordered and small (WideTeam). */
-const roleButtonClass =
-  "shrink-0 rounded-[7px] border border-line bg-surface px-2.5 py-[5px] text-xs text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-40 pointer-coarse:min-h-11";
-const dangerTextButtonClass =
-  "shrink-0 rounded-[7px] px-2.5 py-[5px] text-xs text-overdue-ink hover:bg-overdue-soft disabled:opacity-40 pointer-coarse:min-h-11";
 
 /**
  * A team's heaps and members, by its slug `team` (S-team: WideTeam, PhoneTeam). What each person can change comes from
@@ -444,6 +436,9 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
   const { data: me } = useMe();
   const remove = useRemoveMember(team.slug);
   const setRole = useSetMemberRole(team.slug);
+  const makingLink = useMakeInviteLink(team.slug);
+  const canAddMember = team.allowed_actions.includes("add_member");
+  const canInvite = canManageInviteLinks(team);
   const [asking, setAsking] = useState<Asking | null>(null);
   const askButtons = useRef(new Map<string, HTMLButtonElement>());
   const heading = useRef<HTMLHeadingElement>(null);
@@ -505,7 +500,18 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
       <h2 ref={heading} tabIndex={-1} id="team-members" className={sectionTitleClass}>
         Members · {team.members.length}
       </h2>
-      {team.allowed_actions.includes("add_member") && <AddMember team={team} phone={phone} />}
+      {(canAddMember || canInvite) && (
+        <div className={phone ? "flex flex-col gap-2.5" : "flex items-start gap-2"}>
+          {canAddMember && (
+            <div className="min-w-0 flex-1">
+              <AddMember team={team} phone={phone} />
+            </div>
+          )}
+          {canInvite && <InviteLinkButton making={makingLink} phone={phone} />}
+        </div>
+      )}
+      <ProblemText error={makingLink.error} className="text-overdue-ink" />
+      <InviteLinks team={team} making={makingLink} phone={phone} />
       <ul className={cardClass}>
         {team.members.map((member) => {
           const you = member.user_id === me?.user.id;
@@ -534,7 +540,7 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
         })}
       </ul>
       {!phone && current && (
-        <MemberConfirm
+        <InlineConfirm
           question={current.kind === "remove" ? removeQuestion(current.member, team) : demoteQuestion(team)}
           confirmLabel={current.kind === "remove" ? "Remove" : "Give up admin"}
           pending={current.kind === "remove" ? remove.isPending : setRole.isPending}
@@ -544,63 +550,6 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
         />
       )}
     </section>
-  );
-}
-
-/**
- * The confirm under the member list (WideTeam), for removing someone or giving up your admin role: focus moves to it,
- * and Escape or Cancel goes back to the button that asked.
- */
-function MemberConfirm({
-  question,
-  confirmLabel,
-  pending,
-  error,
-  onConfirm,
-  onCancel,
-}: {
-  question: string;
-  confirmLabel: string;
-  pending: boolean;
-  error: Error | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const questionId = useId();
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => box.current?.focus(), [question]);
-  return (
-    <div
-      ref={box}
-      role="alertdialog"
-      aria-labelledby={questionId}
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-overdue-ink/25 bg-overdue-soft px-3.5 py-2.5 text-[13px] outline-none focus-visible:outline-2 focus-visible:outline-accent"
-    >
-      <p id={questionId} className="min-w-0 flex-1 basis-60 text-overdue-ink">
-        {question}
-      </p>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={onCancel} className={`${compactButtonClass.quiet} py-1.5 text-[13px]`}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={onConfirm}
-          className={`${compactButtonClass.danger} py-1.5 text-[13px]`}
-        >
-          {confirmLabel}
-        </button>
-      </div>
-      <ProblemText error={error} className="text-overdue-ink" />
-    </div>
   );
 }
 

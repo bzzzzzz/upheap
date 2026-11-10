@@ -339,6 +339,11 @@ line saying why the only admin can't leave. Removing a member says what happens:
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,
 where heap rows are 52 px and open the heap, and a member's ⋯ opens a sheet headed "Sam Ortiz · @sam · Member".
 
+For an admin, Members also holds **Invite link** beside the search (under it on a phone) and the team's working links
+as rows ("Made by Ana · ends 16 Nov") with Copy and Revoke; the link just made is marked New and takes focus on its
+Copy. Revoking is confirmed the same way, saying the link stops at once and people who joined stay, and on a phone a
+row's actions are in its ⋯ sheet. A copy the browser refuses shows the link in a field to copy by hand.
+
 ## Sign in and create account
 
 A card on a wide screen and the bare form on a phone, with a Sign in / Create account switch. Sign in takes "Email
@@ -384,9 +389,9 @@ a modal on a wide screen and a sheet on a phone. How the data is kept is in
 ## Rules
 
 1. **Confirmations.** A reversible change acts at once and offers Undo in a toast: state changes, archiving a heap,
-   a view or a parameter. A change that can't be undone, or that affects other people, asks first, in a dialog on a
-   wide screen or a sheet on a phone, and names the object: removing a member, giving up your own admin role,
-   replacing all local data, and discarding a typed title.
+   a view or a parameter. A change that can't be undone, or that affects other people, asks first, inline or in a
+   dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own
+   admin role, revoking an invite link, replacing all local data, and discarding a typed title.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's state buttons sit in a bar at its bottom; on a wide screen they're the main button plus the others.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:

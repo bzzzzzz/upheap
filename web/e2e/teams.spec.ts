@@ -419,3 +419,154 @@ test("Enter waits for the results of what was typed, not the ones still on scree
   await expect(page.getByRole("heading", { name: "Members · 1" })).toBeVisible();
   await expect(members(page).getByText("Sam Ortiz")).toHaveCount(0);
 });
+
+const inviteLinks = (page: Page) => page.getByRole("region", { name: "Invite links" });
+const inviteLinkButton = (page: Page) => page.getByRole("button", { name: "Invite link", exact: true });
+const REVOKE_QUESTION =
+  /^Revoke your link that ends .+\? It stops working at once\. People who joined through it stay\.$/;
+
+test("an admin makes, copies and revokes an invite link", async ({ page, context, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createTeam(page, "Gate");
+  const links = inviteLinks(page);
+  await expect(links.getByRole("heading", { name: "Invite links" })).toBeVisible();
+  await expect(links.getByText("Anyone with a link joins as a member.")).toBeVisible();
+  await expect(links.getByRole("listitem")).toHaveCount(0);
+
+  // The new link comes first, marked New, with focus on its Copy.
+  await inviteLinkButton(page).click();
+  const link = links.getByRole("listitem");
+  await expect(link).toHaveCount(1);
+  await expect(link).toContainText("Made by you");
+  await expect(link).toContainText("New");
+  await expect(link).toContainText(/ends .+/i);
+  const copy = link.getByRole("button", { name: "Copy", exact: true });
+  await expect(copy).toBeFocused();
+
+  await copy.click();
+  await expect(links.getByRole("status")).toHaveText("Link copied.");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toMatch(new RegExp(`^${new URL(page.url()).origin}/invite/[A-Za-z0-9_-]{43}$`));
+
+  // Revoke asks first; Cancel goes back to Revoke.
+  if (isPhone(page)) {
+    await link.getByRole("button", { name: /^Actions for the link / }).click();
+    const sheet = page.getByRole("dialog", { name: "Invite link" });
+    const revokeRow = sheet.getByRole("button", { name: "Revoke link…" });
+    await revokeRow.click();
+    const confirm = page.getByRole("alertdialog", { name: "Invite link" });
+    await expect(confirm).toHaveAccessibleDescription(REVOKE_QUESTION);
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(revokeRow).toBeFocused();
+    await revokeRow.click();
+    await confirm.getByRole("button", { name: "Revoke", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  } else {
+    const revoke = link.getByRole("button", { name: "Revoke", exact: true });
+    await revoke.click();
+    const confirm = page.getByRole("alertdialog", { name: REVOKE_QUESTION });
+    await expect(confirm).toBeFocused();
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(revoke).toBeFocused();
+    await revoke.click();
+    await page.keyboard.press("Escape");
+    await expect(revoke).toBeFocused();
+    await revoke.click();
+    await confirm.getByRole("button", { name: "Revoke", exact: true }).click();
+  }
+  await expect(links.getByRole("listitem")).toHaveCount(0);
+  await expect(links.getByRole("heading", { name: "Invite links" })).toBeFocused();
+
+  // The team's Activity words both.
+  await page.goto(`${new URL(page.url()).pathname}/activity`);
+  await expect(page.getByText("You made an invite link")).toBeVisible();
+  await expect(page.getByText("You revoked Tester's invite link")).toBeVisible();
+});
+
+test("a member sees no invite links, and Activity says who joined through one", async ({
+  page,
+  browser,
+  localBuild,
+}, testInfo) => {
+  test.skip(localBuild, SERVER_ONLY);
+  await createTeam(page, "Door");
+  const teamPath = new URL(page.url()).pathname;
+  await inviteLinkButton(page).click();
+  await expect(inviteLinks(page).getByRole("listitem")).toHaveCount(1);
+
+  // Someone else joins through the link, in a context of their own.
+  const other = await browser.newContext(testInfo.project.use);
+  try {
+    const user = uniqueUser();
+    const registered = await other.request.post("/api/v1/auth/register", {
+      headers: { "x-csrf-protection": "1" },
+      data: { ...user, display_name: "Sam Ortiz", password: PASSWORD },
+    });
+    expect(registered.status()).toBe(201);
+    const listed = await page.request.get(`/api/v1${teamPath}/invite-links`);
+    const token = ((await listed.json()) as { links: { token: string }[] }).links[0]?.token;
+    expect(token).toBeTruthy();
+    const joined = await other.request.post(`/api/v1/invites/${token}/join`, { headers: { "x-csrf-protection": "1" } });
+    expect(joined.status()).toBe(201);
+
+    // A member sees the team, and none of the invite links.
+    const theirs = await other.newPage();
+    await theirs.goto(teamPath);
+    await expect(theirs.getByRole("heading", { name: "Door", level: 1 })).toBeVisible();
+    await expect(theirs.getByRole("heading", { name: /^Members/ })).toBeVisible();
+    await expect(inviteLinkButton(theirs)).toHaveCount(0);
+    await expect(theirs.getByRole("heading", { name: "Invite links" })).toHaveCount(0);
+  } finally {
+    await other.close();
+  }
+
+  await page.goto(`${teamPath}/activity`);
+  await expect(page.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
+});
+
+test("a copy the browser refuses shows the link to copy by hand", async ({ page, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  test.skip(page.viewportSize()?.width !== 1280, "One width is enough for the fallback.");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: () => Promise.reject(new Error("denied")) },
+      configurable: true,
+    });
+  });
+  await createTeam(page, "Plain");
+  await inviteLinkButton(page).click();
+  const link = inviteLinks(page).getByRole("listitem");
+  await link.getByRole("button", { name: "Copy", exact: true }).click();
+  const field = link.getByRole("textbox", { name: "Invite link" });
+  await expect(field).toHaveValue(new RegExp(`^${new URL(page.url()).origin}/invite/[A-Za-z0-9_-]{43}$`));
+  await expect(field).toBeFocused();
+  await expect(link.getByText("Copy it from here.")).toBeVisible();
+  await expect(inviteLinks(page).getByRole("status")).toBeEmpty();
+  await field.press("Escape");
+  await expect(field).toHaveCount(0);
+});
+
+test("a phone copies an older link from its ⋯ sheet", async ({ page, context, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  test.skip(!isPhone(page), "The sheet is the phone's.");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await createTeam(page, "Older");
+  const links = inviteLinks(page);
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  const listed = await page.request.get(`/api/v1${new URL(page.url()).pathname}/invite-links`);
+  const first = ((await listed.json()) as { links: { token: string }[] }).links[0]?.token;
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(2);
+
+  // The older link is the second row, and has no visible Copy.
+  const older = links.getByRole("listitem").nth(1);
+  await expect(older.getByRole("button", { name: "Copy", exact: true })).toHaveCount(0);
+  await older.getByRole("button", { name: /^Actions for the link / }).click();
+  await page.getByRole("dialog", { name: "Invite link" }).getByRole("button", { name: "Copy link" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(links.getByRole("status")).toHaveText("Link copied.");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(`${new URL(page.url()).origin}/invite/${first}`);
+});
