@@ -14,6 +14,7 @@ import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker, DueRows } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { ItemMore } from "./ItemMore";
+import { ItemSteps } from "./ItemSteps";
 import { KindIcon, StageIcon } from "./kindIcons";
 import {
   changeLabel,
@@ -315,6 +316,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       )}
 
       {entry && entry.contributors.length > 0 && <WhyItRanks entry={entry} />}
+
+      {item.kind === "task" && <ItemSteps heapRef={heapRef} item={item} />}
 
       <NeedPicker
         value={item.need}

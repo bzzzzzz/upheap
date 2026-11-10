@@ -12,6 +12,9 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   item_closed: "This item is closed, so only its state can change.",
   option_not_in_parameter: "That option was archived meanwhile. Pick another one.",
   parameter_not_in_heap: "That parameter was archived meanwhile.",
+  steps_need_task: "Only a task has steps. Make it a task first.",
+  too_many_steps: "A task has at most 100 steps.",
+  step_not_in_item: "That step isn't in this task any more.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };
 

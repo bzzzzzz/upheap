@@ -406,6 +406,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds a step to a task, at the end or right after the step numbered `after`, and answers with the whole item. The
+         *     new step is the one with the highest `number`. A task has at most 100 steps, dropped ones included. Adding needs
+         *     no `If-Match`; a step has its own version, and the item's `version` doesn't change.
+         */
+        post: operations["add_step"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps/{step}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edits a step of a task and answers with the whole item. `{step}` is the step's number. Send the step's `version`
+         *     in `If-Match`; the item's `version` doesn't change. A step can move from any state to any other.
+         */
+        patch: operations["update_step"];
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
         parameters: {
             query?: never;
@@ -801,6 +842,18 @@ export interface components {
              */
             label: string;
         };
+        /** @description A step to add to a task. */
+        AddStepRequest: {
+            /**
+             * Format: int32
+             * @description The number of the step the new one goes right after. Left out, the step goes at the end.
+             */
+            after?: number | null;
+            /** @description Plain text, at most 20,000 characters; blank means none. */
+            context?: string | null;
+            /** @description 1 to 300 characters. */
+            title: string;
+        };
         ArchiveOptionRequest: {
             /**
              * Format: uuid
@@ -833,7 +886,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1261,6 +1314,9 @@ export interface components {
              */
             stage_choices: components["schemas"]["Stage"][];
             state: components["schemas"]["ItemState"];
+            step_progress?: null | components["schemas"]["StepProgress"];
+            /** @description A task's steps in order, dropped ones included; empty for a note. */
+            steps: components["schemas"]["Step"][];
             /** @description By name. */
             tags: components["schemas"]["ItemTag"][];
             title: string;
@@ -1274,7 +1330,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "change_state" | "reopen" | "make_task";
+        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step";
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -1811,6 +1867,59 @@ export interface components {
          * @enum {string}
          */
         StateMode: "pinned" | "shown" | "hidden";
+        /** @description One step of a task. */
+        Step: {
+            allowed_actions: components["schemas"]["StepAction"][];
+            /** @description Plain text; `null` when there is none. */
+            context?: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int32
+             * @description The step's number within its item, given when it was added and never changed or reused. The step is named
+             *     by its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.
+             */
+            number: number;
+            state: components["schemas"]["StepState"];
+            title: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the
+             *     item's.
+             */
+            version: number;
+        };
+        /**
+         * @description An action the caller can take on a step. Clients show controls only for these.
+         * @enum {string}
+         */
+        StepAction: "edit";
+        /** @description A partial edit of a step. Leave a field out to keep it; send `null` to clear the context. */
+        StepPatch: {
+            /** @description Plain text; `null` or blank clears it. */
+            context?: string | null;
+            state?: null | components["schemas"]["StepState"];
+            title?: string | null;
+        };
+        /** @description How far a task's steps have got. */
+        StepProgress: {
+            /** Format: int32 */
+            ticked: number;
+            /**
+             * Format: int32
+             * @description Open and ticked steps. Dropped ones don't count.
+             */
+            total: number;
+        };
+        /**
+         * @description Where a step stands. A step can move from any state to any other.
+         *
+         *     - `open`: still to do.
+         *     - `ticked`: done.
+         *     - `dropped`: no longer wanted. The step stays, shown as dropped, and doesn't count in the item's progress.
+         * @enum {string}
+         */
+        StepState: "open" | "ticked" | "dropped";
         Tag: {
             allowed_actions: components["schemas"]["TagAction"][];
             description?: string | null;
@@ -3287,6 +3396,177 @@ export interface operations {
             };
             /** @description `reopen_window_expired` or `version_conflict` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_step: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddStepRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived`, `item_closed`, `steps_need_task` or `too_many_steps` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, `value_unknown` (an `after` of 0) or `step_not_in_item` (`field` `after`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_step: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+                /**
+                 * @description The step's number within its item: a positive integer, given when the step was added.
+                 * @example 3
+                 */
+                step: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StepPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such item, or no step with that number */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `item_closed` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields or `value_unknown` (a `state` the server doesn't know) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

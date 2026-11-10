@@ -69,6 +69,23 @@ export async function openItem(page: Page, title: string) {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
 }
 
+/** Makes the open item, a note, a task through its More menu, answering the question that asks. */
+export async function makeTask(page: Page, title: string) {
+  const more = itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true });
+  await more.click();
+  if (isPhone(page))
+    await page
+      .getByRole("dialog", { name: "More", exact: true })
+      .getByRole("button", { name: "Make it a task…" })
+      .click();
+  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
+  await page
+    .getByRole("alertdialog", { name: `Make “${title}” a task?` })
+    .getByRole("button", { name: "Make it a task" })
+    .click();
+  await expect(itemPane(page).getByRole("region", { name: "Steps" })).toBeVisible();
+}
+
 /** Closes the open item with its ✕. */
 export async function closeItem(page: Page) {
   await itemPane(page).getByRole("button", { name: "Close", exact: true }).click();
