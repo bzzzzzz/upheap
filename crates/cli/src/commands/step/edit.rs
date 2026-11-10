@@ -6,7 +6,7 @@ use clap::Args;
 use super::{find_step, step_name};
 use crate::commands::heap_api::{HeapApi, read_context};
 use crate::commands::item::common::locate_item;
-use crate::commands::{HeapArgs, SharedArgs, UsageError};
+use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::StepName;
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
@@ -35,7 +35,10 @@ pub struct EditArgs {
 pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let name = StepName::parse(&args.step)?;
     if args.title.is_none() && args.context_file.is_none() && !args.no_context {
-        return Err(UsageError::NothingToChangeInStep.into());
+        if out.mode() == Mode::Human {
+            out.line("Nothing to change: give --title, --context-file or --no-context.")?;
+        }
+        return Ok(());
     }
     let at = locate_item(&name.item_typed, name.item.clone(), args.heap.name.as_deref(), app)?;
     let context = match (&args.context_file, args.no_context) {

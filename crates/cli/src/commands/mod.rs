@@ -63,8 +63,6 @@ pub enum UsageError {
     },
     #[error("`{step}` is a step of another item than `{item}`; name a step of {item}, or just its number")]
     StepInOtherItem { step: String, item: String },
-    #[error("nothing to change: give --title, --context-file or --no-context")]
-    NothingToChangeInStep,
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

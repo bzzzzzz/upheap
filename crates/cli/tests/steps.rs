@@ -219,8 +219,11 @@ async fn step_edit_changes_the_title_and_clears_the_context() -> Result<()> {
     let read = server.read_item(&ada, HEAP, &task).await?;
     expect_that!(read["steps"][0]["title"], eq("Run in production"));
     expect_that!(read["steps"][0]["context"], eq(&Value::Null));
-    expect_that!(nothing.exited(2), eq(true));
-    expect_that!(nothing.stderr, contains_substring("nothing to change"));
+    expect_that!(nothing.exited(0), eq(true));
+    expect_that!(
+        nothing.stdout,
+        eq("Nothing to change: give --title, --context-file or --no-context.\n")
+    );
     expect_that!(same.stdout, eq(&format!("No change to {name}.\n")));
     Ok(())
 }
