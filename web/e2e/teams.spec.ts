@@ -2,7 +2,7 @@
 // and members. Teams with others are the server's, so most of these skip the local build.
 import type { APIRequestContext, Page } from "@playwright/test";
 
-import { addItem, createTeam, expect, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
+import { addItem, createTeam, expect, expectFitsWidth, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
 
 const SERVER_ONLY = "The local build has one user and one team.";
 
@@ -292,6 +292,17 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   await more.click();
   await page.getByRole("menuitem", { name: "Activity" }).click();
   await expect(page).toHaveURL(new RegExp(`/teams/${linkName}/activity$`));
+});
+
+test("the team's activity fits the screen with a long team name", async ({ page, localBuild }) => {
+  test.skip(localBuild, SERVER_ONLY);
+  const name = "Q".repeat(100);
+  await createTeam(page, name);
+  await page.getByRole("button", { name: /^More for / }).click();
+  await page.getByRole("menuitem", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Team activity", level: 1 })).toBeVisible();
+  await expect(page.getByRole("main").getByText(name).first()).toBeVisible();
+  await expectFitsWidth(page, "The team's activity");
 });
 
 test("leaving asks first, and the last admin is told why they can't", async ({ page, request, localBuild }) => {

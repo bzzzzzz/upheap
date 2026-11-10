@@ -33,6 +33,7 @@ export function TeamActivityPage({ team: slug }: { team: string }) {
   );
 }
 
+/** The title, intro and card both Activity pages share, in the design tokens (ux.md, Toolkit). */
 function ActivityLayout({
   title,
   subtitle,
@@ -44,11 +45,9 @@ function ActivityLayout({
 }) {
   return (
     <main>
-      <h1 className="mt-6 mb-1 text-xl font-semibold tracking-tight">{title}</h1>
-      <p className="mb-4 min-h-5 text-sm text-stone-500">{subtitle}</p>
-      <div className="rounded-lg border border-stone-200 bg-white px-3 dark:border-stone-800 dark:bg-stone-900">
-        {children}
-      </div>
+      <h1 className="mt-6 mb-1 text-[22px] font-semibold tracking-[-0.015em]">{title}</h1>
+      <p className="mb-4 min-h-5 text-[13px] break-words text-ink-soft">{subtitle}</p>
+      <div className="rounded-[14px] border border-line bg-surface px-3">{children}</div>
     </main>
   );
 }

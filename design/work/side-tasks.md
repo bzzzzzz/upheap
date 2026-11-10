@@ -21,7 +21,7 @@ request, and they don't depend on each other, so they can go in any order and at
    page, so whichever lands second rebases.
    Done when: archiving offers Undo in a toast, demoting yourself asks first in a dialog on a wide screen and a
    sheet on a phone, and tests cover both.
-- [ ] 4. **Phone width for Activity,** in the design tokens. Getting in piece 4 adds lines to the team's
+- [x] 4. **Phone width for Activity,** in the design tokens. Getting in piece 4 adds lines to the team's
    activity, so landing this first means they get checked at phone width too.
    Done when: Activity, the heap's and the team's, fits a phone without horizontal scroll, checked at the
    Playwright phone width.
