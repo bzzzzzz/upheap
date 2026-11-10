@@ -1,7 +1,7 @@
 //! Building audit entries and diffs.
 
 use domain::heap::HeapPolicy;
-use domain::item::{Due, Item};
+use domain::item::{Due, Item, Kind, Stage};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
 use domain::saved_view::SavedView;
@@ -9,9 +9,17 @@ use domain::tag::Tag;
 use domain::{OptionId, ParameterId};
 use serde_json::{Map, Value, json};
 
-/// The fields of a newly created item, for its `item_created` entry.
+/// The fields of a newly created item, for its `item_created` entry. The kind and the stage are left out while they
+/// are the defaults every new item starts with, so a new item's history doesn't grow two lines.
 pub(crate) fn describe_new_item(item: &Item) -> Value {
-    Value::Object(item_fields(item))
+    let mut fields = item_fields(item);
+    if item.kind == Kind::Note {
+        fields.remove("kind");
+    }
+    if item.stage == Stage::AsWritten {
+        fields.remove("stage");
+    }
+    Value::Object(fields)
 }
 
 /// Changed fields between two versions of an item, as `{"field": {"before": …, "after": …}}`.
@@ -80,6 +88,8 @@ fn item_fields(item: &Item) -> Map<String, Value> {
         "description".into(),
         json!(item.description.as_ref().map(|d| d.as_str())),
     );
+    fields.insert("kind".into(), json!(item.kind.code()));
+    fields.insert("stage".into(), json!(item.stage.code()));
     fields.insert("state".into(), json!(item.state.kind().code()));
     fields.insert("blocked_by".into(), json!(item.blocked_by().map(|id| id.to_string())));
     fields.insert("need".into(), json!(item.need.code()));

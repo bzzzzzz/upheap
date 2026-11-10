@@ -2044,7 +2044,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived`",
+            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2054,7 +2054,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`",
+            "description": "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5265,6 +5265,8 @@
           "key",
           "heap_id",
           "title",
+          "kind",
+          "stage_choices",
           "state",
           "need",
           "tags",
@@ -5400,6 +5402,9 @@
             "description": "Five characters, unique within the heap and never changed; the item's path is `…/items/{key}`.",
             "example": "k3x9a"
           },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
           "need": {
             "$ref": "#/components/schemas/Need"
           },
@@ -5409,6 +5414,24 @@
               "$ref": "#/components/schemas/ItemParameter"
             },
             "description": "A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,\nby parameter name."
+          },
+          "stage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Stage",
+                "description": "How far the item has been prepared. `null` when the item is closed, and always in a build without the stage\n(the static, single-user one)."
+              }
+            ]
+          },
+          "stage_choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            },
+            "description": "The stages the caller may set now, in table order: all three on an open task, the first two on an open note.\nEmpty when the item is closed, when the caller can't edit it, and in a build without the stage."
           },
           "state": {
             "$ref": "#/components/schemas/ItemState"
@@ -5437,7 +5460,8 @@
         "enum": [
           "edit",
           "change_state",
-          "reopen"
+          "reopen",
+          "make_task"
         ]
       },
       "ItemOption": {
@@ -5543,6 +5567,10 @@
               }
             ]
           },
+          "kind": {
+            "$ref": "#/components/schemas/Kind",
+            "description": "A note can become a task; `\"note\"` on a task is refused. Applied before `stage`. `null` is refused."
+          },
           "need": {
             "$ref": "#/components/schemas/Need",
             "description": "Need can be changed but not cleared; `null` is refused."
@@ -5561,6 +5589,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage",
+            "description": "`\"defined\"` needs a task, or `kind` set to `\"task\"` in the same patch. `null` is refused."
           },
           "state": {
             "oneOf": [
@@ -5641,6 +5673,14 @@
             "type": "string"
           }
         }
+      },
+      "Kind": {
+        "type": "string",
+        "description": "What an item is. A note becomes a task in place; a task never goes back to a note.",
+        "enum": [
+          "note",
+          "task"
+        ]
       },
       "LinkTagsRequest": {
         "type": "object",
@@ -6765,6 +6805,15 @@
           "m",
           "l",
           "xl"
+        ]
+      },
+      "Stage": {
+        "type": "string",
+        "description": "How far an item has been prepared, from least to most. Set by hand.\n\n- `as_written`: just as it was put down.\n- `with_context`: background has been added.\n- `defined`: clear enough to start on. Only a task can be defined.",
+        "enum": [
+          "as_written",
+          "with_context",
+          "defined"
         ]
       },
       "StateMode": {

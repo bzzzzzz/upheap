@@ -194,8 +194,8 @@ async fn get_item(
     responses(
         (status = 200, body = ItemDto),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired` or `heap_archived`", body = Problem),
-        (status = 422, description = "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task`", body = Problem),
+        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_item(

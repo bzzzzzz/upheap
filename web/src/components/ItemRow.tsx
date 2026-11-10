@@ -5,7 +5,8 @@ import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, Item, ItemState, RankedItem } from "../api/client";
-import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, STATE_LABELS } from "./labels";
+import { KindIcon, StageIcon } from "./kindIcons";
+import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { ParameterChips } from "./ParameterPicker";
@@ -105,6 +106,10 @@ export function ItemRow({
         <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
           {position}
         </span>
+        {/* A fixed slot, so titles line up whether or not the item is a task. */}
+        <span className="flex w-3.5 shrink-0 justify-center">
+          <KindIcon kind={item.kind} />
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {/* The link covers the whole row, under the state circle. */}
@@ -122,7 +127,13 @@ export function ItemRow({
               className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
             >
               {item.title}
+              {/* The icons are for the eye; this is what a screen reader hears after the title. */}
+              <span className="sr-only">
+                {item.kind === "task" && ", task"}
+                {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
+              </span>
             </Link>
+            <StageIcon stage={item.stage} />
             {item.due && <DueChip due={item.due} />}
             <TagChips tags={item.tags} />
             <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />

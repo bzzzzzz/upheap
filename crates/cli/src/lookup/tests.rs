@@ -217,7 +217,7 @@ fn views_resolve_by_name_and_say_when_two_share_it() -> googletest::Result<()> {
 fn text_matches_title_or_description_ignoring_case() -> googletest::Result<()> {
     let item: ItemDto = serde_json::from_value(json!({
         "id": Uuid::new_v4(), "key": "k3x9a", "heap_id": Uuid::new_v4(), "title": "Rotate the staging certs",
-        "description": "Before they expire in March", "state": "open", "blocked_by": null, "need": "expected",
+        "description": "Before they expire in March", "kind": "note", "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
         "effort": null, "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0,
         "created_label": "today", "created_by": null, "closed_at": null, "closed_label": null, "closed_by": null,
         "closed_group": null, "version": 1, "allowed_actions": [],

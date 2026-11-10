@@ -5,7 +5,7 @@
 
 use api_types::common::{
     ContributorDto, DueDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto, ItemTagDto,
-    RankedItemDto, SizeDto, UserRefDto,
+    RankedItemDto, SizeDto, StageDto, UserRefDto,
 };
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, group_closed};
@@ -36,6 +36,14 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         heap_id: *item.heap_id.as_uuid(),
         title: item.title.as_str().to_owned(),
         description: item.description.map(|d| d.as_str().to_owned()),
+        kind: item.kind.into(),
+        // The stage is shown while the item is open, and only in a build that has agents.
+        stage: (cfg!(feature = "agents") && closed_at.is_none()).then(|| item.stage.into()),
+        stage_choices: if cfg!(feature = "agents") {
+            view.stage_choices.into_iter().map(StageDto::from).collect()
+        } else {
+            Vec::new()
+        },
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         need: item.need.into(),
