@@ -43,6 +43,8 @@ pub enum AuditActionDto {
     ItemUpdated,
     StepAdded,
     StepUpdated,
+    QuestionAsked,
+    QuestionAnswered,
     TagCreated,
     TagUpdated,
     SavedViewCreated,
@@ -54,6 +56,10 @@ pub enum AuditActionDto {
     OptionArchived,
     InviteLinkCreated,
     InviteLinkRevoked,
+    /// An action this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
+    /// API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<AuditAction> for AuditActionDto {
@@ -77,6 +83,8 @@ impl From<AuditAction> for AuditActionDto {
             AuditAction::ItemUpdated => Self::ItemUpdated,
             AuditAction::StepAdded => Self::StepAdded,
             AuditAction::StepUpdated => Self::StepUpdated,
+            AuditAction::QuestionAsked => Self::QuestionAsked,
+            AuditAction::QuestionAnswered => Self::QuestionAnswered,
             AuditAction::TagCreated => Self::TagCreated,
             AuditAction::TagUpdated => Self::TagUpdated,
             AuditAction::SavedViewCreated => Self::SavedViewCreated,

@@ -27,6 +27,7 @@ mod me;
 mod oauth;
 mod parameters;
 mod paths;
+mod questions;
 mod request_id;
 mod steps;
 mod tags;
@@ -180,6 +181,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::routes())
         .merge(due_choices::routes())
         .merge(items::routes())
+        .merge(questions::routes())
         .merge(steps::routes())
         .merge(tags::routes())
         .merge(teams::routes())

@@ -5,7 +5,8 @@
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
 use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
-use domain::permission::{ItemAction, StepAction};
+use domain::permission::{ItemAction, QuestionAction, StepAction};
+use domain::question::{QuestionKind, QuestionState};
 use domain::ranking::{Contributor, Factor, Gap, HeldBack};
 use domain::step::{Step, StepProgress, StepState};
 use domain::tag::Tag;
@@ -239,6 +240,8 @@ pub enum ItemActionDto {
     MakeTask,
     /// Add a step to a task. Offered for an open task the caller may edit.
     AddStep,
+    /// Ask a question or make a request on the item. Offered for an open item the caller may edit.
+    AskQuestion,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -249,6 +252,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::Reopen => Self::Reopen,
             ItemAction::MakeTask => Self::MakeTask,
             ItemAction::AddStep => Self::AddStep,
+            ItemAction::AskQuestion => Self::AskQuestion,
         }
     }
 }
@@ -344,6 +348,133 @@ impl StepDto {
             allowed_actions: actions.iter().copied().map(Into::into).collect(),
         }
     }
+}
+
+/// What is being asked.
+///
+/// - `question`: free text, or a pick among `choices`.
+/// - `request`: something to do, replied to with Done (pick 0) or Can't be done (pick 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = QuestionKind)]
+pub enum QuestionKindDto {
+    Question,
+    Request,
+    /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<QuestionKind> for QuestionKindDto {
+    fn from(kind: QuestionKind) -> Self {
+        match kind {
+            QuestionKind::Question => Self::Question,
+            QuestionKind::Request => Self::Request,
+        }
+    }
+}
+
+impl TryFrom<QuestionKindDto> for QuestionKind {
+    type Error = ValidationError;
+
+    /// Fails on a kind this server doesn't know, which a request can carry.
+    fn try_from(kind: QuestionKindDto) -> Result<Self, Self::Error> {
+        match kind {
+            QuestionKindDto::Question => Ok(Self::Question),
+            QuestionKindDto::Request => Ok(Self::Request),
+            QuestionKindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
+        }
+    }
+}
+
+/// Whether a question still waits for a reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = QuestionState)]
+pub enum QuestionStateDto {
+    Open,
+    Answered,
+    /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<QuestionState> for QuestionStateDto {
+    fn from(state: QuestionState) -> Self {
+        match state {
+            QuestionState::Open => Self::Open,
+            QuestionState::Answered => Self::Answered,
+        }
+    }
+}
+
+/// An action the caller can take on a question. Clients show controls only for these.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = QuestionAction)]
+pub enum QuestionActionDto {
+    /// Reply to the question. Offered while it is open, on an open item the caller may edit.
+    Reply,
+}
+
+impl From<QuestionAction> for QuestionActionDto {
+    fn from(action: QuestionAction) -> Self {
+        match action {
+            QuestionAction::Reply => Self::Reply,
+        }
+    }
+}
+
+/// The reply to a question.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = QuestionReply)]
+pub struct QuestionReplyDto {
+    /// Indices into the question's `choices`, ascending. Empty for a question without choices.
+    pub picked: Vec<u32>,
+    /// Plain text; `null` when there is none.
+    pub comment: Option<String>,
+    /// Who replied. `null` when it can't be traced.
+    pub replied_by: Option<UserRefDto>,
+    /// UTC milliseconds.
+    pub replied_at: i64,
+    /// When it was replied to, ready to show: "today", "2 days ago".
+    pub replied_label: String,
+}
+
+/// One question or request on an item.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Question)]
+pub struct QuestionDto {
+    /// The question's number within its item, given when it was asked and never changed or reused. The question is
+    /// named by its item's key and this number, as `k3x9a.q2`, and its path is `…/items/{key}/questions/{number}`.
+    pub number: u32,
+    pub kind: QuestionKindDto,
+    /// The short version: one line.
+    pub text: String,
+    /// The long version, plain text; `null` when there is none.
+    pub details: Option<String>,
+    /// The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
+    /// `Can't be done`.
+    pub choices: Vec<String>,
+    /// Whether any number of choices may be picked, not just one.
+    pub many: bool,
+    /// The number of the item's step this is about, which may have been dropped since.
+    pub step: Option<u32>,
+    pub state: QuestionStateDto,
+    /// Who asked. `null` when it can't be traced.
+    pub asked_by: Option<UserRefDto>,
+    /// UTC milliseconds.
+    pub asked_at: i64,
+    /// When it was asked, ready to show: "today", "2 days ago".
+    pub asked_label: String,
+    /// `null` while the question is open.
+    pub reply: Option<QuestionReplyDto>,
+    /// Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.
+    pub version: u32,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<QuestionActionDto>,
 }
 
 /// How far a task's steps have got.
@@ -560,6 +691,9 @@ pub struct ItemDto {
     /// Ticked of open and ticked steps. `null` when the item has no open or ticked step. On every response,
     /// lists included.
     pub step_progress: Option<StepProgressDto>,
+    /// The item's questions and requests in number order, answered ones included. `null` in the ranked list and the
+    /// closed list: read the item for its questions.
+    pub questions: Option<Vec<QuestionDto>>,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -761,9 +895,18 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::audit::{AuditActionDto, AuditLogDto};
     use crate::me::{MeActionDto, MeDto};
 
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
+    fn question_from_a_later_server() -> serde_json::Value {
+        json!([{
+            "number": 1, "kind": "review", "text": "Look", "details": null, "choices": [], "many": false,
+            "step": null, "state": "withdrawn", "asked_by": null, "asked_at": 0, "asked_label": "today",
+            "reply": null, "version": 1, "allowed_actions": ["reply", "withdraw"],
+        }])
+    }
+
     fn ranked_item_from_a_later_server() -> serde_json::Value {
         json!({
             "position": 1,
@@ -786,6 +929,7 @@ mod tests {
                     "version": 1, "allowed_actions": ["edit", "reorder"],
                 }],
                 "step_progress": null,
+                "questions": question_from_a_later_server(),
             },
         })
     }
@@ -809,6 +953,35 @@ mod tests {
         let steps = ranked.item.steps.or_fail()?;
         expect_that!(steps[0].state, eq(StepStateDto::Unknown));
         expect_that!(steps[0].allowed_actions, elements_are![eq(&StepActionDto::Edit)]);
+        let questions = ranked.item.questions.or_fail()?;
+        expect_that!(questions[0].kind, eq(QuestionKindDto::Unknown));
+        expect_that!(questions[0].state, eq(QuestionStateDto::Unknown));
+        expect_that!(
+            questions[0].allowed_actions,
+            elements_are![eq(&QuestionActionDto::Reply)]
+        );
+        Ok(())
+    }
+
+    #[gtest]
+    fn an_audit_action_a_later_server_added_doesnt_stop_a_client_reading_the_history() -> googletest::Result<()> {
+        let entry = |action: &str| {
+            json!({
+                "id": Uuid::nil(), "created_at": 0, "created_label": "today",
+                "actor": { "id": Uuid::nil(), "display_name": "Ada" },
+                "action": action, "phrase": "did something", "names_entity": true,
+                "entity": { "type": "item", "id": Uuid::nil(), "label": "Rotate the certs" },
+                "changes": [], "diff": {},
+            })
+        };
+        let log: AuditLogDto = serde_json::from_value(json!({
+            "entries": [entry("question_asked"), entry("item_pinned")],
+            "next_cursor": null,
+        }))?;
+
+        expect_that!(log.entries[0].action, eq(AuditActionDto::QuestionAsked));
+        expect_that!(log.entries[1].action, eq(AuditActionDto::Unknown));
+        expect_that!(log.entries[1].phrase, eq("did something"));
         Ok(())
     }
 
@@ -835,6 +1008,9 @@ mod tests {
         expect_that!(serde_json::to_value(KindDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(StageDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(StepStateDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(QuestionKindDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(QuestionStateDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(AuditActionDto::Unknown), err(anything()));
     }
 
     #[gtest]

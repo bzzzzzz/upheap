@@ -5,6 +5,7 @@ use crate::heap::Heap;
 use crate::invite_link::InviteLink;
 use crate::item::{Item, Kind, Stage};
 use crate::parameter::Parameter;
+use crate::question::QuestionState;
 use crate::saved_view::SavedView;
 use crate::team::{Membership, Role, Team, admin_remains};
 use crate::{Timestamp, UserId};
@@ -63,6 +64,8 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::HeapContextUpdated
         | AuditAction::StepAdded
         | AuditAction::StepUpdated
+        | AuditAction::QuestionAsked
+        | AuditAction::QuestionAnswered
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewCreated
@@ -96,6 +99,8 @@ pub enum ItemAction {
     MakeTask,
     /// Add a step to a task.
     AddStep,
+    /// Ask a question or make a request on an open item.
+    AskQuestion,
 }
 
 /// What `role` can do with `item` in `heap` at `now`. Empty for archived heaps.
@@ -109,6 +114,7 @@ pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp
             Kind::Note => actions.push(ItemAction::MakeTask),
             Kind::Task => actions.push(ItemAction::AddStep),
         }
+        actions.push(ItemAction::AskQuestion);
         return actions;
     }
     if item.can_reopen(now) {
@@ -139,6 +145,22 @@ pub fn allowed_step_actions(item: &Item, heap: &Heap, role: Role) -> Vec<StepAct
         return Vec::new();
     }
     vec![StepAction::Edit]
+}
+
+/// An action a client may offer on a question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestionAction {
+    /// Reply to it.
+    Reply,
+}
+
+/// What `role` can do with a question of `item` in `heap`: reply to it while it is open, the item is open and the
+/// heap is active. An open question of a closed item reads only until the item is reopened.
+pub fn allowed_question_actions(item: &Item, heap: &Heap, role: Role, state: QuestionState) -> Vec<QuestionAction> {
+    if item.is_closed() || state != QuestionState::Open || !can_edit_heap_content(heap, role) {
+        return Vec::new();
+    }
+    vec![QuestionAction::Reply]
 }
 
 /// An action a client may offer on a tag.
@@ -657,6 +679,37 @@ mod tests {
         );
         expect_that!(
             allowed_step_actions(&item(Kind::Task, false), &heap(true), Role::Member),
+            is_empty()
+        );
+    }
+
+    #[gtest]
+    fn a_question_is_asked_on_an_open_item_and_replied_to_while_open() {
+        let now = Timestamp::EPOCH;
+        let can_ask = |item: &Item, heap: &Heap| {
+            allowed_item_actions(item, heap, Role::Member, now).contains(&ItemAction::AskQuestion)
+        };
+
+        expect_that!(can_ask(&item(Kind::Note, false), &heap(false)), eq(true));
+        expect_that!(can_ask(&item(Kind::Task, false), &heap(false)), eq(true));
+        expect_that!(can_ask(&item(Kind::Task, true), &heap(false)), eq(false));
+        expect_that!(can_ask(&item(Kind::Task, false), &heap(true)), eq(false));
+
+        let reply = |item: &Item, heap: &Heap, state| allowed_question_actions(item, heap, Role::Member, state);
+        expect_that!(
+            reply(&item(Kind::Task, false), &heap(false), QuestionState::Open),
+            elements_are![eq(&QuestionAction::Reply)]
+        );
+        expect_that!(
+            reply(&item(Kind::Task, false), &heap(false), QuestionState::Answered),
+            is_empty()
+        );
+        expect_that!(
+            reply(&item(Kind::Task, true), &heap(false), QuestionState::Open),
+            is_empty()
+        );
+        expect_that!(
+            reply(&item(Kind::Task, false), &heap(true), QuestionState::Open),
             is_empty()
         );
     }

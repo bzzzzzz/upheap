@@ -5,6 +5,7 @@ pub mod auth;
 pub mod heap;
 pub(crate) mod heap_api;
 pub mod item;
+pub mod question;
 pub mod step;
 pub mod tag;
 

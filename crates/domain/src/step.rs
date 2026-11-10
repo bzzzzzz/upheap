@@ -4,7 +4,7 @@
 //! (architecture.md, Data model). They are never deleted: a dropped step stays, shown as dropped.
 
 use crate::item::{Item, ItemError, Kind, Title};
-use crate::text::Context;
+use crate::text::{Context, parse_positive};
 use crate::{ItemId, StepId, Timestamp, Version};
 
 /// The most steps one task has, dropped ones included. This is the size assumption that lets every response that
@@ -27,10 +27,7 @@ impl StepNumber {
     /// A positive integer written in digits, as in a path or on a command line. `None` for anything else, a sign
     /// and a leading zero included.
     pub fn parse(raw: &str) -> Option<Self> {
-        if raw.is_empty() || raw.starts_with('0') || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
-            return None;
-        }
-        raw.parse().ok().and_then(Self::new)
+        parse_positive(raw).and_then(Self::new)
     }
 
     pub const fn get(self) -> u32 {

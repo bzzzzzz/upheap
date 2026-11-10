@@ -16,6 +16,7 @@ pub mod oauth;
 pub mod parameters;
 #[cfg(feature = "proxy")]
 pub mod proxy;
+pub mod questions;
 pub mod saved_views;
 pub mod sessions;
 pub mod sign_in_attempts;

@@ -2304,6 +2304,281 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Asks a question or makes a request on an open item, and answers with the whole item. The new question is the one\nwith the highest `number`. An item has at most 100 questions, answered ones included. Asking needs no\n`If-Match`; a question has its own version, and the item's `version` doesn't change.",
+        "operationId": "ask_question",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskQuestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`, `item_closed` or `too_many_questions`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, `value_unknown` (a `step` of 0) or `step_not_in_item` (`field` `step`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions/{question}": {
+      "patch": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the\nquestion's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is\n`question_answered`. Replying to an open question of a closed item is `item_closed`.",
+        "operationId": "reply_to_question",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "question",
+            "in": "path",
+            "description": "The question's number within its item: a positive integer, given when the question was asked.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 2
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item or question",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `question_answered`, `item_closed` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields: no `reply`, `pick_invalid` (`field` `picked`: out of range, repeated, none picked, or more than one where only one may be)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen": {
       "post": {
         "tags": [
@@ -5217,6 +5492,57 @@
         },
         "additionalProperties": false
       },
+      "AskQuestionRequest": {
+        "type": "object",
+        "description": "A question or request to put on an item.",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "choices": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "For a `question`: none, or from 2 to 10 labels to pick from, each 1 to 100 characters on one line, no two the\nsame ignoring case. Not for a `request`, which always has `Done` and `Can't be done`."
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The long version: plain text, at most 20,000 characters; blank means none."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/QuestionKind"
+          },
+          "many": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether any number of choices may be picked. Only with `choices`. Defaults to `false`."
+          },
+          "step": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The number of one of the item's steps this is about.",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string",
+            "description": "The short version: 1 to 300 characters, on one line."
+          }
+        },
+        "additionalProperties": false
+      },
       "AuditAction": {
         "type": "string",
         "description": "What was done. Each action is shown to those who may take it: members see item, tag and saved view changes,\nadmins see everything.",
@@ -5239,6 +5565,8 @@
           "item_updated",
           "step_added",
           "step_updated",
+          "question_asked",
+          "question_answered",
           "tag_created",
           "tag_updated",
           "saved_view_created",
@@ -6473,6 +6801,16 @@
             },
             "description": "A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,\nby parameter name."
           },
+          "questions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "description": "The item's questions and requests in number order, answered ones included. `null` in the ranked list and the\nclosed list: read the item for its questions."
+          },
           "stage": {
             "oneOf": [
               {
@@ -6541,7 +6879,8 @@
           "change_state",
           "reopen",
           "make_task",
-          "add_step"
+          "add_step",
+          "ask_question"
         ]
       },
       "ItemOption": {
@@ -7511,6 +7850,221 @@
             "description": "Short human-readable summary. May change; don't match on it."
           }
         }
+      },
+      "Question": {
+        "type": "object",
+        "description": "One question or request on an item.",
+        "required": [
+          "number",
+          "kind",
+          "text",
+          "choices",
+          "many",
+          "state",
+          "asked_at",
+          "asked_label",
+          "version",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionAction"
+            }
+          },
+          "asked_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "asked_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef",
+                "description": "Who asked. `null` when it can't be traced."
+              }
+            ]
+          },
+          "asked_label": {
+            "type": "string",
+            "description": "When it was asked, ready to show: \"today\", \"2 days ago\"."
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and\n`Can't be done`."
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The long version, plain text; `null` when there is none."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/QuestionKind"
+          },
+          "many": {
+            "type": "boolean",
+            "description": "Whether any number of choices may be picked, not just one."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The question's number within its item, given when it was asked and never changed or reused. The question is\nnamed by its item's key and this number, as `k3x9a.q2`, and its path is `…/items/{key}/questions/{number}`.",
+            "minimum": 0
+          },
+          "reply": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QuestionReply",
+                "description": "`null` while the question is open."
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/QuestionState"
+          },
+          "step": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The number of the item's step this is about, which may have been dropped since.",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string",
+            "description": "The short version: one line."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.",
+            "minimum": 0
+          }
+        }
+      },
+      "QuestionAction": {
+        "type": "string",
+        "description": "An action the caller can take on a question. Clients show controls only for these.",
+        "enum": [
+          "reply"
+        ]
+      },
+      "QuestionKind": {
+        "type": "string",
+        "description": "What is being asked.\n\n- `question`: free text, or a pick among `choices`.\n- `request`: something to do, replied to with Done (pick 0) or Can't be done (pick 1).",
+        "enum": [
+          "question",
+          "request"
+        ]
+      },
+      "QuestionPatch": {
+        "type": "object",
+        "description": "An edit of a question. For now the only edit is the reply.",
+        "properties": {
+          "reply": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QuestionReplyRequest",
+                "description": "The reply. Required: a body without it is `field_empty` on `reply`."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuestionReply": {
+        "type": "object",
+        "description": "The reply to a question.",
+        "required": [
+          "picked",
+          "replied_at",
+          "replied_label"
+        ],
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text; `null` when there is none."
+          },
+          "picked": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Indices into the question's `choices`, ascending. Empty for a question without choices."
+          },
+          "replied_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "replied_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef",
+                "description": "Who replied. `null` when it can't be traced."
+              }
+            ]
+          },
+          "replied_label": {
+            "type": "string",
+            "description": "When it was replied to, ready to show: \"today\", \"2 days ago\"."
+          }
+        }
+      },
+      "QuestionReplyRequest": {
+        "type": "object",
+        "description": "A reply to a question.",
+        "properties": {
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plain text, at most 20,000 characters. Required for a question without choices; otherwise optional."
+          },
+          "picked": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Indices into the question's `choices`: none for a question without choices, one for a request or a question\nthat takes one pick, one or more when it takes `many`. Ascending or not, without repeats."
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuestionState": {
+        "type": "string",
+        "description": "Whether a question still waits for a reply.",
+        "enum": [
+          "open",
+          "answered"
+        ]
       },
       "RankedItem": {
         "type": "object",

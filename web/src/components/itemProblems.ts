@@ -15,6 +15,9 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   steps_need_task: "Only a task has steps. Make it a task first.",
   too_many_steps: "A task has at most 100 steps.",
   step_not_in_item: "That step isn't in this task any more.",
+  too_many_questions: "An item has at most 100 questions.",
+  question_answered: "Someone else replied to this question meanwhile.",
+  pick_invalid: "That pick doesn't fit this question. Pick again.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };
 

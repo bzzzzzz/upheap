@@ -38,6 +38,30 @@ pub enum ValidationError {
     /// A list sorted by a custom parameter names it in `sort_parameter`, and no other sort does.
     #[error("send sort_parameter exactly when sort is parameter")]
     SortParameterMismatch,
+    /// A text that must be one line has a line break.
+    #[error("{field} must be a single line")]
+    MultipleLines { field: Field },
+    /// A question with choices has too few or too many.
+    #[error("a question has from {min} to {max} choices")]
+    ChoiceCount { min: usize, max: usize },
+    /// Two choices of a question are the same, ignoring case.
+    #[error("each choice may be listed once, whatever its case")]
+    ChoiceDuplicate,
+    /// A field is sent for something that can't have it, such as `many` on a question without choices.
+    #[error("{field} is not allowed here")]
+    NotAllowed { field: Field },
+    /// A reply picks a choice the question doesn't have.
+    #[error("a pick is not one of the question's choices")]
+    PickOutOfRange,
+    /// A reply picks the same choice twice.
+    #[error("each choice may be picked once")]
+    PickRepeated,
+    /// A reply picks nothing where a question with choices needs a pick.
+    #[error("pick at least one choice")]
+    PickNone,
+    /// A reply picks more than one where the question takes one.
+    #[error("this question takes one pick")]
+    PickTooMany,
     /// A field names a value the server doesn't know, such as an enum value from a newer client.
     #[error("{field} is not a value this server knows")]
     ValueUnknown { field: Field },
@@ -71,6 +95,22 @@ pub enum Field {
     State,
     /// The step a new step goes after.
     After,
+    /// A question's short text.
+    Text,
+    /// A question's long version.
+    Details,
+    /// A question's choices.
+    Choices,
+    /// Whether a question takes any number of picks.
+    Many,
+    /// The step of the item a question is about.
+    Step,
+    /// The choices a reply picks.
+    Picked,
+    /// A reply's comment.
+    Comment,
+    /// The reply in a question's edit.
+    Reply,
 }
 
 impl Field {
@@ -93,6 +133,14 @@ impl Field {
             Self::Context => "context",
             Self::State => "state",
             Self::After => "after",
+            Self::Text => "text",
+            Self::Details => "details",
+            Self::Choices => "choices",
+            Self::Many => "many",
+            Self::Step => "step",
+            Self::Picked => "picked",
+            Self::Comment => "comment",
+            Self::Reply => "reply",
         }
     }
 }

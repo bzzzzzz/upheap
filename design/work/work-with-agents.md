@@ -34,7 +34,7 @@ order.
    is stage 2.
    Done: a heap's context and an item's can be read and written from both clients. Covers Heaps §1, §2,
    Items §2 without rendering.
-- [ ] 5. **Questions.** A question with its short version, details and choices, of kind question or request, asked
+- [x] 5. **Questions.** A question with its short version, details and choices, of kind question or request, asked
    with `question ask` and `question request`, shown and replied to in the web item. An item with an open
    question waits for the person.
    Done: a question asked from the command line is answered in the web app and reads back answered in
@@ -96,4 +96,5 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
 
 ## Open questions
 
-None yet.
+- An open question on an item closed past its reopen window can't be answered or withdrawn. Waiting for me (piece 6)
+  must count only open items; piece 7 decides whether closing an item withdraws its open questions.

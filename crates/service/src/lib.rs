@@ -22,6 +22,7 @@ pub mod me;
 pub mod oauth;
 pub mod parameters;
 mod personal;
+pub mod questions;
 mod random;
 pub mod saved_views;
 pub mod steps;

@@ -12,7 +12,7 @@ use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
 use crate::audit::{describe_new_step, diff_steps};
-use crate::items::{ItemView, build_item_view};
+use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -58,8 +58,8 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, steps, now).await?;
+        let children = ItemChildren::read_locking(&txn, item.id).await?;
+        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -111,7 +111,11 @@ impl Services {
         let now = self.now();
         let role = access.membership.role;
         let Some(edited) = current.apply_patch(&patch) else {
-            return build_item_view(&txn, &access.heap, role, item, steps, now).await;
+            let children = ItemChildren {
+                steps,
+                questions: store::questions::list_questions_locking(&txn, item.id).await?,
+            };
+            return build_item_view(&txn, &access.heap, role, item, children, now).await;
         };
         let saved = store::steps::update_step(&txn, &edited, expected)
             .await?
@@ -128,8 +132,8 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let steps = store::steps::list_steps_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, role, item, steps, now).await?;
+        let children = ItemChildren::read_locking(&txn, item.id).await?;
+        let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
