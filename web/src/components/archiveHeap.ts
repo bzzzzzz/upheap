@@ -22,9 +22,11 @@ export function useArchiveHeap(team: string) {
         setToast({
           message: `“${heap.name}” is archived.`,
           undo: () =>
-            mutation
-              .mutateAsync({ heap: archived, archived: false })
-              .then(undefined, (error: Error) => setToast({ message: problemMessage(error), error: true })),
+            mutation.mutateAsync({ heap: archived, archived: false }).then(undefined, (error: Error) => {
+              // Said once, in the toast: not again under the button the archive came from.
+              mutation.reset();
+              setToast({ message: problemMessage(error), error: true });
+            }),
         }),
       // The error shows under the button, from `mutation.error`.
       () => undefined,

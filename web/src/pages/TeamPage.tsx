@@ -454,11 +454,13 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
     askButtons.current.get(refocus.current)?.focus();
     refocus.current = null;
   }, [asking]);
-  // A demote question goes away, without moving focus, once your row no longer offers it (another admin left).
+  // A demote question goes away, without moving focus, once your row no longer offers it (another admin left), unless
+  // it holds the error of a refused demote, which would go with it.
   const demoteOffered =
     asking?.kind !== "demote" ||
     team.members.some((m) => m.user_id === asking.member.user_id && m.allowed_actions.includes("demote"));
-  if (!demoteOffered) setAsking(null);
+  const dropAsking = !demoteOffered && !setRole.error;
+  if (dropAsking) setAsking(null);
 
   const buttonKey = (kind: Asking["kind"], member: TeamMember) => `${kind}:${member.user_id}`;
   const registerButton = (kind: Asking["kind"], member: TeamMember) => (button: HTMLButtonElement | null) => {
@@ -496,7 +498,7 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
         },
       },
     );
-  const current = asking && demoteOffered ? asking : null;
+  const current = asking && !dropAsking ? asking : null;
 
   return (
     <section aria-labelledby="team-members" className="flex flex-col gap-2 max-sm:gap-2.5">
@@ -750,6 +752,9 @@ function PhoneMemberRow({
   // Giving up your own admin role asks first.
   const asksFirst = roleChange === "member" && you;
   // The question goes away, without moving focus, once the row no longer offers the role change.
+  // Cleared too, so it doesn't come back by itself if the row offers the change again. A refused demote's error still
+  // shows, under the sheet's rows.
+  if (asked === "demote" && !asksFirst) setAsked(null);
   const confirming = asked === "demote" && !asksFirst ? null : asked;
   const { ref: removeRow, returnFocus: returnToRemoveRow } = useReturnFocus<HTMLButtonElement>(confirming === "remove");
   const { ref: demoteRow, returnFocus: returnToDemoteRow } = useReturnFocus<HTMLButtonElement>(confirming === "demote");
