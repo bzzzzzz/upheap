@@ -87,10 +87,12 @@ stays, without agents.
 6. I read it, agree, and tell the agent to go on. It turns the note into two tasks, each with a checklist, the
    second blocked by the first. Stable again, and mine again.
 7. I tell it to do the first task. It works through the checklist, ticking steps and adding ones it finds. One
-   step needs me (a credential, a purchase), so it attaches a request; I do it and say so. The task is done, and
-   the second task is no longer blocked.
-8. For the second I say "all the way" up front, and the agent runs it to done without stopping in between.
-9. The repository got the code and nothing about progress. I can see what happened, when, and what each run cost.
+   step needs me (a credential, a purchase), so it attaches a request; I do it and say so.
+8. The agent opens a pull request and asks me to review it. I comment there and reply "changes asked". It fixes
+   them and asks again; I approve. The task is done, and the second task is no longer blocked.
+9. For the second I say "all the way" up front. The agent runs it through without stopping at stable states,
+   and still waits for my review before done.
+10. The repository got the code and nothing about progress. I can see what happened, when, and what each run cost.
 
 Two side paths: a note too big for a task becomes a new heap with its own context, notes and tasks. And a
 reminder ("renew the certificate in March") stays out of the list until its date, then ranks with the rest, and
@@ -102,8 +104,9 @@ is resolved or turned into a task.
 
 **Heaps**
 
-1. **Core.** A heap has a context: text that says what the project is and points at where its knowledge lives,
-   such as a repository or a wiki. Upheap stores the pointers and doesn't fetch what they point at.
+1. **Core.** A heap has a context: text that says what the project is, points at where its knowledge lives,
+   such as a repository or a wiki, and says where its work is reviewed and what finishing a piece means (merged,
+   published). Upheap stores the pointers and doesn't fetch what they point at.
 2. Any member of the heap's team can edit its context.
 
 **Items**
@@ -127,6 +130,20 @@ is resolved or turned into a task.
 4. **Core.** Answering a question, or saying a request is done, closes it. When an item's last open question
    closes, the item goes back to whoever asked.
 5. Questions and their answers stay with the item for good.
+
+**Review**
+
+1. **Core.** An agent never marks its own work done. It asks for a review: a request on the task with a link to
+   where the work is, such as a pull request or a document.
+2. **Core.** The person reviews where the work lives, and replies in Upheap with one of two outcomes: approved,
+   or changes asked, with an optional line. Their comments stay where the work is.
+3. **Core.** Changes asked sends the task back to the agent, which reads the comments at the link, changes the
+   work and asks again. There is no limit on rounds.
+4. **Core.** A task can need several reviews, as when one change lands as several pull requests. It is done when
+   the agent has nothing left to do on it and every review it asked for is approved.
+5. A task in review is in the middle of the agent's turn, like any item with an open request. "All the way"
+   still stops for each review.
+6. Work the person does themselves needs no review.
 
 **Waiting, not interrupting**
 
@@ -289,9 +306,10 @@ week), setup (once or rarely) or recovery.
 
 **P11. The agent got it wrong.** Recovery, for P4.
 
-1. At a stable state the result isn't what I wanted.
+1. At a stable state the result isn't what I wanted: the context it filled in, or the tasks it defined.
 2. Either fix it myself (edit the context, the steps, the blocks) and send it on.
-3. Or send it back: say what's wrong, and the agent redoes that turn. The earlier attempt stays in the history.
+3. Or reply "changes asked" with what's wrong, as in a review (P14), and the agent redoes that turn. The earlier
+   attempt stays in the history.
 
 **P12. Take an item back.** Recovery, for P4 and A1.
 
@@ -304,6 +322,13 @@ week), setup (once or rarely) or recovery.
 1. While the item is still open, change my answer.
 2. If the agent has already acted on it, the item goes back to it with the changed answer shown as new.
 
+**P14. Review.** Loop.
+
+1. A review request is in what waits for me (P3), with a link to the work.
+2. Follow the link and review there: comment on the pull request, in the document.
+3. Back in Upheap, reply approved, or changes asked with an optional line.
+4. Changes asked: the request comes back later with the work changed, and I review again from step 2.
+
 ### The agent, through `upheap work`
 
 **A1. Take a turn.** Loop.
@@ -313,6 +338,7 @@ week), setup (once or rarely) or recovery.
    what the item was made from, and which stable state to reach.
 3. The agent does the move: fills in context, writes a checklist, makes tasks, does the work and ticks steps.
 4. It reaches the stable state and says so. The run and its cost are recorded, and the item is the person's.
+   For done, that takes a review first (A6).
 5. Sent "all the way", the item is the next one again, until it's done.
 
 **A2. Ask.** Loop.
@@ -332,6 +358,15 @@ week), setup (once or rarely) or recovery.
 2. The agent makes several tasks from it and says which block which, or makes a new heap with its context,
    tasks and notes. Each keeps a link to the note.
 3. The note has reached its stable state. The new items are at theirs, and wait for the person.
+
+**A6. Ask for review.** Loop.
+
+1. The agent has a piece of the task's work ready where the heap's context says work is reviewed.
+2. It attaches a review request with the link and ends the run. A task whose work lands in several pieces gets
+   a request for each, at once or one after another.
+3. Approved: on its next run the agent finishes that piece as the context says (merges, publishes). With no work
+   left and every review approved, it marks the task done.
+4. Changes asked: on its next run it reads the comments at the link, changes the work, and asks again.
 
 **A5. A run dies.** Recovery, for A1.
 
@@ -360,9 +395,10 @@ From the steps above that ask something of the product.
 | 11 | Person | Writes a heap's context and sets whether agents prepare | A heap an agent can work in without being briefed | P8 |
 | 12 | Person | Runs `upheap work` with an agent tool and heaps | A loop that works those heaps and nothing else | P9 |
 | 13 | Person | Opens an item's runs | Each run with its states and cost, and totals per item and heap | P10 |
-| 14 | Person | Sends a result back saying what's wrong | The agent redoes the turn, with the earlier attempt kept | P11 |
 | 15 | Person | Takes an item back | The agent's turn ends, and the item is theirs with what was changed so far | P12 |
 | 16 | Person | Changes an answer | The agent sees the new answer on its next run | P13 |
+| 23 | Person | Replies to a review request: approved, or changes asked | The agent finishes the piece, or changes it and asks again | P14, P11 |
+| 24 | Agent | Asks for review with a link to the work | The task waits for the person, and can't be done without their approval | A6 |
 | 17 | `upheap work` | Asks for the next item | One item or none, the same for the same state | A1 |
 | 18 | Agent | Reads an item | Both contexts, questions with answers, where it came from, and the state to reach | A1 |
 | 19 | Agent | Writes context, steps, tasks, heaps, blocks, and ticks steps | The changes kept as it goes, under its own name in the history | A1, A4 |
@@ -372,7 +408,10 @@ From the steps above that ask something of the product.
 
 ### Not core
 
-- Reviewing the work itself (a diff, a document): that happens where the work lives, such as a pull request.
+- Commenting on the work inside Upheap: comments stay where the work lives, and Upheap holds the link and the
+  outcome.
+- Upheap watching a pull request or a document for new comments. The person's reply in Upheap is what sends the
+  work back.
 - Setting up the agent tool, its sign-in and its permissions.
 - Sending many items on at once.
 - Anything about teammates beyond what a member can do today: who answers, who reviews.
@@ -394,6 +433,7 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - What an agent's actions look like in the audit log, and which account it signs in as.
 - Whether a checklist step can hold a question of its own.
 - How many failed runs stop the retries.
+- Whether several open review requests on one task are answered one by one or together.
 - What "since I last looked" means for the list of items at a stable state.
 - What state a note ends in once it has become a heap.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
@@ -403,6 +443,8 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 
 Outside the scope. Not commitments.
 
+- **Watching the place of review** (a pull request, a document) and sending the task back to the agent when
+  comments arrive.
 - **Spend and time limits** for `upheap work`.
 - **Stories:** following a note through everything it turned into, with the cost of the whole added up.
 - The channel for what is pushed, and how the person says what counts as critical.
