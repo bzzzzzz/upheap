@@ -1063,3 +1063,94 @@ async fn a_join_racing_a_revocation_never_succeeds_after_it() -> Result<()> {
     }
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn joined_count_counts_every_join_through_each_link() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let first = make(&setup, &setup.ana).await?;
+    let second = make(&setup, &setup.ana).await?;
+    let fresh = make(&setup, &setup.ana).await?;
+    let first_token = first.body["token"].as_str().context("no token")?.to_owned();
+    let second_token = second.body["token"].as_str().context("no token")?.to_owned();
+    let (sam, sam_id) = newcomer(&setup, "sam@example.test", "Sam").await?;
+    let (ben, _) = newcomer(&setup, "ben@example.test", "Ben").await?;
+    let (cy, _) = newcomer(&setup, "cy@example.test", "Cy").await?;
+
+    // Act
+    join_through(&setup, &first_token, Some(&sam)).await?;
+    join_through(&setup, &first_token, Some(&ben)).await?;
+    join_through(&setup, &second_token, Some(&cy)).await?;
+    // Someone already in is not recorded, so not counted.
+    let again = join_through(&setup, &first_token, Some(&sam)).await?;
+    // Someone who left still counts.
+    remove(&setup, &sam_id).await?;
+    let listed = list(&setup, &setup.ana).await?;
+
+    // Assert
+    expect_that!(again.status, eq(StatusCode::OK));
+    let count_of = |made: &TestResponse| -> Result<Value> {
+        let id = made.body["id"].as_str().context("no id")?;
+        let link = listed.body["links"]
+            .as_array()
+            .context("no links")?
+            .iter()
+            .find(|link| link["id"] == json!(id))
+            .context("link not listed")?;
+        Ok(link["joined_count"].clone())
+    };
+    expect_that!(count_of(&first)?, eq(&json!(2)));
+    expect_that!(count_of(&second)?, eq(&json!(1)));
+    expect_that!(count_of(&fresh)?, eq(&json!(0)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_labels_say_when_a_link_was_made_and_revoked() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let old = make(&setup, &setup.ana).await?;
+    let old_id = id_of(&old.body)?;
+    setup.app.clock.advance(Duration::from_days(3));
+    let today = make(&setup, &setup.ana).await?;
+    let today_id = id_of(&today.body)?;
+
+    // Act
+    let revoked = revoke(&setup, &setup.ana, &today_id).await?;
+    let listed = list(&setup, &setup.ana).await?;
+
+    // Assert
+    expect_that!(today.body["created_label"], eq(&json!("today")));
+    expect_that!(today.body["revoked_label"], eq(&Value::Null));
+    expect_that!(revoked.body["revoked_label"], eq(&json!("today")));
+    expect_that!(revoked.body["created_label"], eq(&json!("today")));
+    let links = listed.body["links"].as_array().context("no links")?;
+    let old_listed = links
+        .iter()
+        .find(|l| l["id"] == json!(old_id))
+        .context("old not listed")?;
+    expect_that!(old_listed["created_label"], eq(&json!("1 Jan")));
+    expect_that!(old_listed["revoked_label"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_create_and_revoke_responses_carry_joined_count() -> Result<()> {
+    // Arrange
+    let setup = setup().await?;
+    let made = make(&setup, &setup.ana).await?;
+    let token = made.body["token"].as_str().context("no token")?.to_owned();
+    let (sam, _) = newcomer(&setup, "sam@example.test", "Sam").await?;
+    join_through(&setup, &token, Some(&sam)).await?;
+
+    // Act
+    let revoked = revoke(&setup, &setup.ana, &id_of(&made.body)?).await?;
+
+    // Assert
+    expect_that!(made.body["joined_count"], eq(&json!(0)));
+    expect_that!(revoked.body["joined_count"], eq(&json!(1)));
+    Ok(())
+}
