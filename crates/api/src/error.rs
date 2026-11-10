@@ -333,6 +333,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::DuplicateParameter => ("duplicate_parameter", Some("parameters")),
         ValidationError::LimitOutOfRange { .. } => ("limit_out_of_range", Some("limit")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
+        ValidationError::ValueUnknown { field } => ("value_unknown", Some(field.as_str())),
         ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
         ValidationError::ItemKeyInvalid => ("invalid_item_key", None),
     };

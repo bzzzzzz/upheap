@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use domain::item::{Description, ItemPatch, NewItem, StateKind, Title};
+use domain::item::{Description, ItemPatch, Kind, NewItem, Stage, StateKind, Title};
 use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -284,8 +284,8 @@ impl ItemPatchDto {
                 Some(Some(raw)) => Some(Description::parse(raw)?),
             },
             need: self.need.map(Into::into),
-            kind: self.kind.map(Into::into),
-            stage: self.stage.map(Into::into),
+            kind: self.kind.map(Kind::try_from).transpose()?,
+            stage: self.stage.map(Stage::try_from).transpose()?,
             effort: self.effort.map(|e| e.map(Into::into)),
             impact: self.impact.map(|i| i.map(Into::into)),
             due: match &self.due {

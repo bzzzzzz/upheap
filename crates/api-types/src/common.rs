@@ -10,6 +10,7 @@ use domain::ranking::{Contributor, Factor};
 use domain::tag::Tag;
 use domain::team::Role;
 use domain::user::User;
+use domain::validation::Field;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -94,6 +95,10 @@ impl From<NeedDto> for Need {
 pub enum KindDto {
     Note,
     Task,
+    /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<Kind> for KindDto {
@@ -105,11 +110,15 @@ impl From<Kind> for KindDto {
     }
 }
 
-impl From<KindDto> for Kind {
-    fn from(kind: KindDto) -> Self {
+impl TryFrom<KindDto> for Kind {
+    type Error = ValidationError;
+
+    /// Fails on a kind this server doesn't know, which a request can carry.
+    fn try_from(kind: KindDto) -> Result<Self, Self::Error> {
         match kind {
-            KindDto::Note => Self::Note,
-            KindDto::Task => Self::Task,
+            KindDto::Note => Ok(Self::Note),
+            KindDto::Task => Ok(Self::Task),
+            KindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
         }
     }
 }
@@ -126,6 +135,10 @@ pub enum StageDto {
     AsWritten,
     WithContext,
     Defined,
+    /// A stage this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<Stage> for StageDto {
@@ -138,12 +151,16 @@ impl From<Stage> for StageDto {
     }
 }
 
-impl From<StageDto> for Stage {
-    fn from(stage: StageDto) -> Self {
+impl TryFrom<StageDto> for Stage {
+    type Error = ValidationError;
+
+    /// Fails on a stage this server doesn't know, which a request can carry.
+    fn try_from(stage: StageDto) -> Result<Self, Self::Error> {
         match stage {
-            StageDto::AsWritten => Self::AsWritten,
-            StageDto::WithContext => Self::WithContext,
-            StageDto::Defined => Self::Defined,
+            StageDto::AsWritten => Ok(Self::AsWritten),
+            StageDto::WithContext => Ok(Self::WithContext),
+            StageDto::Defined => Ok(Self::Defined),
+            StageDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Stage }),
         }
     }
 }
@@ -593,7 +610,7 @@ mod tests {
             ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
-                "description": null, "kind": "note", "stage": null, "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
@@ -613,6 +630,8 @@ mod tests {
         expect_that!(ranked.contributors[0].label, eq("Picked up again"));
         expect_that!(ranked.contributors[1].factor, eq(FactorDto::Need));
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
+        expect_that!(ranked.item.kind, eq(KindDto::Unknown));
+        expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
         Ok(())
     }
 
@@ -636,6 +655,8 @@ mod tests {
         // The server never makes one, and a client that read one can't send it back as if it were a real value.
         expect_that!(serde_json::to_value(FactorDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(ClosedGroupDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(KindDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(StageDto::Unknown), err(anything()));
     }
 
     #[gtest]

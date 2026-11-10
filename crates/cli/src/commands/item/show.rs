@@ -165,6 +165,7 @@ fn kind_text(kind: KindDto) -> &'static str {
     match kind {
         KindDto::Note => "note",
         KindDto::Task => "task",
+        KindDto::Unknown => "unknown",
     }
 }
 
@@ -173,6 +174,7 @@ fn stage_text(stage: StageDto) -> &'static str {
         StageDto::AsWritten => "as written",
         StageDto::WithContext => "with context",
         StageDto::Defined => "defined",
+        StageDto::Unknown => "unknown",
     }
 }
 

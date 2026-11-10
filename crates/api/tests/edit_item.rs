@@ -287,6 +287,27 @@ async fn only_a_task_can_be_defined() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_kind_or_stage_the_server_doesnt_know_is_refused_naming_the_field() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = create(&app, &session, &heap, json!({ "title": "A note" })).await?;
+
+    // Act
+    let kind = patch(&app, &session, &item, 1, json!({ "kind": "reminder" })).await?;
+    let stage = patch(&app, &session, &item, 1, json!({ "stage": "reviewed" })).await?;
+
+    // Assert
+    expect_that!(kind.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(kind.body["code"], eq(&json!("value_unknown")));
+    expect_that!(kind.body["field"], eq(&json!("kind")));
+    expect_that!(stage.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(stage.body["field"], eq(&json!("stage")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_closed_item_shows_no_stage_refuses_kind_changes_and_keeps_both_when_reopened() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
