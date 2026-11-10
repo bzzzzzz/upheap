@@ -1,11 +1,15 @@
 # Decisions
 
-Choices that could have gone another way, with the reasons, so they aren't reopened by accident or without the
+The few choices that are costly to reverse, with the reasons, so they aren't reopened by accident or without the
 context. [architecture.md](architecture.md) describes the mechanisms these choices led to.
+
+A choice gets an entry when it had a real alternative someone would propose again, it shapes stored data, a public
+interface or several components, and its reason can't be read from the code. Any other choice gets a "because"
+where architecture.md or ux.md describes the mechanism, a code comment, or a line in its pull request.
 
 One entry per decision, appended at the end, each with the **context**, the **decision**, what it was chosen
 **instead of**, and the **consequences**. An entry isn't rewritten once made; when a later decision replaces it,
-both say so.
+both say so. The numbers have gaps: an entry that no longer passes the bar is removed, and its number isn't reused.
 
 ## 1. A stable order comes from a frozen `as_of`, not from server state
 
@@ -62,18 +66,6 @@ count as expected, the step that leaves their age as it was.
 **Consequences.** A formula change is an explicit test update and needs no migration, because scores are never
 stored. Switching from `V1` to `V2` kept most relative orders; blockers were the exception, since a blocker takes
 on a boosted copy of a higher base score and can move above an item it was just below.
-
-## 5. Need is required when an item is added, a deliberate API break
-
-**Context.** Need was added after the API existed. API §3 of the principles says breaking changes are additive or
-versioned.
-
-**Decision.** `POST …/items` requires `need`. Existing items were migrated to `expected`.
-
-**Instead of.** Defaulting a missing `need`.
-
-**Consequences.** Any value the server picked would be a guess the user didn't make, and there were no outside
-clients yet, so the break cost nothing. Release notes call it out.
 
 ## 6. Effort, impact and need are item columns, not custom parameters
 
@@ -187,18 +179,6 @@ once.
 runs in transaction mode, where a session lock could be taken and released on different connections. MySQL and
 SQLite have no such lock and aren't run with several instances.
 
-## 14. Database suites run on service containers, with a database per test
-
-**Context.** The store and API suites must run on MySQL and Postgres as well as SQLite.
-
-**Decision.** CI starts MySQL and Postgres as service containers; `TEST_DATABASE_URL` points the suites at a server,
-and each test creates its own database there.
-
-**Instead of.** testcontainers starting a database per run from inside `cargo test`.
-
-**Consequences.** `cargo test` needs no Docker and no container start-up; the same suites run locally against any
-server the developer points them at. Tests share no data and run in parallel.
-
 ## 15. Every handle follows a fixed word in the URL, and short links are expanded by the client
 
 **Context.** Handles replaced UUIDs in URLs and API paths. A readable URL invites root-level names (`/eugene`),
@@ -286,18 +266,6 @@ about a second. Neon's pooler runs in transaction mode, which is why the migrati
 (decision 13). Running the suites on Postgres found four portability fixes, listed in
 [architecture.md](architecture.md#data-model). The setup is in [operations.md](operations.md).
 
-## 21. Deploys sign in through Workload Identity Federation
-
-**Context.** The deploy workflow needs Google Cloud credentials.
-
-**Decision.** GitHub's OIDC token is exchanged for a deploy service account that only `deploy.yml`, run from `main`
-of this repository (matched by numeric id), can assume. The deploy job's actions are pinned to commits.
-
-**Instead of.** A service-account key in a repository secret.
-
-**Consequences.** No key to leak or rotate. A renamed or recreated repository can't deploy. The one-time setup is a
-script in [operations.md](operations.md#one-time-setup).
-
 ## 22. One React app for every width
 
 **Context.** The web app has to work on phones as well as laptops, in both the server and the local build.
@@ -339,18 +307,6 @@ touch-safe behaviour.
 focus survives the on-screen keyboard); `GridList` gives the list keyboard navigation and, later, selection for
 bulk actions.
 
-## 25. The colour theme is kept per browser, not on the account
-
-**Context.** A light, dark or system theme has to be applied without a flash on reload.
-
-**Decision.** The Account page's Appearance setting is stored in `localStorage` and applied by an inline script in
-`index.html` before the first paint. The design tokens live in Tailwind's `@theme`, so both modes come from one place.
-
-**Instead of.** A theme field on the user, read after sign-in.
-
-**Consequences.** No API change and no flash; the theme is about the screen, so a user's devices can differ.
-`dark:` pairs on elements are avoided in favour of tokens.
-
 ## 26. The due picker offers rough choices the server owns
 
 **Context.** Most due times are loose ("next week"), and a loose due time must read back with the term it was
@@ -363,19 +319,6 @@ picked by, never as a date.
 
 **Consequences.** "Next week" can never come back as "in a few days", because the server's fuzzy bands leave room
 around each choice. The CLI's `--due next-week` uses the same list. Only an exact due time can be overdue.
-
-## 27. Saved views are hidden in the web app until they fit the Filters panel
-
-**Context.** The views bar at the top of the list duplicated what the one Filters panel does, and the first design
-set had no place for saving a view.
-
-**Decision.** The web app shows no saved views for now and ignores `view=` in the URL. The API keeps them, shared by
-the team, for clients that use them (the CLI's `--view`).
-
-**Instead of.** Keeping the views bar, or removing saved views from the API.
-
-**Consequences.** One place shapes the list. When saved views return, "Save as view…" goes in the Filters panel,
-where the user finishes shaping the list.
 
 ## 28. Weights are saved together as one policy
 
@@ -391,21 +334,6 @@ saves, moving on also when one changes only parameter weights, and each paramete
 parameter PATCH still sets a weight alone, from the Parameters tab, guarded by the parameter's version only: it
 doesn't move the heap's version, so a weights save made meanwhile against other parameters still succeeds. Making
 every parameter edit move the heap's version would close that gap but make renames conflict with parameter edits.
-
-## 29. The device name is the client's claim, sent at code exchange
-
-**Context.** A user with the CLI on two machines can't tell their sign-ins apart on Account unless each has a name.
-Only the machine knows it.
-
-**Decision.** The CLI sends its hostname as `device_name` with the code exchange, where the token family is made. The
-server validates it as text (trimmed, at most 64 characters, no control characters) and keeps it as a label. The
-consent page doesn't show it.
-
-**Instead of.** Sending it in the authorization request, so the consent page could name the machine.
-
-**Consequences.** Anything can claim any name, so the consent page, where a familiar name could make a phishing
-request look legitimate, never shows it, and nothing decides by it. A client that sends a name the server refuses
-is refused before its code is used; the CLI cleans the name first, so it never is.
 
 ## 30. The CLI ships as a Homebrew cask from its own tap, built by a hand-written workflow
 
@@ -438,36 +366,6 @@ versioned names; shipping the server binary too, which stays Docker-only.
 The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli)). Release builds
 use no cache, so they take a few minutes longer.
 
-## 31. The personal team's name is a label in the web app, not a stored name
-
-**Context.** A personal team is stored under its owner's display name, so in the heap switcher, the Teams list and
-the sidebar it read as a person ("Alex Rivera") among teams ("Acme").
-
-**Decision.** Wherever the web app names a team, a personal team among others shows as "\<display name\>'s team"
-([`teamName.ts`](../web/src/components/teamName.ts)). The stored name is unchanged, and Rename is hidden on it.
-Alone, as in the local build (no Teams list), it keeps its stored name ("My heaps"), since its user is "Me" and
-there is nothing to tell it from.
-
-**Instead of.** Storing "\<name\>'s team" as the name at sign-up, with a migration for existing teams, which would
-have kept Rename working. The owner chose the label.
-
-**Consequences.** A personal team someone renamed before this shows the label again, and its stored name is
-hidden. The label follows a display-name change. Activity entries still name the team by its stored name, as
-the server writes them. The server still offers `rename` on a personal team.
-
-## 32. The CLI is `upheap`, and the server binary is `upheap-server`
-
-**Context.** The server binary was `upheap`, and the CLI needed a name. The CLI is the one people type.
-
-**Decision.** The CLI's binary is `upheap`. The server's is `upheap-server`: it serves both the API and the web app,
-so `upheap-api` or `upheap-web` would each name half of it, and `upheap-web` is already the web app's npm package.
-The crate stays `server`.
-
-**Instead of.** A different name for the CLI (`uh`, `heap`), keeping the server's.
-
-**Consequences.** `cargo run -p server` in CI, Playwright and the README kept working. Anyone who wants fewer
-keystrokes aliases `upheap` themselves.
-
 ## 33. The CLI shares the API's Rust types instead of generating a client
 
 **Context.** The CLI must not hand-write the request and response types (engineering principles, General: one
@@ -483,21 +381,3 @@ writes 3.1, and sharing the types the spec is generated from is simpler anyway.
 
 **Consequences.** The CLI links `domain` but never the services, the store or the database drivers. A response type
 both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §7).
-
-## 34. Recent heaps and folded teams are kept in the browser
-
-**Context.** With dozens of heaps the switcher needs Recent and teams that fold, and both depend on what this person
-did on this device.
-
-**Decision.** The ids of the last five heaps opened and of the folded teams are kept in localStorage
-([`heapSwitcherStorage.ts`](../web/src/components/heapSwitcherStorage.ts)), and the switcher shows Recent (the last
-four, not the one on screen) only for heaps still in `GET /me`. Below 8 unarchived heaps across a user's teams
-the switcher has no search, no Recent and no folding, since they would only cost attention on every visit
-([engineering-principles.md](engineering-principles.md), User interface, Only where it pays). Archived heaps fold
-per team at every size.
-
-**Instead of.** A server-side "last opened" per membership, which would follow the user across devices but needs an
-API, a migration and a write on every heap visit, and would not work in the local build.
-
-**Consequences.** Recent and folds don't follow the user to another browser or device. Ids the user can't see are
-skipped, so nothing leaks between accounts in one browser.

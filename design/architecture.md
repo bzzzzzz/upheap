@@ -389,7 +389,9 @@ the remaining admins.
    `DELETE /me/sign-ins/{id}` revokes the family as
    `/oauth/revoke` does, answers `204` again for one already ended, and `404` for an unknown id or another user's,
    which it doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
-   it is validated as text (`domain::oauth::DeviceName`), not trusted.
+   it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
+   authorization request, so the consent page never shows it: a familiar name there could make a phishing request
+   look legitimate.
 
 ## Audit log
 

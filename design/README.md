@@ -12,7 +12,6 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [ux.md](ux.md) | The web app's UX: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, what comes later | A principle, a layout or a behaviour changes |
 | [work/README.md](work/README.md) | The tracker: the tracks in flight, what's next, ideas | A track starts, ends or changes stage. One line |
 | [work/getting-in.md](work/getting-in.md) | Getting in: invite links, password change and reset. What it is, its progress, its design | A piece is done, or the design changes, until it's built |
-| [work/docs-migration.md](work/docs-migration.md) | The docs' move to this layout: its steps and what each does | A step is done |
 
 `work/` holds what's in flight: the tracker, and a doc per track of work, deleted once it's built. Everything
 beside it is permanent.

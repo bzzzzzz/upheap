@@ -1,7 +1,8 @@
 # Product
 
-What Upheap does and why: the commitments the product makes, whether or not the code has caught up with them. How
-it's built is in [architecture.md](architecture.md), and how the web app behaves in [ux.md](ux.md).
+What Upheap does and why: the core commitments the product makes, whether or not the code has caught up with them.
+A commitment is a promise to a user, stated as an outcome, that only a product change could break. How it's built
+is in [architecture.md](architecture.md), and how the web app behaves, screen by screen, in [ux.md](ux.md).
 
 ## Pitch
 
@@ -59,8 +60,6 @@ It answers questions like:
    from the team.
 8. A team always has at least one admin. The last admin can't leave, be demoted or be removed until another member
    has been made admin.
-9. Heaps are never deleted. Admins can archive a heap, and its audit history stays. An archived heap is read-only,
-   and an admin can unarchive it.
 
 ## Invite links
 
@@ -146,8 +145,9 @@ It answers questions like:
 8. Only the item's position is shown, never the score itself.
 9. In the list view, each item shows the biggest contributors to its position. This is how the app answers "why is
    this here?" and "why isn't this higher?"; there is no separate item-by-item comparison.
-10. The formula and its numbers live in the code, versioned ([decisions.md](decisions.md), decision 4). The factors
-    above are the commitment; the numbers aren't.
+
+The factors above are the commitment; the numbers aren't. The formula and its numbers live in the code, versioned
+([decisions.md](decisions.md), decision 4).
 
 ## Views
 
@@ -166,7 +166,6 @@ The main view and the answer to "what should I work on?"
 6. The user can search items by text and filter by state, tag, and parameter values. Filtering preserves the relative
    priority order of matching items.
 7. The user can change an item's state directly in the list. Everything else is edited in the item.
-8. The user can open any item in the edit view, and add a new item with a shortcut.
 
 ### Closed items
 
@@ -180,13 +179,10 @@ The fastest path in the app.
 1. The user enters a title, picks how much the item is needed, and optionally adds a description, effort, impact, due
    time and tags. Everything except the title and the need is optional.
 2. Typing a tag that doesn't exist yet creates it.
-3. Adding a tag brings up the custom parameters linked to it.
-4. Saving takes the user back to where they were, ready to add another item.
 
 ### Edit item
 
 1. The user can change any field of an existing item, add or remove tags and parameters, and move it between states.
-2. When setting an item to blocked, the user can pick the blocking item.
 
 ### Manage tags
 
@@ -199,9 +195,8 @@ A supporting view.
 
 A supporting view, for team admins only.
 
-1. An admin can create and rename custom parameters, edit and reorder their options, and link them to tags.
-2. Parameters and options are archived, never deleted (Nothing is deleted §5). Archiving an option requires a
-   replacement that non-terminal items switch to. A parameter can be archived only when no non-terminal item uses it.
+1. An admin can create and rename custom parameters, edit and reorder their options, link them to tags, and
+   archive them (Nothing is deleted §5).
 
 ## Nothing is deleted
 
@@ -209,7 +204,8 @@ A supporting view, for team admins only.
 2. An item that won't be done is closed with the **won't do** state instead.
 3. Tags can be renamed and their descriptions edited, but not deleted. A tag can be taken off an item, which is
    recorded in the audit log like any other item edit.
-4. Heaps are archived instead of removed.
+4. Heaps are archived instead of removed, by an admin. An archived heap is read-only and keeps its audit history,
+   and an admin can unarchive it.
 5. Custom parameters and their options are archived instead of removed:
    - Archiving an option requires the admin to pick a replacement option. Items in a non-terminal state (open, in
      progress, blocked) switch to the replacement. Items in a terminal state (done, won't do) keep the archived

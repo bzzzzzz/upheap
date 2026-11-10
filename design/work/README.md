@@ -7,8 +7,6 @@ What's in flight, what's next, and ideas. Last reviewed 2026-11-09.
 In flight. Each has a doc with its own progress.
 
 - [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 1 next.
-- [Docs migration](docs-migration.md): the docs moved to tracks, then decisions.md and product.md cut to their
-  bars. Step 2 of 3 next.
 
 ## Next
 
