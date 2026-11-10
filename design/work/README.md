@@ -9,27 +9,21 @@ In flight. Each has a doc with its own progress.
 - [Getting in](getting-in.md): invite links, password change and reset. Stage 1 of 2, piece 1 next.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
   AI agents through the CLI. Stage 1 of 2, piece 3 next.
+- [Side tasks](side-tasks.md): backups, old OAuth rows, confirmations, Activity at phone width, and what holds an
+  item back. Small pieces beside the two tracks, none started.
 
 ## Next
 
 Defined well enough to start, in rough order.
 
 - **Need in the list.** Sort by need (Product List items §5), and show it in the row so a critical item stands out.
-- **What holds an item back.** The contributors say why an item is here, not why it isn't higher (Product Priority
-  §9). Say what's missing or low too: no due time, unset sizes, a low need.
 - **Blocked items whose blocker has closed.** They stay blocked and hidden (Product List items §2, Priority §2).
   Bring them back to the user's attention when the blocker closes.
 - **"Start next" in a shared heap.** The offer after Done shows only when nothing in the heap is in progress, which
   with teammates is almost never. Decide what it means when others have work in progress.
 - **A view across heaps.** Each user orders their own heaps, and that order is how items from different heaps
   compare in one list (Product Heaps §4). Designed as heap weights in the Work with agents track, stage 2.
-- **Phone width for Activity,** in the design tokens.
 - **OIDC sign-in** (Product Accounts §3), with a username step on first sign-in (Arch Handles §7).
-- **Backups.** Check Neon's restore window on the plan in use before real data goes in.
-- **Confirmations.** Archiving a heap and demoting yourself act at once, against ux.md, Rules §1. Make the code
-  follow the rule.
-- **Old OAuth rows.** Used codes and expired or revoked tokens stay in their tables. Clean them up on each
-  exchange, as sign-in attempts are.
 
 ## Ideas
 
