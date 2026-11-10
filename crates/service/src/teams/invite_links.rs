@@ -11,10 +11,9 @@
 //! is read when someone opens or joins through a link (architecture.md, Data model).
 //!
 //! Joining, and creating an account through a link, read the link by its token before the transaction begins, only
-//! to learn which team to lock. On MySQL the
-//! first plain read of a transaction fixes its snapshot, so reading the link inside the transaction before the team
-//! lock would hide a revocation that commits while the join waits for the lock (see `lock_team_for`). The link is
-//! read again after the lock, and that read decides.
+//! to learn which team to lock. On MySQL the first plain read of a transaction fixes its snapshot, so reading the
+//! link inside the transaction before the team lock would hide a revocation that commits while the join waits for
+//! the lock (see `lock_team_for`). The link is read again after the lock, and that read decides.
 
 use std::collections::HashMap;
 
@@ -33,7 +32,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 use super::manage::{MemberAdded, lock_team_for};
 use super::{TeamDetail, load_team_detail};
 use crate::access::authorize_team;
-use crate::auth::{Registration, SessionGrant, parse_registration, random_token};
+use crate::auth::{Registration, SessionGrant, hash_registration, random_token, validate_registration};
 use crate::{Principal, ServiceError, Services};
 
 /// An invite link as an admin of its team sees it.
@@ -175,7 +174,11 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let (team_id, link_id) = (found.team_id, found.id);
-        let account = parse_registration(registration).await?;
+        let valid = validate_registration(registration)?;
+        // Only saves a hash for a link that has already stopped working. The check under the lock below is the one
+        // that counts: the link may end or be revoked while the password is hashed.
+        found.check_join(self.now(), None)?;
+        let account = hash_registration(valid).await?;
 
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -183,20 +186,9 @@ impl Services {
         // A new user has never been removed from any team. Before the user is made, so that an ended link wins over
         // a taken username.
         link.check_join(now, None)?;
-        let made = self
-            .insert_personal_user(
-                &txn,
-                account.email,
-                account.username,
-                account.display_name,
-                account.team_name,
-                now,
-            )
-            .await?;
-        store::users::insert_password(&txn, made.user.id, &account.password_hash, now).await?;
-        let principal = Principal { user_id: made.user.id };
+        let (grant, _, _) = self.insert_account(&txn, account, now).await?;
+        let principal = Principal { user_id: grant.user.id };
         self.admit_through_link(&txn, principal, &link, now).await?;
-        let grant = self.open_session(&txn, made.user, now).await?;
         let detail = load_team_detail(&txn, principal, team).await?;
         txn.commit().await.map_err(StoreError::from)?;
 

@@ -1,5 +1,5 @@
-//! Opening an invite link, joining a team through it and creating an account through it, by the link's token. The local build has no teams to join,
-//! so it leaves these out (the `accounts` feature).
+//! Opening an invite link, joining a team through it and creating an account through it, by the link's token. The
+//! local build has no teams to join, so it leaves these out (the `accounts` feature).
 
 use api_types::auth::RegisterRequest;
 use api_types::invite_links::{

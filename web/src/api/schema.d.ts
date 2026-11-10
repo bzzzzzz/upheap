@@ -1298,10 +1298,11 @@ export interface components {
             viewer?: null | components["schemas"]["InviteViewer"];
         };
         /**
-         * @description An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.
+         * @description An action the holder of an invite link can take. Empty unless the link works and admits the viewer: `join` for a
+         *     signed-in outsider, `create_account` for someone signed out.
          * @enum {string}
          */
-        InvitationAction: "join";
+        InvitationAction: "join" | "create_account";
         /** @description An invite link: whoever holds its token can join the team until it ends or is revoked. */
         InviteLink: {
             allowed_actions: components["schemas"]["InviteLinkAction"][];

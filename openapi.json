@@ -6098,9 +6098,10 @@
       },
       "InvitationAction": {
         "type": "string",
-        "description": "An action the holder of an invite link can take. Empty unless a signed-in outsider holds a link that admits them.",
+        "description": "An action the holder of an invite link can take. Empty unless the link works and admits the viewer: `join` for a\nsigned-in outsider, `create_account` for someone signed out.",
         "enum": [
-          "join"
+          "join",
+          "create_account"
         ]
       },
       "InviteLink": {
