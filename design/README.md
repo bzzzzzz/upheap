@@ -15,6 +15,7 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [work/work-with-agents.md](work/work-with-agents.md) | Work with agents: context, tasks with steps, reminders, questions and the agent loop. What it is and its progress | A piece is done, until it's built |
 | [work/work-with-agents-design.md](work/work-with-agents-design.md) | Work with agents, the design: commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
 | [work/side-tasks.md](work/side-tasks.md) | Side tasks: small pieces that run beside the tracks in flight, each with when it's done | A piece is done, until all are |
+| [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | A piece is done, or the plan changes, until it's built |
 
 `work/` holds what's in flight: the tracker, and a doc per track of work, with its design in a second file when
 that is long, deleted once it's built. Everything
