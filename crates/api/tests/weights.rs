@@ -169,10 +169,16 @@ async fn a_heap_shows_its_weights_and_only_admins_may_edit_them() -> Result<()> 
     expect_that!(admin.body["weights"], eq(&tens));
     expect_that!(
         admin.body["allowed_actions"],
-        eq(&json!(["rename", "archive", "edit_weights", "view_history"]))
+        eq(&json!([
+            "rename",
+            "archive",
+            "edit_context",
+            "edit_weights",
+            "view_history"
+        ]))
     );
     expect_that!(member.body["weights"], eq(&tens));
-    expect_that!(member.body["allowed_actions"], eq(&json!([])));
+    expect_that!(member.body["allowed_actions"], eq(&json!(["edit_context"])));
     Ok(())
 }
 

@@ -8,9 +8,9 @@ use anyhow::{Context, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Item, Need, NewItem, Title};
-use domain::step::{NewStep, Step, StepContext, StepNumber, StepPatch, StepPlacement, StepProgress, StepState};
+use domain::step::{NewStep, Step, StepNumber, StepPatch, StepPlacement, StepProgress, StepState};
 use domain::team::Team;
-use domain::text::Name;
+use domain::text::{Context as StepContext, Name};
 use domain::user::{DisplayName, Email, User};
 use domain::validation::Field;
 use domain::{HeapId, ItemId, StepId, TeamId, Timestamp, UserId, Version};
@@ -48,6 +48,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId)> {
         slug: Handle::parse("heap", Field::Slug)?,
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
+        context: None,
         archived_at: None,
         version: Version::INITIAL,
     };

@@ -3,7 +3,7 @@
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::parameter::Weight;
-use domain::text::Name;
+use domain::text::{Context, Name};
 use domain::{HeapId, TeamId, Timestamp, Version};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
@@ -26,6 +26,7 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
         age_weight: Set(weight_to_db(heap.policy.age_weight)),
         deadline_weight: Set(weight_to_db(heap.policy.deadline_weight)),
         value_weight: Set(weight_to_db(heap.policy.value_weight)),
+        context: Set(heap.context.as_ref().map(|c| c.as_str().to_owned())),
         created_at: Set(created_at.as_millis()),
         archived_at: Set(heap.archived_at.map(Timestamp::as_millis)),
     };
@@ -70,8 +71,8 @@ pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<H
     row.map(to_heap).transpose()
 }
 
-/// Writes the slug, name, weights and archive time if the stored row still has version `expected`, and returns the
-/// heap with its new version. Returns `None` when the stored version differs, and fails with
+/// Writes the slug, name, context, weights and archive time if the stored row still has version `expected`, and
+/// returns the heap with its new version. Returns `None` when the stored version differs, and fails with
 /// [`StoreError::Duplicate`] when another heap of the team has the slug.
 pub async fn update_heap(
     db: &impl ConnectionTrait,
@@ -90,6 +91,7 @@ pub async fn update_heap(
         age_weight: Set(weight_to_db(saved.policy.age_weight)),
         deadline_weight: Set(weight_to_db(saved.policy.deadline_weight)),
         value_weight: Set(weight_to_db(saved.policy.value_weight)),
+        context: Set(saved.context.as_ref().map(|c| c.as_str().to_owned())),
         archived_at: Set(saved.archived_at.map(Timestamp::as_millis)),
         version: Set(version_to_db(saved.version, TABLE, &id)?),
         ..Default::default()
@@ -131,6 +133,10 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
             age_weight: read.weight(row.age_weight)?,
             deadline_weight: read.weight(row.deadline_weight)?,
             value_weight: read.weight(row.value_weight)?,
+        },
+        context: match row.context.as_deref() {
+            Some(raw) => Context::parse(raw).map_err(|e| read.corrupt(e.to_string()))?,
+            None => None,
         },
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,

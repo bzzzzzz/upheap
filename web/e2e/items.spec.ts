@@ -48,7 +48,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await pick(page, "Impact", "XL");
   await pane.getByLabel("Title", { exact: true }).fill("Write the team rota");
   await pane.getByLabel("Title", { exact: true }).press("Enter");
-  await (await field(page, "Description")).getByLabel("Description").fill("For the next quarter");
+  await (await field(page, "Context")).getByLabel("Context").fill("For the next quarter");
   await closeField(page);
   // The likeliest next state is the first button: Start, for an open item, then Done once it's started.
   await changeState(page, "Start");
@@ -75,7 +75,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   // Opened from a link, it closes to its list.
   await openItem(page, "Write the team rota");
   await page.reload();
-  await expect((await field(page, "Description")).getByLabel("Description")).toHaveValue("For the next quarter");
+  await expect((await field(page, "Context")).getByLabel("Context")).toHaveValue("For the next quarter");
   await closeField(page);
   await closeItem(page);
   await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
@@ -254,13 +254,13 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "More", exact: true })).toHaveCount(0);
 
-  // The description saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
-  await (await field(page, "Description")).getByLabel("Description").fill("Venue first");
+  // The context saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
+  await (await field(page, "Context")).getByLabel("Context").fill("Venue first");
   await page.keyboard.press("Escape");
-  await expect(pane.getByRole("button", { name: "Description Venue first" })).toBeVisible();
-  await (await field(page, "Description")).getByLabel("Description").fill("Venue, then dates");
+  await expect(pane.getByRole("button", { name: "Context Venue first" })).toBeVisible();
+  await (await field(page, "Context")).getByLabel("Context").fill("Venue, then dates");
   await page.mouse.click(200, 20);
-  await expect(pane.getByRole("button", { name: "Description Venue, then dates" })).toBeVisible();
+  await expect(pane.getByRole("button", { name: "Context Venue, then dates" })).toBeVisible();
 
   // A new tag from the Tags sheet, its offer in view under the field.
   const tags = await field(page, "Tags");
@@ -273,7 +273,7 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
   await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("dialog", { name: "More", exact: true }).getByRole("button", { name: "Won't do" }).click();
   await expect(pane.getByText("Venue, then dates", { exact: true })).toBeVisible();
-  await expect(pane.getByRole("button", { name: /^Description/ })).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: /^Context/ })).toHaveCount(0);
   await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
 });
 

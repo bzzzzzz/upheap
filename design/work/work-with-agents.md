@@ -29,7 +29,7 @@ order.
    count on the row.
    Done: a task can be worked through by hand from the web app and from the command line. Covers Items §4,
    Review §7.
-- [ ] 4. **Contexts.** A heap gets a context, edited in its settings and read with `heap show`. An item's
+- [x] 4. **Contexts.** A heap gets a context, edited in its settings and read with `heap show`. An item's
    description is its context, written from a file with `item edit --context-file`. Shown as written; rendering
    is stage 2.
    Done: a heap's context and an item's can be read and written from both clients. Covers Heaps §1, §2,

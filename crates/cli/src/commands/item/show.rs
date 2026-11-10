@@ -5,7 +5,7 @@ use api_types::common::{ItemDto, KindDto, NeedDto, StageDto, StepStateDto};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
-use crate::commands::heap_api::HeapApi;
+use crate::commands::heap_api::{HeapApi, indented_context};
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
 use crate::output::{Cell, Mode, Output, Tone};
@@ -80,10 +80,9 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
-        // One line at a time, so the newlines stay and anything else that moves the cursor doesn't. `lines` also
-        // drops the `\r` of CRLF text, and a tab becomes spaces, as the output would otherwise show it as U+FFFD.
-        for line in description.lines() {
-            out.line(&line.replace('\t', "    "))?;
+        out.line_toned("Context", Tone::Strong)?;
+        for line in indented_context(description) {
+            out.line(&line)?;
         }
     }
     render_steps(item, out)

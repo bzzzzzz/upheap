@@ -112,10 +112,13 @@ Or build it with `cargo build --release -p cli` (the binary is `target/release/u
 cargo run -p cli -- auth login --server http://localhost:8080   # opens the browser; the sign-in goes in the keychain
 cargo run -p cli -- heap list
 cargo run -p cli -- heap use personal                           # or team/heap
+cargo run -p cli -- heap show                                   # the heap's name and context
+cargo run -p cli -- heap edit --context-file context.md         # or - for stdin, or --no-context
 cargo run -p cli -- item list --effort s,m --tag infra
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
+cargo run -p cli -- item edit k3x9a --context-file context.md    # the item's context; or - for stdin, or --no-context
 cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one

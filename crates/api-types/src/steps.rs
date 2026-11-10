@@ -2,7 +2,8 @@
 
 use domain::ValidationError;
 use domain::item::Title;
-use domain::step::{NewStep, StepContext, StepNumber, StepPatch, StepState};
+use domain::step::{NewStep, StepNumber, StepPatch, StepState};
+use domain::text::Context;
 use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -31,7 +32,7 @@ impl AddStepDto {
     pub fn to_new_step(&self) -> Result<NewStep, ValidationError> {
         Ok(NewStep {
             title: Title::parse(&self.title)?,
-            context: self.context.as_deref().map(StepContext::parse).transpose()?.flatten(),
+            context: self.context.as_deref().map(Context::parse).transpose()?.flatten(),
             after: self
                 .after
                 .map(|number| StepNumber::new(number).ok_or(ValidationError::ValueUnknown { field: Field::After }))
@@ -63,7 +64,7 @@ impl StepPatchDto {
             context: match &self.context {
                 None => None,
                 Some(None) => Some(None),
-                Some(Some(raw)) => Some(StepContext::parse(raw)?),
+                Some(Some(raw)) => Some(Context::parse(raw)?),
             },
             state: self.state.map(StepState::try_from).transpose()?,
         })

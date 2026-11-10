@@ -13,6 +13,7 @@ pub struct Model {
     pub age_weight: i32,
     pub deadline_weight: i32,
     pub value_weight: i32,
+    pub context: Option<String>,
     pub created_at: i64,
     pub archived_at: Option<i64>,
     pub version: i32,

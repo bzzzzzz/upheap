@@ -83,8 +83,8 @@ pub struct AuditEntry {
 pub enum AuditScope {
     /// Everything recorded about one heap and what is in it.
     Heap(HeapId),
-    /// What is recorded about the team itself, its members, and its heaps as wholes (created, renamed, archived),
-    /// but not what happens inside the heaps, which [`AuditScope::Heap`] reads.
+    /// What is recorded about the team itself, its members, and its heaps as wholes (created, renamed, archived,
+    /// context changed), but not what happens inside the heaps, which [`AuditScope::Heap`] reads.
     Team(TeamId),
 }
 

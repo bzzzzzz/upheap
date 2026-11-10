@@ -3,8 +3,8 @@
 use api_types::steps::StepPatchDto;
 use clap::Args;
 
-use super::{find_step, read_context, step_name};
-use crate::commands::heap_api::HeapApi;
+use super::{find_step, step_name};
+use crate::commands::heap_api::{HeapApi, read_context};
 use crate::commands::item::common::locate_item;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
 use crate::lookup::StepName;

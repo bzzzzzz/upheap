@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::text::parse_required;
+use crate::text::{parse_optional, parse_required};
 use crate::validation::{Field, ValidationError};
 use crate::{HeapId, TagId, Timestamp, Version};
 
@@ -43,17 +43,7 @@ impl TagDescription {
 
     /// Blank input means "no description" and gives `None`.
     pub fn parse(raw: &str) -> Result<Option<Self>, ValidationError> {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Ok(None);
-        }
-        if trimmed.chars().count() > Self::MAX_CHARS {
-            return Err(ValidationError::TooLong {
-                field: Field::Description,
-                max: Self::MAX_CHARS,
-            });
-        }
-        Ok(Some(Self(trimmed.to_owned())))
+        Ok(parse_optional(raw, Field::Description, Self::MAX_CHARS)?.map(Self))
     }
 
     pub fn as_str(&self) -> &str {

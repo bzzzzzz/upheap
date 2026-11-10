@@ -122,10 +122,18 @@ the block when it opens.
 **Settings** is one page for a heap's configuration, with a tab each for **General**, **Tags**, **Parameters** and **Ranking**.
 Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`, `/settings/ranking`), so Back steps between
 them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name
-and the link name, edited in place, a note that a new link name breaks old links, the heap's history, and Archive
-heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New link:
-/teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads the
-values.
+and the link name, edited in place, a note that a new link name breaks old links, the heap's history, a Context
+card, and Archive heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New
+link: /teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads
+the values.
+
+The **Context** card shows the heap's context as written, with its line breaks and no rendering, or a muted line
+saying what a context holds when there is none. Any member sees an Edit button (not on an archived heap), which
+turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
+the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
+saved a different context meanwhile, it shows above the kept draft under "Saved meanwhile", and Save again replaces
+it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
+Cancel give focus back to Edit. The local build has no Context card.
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
@@ -235,9 +243,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
    bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
    line), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
-   four steps, effort and impact as S M L XL buttons, due, tags, parameters, the description and the history. On a
-   phone due, tags, parameters and the description are rows of label and value, each opening a sheet; the
-   description saves as its sheet closes.
+   four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description)
+   and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
+   sheet; the context saves as its sheet closes.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
    the tag is added, in Add item too.
@@ -271,12 +279,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 1. The Add item button beside the heap name (or `N`) opens the Add dialog: a modal over the list on a wide screen and
    a tablet. On a phone the + in the middle of the tabs opens it as a sheet above the keyboard.
-2. The dialog has every field Add item takes: title (focused), description, need, effort, impact, due, tags, and the
+2. The dialog has every field Add item takes: title (focused), context, need, effort, impact, due, tags, and the
    parameters linked to the chosen tags, which appear as soon as a tag is added, each saying which tag asked. Each
    is optional apart from the title and the need: Add stays off until a need is picked. Nothing is picked for you, so
    every need is someone's choice. Under the four steps a line says what the picked one means. On a phone the need,
    effort, impact, tags and due are chips in rows that scroll sideways, effort and impact opening a sheet of sizes;
-   the description and the parameters are under More fields.
+   the context and the parameters are under More fields.
 3. It starts from where it was opened, silently: the heap on screen, and the list's filtered tags, and effort,
    impact or a parameter where the filters pick one value. No label explains the prefill; the tag picker's own
    suggestions are enough. The title, "Add to \<heap\> ▾", chooses another heap; tags and parameter values belong to

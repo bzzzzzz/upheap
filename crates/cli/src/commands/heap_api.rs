@@ -1,11 +1,12 @@
 //! What the commands that work in a heap share: the calls under the heap's path, finding the heap a command names,
-//! and the description a flag gives.
+//! and the description and context a flag gives.
 
 use api_types::me::MeDto;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
+use crate::commands::UsageError;
 use crate::config::SettingError;
 use crate::lookup::{HeapHandle, HeapName, resolve_heap};
 use crate::{App, CliError};
@@ -90,4 +91,25 @@ pub(crate) async fn read_description(raw: &str, app: &App) -> Result<String, Cli
     let text = app.read_stdin("--description").await?;
     let text = text.strip_suffix('\n').unwrap_or(&text);
     Ok(text.strip_suffix('\r').unwrap_or(text).to_owned())
+}
+
+/// The context a flag gives: the text of the file at `path`, or all of stdin for `-`.
+pub(crate) async fn read_context(path: &str, app: &App) -> Result<String, CliError> {
+    if path == "-" {
+        return Ok(app.read_stdin("--context-file").await?);
+    }
+    std::fs::read_to_string(path).map_err(|source| {
+        UsageError::UnreadableContextFile {
+            path: path.to_owned(),
+            source,
+        }
+        .into()
+    })
+}
+
+/// A context's lines for printing under a heading, each indented two spaces. One line at a time, so the newlines
+/// stay and anything else that moves the cursor doesn't. `lines` also drops the `\r` of CRLF text, and a tab becomes
+/// spaces, as the output would otherwise show it as U+FFFD.
+pub(crate) fn indented_context(text: &str) -> impl Iterator<Item = String> {
+    text.lines().map(|line| format!("  {}", line.replace('\t', "    ")))
 }

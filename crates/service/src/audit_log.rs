@@ -125,7 +125,8 @@ impl Services {
     }
 
     /// What happened to `team_id` itself that the caller may see: its name and members, display names, and its
-    /// heaps being created, renamed and archived. What happens inside a heap is in [`Self::list_heap_audit`].
+    /// heaps being created, renamed, archived and given a new context. What happens inside a heap is in
+    /// [`Self::list_heap_audit`].
     pub async fn list_team_audit(
         &self,
         principal: Principal,
@@ -307,6 +308,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::MemberJoined, _) => ("joined through", true),
         (AuditAction::HeapCreated, _) => ("created heap", true),
         (AuditAction::HeapUpdated, _) => ("changed heap", true),
+        (AuditAction::HeapContextUpdated, _) => ("changed the context of heap", true),
         (AuditAction::HeapArchived, _) => ("archived heap", true),
         (AuditAction::HeapUnarchived, _) => ("unarchived heap", true),
         (AuditAction::ItemCreated, _) => ("added item", true),
@@ -356,6 +358,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::TeamUpdated
         | AuditAction::MemberRoleChanged
         | AuditAction::HeapUpdated
+        | AuditAction::HeapContextUpdated
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
         | AuditAction::ItemUpdated
@@ -371,7 +374,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 28] = [
+const FIELD_ORDER: [&str; 29] = [
     "step",
     "step_title",
     "step_context",
@@ -382,6 +385,7 @@ const FIELD_ORDER: [&str; 28] = [
     "name",
     "display_name",
     "description",
+    "context",
     "state",
     "blocked_by",
     "need",
@@ -443,7 +447,7 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
         }
         let change = AuditChange {
             field: field.clone(),
-            label: describe_field(field).to_owned(),
+            label: describe_field(field, entry.entity_type).to_owned(),
             before: describe_value(field, before, names, tz),
             after: describe_value(field, after, names, tz),
         };
@@ -492,7 +496,8 @@ fn has_no_value(value: &Value) -> bool {
     }
 }
 
-fn describe_field(field: &str) -> &str {
+/// A field's label. An item's description is its context to people; a tag's stays a description.
+fn describe_field(field: &str, entity_type: EntityType) -> &str {
     match field {
         "step" => "Step",
         "step_title" => "Step title",
@@ -503,7 +508,9 @@ fn describe_field(field: &str) -> &str {
         "stage" => "Stage",
         "name" => "Name",
         "display_name" => "Display name",
+        "description" if entity_type == EntityType::Item => "Context",
         "description" => "Description",
+        "context" => "Context",
         "state" => "State",
         "blocked_by" => "Blocked by",
         "need" => "Need",

@@ -193,6 +193,10 @@ enum HeapCommand {
     List(commands::heap::list::ListArgs),
     /// Make a heap the default for commands that work in one
     Use(commands::heap::use_heap::UseArgs),
+    /// A heap's name and context
+    Show(commands::heap::show::ShowArgs),
+    /// Write or clear a heap's context
+    Edit(commands::heap::edit::EditArgs),
 }
 
 #[derive(Subcommand)]
@@ -226,6 +230,8 @@ impl Command {
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Use(args)) => &args.shared,
+            Self::Heap(HeapCommand::Show(args)) => &args.shared,
+            Self::Heap(HeapCommand::Edit(args)) => &args.shared,
             Self::Auth(AuthCommand::Login(args)) => &args.shared,
             Self::Auth(AuthCommand::Logout(args)) => &args.shared,
         }
@@ -327,6 +333,8 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Use(args)) => commands::heap::use_heap::run(args, app, out).await,
+        Command::Heap(HeapCommand::Show(args)) => commands::heap::show::run(args, app, out).await,
+        Command::Heap(HeapCommand::Edit(args)) => commands::heap::edit::run(args, app, out).await,
         Command::Auth(AuthCommand::Login(args)) => commands::auth::login::run(args, app, out).await,
         Command::Auth(AuthCommand::Logout(args)) => commands::auth::logout::run(args, app, out).await,
     }

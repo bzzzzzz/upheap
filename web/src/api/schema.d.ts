@@ -360,7 +360,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Renames the heap or changes its slug. Admins only; send the heap's `version` in `If-Match`. */
+        /**
+         * Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and
+         *     slug need an admin, the context any member. A body that sets a field the caller may not change is refused whole
+         *     with 403, and saves nothing. A save that changes nothing succeeds and keeps the version.
+         */
         patch: operations["update_heap"];
         trace?: never;
     };
@@ -953,7 +957,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1168,6 +1172,11 @@ export interface components {
              * @description When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
              */
             archived_at?: number | null;
+            /**
+             * @description What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
+             *     written: plain text for now, Markdown later. `null` when nobody has written one.
+             */
+            context?: string | null;
             /** Format: uuid */
             id: string;
             name: string;
@@ -1183,7 +1192,7 @@ export interface components {
             team_id: string;
             /**
              * Format: int32
-             * @description Send back in `If-Match` when renaming or changing weights.
+             * @description Send back in `If-Match` when renaming or changing the context or weights.
              */
             version: number;
             /** @description The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`. */
@@ -1193,7 +1202,7 @@ export interface components {
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive" | "edit_weights" | "view_history";
+        HeapAction: "rename" | "archive" | "unarchive" | "edit_context" | "edit_weights" | "view_history";
         /** @description A heap of one of the caller's teams, with how many items it has open. */
         HeapOverview: components["schemas"]["HeapSummary"] & {
             /**
@@ -1205,6 +1214,11 @@ export interface components {
         };
         /** @description A change to a heap. Leave a field out to keep it. */
         HeapPatchRequest: {
+            /**
+             * @description At most 20,000 characters, trimmed; blank or `null` clears it. Any member may change it; the name and slug
+             *     need an admin.
+             */
+            context?: string | null;
             /** @description 1 to 100 characters. */
             name?: string | null;
             /**
