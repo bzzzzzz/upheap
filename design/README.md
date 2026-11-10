@@ -12,6 +12,7 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [ux.md](ux.md) | The web app's UX: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, what comes later | A principle, a layout or a behaviour changes |
 | [work/README.md](work/README.md) | The tracker: the tracks in flight, what's next, ideas | A track starts, ends or changes stage. One line |
 | [work/getting-in.md](work/getting-in.md) | Getting in: invite links, password change and reset. What it is, its progress, its design | A piece is done, or the design changes, until it's built |
+| [work/work-with-agents.md](work/work-with-agents.md) | Work with agents: Upheap as the place for a project's ideas, tasks and progress, shared with AI agents. Its design, in progress | A step is agreed, until it's built |
 
 `work/` holds what's in flight: the tracker, and a doc per track of work, deleted once it's built. Everything
 beside it is permanent.
