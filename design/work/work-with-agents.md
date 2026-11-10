@@ -215,6 +215,13 @@ is resolved or turned into a task.
    reached, and what it cost, as far as the agent tool reports it. An item touched five times shows five runs.
 2. The person can see an item's runs, and the total for an item and for a heap.
 
+**Agents' progress**
+
+1. **Core.** The person can see what agents have done across their heaps as one short history of results: what
+   was reached, on which item, and the main things produced. Details stay one step away, on the item.
+2. An agent's run says, when it ends, what it reached and what it produced. The history is built from that, not
+   from the audit log.
+
 **Where things came from**
 
 1. An item, a heap or a checklist step made out of another item keeps a link back to it, and the source shows
@@ -267,7 +274,8 @@ week), setup (once or rarely) or recovery.
 
 **P4. Decide at a stable state.** Loop.
 
-1. See the items an agent has brought to a stable state since I last looked.
+1. See the items an agent has brought to a stable state and that wait for my decision, in the agents' progress
+   (P10).
 2. Open one and read what the agent made: the context it filled in, the tasks and their steps, what blocks what.
 3. Decide: send it on one state, send it all the way, change it and then send it on, leave it for now, or close
    it as won't do.
@@ -301,10 +309,15 @@ week), setup (once or rarely) or recovery.
 2. Run `upheap work`, naming the agent tool to use and the heaps it may work in.
 3. Leave it running, or run it for a while and stop it. Either way it picks up where things stand.
 
-**P10. Look back.** Loop, occasional.
+**P10. See what the agents did.** Loop, daily.
 
-1. Open an item and see its runs: when, from which state to which, what each cost.
-2. See what a heap has cost in total, and what an item was made from or turned into.
+1. Open the agents' progress: one history of their work across my heaps, newest first.
+2. Each entry is a result, not a log: what was reached (a note got its context, a task was defined, a task was
+   done, a heap was made), on which item, with the main things it produced, such as a pull request or a document,
+   as links.
+3. Open an entry's item when I want more: its runs with what each cost, and what it was made from or turned
+   into. A heap shows its total cost.
+4. Items waiting for my decision at a stable state (P4) are marked here, so this is also where P4 starts.
 
 **P11. The agent got it wrong.** Recovery, for P4.
 
@@ -390,7 +403,7 @@ From the steps above that ask something of the product.
 | 2 | Person | Opens a heap | One list in priority order, each item showing its kind, who has it, and whether it waits for them | P2 |
 | 3 | Person | Opens what waits for them | Every open question and request across their heaps, in priority order | P3 |
 | 4 | Person | Answers a question or says a request is done | The question closes, and the item returns to the agent when it was the last | P3 |
-| 5 | Person | Opens what reached a stable state | The items an agent has finished a turn on since they last looked | P4 |
+| 5 | Person | Looks for what reached a stable state | In the agents' progress, the items that wait for their decision | P4 |
 | 6 | Person | Reads an item at a stable state | What the agent made: context, steps, new tasks, blocks | P4 |
 | 7 | Person | Sends an item on, one state or all the way | The item is in the agent's queue | P4 |
 | 8 | Person | Ticks, adds and rewords a task's steps | A checklist that shows how far the task is | P5 |
@@ -398,7 +411,8 @@ From the steps above that ask something of the product.
 | 10 | Person | Turns a note into a task or a heap by hand, and sets blocks | The same result an agent would produce | P7 |
 | 11 | Person | Writes a heap's context and sets whether agents prepare | A heap an agent can work in without being briefed | P8 |
 | 12 | Person | Runs `upheap work` with an agent tool and heaps | A loop that works those heaps and nothing else | P9 |
-| 13 | Person | Opens an item's runs | Each run with its states and cost, and totals per item and heap | P10 |
+| 13 | Person | Opens the agents' progress | One short history of results across their heaps, each with its item and the main things produced | P10 |
+| 25 | Person | Opens an item's runs | Each run with its states and cost, and totals per item and heap | P10 |
 | 15 | Person | Takes an item back | The agent's turn ends, and the item is theirs with what was changed so far | P12 |
 | 16 | Person | Changes an answer | The agent sees the new answer on its next run | P13 |
 | 23 | Person | Replies to a review request: approved, or changes asked | The agent finishes the piece, or changes it and asks again | P14, P11 |
@@ -438,7 +452,6 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Whether a checklist step can hold a question of its own.
 - How many failed runs stop the retries.
 - Whether several open review requests on one task are answered one by one or together.
-- What "since I last looked" means for the list of items at a stable state.
 - What state a note ends in once it has become a heap.
 - What cost is counted in when the agent tool reports tokens, money or nothing.
 - Two agents asking for "next" at once must not get the same item.
@@ -449,6 +462,7 @@ Outside the scope. Not commitments.
 
 - **Watching the place of review** (a pull request, a document) and sending the task back to the agent when
   comments arrive.
+- **A daily outline** of the agents' work, written by an agent: the day's results and artifacts in a few lines.
 - **Spend and time limits** for `upheap work`.
 - **Stories:** following a note through everything it turned into, with the cost of the whole added up.
 - The channel for what is pushed, and how the person says what counts as critical.
