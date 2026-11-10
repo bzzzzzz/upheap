@@ -63,7 +63,9 @@ const joinedPhrase = (count: number) => (count === 0 ? "no one joined" : `${coun
 
 /** The link's name for its History button, which says whose it is: "the link made by Ana Ruiz" or "…made by you". */
 const historyLabel = (link: InviteLink, you: boolean) =>
-  `History of the link made by ${you ? "you" : link.created_by.display_name}`;
+  `History of the link made by ${you ? "you" : link.created_by.display_name} ${
+    link.state === "working" ? `that ends ${link.ends_label}` : link.created_label
+  }`;
 
 /** The History button of a link's row on a wide screen, the look of a member row's. */
 function HistoryButton({

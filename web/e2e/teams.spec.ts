@@ -612,7 +612,7 @@ test("an admin reads the history of a working link", async ({ page, browser, loc
     await expect(sheet.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
     await expect(sheet.getByRole("button", { name: "Hide history" })).toBeVisible();
   } else {
-    const history = link.getByRole("button", { name: "History of the link made by you" });
+    const history = link.getByRole("button", { name: /^History of the link made by you that ends / });
     await expect(history).toHaveAttribute("aria-expanded", "false");
     await history.click();
     await expect(history).toHaveAttribute("aria-expanded", "true");
@@ -660,7 +660,7 @@ test("past links list a revoked link, who joined and its history", async ({ page
   // No Copy or Revoke on it; its History shows the revoke.
   await expect(past.getByRole("button", { name: "Copy" })).toHaveCount(0);
   await expect(past.getByRole("button", { name: "Revoke" })).toHaveCount(0);
-  await past.getByRole("button", { name: "History of the link made by you" }).click();
+  await past.getByRole("button", { name: /^History of the link made by you today$/ }).click();
   await expect(past.getByText("You revoked Tester's invite link")).toBeVisible();
   await expect(past.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
 });

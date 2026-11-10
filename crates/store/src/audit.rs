@@ -156,9 +156,10 @@ pub async fn list_audit_entries(
 
 /// How many people joined the team through each of `link_ids`, ever, from the `member_joined` entries recorded against
 /// the link. People who have since left still count. A link nobody joined through is absent from the map.
+///
+/// Callers pass the ids of one team's links, so the query needs no team filter and the entity index serves it.
 pub async fn count_joins_by_invite_link(
     db: &impl ConnectionTrait,
-    team_id: TeamId,
     link_ids: &[InviteLinkId],
 ) -> Result<HashMap<InviteLinkId, u32>, StoreError> {
     if link_ids.is_empty() {
@@ -168,7 +169,6 @@ pub async fn count_joins_by_invite_link(
         .select_only()
         .column(audit_log::Column::EntityId)
         .column_as(Expr::col(audit_log::Column::Id).count(), "joins")
-        .filter(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
         .filter(audit_log::Column::EntityType.eq(EntityType::InviteLink.as_str()))
         .filter(audit_log::Column::Action.eq(AuditAction::MemberJoined.as_str()))
         .filter(audit_log::Column::EntityId.is_in(link_ids.iter().map(|id| id_to_db(id.as_uuid()))))

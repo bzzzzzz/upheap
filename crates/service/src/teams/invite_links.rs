@@ -383,14 +383,8 @@ async fn load_views(
         .into_iter()
         .map(|user| (user.id, user))
         .collect();
-    // The links are all one team's.
-    let joins = match links.first() {
-        Some(first) => {
-            let link_ids: Vec<InviteLinkId> = links.iter().map(|link| link.id).collect();
-            store::audit::count_joins_by_invite_link(db, first.team_id, &link_ids).await?
-        }
-        None => HashMap::new(),
-    };
+    let link_ids: Vec<InviteLinkId> = links.iter().map(|link| link.id).collect();
+    let joins = store::audit::count_joins_by_invite_link(db, &link_ids).await?;
     links
         .into_iter()
         .map(|link| {
