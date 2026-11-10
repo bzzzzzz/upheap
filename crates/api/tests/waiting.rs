@@ -343,3 +343,102 @@ async fn an_item_in_an_archived_heap_does_not_wait_in_the_list_or_on_its_own() -
     expect_that!(waiting["count"], eq(&json!(0)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn the_count_says_how_many_wait_when_the_cap_holds_back_rows() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let me = app.send(Method::GET, "/api/v1/me", Some(&session), None).await?;
+    let user_id = me.body["user"]["id"].as_str().context("no id")?.to_owned();
+    for title in ["First", "Second", "Third"] {
+        let key = item(&app, &session, &heap, title, "expected").await?;
+        ask_text(&app, &session, &heap, &key, "Which?").await?;
+    }
+
+    // Act
+    let (count, rows) = app.waiting_capped(&user_id, 2).await?;
+    let uncapped = waiting(&app, &session).await?;
+
+    // Assert
+    expect_that!(count, eq(3));
+    expect_that!(rows, eq(2));
+    expect_that!(uncapped["count"], eq(&json!(3)));
+    expect_that!(uncapped["rows"].as_array().map(Vec::len), some(eq(3)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn equal_scores_in_two_heaps_order_by_heap_name_whatever_order_the_heaps_were_made_in() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (team, _) = app.shared_heap(&session).await?;
+    let team_url = app.team_url(&team).await?;
+    let mut heaps = Vec::new();
+    // Made in reverse, so neither creation order nor ID order is the name order.
+    for name in ["Beta", "Alpha"] {
+        let made = app
+            .send(
+                Method::POST,
+                &format!("{team_url}/heaps"),
+                Some(&session),
+                Some(json!({ "name": name })),
+            )
+            .await?;
+        heaps.push(made.body["id"].as_str().context("heap id")?.to_owned());
+    }
+    for (heap, title) in heaps.iter().zip(["In Beta", "In Alpha"]) {
+        let key = item(&app, &session, heap, title, "expected").await?;
+        ask_text(&app, &session, heap, &key, "Which?").await?;
+    }
+
+    // Act
+    let waiting = waiting(&app, &session).await?;
+
+    // Assert
+    expect_that!(
+        rows(&waiting),
+        elements_are![eq(&("In Alpha".to_owned(), 1)), eq(&("In Beta".to_owned(), 1))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_waiting_blocker_ranks_with_what_it_blocks() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let blocker = item(&app, &session, &heap, "Quiet blocker", "idea").await?;
+    let blocked = item(&app, &session, &heap, "Critical, waiting on it", "critical").await?;
+    let plain = item(&app, &session, &heap, "Plain expected", "expected").await?;
+    ask_text(&app, &session, &heap, &blocker, "Can you?").await?;
+    ask_text(&app, &session, &heap, &plain, "Which?").await?;
+    let blocker_item = get_item(&app, &session, &heap, &blocker).await?;
+    let blocked_item = get_item(&app, &session, &heap, &blocked).await?;
+    let saved = app
+        .patch(
+            &session,
+            &item_path(&app, &heap, &blocked).await?,
+            &blocked_item["version"],
+            json!({ "state": "blocked", "blocked_by_item_id": blocker_item["id"] }),
+        )
+        .await?;
+    anyhow::ensure!(saved.status == StatusCode::OK, "block failed: {}", saved.body);
+
+    // Act
+    let waiting = waiting(&app, &session).await?;
+
+    // Assert
+    expect_that!(
+        rows(&waiting),
+        elements_are![
+            eq(&("Quiet blocker".to_owned(), 1)),
+            eq(&("Plain expected".to_owned(), 1))
+        ]
+    );
+    Ok(())
+}

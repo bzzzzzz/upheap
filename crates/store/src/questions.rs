@@ -18,9 +18,6 @@ use crate::entities::{item_questions, items};
 
 const TABLE: &str = "item_questions";
 
-/// The states of an item that isn't closed.
-const OPEN_STATES: [StateKind; 3] = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
-
 /// Inserts a new question.
 pub async fn insert_question(db: &impl ConnectionTrait, question: &Question) -> Result<(), StoreError> {
     item_questions::Entity::insert(to_row(question)?)
@@ -43,6 +40,14 @@ pub async fn list_questions_locking(db: &impl ConnectionTrait, item_id: ItemId) 
     read_questions(db, item_id, true).await
 }
 
+/// A question row with the heap of its item.
+#[derive(sea_orm::FromQueryResult)]
+struct QuestionInHeap {
+    #[sea_orm(nested)]
+    question: item_questions::Model,
+    heap_id: String,
+}
+
 /// The open questions on the open items (open, in progress, blocked) of `heap_ids`, each with the heap of its item, in
 /// one query per [`IN_LIST_CHUNK`] heaps. Questions of closed items and answered ones are left out; the order is the
 /// database's, so the caller orders them. The caller leaves archived heaps out of `heap_ids`.
@@ -62,20 +67,21 @@ pub async fn list_open_questions_on_open_items(
                     .into(),
             )
             .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
-            .filter(items::Column::State.is_in(OPEN_STATES.map(StateKind::code)))
+            .filter(items::Column::State.is_in(StateKind::OPEN.map(StateKind::code)))
             .filter(item_questions::Column::State.eq(QuestionState::Open.code()))
-            .select_also(items::Entity)
+            // Only the item's heap is read from the join: the item itself, with its context, isn't needed.
+            .column_as(items::Column::HeapId, "heap_id")
             .order_by_asc(item_questions::Column::ItemId)
             .order_by_asc(item_questions::Column::Number)
+            .into_model::<QuestionInHeap>()
             .all(db)
             .await?;
-        for (question, item) in rows {
+        for QuestionInHeap { question, heap_id } in rows {
             let read = RowReader {
                 table: TABLE,
                 id: &question.id,
             };
-            let item = item.ok_or_else(|| read.corrupt("the item is missing".to_owned()))?;
-            let heap_id = HeapId::from_uuid(read.uuid(&item.heap_id)?);
+            let heap_id = HeapId::from_uuid(read.uuid(&heap_id)?);
             found.push((heap_id, to_question(question)?));
         }
     }

@@ -1550,7 +1550,7 @@ export interface components {
              *     caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
              *     and in an archived heap.
              */
-            waits_for_you?: boolean;
+            waits_for_you: boolean;
         };
         /**
          * @description An action the caller can take on an item. Clients show controls only for these.

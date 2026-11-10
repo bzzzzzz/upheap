@@ -3,15 +3,14 @@
 use std::collections::{BTreeSet, HashMap};
 
 use domain::heap::Heap;
-use domain::item::{Item, StateKind, Title};
-use domain::permission::allowed_question_actions;
-use domain::ranking::{CURRENT_FORMULA, ItemForRanking, rank};
+use domain::item::{Item, Title};
+use domain::permission::{Permission, allowed_question_actions};
 use domain::step::StepNumber;
 use domain::team::{Role, Team};
 use domain::user::User;
 use domain::{HeapId, ItemId, UserId};
 
-use crate::items::QuestionView;
+use crate::items::{QuestionView, rank_open_items};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_waiting`] returns. A person waits on tens of questions, not thousands, so one
@@ -49,18 +48,35 @@ struct Candidate {
 
 impl Services {
     /// The open questions on open items in the active heaps of the caller's teams, ordered by the score of their
-    /// item in its own heap, highest first (every heap weighs the same for now), then by heap name, the item's
+    /// item in its own heap, highest first (every heap weighs the same for now), then by heap (by name), the item's
     /// position in its heap and the question's number. Scores are those the heap's list ranks by right now.
     ///
     /// Ranking costs one pass over a heap's open items, so only heaps with a waiting question are ranked. Any member
     /// may ask; nobody sees a heap outside their teams.
     pub async fn list_waiting(&self, principal: Principal) -> Result<WaitingView, ServiceError> {
+        self.list_waiting_capped(principal, MAX_WAITING_ROWS).await
+    }
+
+    /// [`list_waiting`](Self::list_waiting) with at most `max_rows` rows in place of [`MAX_WAITING_ROWS`], so the cap
+    /// can be tested without a question for each of its rows.
+    pub async fn list_waiting_capped(
+        &self,
+        principal: Principal,
+        max_rows: usize,
+    ) -> Result<WaitingView, ServiceError> {
         let teams = store::teams::list_teams_for_user(&self.db, principal.user_id).await?;
         let team_ids: Vec<_> = teams.iter().map(|(team, _)| team.id).collect();
+        let team_by_id: HashMap<_, (&Team, Role)> = teams.iter().map(|(team, role)| (team.id, (team, *role))).collect();
+        // The store lists heaps by name, then ID, and the order of `heaps` is the tie-break between heaps below.
         let heaps: Vec<Heap> = store::heaps::list_heaps_for_teams(&self.db, &team_ids)
             .await?
             .into_iter()
-            .filter(|heap| !heap.is_archived())
+            .filter(|heap| {
+                !heap.is_archived()
+                    && team_by_id
+                        .get(&heap.team_id)
+                        .is_some_and(|(_, role)| Permission::ViewHeap.is_granted_to(*role))
+            })
             .collect();
         let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
         let mut waiting = store::questions::list_open_questions_on_open_items(&self.db, &heap_ids).await?;
@@ -72,7 +88,6 @@ impl Services {
         }
 
         let as_of = self.now();
-        let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
         let mut candidates = Vec::with_capacity(waiting.len());
         for (heap_index, heap) in heaps.iter().enumerate() {
             let (mine, rest): (Vec<_>, Vec<_>) = waiting.into_iter().partition(|(id, _)| *id == heap.id);
@@ -80,11 +95,7 @@ impl Services {
             if mine.is_empty() {
                 continue;
             }
-            // Every open item is ranked, because a blocker inherits from what it blocks.
-            let items = store::items::list_items_in_states(&self.db, heap.id, &states).await?;
-            let parameters = store::parameters::list_parameters(&self.db, heap.id).await?;
-            let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
-            let ranking = rank(CURRENT_FORMULA, &heap.policy, &parameters, &inputs, as_of);
+            let (items, _, ranking) = rank_open_items(&self.db, heap, as_of).await?;
             let ranks: HashMap<ItemId, (f64, u32)> = ranking
                 .iter()
                 .map(|ranked| (ranked.item_id, (ranked.score, ranked.position)))
@@ -110,13 +121,12 @@ impl Services {
         candidates.sort_by(|a, b| {
             b.score
                 .total_cmp(&a.score)
-                .then_with(|| heaps[a.heap_index].name.as_str().cmp(heaps[b.heap_index].name.as_str()))
-                .then_with(|| heaps[a.heap_index].id.cmp(&heaps[b.heap_index].id))
+                .then_with(|| a.heap_index.cmp(&b.heap_index))
                 .then_with(|| a.position.cmp(&b.position))
                 .then_with(|| a.question.number.cmp(&b.question.number))
         });
         let count = u32::try_from(candidates.len()).unwrap_or(u32::MAX);
-        candidates.truncate(MAX_WAITING_ROWS);
+        candidates.truncate(max_rows);
 
         let user_ids: Vec<UserId> = candidates
             .iter()
@@ -141,13 +151,12 @@ impl Services {
         } else {
             store::steps::list_step_titles(&self.db, &step_item_ids).await?
         };
-        let teams: HashMap<_, (&Team, Role)> = teams.iter().map(|(team, role)| (team.id, (team, *role))).collect();
 
         let rows = candidates
             .into_iter()
             .filter_map(|candidate| {
                 let heap = &heaps[candidate.heap_index];
-                let (team, role) = *teams.get(&heap.team_id)?;
+                let (team, role) = *team_by_id.get(&heap.team_id)?;
                 let question = candidate.question;
                 let step_title = question
                     .step

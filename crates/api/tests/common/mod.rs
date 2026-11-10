@@ -61,6 +61,7 @@ fn init_tracing() {
 
 pub struct TestApp {
     router: Router,
+    services: Services,
     pub clock: Arc<ManualClock>,
     /// The same database the router uses, for fixtures the API can't create yet.
     db: DatabaseConnection,
@@ -108,9 +109,10 @@ impl TestApp {
         let services = Services::new(db.clone(), clock.clone(), test_settings(true)).with_random(random);
         Ok(Self {
             router: api::router(AppState {
-                services,
+                services: services.clone(),
                 authentication: Authentication::Sessions(test_cookies()),
             }),
+            services,
             clock,
             db,
         })
@@ -122,9 +124,10 @@ impl TestApp {
         let services = Services::new(self.db.clone(), self.clock.clone(), test_settings(false));
         TestApp {
             router: api::router(AppState {
-                services,
+                services: services.clone(),
                 authentication: Authentication::Sessions(test_cookies()),
             }),
+            services,
             clock: self.clock.clone(),
             db: self.db.clone(),
         }
@@ -141,12 +144,23 @@ impl TestApp {
         let local_user = services.open_local_user().await?;
         Ok(Self {
             router: api::router(AppState {
-                services,
+                services: services.clone(),
                 authentication: Authentication::LocalUser(local_user),
             }),
+            services,
             clock,
             db,
         })
+    }
+
+    /// How many questions wait for the user with `user_id`, and how many rows the list holds when it is capped at
+    /// `max_rows`, which the cap's real size makes too many questions to make in a test.
+    pub async fn waiting_capped(&self, user_id: &str, max_rows: usize) -> Result<(u32, usize)> {
+        let principal = service::Principal {
+            user_id: UserId::from_uuid(user_id.parse()?),
+        };
+        let waiting = self.services.list_waiting_capped(principal, max_rows).await?;
+        Ok((waiting.count, waiting.rows.len()))
     }
 
     /// Sends a request as the app does: with the CSRF and timezone headers.

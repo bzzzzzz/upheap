@@ -13,7 +13,7 @@ use domain::permission::{
     allowed_stage_choices, allowed_step_actions,
 };
 use domain::question::{Question, QuestionState, waits_for_you};
-use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, rank};
+use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -212,17 +212,10 @@ impl Services {
         let as_of = requested_as_of
             .filter(|t| *t <= now && now.since(*t) <= MAX_AS_OF_AGE)
             .unwrap_or(now);
-        let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
-        let mut items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
+        let (mut items, parameters, ranking) = rank_open_items(&self.db, &access.heap, as_of).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
-        let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
-        // Every item is ranked, because a blocker inherits from what it blocks even when that is left out below.
-        let ranking = {
-            let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
-            rank(CURRENT_FORMULA, &access.heap.policy, &parameters, &inputs, as_of)
-        };
         let item_count = items.len();
         let unfiltered_count = count_items(&items, |item| view.lists(item.state.kind()));
         let in_progress_count = count_items(&items, |item| item.state.kind() == StateKind::InProgress);
@@ -353,9 +346,7 @@ impl Services {
     ) -> Result<RankingPreview, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let as_of = self.now();
-        let states = [StateKind::Open, StateKind::InProgress, StateKind::Blocked];
-        let items = store::items::list_items_in_states(&self.db, heap_id, &states).await?;
-        let stored_parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
+        let (items, stored_parameters) = load_open_items(&self.db, heap_id).await?;
         let drafted_parameters = apply_parameter_draft(&stored_parameters, &draft.parameters)?;
         let drafted_policy = draft.heap.apply(&access.heap.policy);
 
@@ -719,6 +710,31 @@ async fn build_question_views(
             question,
         })
         .collect())
+}
+
+/// The open items of the heap (open, in progress, blocked) and its parameters in use, which is what ranking reads.
+async fn load_open_items(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+) -> Result<(Vec<Item>, Vec<Parameter>), StoreError> {
+    let items = store::items::list_items_in_states(db, heap_id, &StateKind::OPEN).await?;
+    let parameters = store::parameters::list_parameters(db, heap_id).await?;
+    Ok((items, parameters))
+}
+
+/// Ranks every open item of the heap under its stored weights, as its list does, and returns the items and
+/// parameters with the ranking. Every item is ranked, because a blocker inherits from what it blocks even when that
+/// is left out of what a caller shows. The one place that says how a heap's current order is made, so no list
+/// drifts from another.
+pub(crate) async fn rank_open_items(
+    db: &impl ConnectionTrait,
+    heap: &Heap,
+    as_of: Timestamp,
+) -> Result<(Vec<Item>, Vec<Parameter>, Vec<RankedItem>), StoreError> {
+    let (items, parameters) = load_open_items(db, heap.id).await?;
+    let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
+    let ranking = rank(CURRENT_FORMULA, &heap.policy, &parameters, &inputs, as_of);
+    Ok((items, parameters, ranking))
 }
 
 /// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker

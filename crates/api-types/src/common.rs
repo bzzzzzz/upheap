@@ -697,7 +697,10 @@ pub struct ItemDto {
     /// Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the
     /// caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
     /// and in an archived heap.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
     #[serde(default)]
+    #[schema(required = true)]
     pub waits_for_you: bool,
     /// Send back in `If-Match` when editing.
     pub version: u32,

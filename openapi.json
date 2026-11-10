@@ -6693,6 +6693,7 @@
           "parameters",
           "created_at",
           "created_label",
+          "waits_for_you",
           "version",
           "allowed_actions"
         ],
