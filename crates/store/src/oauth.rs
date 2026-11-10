@@ -4,13 +4,20 @@
 //! Single use is enforced by conditional updates (`used_at IS NULL`), which every backend applies to the latest
 //! committed row whatever the transaction read before. Of two requests racing to use one code or refresh token,
 //! exactly one marks it used. Revocation is per family: a token is good only while its family isn't revoked.
+//!
+//! These rows are authentication plumbing, not something a person made, so once they can't be used they are deleted
+//! rather than kept (design/engineering-principles.md, Nothing is deleted §1): a table that only grows costs the operator for rows
+//! nobody can use. They go a day after they end, so a retry still hears why it was refused.
 
 use std::collections::HashMap;
 
 use domain::oauth::{CodeChallenge, DeviceName, TokenKind};
 use domain::{Timestamp, TokenFamilyId, UserId};
-use sea_orm::sea_query::Query;
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::sea_query::{Condition, Query, SelectStatement};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    TransactionSession, TransactionTrait,
+};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db};
@@ -146,13 +153,7 @@ pub async fn list_live_token_families(
     user_id: UserId,
     now: Timestamp,
 ) -> Result<Vec<LiveTokenFamily>, StoreError> {
-    let live_refresh_tokens = Query::select()
-        .column(oauth_tokens::Column::FamilyId)
-        .from(oauth_tokens::Entity)
-        .and_where(oauth_tokens::Column::Kind.eq(kind_to_db(TokenKind::Refresh)))
-        .and_where(oauth_tokens::Column::UsedAt.is_null())
-        .and_where(oauth_tokens::Column::ExpiresAt.gt(now.as_millis()))
-        .to_owned();
+    let live_refresh_tokens = live_refresh_token_families(now);
     let families = oauth_token_families::Entity::find()
         .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
         .filter(oauth_token_families::Column::RevokedAt.is_null())
@@ -194,6 +195,72 @@ pub async fn list_live_token_families(
     // Stable, so the order by id above settles ties.
     live.sort_by_key(|family| std::cmp::Reverse(family.last_used_at));
     Ok(live)
+}
+
+/// The ids of the families that hold a refresh token that is unused and unexpired at `at`, as a subquery.
+fn live_refresh_token_families(at: Timestamp) -> SelectStatement {
+    Query::select()
+        .column(oauth_tokens::Column::FamilyId)
+        .from(oauth_tokens::Entity)
+        .and_where(oauth_tokens::Column::Kind.eq(kind_to_db(TokenKind::Refresh)))
+        .and_where(oauth_tokens::Column::UsedAt.is_null())
+        .and_where(oauth_tokens::Column::ExpiresAt.gt(at.as_millis()))
+        .to_owned()
+}
+
+/// Deletes up to `batch` token families that were unusable at `cutoff`, with every token of them, and returns how many
+/// families it deleted.
+///
+/// A family is unusable at `cutoff` when no code names it any more and either it was revoked by then or it held no
+/// refresh token that was unused and unexpired then: the complement of [`list_live_token_families`] at `cutoff`. A
+/// family a code still names is kept, and the foreign key would refuse deleting it anyway, so delete the ended codes
+/// first. Ended families stay ended, so nothing is rechecked at the delete.
+///
+/// Size assumption: a run deletes `batch` families, each with every token it gathered over its life, two per
+/// refresh. A sign-in in daily use for months has a few thousand, so the tokens go by family, not by key, and a run
+/// stays a single statement per table. If a run grows too big for one transaction, bound the tokens per run instead.
+/// The family read scans the tokens table for live refresh tokens, which stays small because ended families go.
+///
+/// The families are found with a plain read and then deleted by key, tokens first and both in one transaction, so a
+/// run never leaves a family without its tokens. A subquery inside a `DELETE` would take shared locks on every row it
+/// reads on MySQL.
+pub async fn delete_ended_token_families(
+    db: &(impl ConnectionTrait + TransactionTrait),
+    cutoff: Timestamp,
+    batch: u64,
+) -> Result<u64, StoreError> {
+    let named_by_a_code = Query::select()
+        .column(oauth_auth_codes::Column::FamilyId)
+        .from(oauth_auth_codes::Entity)
+        .and_where(oauth_auth_codes::Column::FamilyId.is_not_null())
+        .to_owned();
+    let ended = Condition::any()
+        .add(oauth_token_families::Column::RevokedAt.lte(cutoff.as_millis()))
+        .add(oauth_token_families::Column::Id.not_in_subquery(live_refresh_token_families(cutoff)));
+    let ids: Vec<String> = oauth_token_families::Entity::find()
+        .select_only()
+        .column(oauth_token_families::Column::Id)
+        .filter(oauth_token_families::Column::Id.not_in_subquery(named_by_a_code))
+        .filter(ended)
+        .order_by_asc(oauth_token_families::Column::Id)
+        .limit(batch)
+        .into_tuple()
+        .all(db)
+        .await?;
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let txn = db.begin().await?;
+    oauth_tokens::Entity::delete_many()
+        .filter(oauth_tokens::Column::FamilyId.is_in(ids.clone()))
+        .exec(&txn)
+        .await?;
+    let result = oauth_token_families::Entity::delete_many()
+        .filter(oauth_token_families::Column::Id.is_in(ids))
+        .exec(&txn)
+        .await?;
+    txn.commit().await?;
+    Ok(result.rows_affected)
 }
 
 /// Revokes the family at `now`, which ends every token in it, and returns whether this call did (`false` when it
@@ -358,6 +425,35 @@ pub async fn use_auth_code(
         .exec(db)
         .await?;
     Ok(result.rows_affected == 1)
+}
+
+/// Deletes up to `batch` authorization codes that expired by `cutoff`, used or not, and returns how many.
+///
+/// The codes are found with a plain read and then deleted by key, as for ended sign-in windows, so the delete takes
+/// no locks beyond the rows it removes. Codes are one per approval, so `batch` is a few rows.
+pub async fn delete_ended_auth_codes(
+    db: &impl ConnectionTrait,
+    cutoff: Timestamp,
+    batch: u64,
+) -> Result<u64, StoreError> {
+    let ended = oauth_auth_codes::Column::ExpiresAt.lte(cutoff.as_millis());
+    let keys: Vec<String> = oauth_auth_codes::Entity::find()
+        .select_only()
+        .column(oauth_auth_codes::Column::CodeHash)
+        .filter(ended.clone())
+        .limit(batch)
+        .into_tuple()
+        .all(db)
+        .await?;
+    if keys.is_empty() {
+        return Ok(0);
+    }
+    let result = oauth_auth_codes::Entity::delete_many()
+        .filter(oauth_auth_codes::Column::CodeHash.is_in(keys))
+        .filter(ended)
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
 }
 
 const fn kind_to_db(kind: TokenKind) -> &'static str {

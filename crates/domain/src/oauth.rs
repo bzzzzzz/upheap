@@ -13,6 +13,9 @@ pub const ACCESS_TOKEN_LIFETIME: Duration = Duration::from_minutes(15);
 /// How long a refresh token can be used, counted from when it was issued. Each refresh issues a new one, so a client
 /// in use stays signed in and one left alone for this long has to sign in again.
 pub const REFRESH_TOKEN_LIFETIME: Duration = Duration::from_days(30);
+/// How long an ended code or sign-in is kept before an exchange removes it, so a retry within it still hears why it
+/// was refused ("expired", "revoked") and ending a sign-in again still succeeds.
+pub const KEEP_ENDED_GRANTS_FOR: Duration = Duration::from_days(1);
 
 /// What a token is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
