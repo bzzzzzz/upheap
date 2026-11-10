@@ -8,6 +8,7 @@ import {
   closeItem,
   createTeam,
   expect,
+  expectFitsWidth,
   goTo,
   HEAP_URL,
   itemPane,
@@ -50,8 +51,7 @@ test("every page fits the screen, with the navigation for its width", async ({ p
   for (const name of pages) {
     await goTo(page, name);
     await expect(page.getByRole("main")).toBeVisible();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow, `${name} scrolls sideways`).toBeLessThanOrEqual(0);
+    await expectFitsWidth(page, name);
   }
 });
 
@@ -68,13 +68,7 @@ test("Activity fits the screen with long entries", async ({ page }) => {
 
   await goTo(page, "Activity");
   await expect(page.getByRole("main").getByText(after).first()).toBeVisible();
-  const { overflow, right, width } = await page.evaluate(() => ({
-    overflow: document.documentElement.scrollWidth - window.innerWidth,
-    right: document.querySelector("main")?.getBoundingClientRect().right ?? Infinity,
-    width: window.innerWidth,
-  }));
-  expect(overflow, "Activity scrolls sideways").toBeLessThanOrEqual(0);
-  expect(right, "Activity's content runs off the screen").toBeLessThanOrEqual(width);
+  await expectFitsWidth(page, "Activity");
 });
 
 test("the sidebar's Open count follows adding an item and closing one", async ({ page }) => {

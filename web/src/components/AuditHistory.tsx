@@ -63,7 +63,7 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
   // The viewer's own changes read as theirs, as the phrase reads after any name: "You added item".
   const actor = entry.actor.id === me?.user.id ? "You" : entry.actor.display_name;
   return (
-    <li className="py-2 text-sm [overflow-wrap:anywhere]">
+    <li className="py-2 text-sm wrap-anywhere">
       <p>
         <span className="font-medium">{actor}</span> {entry.phrase}
         {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}

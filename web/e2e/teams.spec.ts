@@ -2,7 +2,7 @@
 // and members. Teams with others are the server's, so most of these skip the local build.
 import type { APIRequestContext, Page } from "@playwright/test";
 
-import { addItem, createTeam, expect, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
+import { addItem, createTeam, expect, expectFitsWidth, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
 
 const SERVER_ONLY = "The local build has one user and one team.";
 
@@ -302,13 +302,7 @@ test("the team's activity fits the screen with a long team name", async ({ page,
   await page.getByRole("menuitem", { name: "Activity" }).click();
   await expect(page.getByRole("heading", { name: "Team activity", level: 1 })).toBeVisible();
   await expect(page.getByRole("main").getByText(name).first()).toBeVisible();
-  const { overflow, right, width } = await page.evaluate(() => ({
-    overflow: document.documentElement.scrollWidth - window.innerWidth,
-    right: document.querySelector("main")?.getBoundingClientRect().right ?? Infinity,
-    width: window.innerWidth,
-  }));
-  expect(overflow, "the team's activity scrolls sideways").toBeLessThanOrEqual(0);
-  expect(right, "the team's activity runs off the screen").toBeLessThanOrEqual(width);
+  await expectFitsWidth(page, "The team's activity");
 });
 
 test("leaving asks first, and the last admin is told why they can't", async ({ page, request, localBuild }) => {

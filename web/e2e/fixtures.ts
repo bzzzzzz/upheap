@@ -209,6 +209,12 @@ export async function addItem(
   if (listed) await expect(row(page, title)).toBeVisible();
 }
 
+/** Expects the page to be no wider than the screen: nothing on it makes it scroll sideways. */
+export async function expectFitsWidth(page: Page, name: string) {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow, `${name} scrolls sideways`).toBeLessThanOrEqual(0);
+}
+
 /** A page the app's navigation leads to. Tags, Parameters and Ranking are tabs of the heap's Settings. */
 export type AppPage = "Open" | "Closed" | "Activity" | "Settings" | "Tags" | "Parameters" | "Ranking" | "Account";
 
