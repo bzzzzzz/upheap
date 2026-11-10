@@ -14,6 +14,7 @@ import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker, DueRows } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { ItemMore } from "./ItemMore";
+import { AnsweredQuestions, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
 import { KindIcon, StageIcon } from "./kindIcons";
 import {
@@ -315,6 +316,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         />
       )}
 
+      <WaitsForYou heapRef={heapRef} item={item} />
+
       {entry && entry.contributors.length > 0 && <WhyItRanks entry={entry} />}
 
       <ItemSteps heapRef={heapRef} item={item} />
@@ -414,6 +417,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           {itemProblem(update.error)}
         </p>
       )}
+
+      <AnsweredQuestions item={item} />
 
       <section aria-label="History" className="flex flex-col gap-1.5 border-t border-line pt-4">
         <div className="flex items-baseline justify-between gap-3">
