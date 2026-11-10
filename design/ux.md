@@ -130,8 +130,10 @@ the values.
 The **Context** card shows the heap's context as written, with its line breaks and no rendering, or a muted line
 saying what a context holds when there is none. Any member sees an Edit button (not on an archived heap), which
 turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
-the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. Save and Cancel
-give focus back to Edit. The local build has no Context card.
+the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
+saved a different context meanwhile, it shows above the kept draft under "Saved meanwhile", and Save again replaces
+it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
+Cancel give focus back to Edit. The local build has no Context card.
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description

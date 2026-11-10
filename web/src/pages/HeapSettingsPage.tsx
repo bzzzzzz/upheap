@@ -151,7 +151,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}
       </section>
 
-      {!localDatabase && <HeapContextCard heap={data} canEdit={can("edit_context")} update={update} />}
+      {!localDatabase && <HeapContextCard team={heapRef.team} heap={data} canEdit={can("edit_context")} />}
 
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>
@@ -187,18 +187,14 @@ const CONTEXT_MAX_CHARS = 20_000;
  * settings). The draft is local state from the press of Edit, so a refetch of the heap doesn't touch it; a failed
  * save keeps the form and the draft open. Escape does nothing, so a long draft is never lost to a stray key.
  */
-function HeapContextCard({
-  heap,
-  canEdit,
-  update,
-}: {
-  heap: Heap;
-  canEdit: boolean;
-  update: ReturnType<typeof useUpdateHeap>;
-}) {
+function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; canEdit: boolean }) {
+  // Its own mutation, so resetting its error leaves the name forms' saves alone.
+  const update = useUpdateHeap(team);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  // Set when a save finds the context changed meanwhile; the heap is refetched, so `heap.context` is theirs.
+  // The context when Edit was pressed, to tell whether a conflict changed the context or only the rest of the heap.
+  const [startedFrom, setStartedFrom] = useState<string | null>(null);
+  // Set when a save finds the heap changed meanwhile; the heap is refetched, so `heap.context` is the saved one.
   const [conflicted, setConflicted] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
@@ -231,8 +227,10 @@ function HeapContextCard({
       },
     );
   };
-  const error = update.variables && "context" in update.variables.patch ? update.error : null;
+  const error = update.error;
   const conflictShown = conflicted && error instanceof ApiProblem && error.code === "version_conflict";
+  // A rename or a weights save moves the heap's version too, and leaves nothing of theirs to show.
+  const contextChanged = conflictShown && (heap.context ?? null) !== startedFrom;
 
   return (
     <section aria-labelledby="heap-context" className={cardClass}>
@@ -241,7 +239,7 @@ function HeapContextCard({
       </h2>
       {editing ? (
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-center gap-2">
-          {conflicted && (
+          {contextChanged && (
             <div className="w-full">
               <h3 className="text-sm/normal font-medium text-ink">Saved meanwhile</h3>
               <p className="mt-1 rounded-md border border-line bg-canvas p-3 text-sm/normal break-words whitespace-pre-wrap text-ink-soft">
@@ -263,10 +261,14 @@ function HeapContextCard({
           <button type="button" onClick={close} className={`${compactButtonClass.quiet} max-sm:flex-1`}>
             Cancel
           </button>
-          {conflictShown ? (
+          {contextChanged ? (
             <p role="alert" className="basis-full text-sm text-overdue-ink">
               Someone else changed the context while you were editing. Their version is above; Save again to replace it
               with yours, or Cancel to keep theirs.
+            </p>
+          ) : conflictShown ? (
+            <p role="alert" className="basis-full text-sm text-overdue-ink">
+              The heap&apos;s settings changed while you were editing, but not its context. Save again to save yours.
             </p>
           ) : (
             <ProblemText error={error} className="text-overdue-ink" />
@@ -288,6 +290,7 @@ function HeapContextCard({
               type="button"
               onClick={() => {
                 update.reset();
+                setStartedFrom(heap.context ?? null);
                 setDraft(heap.context ?? "");
                 setEditing(true);
               }}
