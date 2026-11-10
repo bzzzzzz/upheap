@@ -9,9 +9,9 @@ The design is agreed and is in [work-with-agents-design.md](work-with-agents-des
 
 ## Progress
 
-Two stages, a pull request per piece. Nothing is built yet. Commitments, rules, scenarios and interface
-entries are cited as the [design](work-with-agents-design.md) numbers them: commitments by their heading under
-Commitments, rules and scenarios as in Behaviours, W and C entries as in the Interface inventory.
+Two stages, a pull request per piece. Commitments, rules, scenarios and interface entries are cited as the
+[design](work-with-agents-design.md) numbers them: commitments by their heading under Commitments, rules and
+scenarios as in Behaviours, W and C entries as in the Interface inventory.
 
 ### Stage 1: the golden path, thin
 

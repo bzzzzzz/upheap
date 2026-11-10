@@ -437,8 +437,8 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         .map_err(|e| read.corrupt(e.to_string()))?;
     let item_kind = Kind::from_code(&row.kind).ok_or_else(|| read.corrupt(format!("unknown kind {:?}", row.kind)))?;
     let stage = Stage::from_code(&row.stage).ok_or_else(|| read.corrupt(format!("unknown stage {:?}", row.stage)))?;
-    if item_kind == Kind::Note && stage == Stage::Defined {
-        return Err(read.corrupt("a note can't be defined".to_owned()));
+    if !item_kind.allows(stage) {
+        return Err(read.corrupt(format!("a {} can't be at stage {}", item_kind.code(), stage.code())));
     }
     let need = Need::from_code(&row.need).ok_or_else(|| read.corrupt(format!("unknown need {:?}", row.need)))?;
     let due = match (row.due_at, row.due_firm) {

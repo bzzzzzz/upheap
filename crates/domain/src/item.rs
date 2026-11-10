@@ -104,6 +104,14 @@ impl Kind {
     pub fn from_code(code: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.code() == code)
     }
+
+    /// Whether an item of this kind can be at `stage`. Only a task can be defined.
+    pub const fn allows(self, stage: Stage) -> bool {
+        match self {
+            Self::Task => true,
+            Self::Note => !matches!(stage, Stage::Defined),
+        }
+    }
 }
 
 /// How far an item has been prepared. Ordered from least to most prepared.
@@ -471,10 +479,10 @@ impl Item {
         if self.is_closed() {
             return Vec::new();
         }
-        match self.kind {
-            Kind::Task => Stage::ALL.to_vec(),
-            Kind::Note => vec![Stage::AsWritten, Stage::WithContext],
-        }
+        Stage::ALL
+            .into_iter()
+            .filter(|stage| self.kind.allows(*stage))
+            .collect()
     }
 
     /// The item this one waits for, if it's blocked and one was picked.
@@ -517,7 +525,7 @@ impl Item {
             (_, Some(target)) => target,
         };
         let stage = patch.stage.unwrap_or(self.stage);
-        if kind == Kind::Note && stage == Stage::Defined {
+        if !kind.allows(stage) {
             return Err(ItemError::StageNeedsTask { item_id: self.id });
         }
 

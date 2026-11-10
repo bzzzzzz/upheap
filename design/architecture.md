@@ -567,10 +567,12 @@ section is how it maps onto this API.
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
    (`deserialize_with`), and `Factor` (contributors) and `ClosedGroup` read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
-   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. Values the server reads in
-   requests stay strict: `Need`, `Size`, `ItemState`, `Role`, and the list view's `StateMode`, `BlockedLayout` and
-   `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
-   would still stop an older CLI reading the heap's views; making them lenient needs a second type, left for when it
+   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`
+   are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
+   request when converting to the domain type, with `422 value_unknown` naming the field, rather than at parsing
+   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `ItemState`, `Role`,
+   and the list view's `StateMode`, `BlockedLayout` and `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
+   would still stop an older CLI reading the heap's views; making them lenient the way `Kind` is, left for when it
    happens.
 
 ## Testing
