@@ -448,8 +448,8 @@ item. Both are read off its items; neither is stored.
 **Heap weight.** A number each person gives each of their heaps, one by default. It says how much that heap
 matters to them against their other heaps, and is theirs alone: teammates in a shared heap each have their own.
 
-**Item.** As today, and: a **kind** (note, task or reminder), a **context**, and an **origin** when it was made
-from another item. Its work state is today's, with one more closed state:
+**Item.** As today, and: a **kind** (note, task or reminder), a **context** (the description it has today, as
+Markdown), and an **origin** when it was made from another item. Its work state is today's, with one more closed state:
 
 - open, in progress, blocked, done, won't do: as today.
 - **became**: closed because it turned into other things (several tasks, a step, a heap). It isn't done and
