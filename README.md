@@ -133,6 +133,7 @@ cargo run -p cli -- heap use personal                           # or team/heap
 cargo run -p cli -- heap show                                   # the heap's name and context
 cargo run -p cli -- heap edit --context-file context.md         # or - for stdin, or --no-context
 cargo run -p cli -- item list --effort s,m --tag infra
+cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link

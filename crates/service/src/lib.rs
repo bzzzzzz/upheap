@@ -10,6 +10,7 @@
 mod access;
 #[cfg(feature = "accounts")]
 pub mod account_history;
+pub mod across_heaps;
 mod audit;
 pub mod audit_log;
 #[cfg(feature = "accounts")]

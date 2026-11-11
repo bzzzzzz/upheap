@@ -9,30 +9,33 @@ pub(crate) mod sign_ins;
 
 use api_types::common::HeapSummaryDto;
 use api_types::common::ItemActionDto;
+use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
-use api_types::waiting::{
-    WaitingDto, WaitingHeapDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
-};
+use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto};
 use axum::Json;
 use axum::extract::State;
-use domain::Timestamp;
+use domain::heap::Heap;
+use domain::team::Team;
 use domain::user::DisplayName;
+use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use service::ServiceError;
+use service::across_heaps::AcrossHeapsEntry;
 use service::me::{HeapOverview, MeView, TeamView};
 use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::dto::{IfMatchHeader, to_question_dto, to_turn_dto};
+use crate::dto::{IfMatchHeader, to_question_dto, to_ranked_dto, to_turn_dto};
 use crate::error::Problem;
-use crate::extract::{ApiJson, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
+use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::{ApiError, AppState, Authentication};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(get_me, update_me))
         .routes(routes!(get_waiting))
+        .routes(routes!(get_items))
 }
 
 /// What `GET /me` answers for `me`. The local build's one user can't sign out or make teams, so gets no actions.
@@ -104,6 +107,16 @@ async fn update_me(
     Ok(Json(UserDto::from(&user)))
 }
 
+fn to_item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
+    ItemHeapDto {
+        id: *heap.id.as_uuid(),
+        slug: heap.slug.to_string(),
+        name: heap.name.as_str().to_owned(),
+        team_slug: team.slug.to_string(),
+        team_name: team.name.as_str().to_owned(),
+    }
+}
+
 fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> WaitingRowDto {
     let item = row.item;
     let (kind, question, stuck) = match row.subject {
@@ -135,13 +148,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             turn: row.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
             with_agent: row.with_agent,
         },
-        heap: WaitingHeapDto {
-            id: *row.heap.id.as_uuid(),
-            slug: row.heap.slug.to_string(),
-            name: row.heap.name.as_str().to_owned(),
-            team_slug: row.team.slug.to_string(),
-            team_name: row.team.name.as_str().to_owned(),
-        },
+        heap: to_item_heap_dto(&row.heap, &row.team),
         question,
         stuck,
         step_title: row.step_title.map(|title| title.as_str().to_owned()),
@@ -169,5 +176,53 @@ async fn get_waiting(
             .into_iter()
             .map(|row| to_waiting_row_dto(row, as_of, &tz))
             .collect(),
+    }))
+}
+
+/// The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.
+/// Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
+/// carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
+/// in its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in
+/// its heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,
+/// pinned first; `count` is the true total. Read-only, for any member.
+#[utoipa::path(get, path = "/me/items", tag = "me", security(("session" = [])),
+    params(AcrossHeapsQuery, TimeZoneHeader),
+    responses(
+        (status = 200, body = AcrossHeapsListDto),
+        (status = 400, description = "`invalid_query`", body = Problem),
+        (status = 401, description = "`unauthenticated`", body = Problem),
+    ))]
+async fn get_items(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiQuery(query): ApiQuery<AcrossHeapsQuery>,
+) -> Result<Json<AcrossHeapsListDto>, ApiError> {
+    let as_of = query
+        .as_of
+        .map(|ms| Timestamp::from_millis(ms).ok_or(ValidationError::TimestampOutOfRange))
+        .transpose()
+        .map_err(ServiceError::from)?;
+    let view = query.to_view().map_err(ServiceError::from)?;
+    let list = state.services.list_ranked_across_heaps(principal, as_of, &view).await?;
+    let as_of = list.as_of;
+    let group = |entries: Vec<AcrossHeapsEntry>| {
+        entries
+            .into_iter()
+            .map(|row| AcrossHeapsItemDto {
+                position: row.position,
+                heap: to_item_heap_dto(&row.heap, &row.team),
+                entry: to_ranked_dto(row.entry, as_of, &tz),
+            })
+            .collect()
+    };
+    Ok(Json(AcrossHeapsListDto {
+        as_of: as_of.as_millis(),
+        count: list.count,
+        pinned: group(list.pinned),
+        ranked: group(list.ranked),
+        blocked: group(list.blocked),
+        hidden_count: list.hidden_count,
+        in_progress_count: list.in_progress_count,
     }))
 }

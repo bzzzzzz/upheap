@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::common::{KindDto, StageDto};
 use crate::turns::{GoalDto, ReachDto};
-use crate::waiting::WaitingHeapDto;
+use crate::waiting::ItemHeapDto;
 
 /// An item an agent may work on: the item, its heap, and the turn it works to.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -25,7 +25,7 @@ pub struct WorkItemDto {
     pub kind: KindDto,
     /// Where the item is now.
     pub stage: StageDto,
-    pub heap: WaitingHeapDto,
+    pub heap: ItemHeapDto,
     /// The stable state the turn goes to.
     pub goal: GoalDto,
     pub reach: ReachDto,

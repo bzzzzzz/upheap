@@ -630,6 +630,157 @@
         ]
       }
     },
+    "/api/v1/me/items": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in\nits heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
+        "operationId": "get_items",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "description": "The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "open",
+            "in": "query",
+            "description": "Where open items go. Defaults to `shown`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "in_progress",
+            "in": "query",
+            "description": "Where in-progress items go. Defaults to `pinned`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "blocked",
+            "in": "query",
+            "description": "Where blocked items go. Defaults to `hidden`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StateMode"
+            }
+          },
+          {
+            "name": "blocked_layout",
+            "in": "query",
+            "description": "Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BlockedLayout"
+            }
+          },
+          {
+            "name": "effort",
+            "in": "query",
+            "description": "Keep items with any of these efforts, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Size"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "impact",
+            "in": "query",
+            "description": "Keep items with any of these impacts, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Size"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "need",
+            "in": "query",
+            "description": "Keep items with any of these needs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Need"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcrossHeapsList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/password": {
       "post": {
         "tags": [
@@ -6526,6 +6677,90 @@
           }
         }
       },
+      "AcrossHeapsItem": {
+        "type": "object",
+        "description": "A row of the list across heaps.",
+        "required": [
+          "position",
+          "heap",
+          "entry"
+        ],
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/RankedItem",
+            "description": "The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`\nnames what holds it back in that heap."
+          },
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap",
+            "description": "The heap the item is in, and its team."
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1-based position within its group across all heaps.",
+            "minimum": 0
+          }
+        }
+      },
+      "AcrossHeapsList": {
+        "type": "object",
+        "description": "The non-closed items of all the caller's heaps in one ranked list, grouped as the view says.",
+        "required": [
+          "as_of",
+          "count",
+          "pinned",
+          "ranked",
+          "blocked",
+          "hidden_count",
+          "in_progress_count"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The time every heap was ranked at (UTC milliseconds). Send it back as `as_of` to keep the order stable."
+          },
+          "blocked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcrossHeapsItem"
+            },
+            "description": "Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden."
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many rows the view lists in all groups, whether or not they all fit under the cap of 500 rows.",
+            "minimum": 0
+          },
+          "hidden_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items the filters keep but are left out because their state is hidden, over all heaps.",
+            "minimum": 0
+          },
+          "in_progress_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items are in progress, over all heaps, whatever the view and its filters leave out.",
+            "minimum": 0
+          },
+          "pinned": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcrossHeapsItem"
+            },
+            "description": "Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in\nits own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same\nfor now."
+          },
+          "ranked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AcrossHeapsItem"
+            },
+            "description": "Items in shown states, including blocked items when they're mixed in."
+          }
+        }
+      },
       "AddMemberRequest": {
         "type": "object",
         "required": [
@@ -8182,6 +8417,36 @@
           "take_back",
           "retry"
         ]
+      },
+      "ItemHeap": {
+        "type": "object",
+        "description": "The heap a row's item is in, and its team.",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "team_slug",
+          "team_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "team_name": {
+            "type": "string",
+            "description": "The team's name as `GET /me` shows it."
+          },
+          "team_slug": {
+            "type": "string"
+          }
+        }
       },
       "ItemOption": {
         "type": "object",
@@ -10614,36 +10879,6 @@
           }
         }
       },
-      "WaitingHeap": {
-        "type": "object",
-        "description": "The heap a row's item is in, and its team.",
-        "required": [
-          "id",
-          "slug",
-          "name",
-          "team_slug",
-          "team_name"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "team_name": {
-            "type": "string",
-            "description": "The team's name as `GET /me` shows it."
-          },
-          "team_slug": {
-            "type": "string"
-          }
-        }
-      },
       "WaitingItem": {
         "type": "object",
         "description": "The item a row is on.",
@@ -10711,7 +10946,7 @@
         ],
         "properties": {
           "heap": {
-            "$ref": "#/components/schemas/WaitingHeap"
+            "$ref": "#/components/schemas/ItemHeap"
           },
           "item": {
             "$ref": "#/components/schemas/WaitingItem"
@@ -10820,7 +11055,7 @@
             "description": "The stable state the turn goes to."
           },
           "heap": {
-            "$ref": "#/components/schemas/WaitingHeap"
+            "$ref": "#/components/schemas/ItemHeap"
           },
           "id": {
             "type": "string",

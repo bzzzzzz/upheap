@@ -187,6 +187,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.
+         *     Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
+         *     carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
+         *     in its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in
+         *     its heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,
+         *     pinned first; `count` is the true total. Read-only, for any member.
+         */
+        get: operations["get_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/password": {
         parameters: {
             query?: never;
@@ -1230,6 +1254,54 @@ export interface components {
             /** @description Pass as `cursor` for the next page; `null` on the last page. */
             next_cursor?: string | null;
         };
+        /** @description A row of the list across heaps. */
+        AcrossHeapsItem: {
+            /**
+             * @description The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`
+             *     names what holds it back in that heap.
+             */
+            entry: components["schemas"]["RankedItem"];
+            /** @description The heap the item is in, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /**
+             * Format: int32
+             * @description 1-based position within its group across all heaps.
+             */
+            position: number;
+        };
+        /** @description The non-closed items of all the caller's heaps in one ranked list, grouped as the view says. */
+        AcrossHeapsList: {
+            /**
+             * Format: int64
+             * @description The time every heap was ranked at (UTC milliseconds). Send it back as `as_of` to keep the order stable.
+             */
+            as_of: number;
+            /** @description Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden. */
+            blocked: components["schemas"]["AcrossHeapsItem"][];
+            /**
+             * Format: int32
+             * @description How many rows the view lists in all groups, whether or not they all fit under the cap of 500 rows.
+             */
+            count: number;
+            /**
+             * Format: int32
+             * @description How many items the filters keep but are left out because their state is hidden, over all heaps.
+             */
+            hidden_count: number;
+            /**
+             * Format: int32
+             * @description How many items are in progress, over all heaps, whatever the view and its filters leave out.
+             */
+            in_progress_count: number;
+            /**
+             * @description Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in
+             *     its own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same
+             *     for now.
+             */
+            pinned: components["schemas"]["AcrossHeapsItem"][];
+            /** @description Items in shown states, including blocked items when they're mixed in. */
+            ranked: components["schemas"]["AcrossHeapsItem"][];
+        };
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -1889,6 +1961,16 @@ export interface components {
          * @enum {string}
          */
         ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back" | "retry";
+        /** @description The heap a row's item is in, and its team. */
+        ItemHeap: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            /** @description The team's name as `GET /me` shows it. */
+            team_name: string;
+            team_slug: string;
+        };
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -2883,16 +2965,6 @@ export interface components {
              */
             rows: components["schemas"]["WaitingRow"][];
         };
-        /** @description The heap a row's item is in, and its team. */
-        WaitingHeap: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            slug: string;
-            /** @description The team's name as `GET /me` shows it. */
-            team_name: string;
-            team_slug: string;
-        };
         /** @description The item a row is on. */
         WaitingItem: {
             /** Format: uuid */
@@ -2911,7 +2983,7 @@ export interface components {
         };
         /** @description One thing that waits. */
         WaitingRow: {
-            heap: components["schemas"]["WaitingHeap"];
+            heap: components["schemas"]["ItemHeap"];
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
             question: null | components["schemas"]["Question"];
@@ -2950,7 +3022,7 @@ export interface components {
             failed_runs: number;
             /** @description The stable state the turn goes to. */
             goal: components["schemas"]["Goal"];
-            heap: components["schemas"]["WaitingHeap"];
+            heap: components["schemas"]["ItemHeap"];
             /** Format: uuid */
             id: string;
             /**
@@ -3411,6 +3483,63 @@ export interface operations {
                 };
             };
             /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_items: {
+        parameters: {
+            query?: {
+                /** @description The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time. */
+                as_of?: number;
+                /** @description Where open items go. Defaults to `shown`. */
+                open?: components["schemas"]["StateMode"];
+                /** @description Where in-progress items go. Defaults to `pinned`. */
+                in_progress?: components["schemas"]["StateMode"];
+                /** @description Where blocked items go. Defaults to `hidden`. */
+                blocked?: components["schemas"]["StateMode"];
+                /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
+                blocked_layout?: components["schemas"]["BlockedLayout"];
+                /** @description Keep items with any of these efforts, comma-separated. */
+                effort?: components["schemas"]["Size"][];
+                /** @description Keep items with any of these impacts, comma-separated. */
+                impact?: components["schemas"]["Size"][];
+                /** @description Keep items with any of these needs, comma-separated. */
+                need?: components["schemas"]["Need"][];
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcrossHeapsList"];
+                };
+            };
+            /** @description `invalid_query` */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -378,3 +378,155 @@ async fn sorting_by_a_parameter_needs_one_from_the_flags_or_the_view() -> Result
     expect_that!(alone.exited(2), eq(true));
     Ok(())
 }
+
+/// Ada with her three personal items, and a second heap `ada/ops` with one more. Returns the keys the server's
+/// list across heaps gives, in order, as `team/heap/key`.
+async fn ada_with_two_heaps(server: &TestServer) -> Result<(common::TestUser, Vec<String>)> {
+    let (ada, _) = ada_with_items(server).await?;
+    server
+        .send(&ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "Ops" })))
+        .await?;
+    server
+        .add_item(
+            &ada,
+            "ada/ops",
+            json!({ "title": "Patch the hosts", "need": "critical" }),
+        )
+        .await?;
+    let across = server.send(&ada, "GET", "/me/items", None).await?;
+    let names = across["ranked"]
+        .as_array()
+        .context("ranked")?
+        .iter()
+        .map(|row| {
+            format!(
+                "{}/{}/{}",
+                row["heap"]["team_slug"].as_str().unwrap_or_default(),
+                row["heap"]["slug"].as_str().unwrap_or_default(),
+                row["entry"]["item"]["key"].as_str().unwrap_or_default()
+            )
+        })
+        .collect();
+    Ok((ada, names))
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_lists_every_heap_in_one_ranked_list_with_no_heap_set() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, names) = ada_with_two_heaps(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--all-heaps"]).await;
+
+    // Assert
+    let lines: Vec<&str> = listed.stdout.lines().collect();
+    expect_that!(lines.len(), eq(4));
+    for (index, (line, name)) in lines.iter().zip(&names).enumerate() {
+        let (heap, key) = name.rsplit_once('/').context("name")?;
+        expect_that!(
+            *line,
+            starts_with(format!("{}  {key}  {heap}  ", index + 1)),
+            "line {index}"
+        );
+    }
+    expect_that!(listed.stdout, contains_substring("Patch the hosts"));
+    expect_that!(listed.stdout, contains_substring("ada/ops"));
+    expect_that!(listed.stderr, eq(""));
+    expect_that!(listed.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_quiet_prints_team_heap_key_in_order_and_json_is_the_body() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, names) = ada_with_two_heaps(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let quiet = cli.run(&["item", "list", "--all-heaps", "-q"]).await;
+    let json = cli.run(&["item", "list", "--all-heaps", "--json"]).await;
+
+    // Assert
+    expect_that!(quiet.stdout, eq(&format!("{}\n", names.join("\n"))));
+    let printed: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(printed["count"], eq(&json!(4)));
+    expect_that!(printed["ranked"].as_array().map(Vec::len), some(eq(4)));
+    // A name from `-q` is one every item command takes.
+    let shown = cli.run(&["item", "show", &names[0]]).await;
+    expect_that!(shown.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_narrows_by_text_and_by_the_view_flags() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_two_heaps(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let by_text = cli.run(&["item", "list", "--all-heaps", "patch"]).await;
+    let nothing = cli.run(&["item", "list", "--all-heaps", "zebra"]).await;
+    let critical = cli
+        .run(&["item", "list", "--all-heaps", "--need", "critical", "-q"])
+        .await;
+
+    // Assert
+    expect_that!(by_text.stdout.lines().count(), eq(1));
+    expect_that!(by_text.stdout, contains_substring("Patch the hosts"));
+    expect_that!(nothing.stdout, eq("No items in your heaps match \"zebra\".\n"));
+    expect_that!(critical.stdout.lines().count(), eq(2));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_says_so_when_there_is_nothing() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--all-heaps"]).await;
+
+    // Assert
+    expect_that!(listed.stdout, eq("No items in your heaps.\n"));
+    expect_that!(listed.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_doesnt_go_with_the_one_heap_flags_and_sends_nothing() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    for flags in [
+        &["--heap", "ada/personal"][..],
+        &["--tag", "Infra"],
+        &["--closed"],
+        &["--view", "mine"],
+        &["--sort", "due"],
+        &["--sort-parameter", "Customer"],
+    ] {
+        // Act
+        let mut args = vec!["item", "list", "--all-heaps"];
+        args.extend_from_slice(flags);
+        let listed = cli.run(&args).await;
+
+        // Assert
+        expect_that!(listed.exited(2), eq(true), "{flags:?}");
+        expect_that!(listed.stdout, eq(""), "{flags:?}");
+        expect_that!(listed.stderr, contains_substring("--all-heaps"), "{flags:?}");
+    }
+    Ok(())
+}
