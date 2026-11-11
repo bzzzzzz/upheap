@@ -1,0 +1,14 @@
+{
+  "name": "upheap",
+  "description": "Upheap's plugins for Claude Code.",
+  "owner": {
+    "name": "Upheap"
+  },
+  "plugins": [
+    {
+      "name": "upheap",
+      "source": "./plugins/upheap",
+      "description": "Add notes, tasks and reminders to Upheap from a conversation, through the upheap command-line tool."
+    }
+  ]
+}

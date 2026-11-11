@@ -150,6 +150,19 @@ The server address and default heap are kept in `config.toml` under the platform
 `UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. Exit codes: 0 done, 2 bad command line, 3
 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1 anything else.
 
+### From Claude Code
+
+This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skill adds a note, a task
+or a reminder to a heap from a conversation, through the CLI, when you run `/upheap:add` or name Upheap in a
+request. It needs `upheap` installed and signed in.
+
+```
+/plugin marketplace add bzzzzzz/upheap
+/plugin install upheap@upheap
+```
+
+The plugin is in [plugins/upheap](plugins/upheap).
+
 ## Develop
 
 ```sh
@@ -230,6 +243,7 @@ crates/cli        the upheap command-line client
 crates/server     the binary: config, startup, embedded web app
 crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
 web/              React app (TypeScript), generated API types only
+plugins/upheap    the Claude Code plugin: a skill that adds items through the CLI
 ```
 
 ## License
