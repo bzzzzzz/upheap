@@ -1,8 +1,9 @@
-import { Ellipsis, Link as LinkIcon } from "lucide-react";
+import { ChevronRight, Ellipsis, History, Link as LinkIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import type { InviteLink, Team } from "../api/client";
 import { useCreateInviteLink, useInviteLinks, useMe, useRevokeInviteLink } from "../api/queries";
+import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { inviteLink, useCopyText } from "../components/copyLink";
 import { InlineConfirm } from "../components/InlineConfirm";
@@ -57,6 +58,51 @@ export function InviteLinkButton({ making, phone }: { making: MakeInviteLink; ph
 
 const madeBy = (link: InviteLink, you: boolean) => `Made by ${you ? "you" : link.created_by.display_name}`;
 
+/** "no one joined", "1 joined" or "4 joined": how many people came in through a link. */
+const joinedPhrase = (count: number) => (count === 0 ? "no one joined" : `${count} joined`);
+
+/** The link's name for its History button, which says whose it is: "the link made by Ana Ruiz" or "…made by you". */
+const historyLabel = (link: InviteLink, you: boolean) =>
+  `History of the link made by ${you ? "you" : link.created_by.display_name} ${
+    link.state === "working" ? `that ends ${link.ends_label}` : link.created_label
+  }`;
+
+/** The History button of a link's row on a wide screen, the look of a member row's. */
+function HistoryButton({
+  link,
+  you,
+  open,
+  onToggle,
+  className = "",
+}: {
+  link: InviteLink;
+  you: boolean;
+  open: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={historyLabel(link, you)}
+      aria-expanded={open}
+      onClick={onToggle}
+      className={`${moreButtonClass} text-muted ${className}`}
+    >
+      <History aria-hidden="true" className="size-4" />
+    </button>
+  );
+}
+
+/** A link's history under its row. The join lines name the link ("joined through Ana Ruiz's invite link"). */
+function LinkHistory({ team, link, className }: { team: string; link: InviteLink; className: string }) {
+  return (
+    <div className={className}>
+      <AuditHistory scope={{ team }} entityId={link.id} showEntity />
+    </div>
+  );
+}
+
 /**
  * The team's working invite links, newest first, with Copy and Revoke (ux.md, Teams and Team). Revoke asks first: inline
  * on a wide screen, in the ⋯ sheet on a phone. Only admins see it, and the list is fetched only for them. A copy the
@@ -74,6 +120,7 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
   const working = (links.data ?? []).filter((link) => link.state === "working");
+  const past = (links.data ?? []).filter((link) => link.state !== "working");
 
   // A confirm for a link that is no longer listed (revoked, here or by another admin, or ended) goes with its row. Focus
   // moves to the heading only if it was lost with the row, which leaves it on the page's body.
@@ -130,10 +177,15 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
               onCopy: () => copyLink(link),
               onCloseManual: () => setManual(null),
             };
-            return phone ? <PhoneLinkRow key={link.id} {...props} /> : <LinkRow key={link.id} {...props} />;
+            return phone ? (
+              <PhoneLinkRow key={link.id} team={team.slug} {...props} />
+            ) : (
+              <LinkRow key={link.id} team={team.slug} {...props} />
+            );
           })}
         </ul>
       )}
+      {past.length > 0 && <PastLinks team={team.slug} links={past} meId={me?.user.id} phone={phone} />}
       <p role="status" className="text-[13px] text-ink-soft empty:sr-only">
         {copied ? "Link copied." : null}
       </p>
@@ -142,6 +194,8 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
 }
 
 type RowProps = {
+  /** The team's slug, for the link's history. */
+  team: string;
   link: InviteLink;
   you: boolean;
   isNew: boolean;
@@ -191,6 +245,7 @@ function ManualLink({ link, onClose }: { link: InviteLink; onClose: () => void }
 
 /** A link on a wide screen or a tablet: who made it and when it ends, New, Copy and Revoke. */
 function LinkRow({
+  team,
   link,
   you,
   isNew,
@@ -203,6 +258,7 @@ function LinkRow({
   onCopy,
   onCloseManual,
 }: RowProps) {
+  const [history, setHistory] = useState(false);
   const { ref: copyButton, returnFocus: returnToCopy } = useReturnFocus<HTMLButtonElement>(manual);
   const { ref: revokeButton, returnFocus: returnToRevoke } = useReturnFocus<HTMLButtonElement>(confirming);
   // The link just made takes focus on its Copy, once.
@@ -251,7 +307,9 @@ function LinkRow({
             Revoke
           </button>
         )}
+        <HistoryButton link={link} you={you} open={history} onToggle={() => setHistory((open) => !open)} />
       </div>
+      {history && <LinkHistory team={team} link={link} className="px-2 pb-2" />}
       {manual && (
         <ManualLink
           link={link}
@@ -267,6 +325,7 @@ function LinkRow({
 
 /** A link on a phone: who made it and when it ends, and a ⋯ whose sheet holds Copy link and Revoke link…. */
 function PhoneLinkRow({
+  team,
   link,
   you,
   isNew,
@@ -280,6 +339,7 @@ function PhoneLinkRow({
   onCloseManual,
 }: RowProps) {
   const [open, setOpen] = useState(false);
+  const [history, setHistory] = useState(false);
   const questionId = useId();
   const { ref: revokeRow, returnFocus: returnToRevokeRow } = useReturnFocus<HTMLButtonElement>(confirming);
   const copyButton = useRef<HTMLButtonElement>(null);
@@ -375,6 +435,15 @@ function PhoneLinkRow({
               </button>
             )}
             {manual && <ManualLink link={link} onClose={onCloseManual} />}
+            <button
+              type="button"
+              aria-expanded={history}
+              onClick={() => setHistory((shown) => !shown)}
+              className={sheetRowClass}
+            >
+              {history ? "Hide history" : "History"}
+            </button>
+            {history && <LinkHistory team={team} link={link} className="px-3 pb-2" />}
             {link.allowed_actions.includes("revoke") && (
               <button
                 ref={revokeRow}
@@ -388,6 +457,97 @@ function PhoneLinkRow({
           </div>
         )}
       </Sheet>
+    </li>
+  );
+}
+
+/**
+ * The links that ended or were revoked, under a toggle that starts closed on each visit and keeps its state through
+ * refetches. Each row says who made the link, how it ended and how many joined, and has its History.
+ */
+function PastLinks({
+  team,
+  links,
+  meId,
+  phone,
+}: {
+  team: string;
+  links: InviteLink[];
+  meId: string | undefined;
+  phone: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((shown) => !shown)}
+        className="flex min-h-9 items-center gap-1 self-start text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 max-sm:w-full"
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className={`size-3.5 transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`}
+        />
+        Past links ({links.length})
+      </button>
+      {open && (
+        <ul id={listId} className={cardClass}>
+          {links.map((link) => {
+            const props = { team, link, you: link.created_by.id === meId, revokedByYou: link.revoked_by?.id === meId };
+            return phone ? <PhonePastRow key={link.id} {...props} /> : <PastRow key={link.id} {...props} />;
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
+type PastRowProps = { team: string; link: InviteLink; you: boolean; revokedByYou: boolean };
+
+/** "revoked by Ben Ortiz 5 Nov" or "ended 9 Nov". */
+const endedPhrase = (link: InviteLink, revokedByYou: boolean) =>
+  link.state === "revoked"
+    ? `revoked by ${revokedByYou ? "you" : (link.revoked_by?.display_name ?? "someone")} ${link.revoked_label ?? ""}`.trim()
+    : `ended ${link.ends_label}`;
+
+/** A past link on a wide screen or a tablet: "Made by Ana Ruiz 2 Nov · ended 9 Nov · 4 joined", and History. */
+function PastRow({ team, link, you, revokedByYou }: PastRowProps) {
+  const [history, setHistory] = useState(false);
+  return (
+    <li className="flex flex-col">
+      <div className="flex items-center gap-3 px-2 py-[9px]">
+        <span className="min-w-0 flex-1 break-words">
+          {madeBy(link, you)} {link.created_label} · {endedPhrase(link, revokedByYou)} ·{" "}
+          {joinedPhrase(link.joined_count)}
+        </span>
+        <HistoryButton link={link} you={you} open={history} onToggle={() => setHistory((open) => !open)} />
+      </div>
+      {history && <LinkHistory team={team} link={link} className="px-2 pb-2" />}
+    </li>
+  );
+}
+
+/** A past link on a phone: who made it and when, how it ended and how many joined, and a History button. */
+function PhonePastRow({ team, link, you, revokedByYou }: PastRowProps) {
+  const [history, setHistory] = useState(false);
+  const ended = endedPhrase(link, revokedByYou);
+  return (
+    <li className="flex flex-col">
+      <div className="flex min-h-14 items-center gap-2.5 py-1 pr-1.5 pl-3.5">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="font-medium break-words">
+            {madeBy(link, you)} · {link.created_label}
+          </span>
+          <span className="text-[13px] break-words text-muted">
+            {ended.charAt(0).toUpperCase() + ended.slice(1)} · {joinedPhrase(link.joined_count)}
+          </span>
+        </div>
+        <HistoryButton link={link} you={you} open={history} onToggle={() => setHistory((open) => !open)} />
+      </div>
+      {history && <LinkHistory team={team} link={link} className="px-3.5 pb-2" />}
     </li>
   );
 }

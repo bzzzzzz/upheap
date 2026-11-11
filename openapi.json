@@ -6536,6 +6536,8 @@
           "created_at",
           "ends_at",
           "ends_label",
+          "created_label",
+          "joined_count",
           "version",
           "allowed_actions"
         ],
@@ -6555,6 +6557,10 @@
             "$ref": "#/components/schemas/UserRef",
             "description": "Who made it, by their display name now, even if they have left the team."
           },
+          "created_label": {
+            "type": "string",
+            "description": "`created_at` as a date in the request's timezone: \"today\", \"yesterday\" or \"2 Nov\"."
+          },
           "ends_at": {
             "type": "integer",
             "format": "int64",
@@ -6567,6 +6573,12 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "joined_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many people joined the team through the link, ever. People who have since left or been removed still\ncount; someone who was already a member when they opened it does not.",
+            "minimum": 0
           },
           "revoked_at": {
             "type": [
@@ -6585,6 +6597,13 @@
                 "$ref": "#/components/schemas/UserRef"
               }
             ]
+          },
+          "revoked_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`revoked_at` as a date in the request's timezone; `null` unless the link is `revoked`."
           },
           "state": {
             "$ref": "#/components/schemas/InviteLinkState"

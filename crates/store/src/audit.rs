@@ -1,10 +1,12 @@
 //! The audit log. Insert-only: there is no update or delete function, on purpose.
 
 use domain::audit::{AuditAction, EntityType};
-use domain::{HeapId, TeamId, Timestamp, UserId};
+use domain::{HeapId, InviteLinkId, TeamId, Timestamp, UserId};
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder,
+    QuerySelect, sea_query::Expr,
 };
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::StoreError;
@@ -149,6 +151,41 @@ pub async fn list_audit_entries(
         .await?
         .into_iter()
         .map(to_entry)
+        .collect()
+}
+
+/// How many people joined the team through each of `link_ids`, ever, from the `member_joined` entries recorded against
+/// the link. People who have since left still count. A link nobody joined through is absent from the map.
+///
+/// Callers pass the ids of one team's links, so the query needs no team filter and the entity index serves it.
+pub async fn count_joins_by_invite_link(
+    db: &impl ConnectionTrait,
+    link_ids: &[InviteLinkId],
+) -> Result<HashMap<InviteLinkId, u32>, StoreError> {
+    if link_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(String, i64)> = audit_log::Entity::find()
+        .select_only()
+        .column(audit_log::Column::EntityId)
+        .column_as(Expr::col(audit_log::Column::Id).count(), "joins")
+        .filter(audit_log::Column::EntityType.eq(EntityType::InviteLink.as_str()))
+        .filter(audit_log::Column::Action.eq(AuditAction::MemberJoined.as_str()))
+        .filter(audit_log::Column::EntityId.is_in(link_ids.iter().map(|id| id_to_db(id.as_uuid()))))
+        .group_by(audit_log::Column::EntityId)
+        .into_tuple()
+        .all(db)
+        .await?;
+    rows.into_iter()
+        .map(|(entity_id, joins)| {
+            let read = RowReader {
+                table: TABLE,
+                id: &entity_id,
+            };
+            let id = InviteLinkId::from_uuid(read.uuid(&entity_id)?);
+            let joins = u32::try_from(joins).map_err(|_| read.corrupt(format!("join count {joins} out of range")))?;
+            Ok((id, joins))
+        })
         .collect()
 }
 

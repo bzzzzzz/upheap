@@ -1,6 +1,6 @@
 // The Teams and Team pages (design/ux.md, Teams and Team): making a team, sharing it, and managing its heaps
 // and members. Teams with others are the server's, so most of these skip the local build.
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Browser, Page, TestInfo } from "@playwright/test";
 
 import { addItem, createTeam, expect, expectFitsWidth, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
 
@@ -517,6 +517,7 @@ test("a member sees no invite links, and Activity says who joined through one", 
     await expect(theirs.getByRole("heading", { name: /^Members/ })).toBeVisible();
     await expect(inviteLinkButton(theirs)).toHaveCount(0);
     await expect(theirs.getByRole("heading", { name: "Invite links" })).toHaveCount(0);
+    await expect(theirs.getByText("Past links")).toHaveCount(0);
   } finally {
     await other.close();
   }
@@ -569,4 +570,97 @@ test("a phone copies an older link from its ⋯ sheet", async ({ page, context, 
   await expect(links.getByRole("status")).toHaveText("Link copied.");
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toBe(`${new URL(page.url()).origin}/invite/${first}`);
+});
+
+/** Someone new joins the team of `page` through the working link with `token`, by the API, in a context of their own. */
+async function joinThroughLink(browser: Browser, testInfo: TestInfo, token: string, name: string) {
+  const other = await browser.newContext(testInfo.project.use);
+  try {
+    const registered = await other.request.post("/api/v1/auth/register", {
+      headers: { "x-csrf-protection": "1" },
+      data: { ...uniqueUser(), display_name: name, password: PASSWORD },
+    });
+    expect(registered.status()).toBe(201);
+    const joined = await other.request.post(`/api/v1/invites/${token}/join`, { headers: { "x-csrf-protection": "1" } });
+    expect(joined.status()).toBe(201);
+  } finally {
+    await other.close();
+  }
+}
+
+/** The team's links as the API lists them, newest first. */
+async function listLinks(page: Page) {
+  const listed = await page.request.get(`/api/v1${new URL(page.url()).pathname}/invite-links`);
+  return ((await listed.json()) as { links: { id: string; token: string | null }[] }).links;
+}
+
+test("an admin reads the history of a working link", async ({ page, browser, localBuild }, testInfo) => {
+  test.skip(localBuild, SERVER_ONLY);
+  await createTeam(page, "Trail");
+  await inviteLinkButton(page).click();
+  const links = inviteLinks(page);
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  const [made] = await listLinks(page);
+  await joinThroughLink(browser, testInfo, made?.token ?? "", "Sam Ortiz");
+
+  const link = links.getByRole("listitem");
+  if (isPhone(page)) {
+    await link.getByRole("button", { name: /^Actions for the link / }).click();
+    const sheet = page.getByRole("dialog", { name: "Invite link" });
+    await sheet.getByRole("button", { name: "History", exact: true }).click();
+    await expect(sheet.getByText("You made an invite link")).toBeVisible();
+    await expect(sheet.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Hide history" })).toBeVisible();
+  } else {
+    const history = link.getByRole("button", { name: /^History of the link made by you that ends / });
+    await expect(history).toHaveAttribute("aria-expanded", "false");
+    await history.click();
+    await expect(history).toHaveAttribute("aria-expanded", "true");
+    await expect(history).toBeFocused();
+    await expect(link.getByText("You made an invite link")).toBeVisible();
+    await expect(link.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
+  }
+});
+
+test("past links list a revoked link, who joined and its history", async ({ page, browser, localBuild }, testInfo) => {
+  test.skip(localBuild, SERVER_ONLY);
+  await createTeam(page, "Past");
+  const links = inviteLinks(page);
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  await inviteLinkButton(page).click();
+  await expect(links.getByRole("listitem")).toHaveCount(2);
+  await expect(links.getByText(/Past links/)).toHaveCount(0);
+
+  // Revoke the older link, after someone joins through it.
+  const [, older] = await listLinks(page);
+  await joinThroughLink(browser, testInfo, older?.token ?? "", "Sam Ortiz");
+  const revoked = await page.request.post(`/api/v1${new URL(page.url()).pathname}/invite-links/${older?.id}/revoke`, {
+    headers: { "x-csrf-protection": "1" },
+  });
+  expect(revoked.ok()).toBe(true);
+  await page.reload();
+
+  // Collapsed at first, with the working link alone in the list.
+  const toggle = links.getByRole("button", { name: "Past links (1)" });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(links.getByRole("listitem")).toHaveCount(1);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle).toBeFocused();
+  const past = links.getByRole("listitem").filter({ hasText: "revoked by you" });
+  await expect(past).toHaveCount(1);
+  if (isPhone(page)) {
+    await expect(past).toContainText("Made by you · today");
+    await expect(past).toContainText("Revoked by you today · 1 joined");
+  } else {
+    await expect(past).toContainText("Made by you today · revoked by you today · 1 joined");
+  }
+
+  // No Copy or Revoke on it; its History shows the revoke.
+  await expect(past.getByRole("button", { name: "Copy" })).toHaveCount(0);
+  await expect(past.getByRole("button", { name: "Revoke" })).toHaveCount(0);
+  await past.getByRole("button", { name: /^History of the link made by you today$/ }).click();
+  await expect(past.getByText("You revoked Tester's invite link")).toBeVisible();
+  await expect(past.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
 });

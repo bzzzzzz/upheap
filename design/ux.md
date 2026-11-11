@@ -411,6 +411,9 @@ For an admin, Members also holds **Invite link** beside the search (under it on 
 as rows ("Made by Ana · ends 16 Nov") with Copy and Revoke; the link just made is marked New and takes focus on its
 Copy. Revoking is confirmed the same way, saying the link stops at once and people who joined stay, and on a phone a
 row's actions are in its ⋯ sheet. A copy the browser refuses shows the link in a field to copy by hand.
+Every link has a **History** (made, revoked, each person who joined through it), a button on a wide row and an entry in
+a phone row's sheet. Links that ended or were revoked are under a collapsed **Past links (N)**, each saying who made
+it, when it ended or who revoked it and when, and how many joined; on a phone their History is a button on the row.
 
 ## Sign in and create account
 
