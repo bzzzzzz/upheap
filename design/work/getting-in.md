@@ -46,10 +46,11 @@ usable. Each pull request ticks its piece here.
 ### Stage 2: the rest of the first set
 
 - [x] 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
-- [ ] 2. **Password change** in Account, ending the user's other sign-ins and cancelling a reset link (Interface 8
-   without History; Product Accounts §5; Kept 9; rules 13 to 15; scenario 7).
+- [x] 2. **Password change** in Account, ending the user's other sign-ins (Interface 8 without History; Product
+   Accounts §5; Kept 9; rules 13 to 15; scenario 7).
 - [ ] 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
-   (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10).
+   (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10); a password
+   change cancels the user's working reset link.
 - [ ] 4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §7; Kept 12; rules 21
    and 22).
 
@@ -362,9 +363,12 @@ One per step that asks something new of the product. Steps that use what's built
 **Passwords**
 
 13. Changing a password needs a browser session and the current password. A command-line sign-in can't change it.
-14. A wrong current password counts as a failed sign-in attempt for the account, under the same limit.
-15. A change ends every other sign-in of the user in the same act, leaves the session it was made from, and
-    cancels the user's working reset link.
+14. A wrong current password counts as a failed sign-in attempt for the account. A change itself is limited per
+    session, to the same five per window, so someone else using up the account's attempts can't stop the owner
+    changing it.
+15. A change ends every other sign-in of the user in the same act, cancels the user's working reset link, and
+    leaves the browser it was made from signed in with a new session token, so a copy of the old cookie stops
+    working too.
 16. The operator's command makes a reset link for one existing user, named by username or by email address. It
     works for 60 minutes. Making it cancels the user's earlier working one. The link is shown once, by the command.
 17. Anyone holding a working reset link sees whose account it's for and can set a new password. Doing so uses the
@@ -402,8 +406,9 @@ Each is walked through the rules by hand, and kept as a test case.
 6. **An admin opens their own team's link.** Rule 7: they're taken to the team, stay an admin, nothing is recorded.
 7. **Someone else has a session.** A thief holds a session on Sam's account without knowing the password. Sam
    changes the password: rule 15 ends the thief's session. The thief tries first: rule 13 asks for the current
-   password, and after five wrong tries rule 14 refuses more for the window. Sam's own session keeps working
-   through it, though a new sign-in by Sam waits out the same window.
+   password, and after five wrong tries rule 14 refuses more from that session for the window. Those tries use up
+   the account's sign-in attempts, so a new sign-in by Sam waits out the window, but Sam's change from Sam's own
+   session still goes through.
 8. **Two reset links.** The operator makes one at 10:00 and, Sam having lost it, another at 10:20. Rule 16: the
    first is cancelled. Sam opens the first and is told so (rule 18), then the second at 11:15, which works.
 9. **Password remembered after all.** Sam asks for a reset, then signs in and changes the password in Account.

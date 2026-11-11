@@ -5,6 +5,9 @@
 //! Attempts are counted whether or not the address has an account, so being refused says nothing about whether
 //! one exists. Refused attempts are counted too but don't extend the window.
 //!
+//! A password change counts its attempts per session as well (see `change_password` in the service crate), so
+//! used-up sign-in attempts can't stop the owner changing the password.
+//!
 //! The limit is per address, so someone who knows an address can keep its owner out by using up its attempts at
 //! the start of every window. That is the price of limiting guesses at one account no matter where they come from;
 //! a limit per client would need the client's address, which the server behind a proxy doesn't know.

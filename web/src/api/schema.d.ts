@@ -166,6 +166,35 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Changes the caller's password. Takes the session cookie only, never a bearer token: it is the person's decision
+         *     in their browser, and a client holding a token must not be able to lock the person out of the rest.
+         * @description The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so
+         *     the browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so
+         *     does every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`
+         *     counts the other ones that were still live. The new password may equal the current one, which ends the others
+         *     without picking a new password.
+         *
+         *     Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
+         *     is checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count
+         *     doesn't block a change. A success starts both counts over.
+         */
+        post: operations["change_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/sign-ins": {
         parameters: {
             query?: never;
@@ -1041,7 +1070,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1100,6 +1129,16 @@ export interface components {
          * @enum {string}
          */
         BlockedLayout: "grouped" | "mixed";
+        /** @description What the signed-in user gives to change their password. */
+        ChangePasswordRequest: {
+            /** @description The password now in use, to show it is the user and not someone at their open browser. */
+            current_password: string;
+            /**
+             * @description The new password, named as in registration so a length problem points at the same field. At least 10
+             *     characters. May equal the current one.
+             */
+            password: string;
+        };
         /** @description One live sign-in of a client such as the CLI: the tokens it holds can still be used. */
         ClientSignIn: {
             /** @description The client: `upheap-cli`. */
@@ -1710,7 +1749,7 @@ export interface components {
          * @description An action the caller can take on their account.
          * @enum {string}
          */
-        MeAction: "sign_out" | "create_team" | "manage_sign_ins";
+        MeAction: "sign_out" | "create_team" | "manage_sign_ins" | "change_password";
         MePatchRequest: {
             /** @description 1 to 100 characters. */
             display_name: string;
@@ -1904,6 +1943,15 @@ export interface components {
              * @description 0 to 100.
              */
             weight: number;
+        };
+        /** @description What a password change did. */
+        PasswordChanged: {
+            /**
+             * Format: int32
+             * @description How many other sign-ins the change ended that were still live: other browsers, and clients such as the
+             *     command line. The browser it was made from stays signed in on a new session, and isn't counted.
+             */
+            ended_sign_ins: number;
         };
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
@@ -2838,6 +2886,68 @@ export interface operations {
             /** @description `version_required` */
             428: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Changed; sets a new session cookie, and the old one stops working */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordChanged"];
+                };
+            };
+            /** @description `unauthenticated`: no session cookie, or the request carried a bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `password`), `password_too_short` or `password_too_long` (`field` `password`). Not counted as an attempt, except `wrong_password` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
+            429: {
+                headers: {
+                    /** @description Seconds until the session may try again */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

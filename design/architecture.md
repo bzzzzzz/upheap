@@ -361,6 +361,12 @@ a fixed time.
      under many spellings, each with its own attempts.
    - There is no per-IP limit, because the server sits behind a proxy and doesn't know client addresses. Spraying
      one password across many accounts is left to the reverse proxy.
+   - A password change (`POST /me/password`, the session cookie only) takes the current password. Each try counts
+     against the same limit per session, not per account, so someone using up the account's sign-in attempts can't
+     block the owner's change; a wrong current password also adds one to the account's sign-in count. Then, in one
+     transaction with the new hash and its audit entry, it deletes all the user's sessions and opens a new one for
+     the caller, so a copy of the old cookie stops working too, revokes all their token families, and expires their
+     unused authorization codes.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 

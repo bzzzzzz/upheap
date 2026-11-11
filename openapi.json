@@ -547,6 +547,92 @@
         ]
       }
     },
+    "/api/v1/me/password": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Changes the caller's password. Takes the session cookie only, never a bearer token: it is the person's decision\nin their browser, and a client holding a token must not be able to lock the person out of the rest.",
+        "description": "The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so\nthe browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so\ndoes every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`\ncounts the other ones that were still live. The new password may equal the current one, which ends the others\nwithout picking a new password.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count\ndoesn't block a change. A success starts both counts over.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Changed; sets a new session cookie, and the old one stops working",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChanged"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: no session cookie, or the request carried a bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `password`), `password_too_short` or `password_too_long` (`field` `password`). Not counted as an attempt, except `wrong_password`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_attempts`; `Retry-After` gives the seconds to wait",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Seconds until the session may try again"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/sign-ins": {
       "get": {
         "tags": [
@@ -5630,7 +5716,8 @@
           "parameter_archived",
           "option_archived",
           "invite_link_created",
-          "invite_link_revoked"
+          "invite_link_revoked",
+          "password_changed"
         ]
       },
       "AuditChange": {
@@ -5786,6 +5873,25 @@
           "grouped",
           "mixed"
         ]
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "description": "What the signed-in user gives to change their password.",
+        "required": [
+          "current_password",
+          "password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "description": "The password now in use, to show it is the user and not someone at their open browser."
+          },
+          "password": {
+            "type": "string",
+            "description": "The new password, named as in registration so a length problem points at the same field. At least 10\ncharacters. May equal the current one."
+          }
+        },
+        "additionalProperties": false
       },
       "ClientSignIn": {
         "type": "object",
@@ -7396,7 +7502,8 @@
         "enum": [
           "sign_out",
           "create_team",
-          "manage_sign_ins"
+          "manage_sign_ins",
+          "change_password"
         ]
       },
       "MePatchRequest": {
@@ -7863,6 +7970,21 @@
           }
         },
         "additionalProperties": false
+      },
+      "PasswordChanged": {
+        "type": "object",
+        "description": "What a password change did.",
+        "required": [
+          "ended_sign_ins"
+        ],
+        "properties": {
+          "ended_sign_ins": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many other sign-ins the change ended that were still live: other browsers, and clients such as the\ncommand line. The browser it was made from stays signed in on a new session, and isn't counted.",
+            "minimum": 0
+          }
+        }
       },
       "Problem": {
         "type": "object",

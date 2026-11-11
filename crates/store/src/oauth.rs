@@ -280,6 +280,22 @@ pub async fn revoke_token_family(
     Ok(result.rows_affected == 1)
 }
 
+/// Revokes every family of the user that isn't revoked yet at `now`, and returns how many it revoked. As
+/// [`revoke_token_family`], each row waits for a refresh of its family in progress.
+pub async fn revoke_user_token_families(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let result = oauth_token_families::Entity::update_many()
+        .col_expr(oauth_token_families::Column::RevokedAt, now.as_millis().into())
+        .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(oauth_token_families::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
+}
+
 pub async fn insert_token(db: &impl ConnectionTrait, token: &NewToken<'_>) -> Result<(), StoreError> {
     let row = oauth_tokens::ActiveModel {
         token_hash: Set(token.token_hash.to_owned()),
@@ -425,6 +441,24 @@ pub async fn use_auth_code(
         .exec(db)
         .await?;
     Ok(result.rows_affected == 1)
+}
+
+/// Ends the user's authorization codes that are unused and not yet expired, by setting their expiry to `now`, and
+/// returns how many it ended. An exchange then refuses them as expired. They aren't marked used: a used code needs
+/// a token family, and presenting one again revokes that family.
+pub async fn expire_user_auth_codes(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let result = oauth_auth_codes::Entity::update_many()
+        .col_expr(oauth_auth_codes::Column::ExpiresAt, now.as_millis().into())
+        .filter(oauth_auth_codes::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(oauth_auth_codes::Column::UsedAt.is_null())
+        .filter(oauth_auth_codes::Column::ExpiresAt.gt(now.as_millis()))
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
 }
 
 /// Deletes up to `batch` authorization codes that expired by `cutoff`, used or not, and returns how many.

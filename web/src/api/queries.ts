@@ -622,6 +622,19 @@ export function useEndSignIn() {
   });
 }
 
+/**
+ * Changes the signed-in user's password. The browser is given a new session cookie, so it stays signed in and the
+ * cached data stays valid; only the Command line card's list changes, as the change ends every client sign-in.
+ */
+export function useChangePassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { current_password: string; password: string }) =>
+      unwrap(await api.POST("/api/v1/me/password", { body })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: signInsKey }),
+  });
+}
+
 export function useSignOut() {
   const queryClient = useQueryClient();
   return useMutation({

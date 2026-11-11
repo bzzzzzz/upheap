@@ -24,6 +24,9 @@ pub enum ServiceError {
     Unauthenticated,
     #[error("email or password is wrong")]
     InvalidCredentials,
+    /// The current password given to change the password is not the user's.
+    #[error("the current password is wrong")]
+    WrongPassword,
     /// The email address used up its sign-in attempts for now.
     #[error("too many sign-in attempts; try again in {}", in_minutes(*retry_after))]
     TooManySignInAttempts { retry_after: Duration },
