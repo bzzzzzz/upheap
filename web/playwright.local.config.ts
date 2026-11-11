@@ -13,8 +13,9 @@ const baseURL = `http://127.0.0.1:${port}${base}`;
 
 export default defineConfig<LocalBuildOptions>({
   testDir: "e2e",
-  // Signing up and in, connecting the CLI, joining a team by invite link, and changing the password are the server's.
-  testIgnore: ["accounts.spec.ts", "oauth.spec.ts", "invites.spec.ts", "password.spec.ts"],
+  // Signing up and in, connecting the CLI, joining a team by invite link, and changing or resetting the password are
+  // the server's.
+  testIgnore: ["accounts.spec.ts", "oauth.spec.ts", "invites.spec.ts", "password.spec.ts", "password-reset.spec.ts"],
   outputDir: "test-results/local",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

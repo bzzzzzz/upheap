@@ -454,7 +454,10 @@ A card on a wide screen and the bare form on a phone, with a Sign in / Create ac
 or username". Create account takes name, username, email and password; the username is permanent and part of every
 link, so its hint says so. A problem about an input shows under it, with focus on it; any other (wrong password, too
 many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
-to Sign in with the address carried over and focus on Password. A signed-out link says where it leads
+to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
+password?** button (`aria-expanded`) shows one line under it, "Whoever runs this Upheap server can send you a reset
+link.", and hides it again: no form and no request, since the server sends no email. Create account has none. The
+invite page's Sign in side has it too. A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
 
 ## Invite page
@@ -487,6 +490,35 @@ lists the heaps. Landing replaces the invite page in the history. The app's toas
 already in Acme."), belongs to the page they land on like any toast, and is shown once: the line is taken out of the
 history entry as it is shown, so a reload doesn't repeat it.
 
+## Reset page
+
+`/reset/{token}` is where a password reset link leads, outside the app's shell like sign-in and in the same card, the
+same way at every width, and needs no sign-in: holding the link is the permission, so a signed-in visitor sees the
+same page. The operator makes the link with the server's command (README, Resetting a password). The server decides
+the state, and the page only shows it:
+
+- **Checking the link…** while it loads.
+- **Not a reset link** for any token the server doesn't know: "This isn't a reset link.", "Check that the whole link
+  was copied, or ask whoever runs this server for a new one." The local build has no passwords and no reset
+  endpoints, so it says this for every link.
+- **Used**, **cancelled** (a newer link was made, or the password was changed: "A newer one was made, or the password
+  was changed since.") and **ended** say which, in a heading ("This reset link was already used.", "… no longer
+  works.", "… has ended."), then "Ask whoever runs this server for a new one."
+- **Working:** "Set a new password", "for Sam Ortiz (@sam)", the **New password** input (focused, hint "At least 10
+  characters."), **Set password and sign in**, and under it "This signs you out everywhere else."
+
+The states that can't be used end in an **Open Upheap** button, which leads to sign-in when signed out. A failed read
+says why, with Try again. Enter submits, and the button is disabled while it is pending and until the landing. A
+problem about the password shows under the input, marked invalid and focused, with what was typed kept: "Enter a new
+password.", "Use at least 10 characters." and "That password is too long." The link stays working after them. A `404`
+or `409` means the link changed meanwhile (another tab used it, it ended), so the page reads it again and becomes the
+state that says so; it never shows the raw error. Anything else is the server's message above the button. When the
+page changes state, focus moves to its heading. A `401` on this page never sends the user to sign-in.
+
+Setting the password signs the browser in as the link's user, whoever it was signed in as, and ends every other
+sign-in of that user. It lands on `/`, which goes to the user's heap, replacing the reset page in the history, with
+the toast "Password changed. You're signed in.", shown once like the invite page's.
+
 ## Password
 
 In the server build, Account's Password card sits between Profile and Appearance. Closed, it is the heading "Password"
@@ -505,7 +537,8 @@ A success closes the form and shows a status line under the heading, "Password c
 "… 1 other sign-in ended." or "… No other sign-ins were open.", until the form is opened again or the page is left.
 Focus goes to Change password, and the Command line card is read again, since the change ended its sign-ins. The
 browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user
-lands on sign-in at its next request. The card is there when the server's `change_password` action is, so never in
+lands on sign-in at its next request. A change also cancels the user's working reset link ([Reset page](#reset-page)),
+so a copy of it can't be used afterwards. The card is there when the server's `change_password` action is, so never in
 the local build.
 
 ## Command line
