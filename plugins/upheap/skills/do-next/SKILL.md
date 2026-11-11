@@ -113,8 +113,8 @@ say so; otherwise it goes back to open.
 ### Is it defined?
 
 A task is ready when its context says what the problem is and what done looks like. If it doesn't, define it
-first: collect as for a note, ask the person what's missing, write "Done when", add the steps that are known. Then
-go on.
+first: collect as for a note, ask the person what's missing, write "Done when", add the steps that are known. Once no
+question is open on it, set its stage to defined, if the guide shows how. Then go on.
 
 ### Can an agent do it?
 
