@@ -91,7 +91,7 @@ pub struct ChangePasswordRequestDto {
 #[schema(as = PasswordChanged)]
 pub struct PasswordChangedDto {
     /// How many other sign-ins the change ended that were still live: other browsers, and clients such as the
-    /// command line. The sign-in it was made from stays.
+    /// command line. The browser it was made from stays signed in on a new session, and isn't counted.
     pub ended_sign_ins: u32,
 }
 

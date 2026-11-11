@@ -576,8 +576,8 @@ export function useEndSignIn() {
 }
 
 /**
- * Changes the signed-in user's password. The browser session it is made from stays valid, so the cached data does
- * too; only the Command line card's list changes, as the change ends every client sign-in.
+ * Changes the signed-in user's password. The browser is given a new session cookie, so it stays signed in and the
+ * cached data stays valid; only the Command line card's list changes, as the change ends every client sign-in.
  */
 export function useChangePassword() {
   const queryClient = useQueryClient();

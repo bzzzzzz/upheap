@@ -23,7 +23,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 /// The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so
 /// the browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so
 /// does every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`
-/// counts the other ones that were still live. The new password may equal the current one, which ends the others without picking a new password.
+/// counts the other ones that were still live. The new password may equal the current one, which ends the others
+/// without picking a new password.
 ///
 /// Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
 /// is checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count
