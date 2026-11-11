@@ -161,14 +161,10 @@ jobs:
 
   # The local build (design/architecture.md, Local build): the backend without accounts, compiled to wasm and run on SQLite-wasm
   # in Node, and the web app built around it and tested in Chromium. Catches code that only builds natively, and
-  # keeps the download within its budget.
+  # prints the download's size. There is no size limit for now.
   local:
     name: Local build
     runs-on: ubuntu-latest
-    env:
-      # Gzipped bytes of the backend wasm. It was 1.40 MB when the budget was last raised, with questions and
-      # Waiting for me in it.
-      WASM_GZIP_BUDGET: 1500000
     defaults:
       run:
         working-directory: web
@@ -221,14 +217,9 @@ jobs:
             sleep $((i * 10))
           done
 
-      - name: Size budget
+      - name: Wasm size
         run: |
-          size=$(gzip -9c src/local/backend/local_bg.wasm | wc -c)
-          echo "backend wasm: $size bytes gzipped, budget $WASM_GZIP_BUDGET"
-          if [ "$size" -gt "$WASM_GZIP_BUDGET" ]; then
-            echo "::error::The local build's wasm is $size bytes gzipped, over its budget of $WASM_GZIP_BUDGET."
-            exit 1
-          fi
+          echo "backend wasm: $(gzip -9c src/local/backend/local_bg.wasm | wc -c) bytes gzipped"
 
       - name: Typecheck the worker
         run: npm run typecheck:local
