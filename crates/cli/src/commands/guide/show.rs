@@ -8,6 +8,11 @@ use clap::{Arg, Args, Command};
 
 use crate::output::Output;
 
+/// What the product is and what an agent uses it for, with a pointer to the instructions, which come last so the
+/// commands they name have been read by then. An agent that reads only the head of a long output still learns
+/// they're there.
+const INTRO: &str = include_str!("intro.txt");
+
 /// What help can't say: how things are named, what the flags print, the exit codes and the usual order of work.
 const FOR_AGENTS: &str = include_str!("agents.txt");
 
@@ -36,6 +41,8 @@ pub(crate) fn render(root: &Command) -> String {
         Some(version) => format!("{name} {version}. {about}"),
         None => format!("{name}. {about}"),
     });
+    lines.push(INTRO.trim_end().to_owned());
+    lines.push(String::new());
     lines.push(format!(
         "Every command is `{name} <category> <verb>`; <required> and [optional] inputs come before the flags."
     ));

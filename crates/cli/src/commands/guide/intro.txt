@@ -1,0 +1,9 @@
+AI agents: detailed instructions are at the end of this guide, under "For agents". Read them before the first command.
+
+Upheap is a ranked todo list. An item goes into a heap with how much it's needed, a rough size, its impact and a due
+date; the server ranks the heap, says why each item is where it is, and keeps the order current as time passes. An
+item also carries its context, a task its steps, and either one questions that wait for a person's answer.
+
+For an AI agent it is where the work, and what's known about it, is kept between sessions. The list says what to do
+next, an item's context says what's known so far, a task's steps say how far it got, and a question hands a decision
+to the person and holds the item until they answer. Write there what the next session will need.

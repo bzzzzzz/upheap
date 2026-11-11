@@ -115,9 +115,30 @@ fn the_instructions_follow_the_commands() {
 }
 
 #[gtest]
+fn the_head_says_what_upheap_is_and_where_the_instructions_are() {
+    // Arrange
+    let root = Cli::command();
+
+    // Act
+    let guide = render(&root);
+    let head: Vec<&str> = guide.lines().take(12).collect();
+
+    // Assert
+    expect_that!(head, contains(starts_with("Upheap is a ranked todo list.")));
+    expect_that!(head, contains(starts_with("For an AI agent")));
+    expect_that!(
+        head.get(1),
+        some(starts_with(
+            "AI agents: detailed instructions are at the end of this guide, under \"For agents\"."
+        ))
+    );
+    expect_that!(FOR_AGENTS, starts_with("For agents\n"));
+}
+
+#[gtest]
 fn every_command_the_instructions_name_exists_with_its_flags() {
     // Arrange
-    let named = commands_named(FOR_AGENTS);
+    let named = commands_named(&format!("{INTRO}\n{FOR_AGENTS}"));
 
     // Act
     let refused: Vec<String> = named
