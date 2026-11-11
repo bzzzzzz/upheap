@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
-import { GOAL_LABELS } from "../components/labels";
 import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
 
@@ -188,7 +187,6 @@ function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
       {` · ${row.heap.name}`}
       {team && ` · ${team}`}
       {row.step_title && ` · step “${row.step_title}”`}
-      {row.kind === "stuck" && row.stuck && ` · going to: ${GOAL_LABELS[row.stuck.goal]}`}
     </p>
   );
 }

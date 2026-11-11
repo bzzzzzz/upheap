@@ -410,6 +410,9 @@ its row, and every item whose agent turn is stuck, with the ways out.
    survive a refresh.
 5. On a phone every control is 44 px, Reply spans the width, and Done and Can't be done share a row at half the width
    each.
+6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
+   from agents and teammates show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
+   "Showing the 500 most important of n."
 7. **A stuck row** is an item whose agent turn failed three runs in a row, so the agents' queue skips it. It is ranked
    among the question rows by the same order, before that item's questions, and counts in the heading and the
    navigation. Its head line reads "Stuck · <item> · <heap> · <team>" (and, in the item, "Stuck · going to: …"); under
@@ -421,9 +424,6 @@ its row, and every item whose agent turn is stuck, with the ways out.
    someone else took the turn back or retried it first, the row leaves and a note at the top says "Someone else
    changed this meanwhile." A reply draft in another row survives a stuck row leaving. On a phone both buttons are
    44 px, sharing a row.
-6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
-   from agents and teammates show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
-   "Showing the 500 most important of n."
 
 ## Closed
 
