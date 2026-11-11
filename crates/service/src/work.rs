@@ -21,7 +21,7 @@ use domain::validation::Field;
 use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
-use crate::access::{authorize_heap, ensure_active};
+use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
 use crate::audit::describe_reached;
 use crate::items::rank_open_items;
 use crate::{Principal, ServiceError, Services};
@@ -388,6 +388,8 @@ impl Services {
         let heap = store::heaps::lock_heap(txn, item.heap_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
+        // The item may have moved to another heap while this waited for the lock.
+        find_item_locking_in(txn, item.id, heap.id, item.version).await?;
         let run = store::runs::find_run_locking(txn, run_id)
             .await?
             .ok_or(ServiceError::NotFound)?;

@@ -236,6 +236,8 @@ impl From<ClosedGroup> for ClosedGroupDto {
 #[schema(as = ItemAction)]
 pub enum ItemActionDto {
     Edit,
+    /// Move the item to another heap of its team, on `POST …/move`. Offered for an open item the caller may edit.
+    Move,
     ChangeState,
     Reopen,
     /// Make a note a task. Offered for an open note the caller may edit.
@@ -258,6 +260,7 @@ impl From<ItemAction> for ItemActionDto {
     fn from(action: ItemAction) -> Self {
         match action {
             ItemAction::Edit => Self::Edit,
+            ItemAction::Move => Self::Move,
             ItemAction::ChangeState => Self::ChangeState,
             ItemAction::Reopen => Self::Reopen,
             ItemAction::MakeTask => Self::MakeTask,

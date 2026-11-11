@@ -13,7 +13,7 @@ use domain::text::Context;
 use domain::{ItemId, QuestionId, Version};
 use store::{StoreError, TransactionTrait};
 
-use crate::access::authorize_heap_write;
+use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::{describe_new_question, describe_reply};
 use crate::items::{ItemChildren, ItemView, build_item_view, in_run};
 use crate::{Principal, ServiceError, Services};
@@ -40,9 +40,7 @@ impl Services {
         self.check_run_write(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
         check_questions_editable(&item)?;
         let questions = store::questions::list_questions_locking(&txn, item.id).await?;
         let step_numbers: Vec<_> = if fields.step.is_some() {
@@ -113,9 +111,7 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
         let questions = store::questions::list_questions_locking(&txn, item.id).await?;
         let current = questions
             .iter()

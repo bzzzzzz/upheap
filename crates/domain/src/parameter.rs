@@ -55,7 +55,8 @@ impl OptionLabel {
         &self.0
     }
 
-    fn to_key(&self) -> String {
+    /// The form labels are compared on: lowercase, so "High" and "high" are the same option.
+    pub fn to_key(&self) -> String {
         self.0.to_lowercase()
     }
 }
