@@ -29,6 +29,29 @@ impl HeapApi<'_> {
         }
     }
 
+    /// `POST` of `body` to `action` of the item with `key`, which is at `version`. A refusal is reported like
+    /// [`patch_item`](Self::patch_item)'s.
+    pub async fn post_item_action(
+        &self,
+        key: &str,
+        action: &str,
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<ItemDto>, CliError> {
+        match self
+            .client
+            .post_at_version(&self.path(&["items", key, action]), body, version, self.token)
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_stale_or_closed(&source) => Err(CliError::ItemRefused {
+                name: format!("{}/{key}", self.heap),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// `PATCH` of `body` to the item with `key`, which is at `version`. A stale or closed item's refusal names the
     /// item as `team/heap/key`, so the hint built from it works whatever heap is the default and is safe to paste.
     pub async fn patch_item(

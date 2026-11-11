@@ -14,7 +14,7 @@ use cli::{Browser, Deps, Environment, MemoryTokenStore, StoredTokens, TokenStore
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
 use serde_json::{Value, json};
-use service::{ManualClock, Services, Settings};
+use service::{ManualClock, RandomSource, Services, Settings, SystemRandom};
 
 /// 2027-01-01T12:00:00Z, the server's clock.
 pub const START: i64 = 1_798_804_800_000;
@@ -97,6 +97,11 @@ pub struct TestUser {
 
 impl TestServer {
     pub async fn start() -> Result<Self> {
+        Self::start_with_random(Arc::new(SystemRandom)).await
+    }
+
+    /// [`TestServer::start`], with item keys drawn from `random`.
+    pub async fn start_with_random(random: Arc<dyn RandomSource>) -> Result<Self> {
         init_tracing();
         let db = store::testing::fresh_database().await?;
         let clock = Arc::new(ManualClock::new(
@@ -110,7 +115,8 @@ impl TestServer {
                 session_ttl: Duration::from_days(30),
                 sign_in_limit: SignInLimit::DEFAULT,
             },
-        );
+        )
+        .with_random(random);
         let router = api::router(AppState {
             services,
             authentication: Authentication::Sessions(CookieSettings {

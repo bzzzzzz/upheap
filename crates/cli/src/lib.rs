@@ -175,6 +175,8 @@ enum ItemCommand {
     Reopen(commands::item::state::StateArgs),
     /// Make a note a task, in place: it keeps its key, age and history
     ToTask(commands::item::state::StateArgs),
+    /// Move an item to another heap of its team, with its context, steps, questions and history
+    Move(commands::item::move_item::MoveArgs),
 }
 
 #[derive(Subcommand)]
@@ -263,6 +265,7 @@ impl Command {
                 | ItemCommand::ToTask(args),
             ) => &args.shared,
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
+            Self::Item(ItemCommand::Move(args)) => &args.shared,
             Self::Step(StepCommand::Add(args)) => &args.shared,
             Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
@@ -389,6 +392,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
         Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
         Command::Item(ItemCommand::ToTask(args)) => commands::item::to_task::run(args, app, out).await,
+        Command::Item(ItemCommand::Move(args)) => commands::item::move_item::run(args, app, out).await,
         Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
