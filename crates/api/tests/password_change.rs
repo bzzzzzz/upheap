@@ -52,7 +52,7 @@ fn problem_code(response: &TestResponse) -> &str {
 
 #[gtest]
 #[tokio::test]
-async fn a_change_ends_the_other_sessions_and_cli_sign_ins_and_keeps_the_callers() -> Result<()> {
+async fn a_change_ends_the_other_sessions_and_cli_sign_ins_and_replaces_the_callers() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, _) = app.register(EMAIL).await?;
@@ -61,7 +61,9 @@ async fn a_change_ends_the_other_sessions_and_cli_sign_ins_and_keeps_the_callers
 
     // Act
     let changed = change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
-    let own = me(&app, &session).await?;
+    let new_session = changed.session_cookie.clone();
+    let old_own = me(&app, &session).await?;
+    let own = me(&app, new_session.as_deref().unwrap_or_default()).await?;
     let ended_session = me(&app, &other).await?;
     let ended_access = app.send_bearer(Method::GET, "/api/v1/me", &access, None).await?;
     let refreshed = app
@@ -80,6 +82,8 @@ async fn a_change_ends_the_other_sessions_and_cli_sign_ins_and_keeps_the_callers
     // Assert
     expect_that!(changed.status, eq(StatusCode::OK));
     expect_that!(changed.body, eq(&json!({ "ended_sign_ins": 2 })));
+    expect_that!(new_session, some(not(eq(&session))));
+    expect_that!(old_own.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(own.status, eq(StatusCode::OK));
     expect_that!(ended_session.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(ended_access.status, eq(StatusCode::UNAUTHORIZED));
@@ -358,7 +362,10 @@ async fn the_change_is_recorded_in_the_personal_team_only() -> Result<()> {
     let user_id = own.body["user"]["id"].as_str().context("no user")?.to_owned();
 
     // Act
-    change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
+    let session = change(&app, &session, PASSWORD, NEW_PASSWORD)
+        .await?
+        .session_cookie
+        .context("the change set no cookie")?;
     let personal = app
         .send(
             Method::GET,

@@ -366,8 +366,9 @@ One per step that asks something new of the product. Steps that use what's built
 14. A wrong current password counts as a failed sign-in attempt for the account. A change itself is limited per
     session, to the same five per window, so someone else using up the account's attempts can't stop the owner
     changing it.
-15. A change ends every other sign-in of the user in the same act, leaves the session it was made from, and
-    cancels the user's working reset link.
+15. A change ends every other sign-in of the user in the same act, cancels the user's working reset link, and
+    leaves the browser it was made from signed in with a new session token, so a copy of the old cookie stops
+    working too.
 16. The operator's command makes a reset link for one existing user, named by username or by email address. It
     works for 60 minutes. Making it cancels the user's earlier working one. The link is shown once, by the command.
 17. Anyone holding a working reset link sees whose account it's for and can set a new password. Doing so uses the

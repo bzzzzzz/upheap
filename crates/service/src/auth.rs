@@ -61,8 +61,10 @@ pub struct SessionGrant {
 }
 
 /// The outcome of a password change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct PasswordChanged {
+    /// The caller's new session. The one the change was made from has ended.
+    pub session: SessionGrant,
     /// How many other sign-ins the change ended that were still live: other web sessions, and sign-ins by clients
     /// such as the CLI.
     pub ended_sign_ins: u32,
@@ -258,9 +260,10 @@ impl Services {
 
     /// Changes the caller's password, ends their other sign-ins and records it, in one transaction.
     ///
-    /// `session` is the caller's own web session, which stays. Every other session of the user is deleted and every
-    /// token family of theirs is revoked, so nothing signed in with the old password keeps working. The new password
-    /// may equal the current one: that ends the other sign-ins all the same.
+    /// `session` is the caller's own web session. It is replaced: every session of the user is deleted, that one
+    /// included, and a new one is opened in the same transaction, so a copy of the old cookie stops working too.
+    /// Every token family of theirs is revoked, so nothing signed in with the old password keeps working. The new
+    /// password may equal the current one: that ends the other sign-ins all the same.
     ///
     /// Empty or unacceptable input fails with [`ValidationError`] before anything is counted. Then the attempt is
     /// counted per session (`domain::sign_in`, the same limit as sign-in), and one past the limit fails with
@@ -314,15 +317,18 @@ impl Services {
             .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;
 
         let now = self.now();
-        let keep = session.to_hash();
+        let old_hash = session.to_hash();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         // The personal team first, as `update_display_name` takes team rows before the user's.
         store::teams::lock_team(&txn, personal_team.id).await?;
         // The caller's session may have ended while the password was being checked.
-        if store::sessions::find_session_user(&txn, &keep, now).await?.is_none() {
+        if store::sessions::find_session_user(&txn, &old_hash, now)
+            .await?
+            .is_none()
+        {
             return Err(ServiceError::Unauthenticated);
         }
-        let live_sessions = store::sessions::count_live_sessions_except(&txn, user.id, &keep, now).await?;
+        let live_sessions = store::sessions::count_live_sessions_except(&txn, user.id, &old_hash, now).await?;
         let live_clients = store::oauth::list_live_token_families(&txn, user.id, now).await?.len();
         let ended_sign_ins = u32::try_from(live_sessions.saturating_add(live_clients as u64)).unwrap_or(u32::MAX);
         // Only while the stored hash is the one `current` was verified against. If another change got in first,
@@ -331,7 +337,8 @@ impl Services {
             return Err(ServiceError::WrongPassword);
         }
         store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
-        store::sessions::delete_sessions_except(&txn, user.id, &keep).await?;
+        store::sessions::delete_user_sessions(&txn, user.id).await?;
+        let session = self.open_session(&txn, user.clone(), now).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
             principal,
@@ -352,7 +359,10 @@ impl Services {
             }
         }
         tracing::info!(user_id = %user.id, ended_sign_ins, "password changed");
-        Ok(PasswordChanged { ended_sign_ins })
+        Ok(PasswordChanged {
+            session,
+            ended_sign_ins,
+        })
     }
 
     /// Resolves a session token to its user. Fails with [`ServiceError::Unauthenticated`] when the session is

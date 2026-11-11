@@ -58,6 +58,9 @@ enum Target {
     ParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
+    /// An account of its own, signed in when the caller is, so a request that replaces the caller's session (a
+    /// password change) doesn't end the caller's shared one.
+    OwnAccount,
     /// The shared team, with its version for `If-Match`.
     Team,
     /// A new user, added to the shared team as a member, in `{username}`.
@@ -127,8 +130,7 @@ enum RequestBody {
     AddMember,
     Promote,
     DisplayName,
-    /// The caller's password, as both the current and the new one: the change succeeds and leaves the password every
-    /// other call signs in with.
+    /// The password of the account from [`Target::OwnAccount`], as both the current and the new one.
     ChangePassword,
     /// The CLI's authorization request.
     Authorization,
@@ -272,7 +274,7 @@ fn endpoints() -> Vec<Endpoint> {
             Method::POST,
             "/me/password",
             SignedIn,
-            Target::Nothing,
+            Target::OwnAccount,
             RequestBody::ChangePassword,
             StatusCode::OK,
         ),
@@ -1228,6 +1230,12 @@ impl World {
                     .as_str()
                     .context("parameter has no option")?;
                 path = path.replace("{option_id}", id);
+            }
+            Target::OwnAccount => {
+                session = match account {
+                    Some(_) => Some(self.new_user().await?.0),
+                    None => None,
+                };
             }
             Target::FreshSession => {
                 session = match account {

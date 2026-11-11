@@ -428,7 +428,7 @@ buttons. Cancel and Escape close the form, clear it and give focus back to Chang
 A success closes the form and shows a status line under the heading, "Password changed. 2 other sign-ins ended.",
 "… 1 other sign-in ended." or "… No other sign-ins were open.", until the form is opened again or the page is left.
 Focus goes to Change password, and the Command line card is read again, since the change ended its sign-ins. The
-browser the change was made in stays signed in; another browser of the user lands on sign-in at its next request. The
+browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user lands on sign-in at its next request. The
 card is there when the server's `change_password` action is, so never in the local build.
 
 ## Command line

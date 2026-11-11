@@ -63,17 +63,12 @@ pub async fn count_live_sessions_except(
     Ok(count)
 }
 
-/// Ends every session of the user except `keep_hash`, expired ones included, and returns how many rows it deleted.
+/// Ends every session of the user, expired ones included, and returns how many rows it deleted.
 /// Without an index on `sessions.user_id` (SQLite and Postgres have none) this scans the whole sessions table, not
 /// just the user's sessions; a password change is rare enough for that.
-pub async fn delete_sessions_except(
-    db: &impl ConnectionTrait,
-    user_id: UserId,
-    keep_hash: &str,
-) -> Result<u64, StoreError> {
+pub async fn delete_user_sessions(db: &impl ConnectionTrait, user_id: UserId) -> Result<u64, StoreError> {
     let result = sessions::Entity::delete_many()
         .filter(sessions::Column::UserId.eq(id_to_db(user_id.as_uuid())))
-        .filter(sessions::Column::TokenHash.ne(keep_hash))
         .exec(db)
         .await?;
     Ok(result.rows_affected)
