@@ -204,20 +204,65 @@ async fn heap_show_prints_the_context_indented_or_how_to_write_one() -> Result<(
     // Assert
     expect_that!(
         written.stdout,
-        eq("ops · Infrastructure\n\nContext\n  Docs: the wiki\n      Review on GitHub\n")
+        eq(
+            "ops · Infrastructure · agents prepare new notes: off\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+        )
     );
     expect_that!(
         empty.stdout,
         eq(
-            "backlog · Infrastructure\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
+            "backlog · Infrastructure · agents prepare new notes: off\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
         )
     );
-    expect_that!(default.stdout, starts_with("Personal · Ada\n\nContext\n"));
-    expect_that!(archived.stdout, starts_with("old · Ada · archived\n"));
+    expect_that!(
+        default.stdout,
+        starts_with("Personal · Ada · agents prepare new notes: off\n\nContext\n")
+    );
+    expect_that!(
+        archived.stdout,
+        starts_with("old · Ada · archived · agents prepare new notes: off\n")
+    );
     let heap: serde_json::Value = serde_json::from_str(&json.stdout)?;
     expect_that!(heap["slug"].as_str(), some(eq("old")));
     expect_that!(quiet.stdout, eq(""));
     expect_that!(unknown.exited(3), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_show_says_whether_agents_prepare_new_notes() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let ops = server.send(&ada, "GET", "/teams/infra/heaps/ops", None).await?;
+    server
+        .send_with(
+            &ada,
+            "PATCH",
+            "/teams/infra/heaps/ops",
+            Some(json!({ "agents_prepare": true })),
+            &[("if-match", &ops["version"].to_string())],
+        )
+        .await?;
+
+    // Act
+    let on = cli.run(&["heap", "show", "infra/ops"]).await;
+    let off = cli.run(&["heap", "show", "infra/backlog"]).await;
+    let json = cli.run(&["heap", "show", "infra/ops", "--json"]).await;
+
+    // Assert
+    expect_that!(
+        on.stdout,
+        starts_with("ops · Infrastructure · agents prepare new notes: on\n")
+    );
+    expect_that!(
+        off.stdout,
+        starts_with("backlog · Infrastructure · agents prepare new notes: off\n")
+    );
+    let heap: serde_json::Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(heap["agents_prepare"], eq(&json!(true)));
     Ok(())
 }
 
@@ -251,7 +296,9 @@ async fn heap_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Re
     expect_that!(from_file.stdout, eq("Updated the context of infra/ops.\n"));
     expect_that!(
         shown.stdout,
-        eq("ops · Infrastructure\n\nContext\n  Docs: the wiki\n      Review on GitHub\n")
+        eq(
+            "ops · Infrastructure · agents prepare new notes: off\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+        )
     );
     expect_that!(again.stdout, eq("No change to infra/ops.\n"));
     let heap: serde_json::Value = serde_json::from_str(&from_stdin.stdout)?;

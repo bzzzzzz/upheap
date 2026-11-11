@@ -4,6 +4,7 @@ use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
     ItemDto, KindDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
+use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
@@ -79,6 +80,9 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     let lines = out.render_table(&fields(item));
     for line in &lines {
         out.table_line("", line)?;
+    }
+    if let Some(turn) = &item.turn {
+        out.line(&turn_text(turn))?;
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
@@ -213,6 +217,7 @@ const fn question_state_text(state: QuestionStateDto) -> &'static str {
     match state {
         QuestionStateDto::Open => "open",
         QuestionStateDto::Answered => "answered",
+        QuestionStateDto::Withdrawn => "withdrawn",
         QuestionStateDto::Unknown => "unknown",
     }
 }
@@ -223,7 +228,12 @@ fn fields(item: &ItemDto) -> Vec<Vec<Cell>> {
     if let Some(stage) = item.stage {
         rows.push(vec![Cell::new("Stage"), Cell::new(stage_text(stage))]);
     }
-    rows.push(vec![Cell::new("State"), Cell::new(state_text(item.state))]);
+    let state = if item.with_agent {
+        format!("{} · with an agent", state_text(item.state))
+    } else {
+        state_text(item.state).to_owned()
+    };
+    rows.push(vec![Cell::new("State"), Cell::new(state)]);
     rows.push(vec![Cell::new("Need"), Cell::new(need_text(item.need))]);
     if let Some(effort) = item.effort {
         rows.push(vec![Cell::new("Effort"), Cell::new(size_text(effort))]);
@@ -279,6 +289,32 @@ fn fields(item: &ItemDto) -> Vec<Vec<Cell>> {
         ]);
     }
     rows
+}
+
+/// The open turn as one line: where it goes, the reach when it is all the way, the person's line in quotes, and
+/// whether the heap prepared it. `Turn: to defined, all the way. "Use the new CA." Prepared on add.`
+fn turn_text(turn: &TurnDto) -> String {
+    let mut text = format!("Turn: to {}", goal_text(turn.goal));
+    if turn.reach == ReachDto::AllTheWay {
+        text.push_str(", all the way");
+    }
+    text.push('.');
+    if let Some(line) = turn.line.as_deref().filter(|line| !line.is_empty()) {
+        text.push_str(&format!(" \"{}\".", line.replace('\n', " ")));
+    }
+    if turn.source == TurnSourceDto::Prepare {
+        text.push_str(" Prepared on add.");
+    }
+    text
+}
+
+const fn goal_text(goal: GoalDto) -> &'static str {
+    match goal {
+        GoalDto::WithContext => "with context",
+        GoalDto::Defined => "defined",
+        GoalDto::Done => "done",
+        GoalDto::Unknown => "unknown",
+    }
 }
 
 /// `label`, followed by `by <name>` when the server says who.

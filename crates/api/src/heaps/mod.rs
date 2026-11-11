@@ -9,6 +9,7 @@ use axum::extract::State;
 use domain::handle::Handle;
 use domain::heap::HeapPolicyPatch;
 use domain::parameter::Weight;
+use domain::permission::{HeapAction, Permission};
 use domain::text::{Context, Name};
 use domain::validation::Field;
 use domain::{ParameterId, Version};
@@ -41,11 +42,18 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         slug: heap.slug.to_string(),
         name: heap.name.as_str().to_owned(),
         context: heap.context.as_ref().map(|context| context.as_str().to_owned()),
+        agents_prepare: heap.agents_prepare,
         archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
         version: heap.version.get(),
-        allowed_actions: view.allowed_actions.into_iter().map(HeapActionDto::from).collect(),
+        // Whether agents prepare new notes is set only in a build that has agents.
+        allowed_actions: view
+            .allowed_actions
+            .into_iter()
+            .filter(|action| cfg!(feature = "agents") || *action != HeapAction::SetAgentsPrepare)
+            .map(HeapActionDto::from)
+            .collect(),
     }
 }
 
@@ -62,6 +70,7 @@ fn to_heap_patch(body: &HeapPatchDto) -> Result<HeapPatch, ServiceError> {
             Some(None) => Some(None),
             Some(Some(raw)) => Some(Context::parse(raw)?),
         },
+        agents_prepare: body.agents_prepare,
     })
 }
 
@@ -104,8 +113,8 @@ async fn get_heap(State(state): State<AppState>, path: HeapPath) -> Result<Json<
     Ok(Json(to_heap_dto(view)))
 }
 
-/// Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and
-/// slug need an admin, the context any member. A body that sets a field the caller may not change is refused whole
+/// Renames the heap, changes its slug, writes its context or sets whether agents prepare new notes; send the heap's
+/// `version` in `If-Match`. The name, slug and `agents_prepare` need an admin, the context any member. A body that sets a field the caller may not change is refused whole
 /// with 403, and saves nothing. A save that changes nothing succeeds and keeps the version.
 #[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}", tag = "heaps", security(("session" = [])),
     params(HeapParams, IfMatchHeader), request_body = HeapPatchDto,
@@ -123,6 +132,11 @@ async fn update_heap(
     IfMatch(expected): IfMatch,
     ApiJson(body): ApiJson<HeapPatchDto>,
 ) -> Result<Json<HeapDto>, ApiError> {
+    // A build without agents offers no such setting, so a body that sets it is refused like any field the caller may
+    // not change.
+    if !cfg!(feature = "agents") && body.agents_prepare.is_some() {
+        return Err(ServiceError::Forbidden(Permission::ConfigureHeap).into());
+    }
     let view = state
         .services
         .update_heap(path.principal, path.heap.heap_id, to_heap_patch(&body)?, expected)

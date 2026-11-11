@@ -15,6 +15,7 @@ use domain::parameter::ParameterError;
 use domain::question::QuestionError;
 use domain::step::StepError;
 use domain::team::TeamError;
+use domain::turn::TurnError;
 use domain::validation::Field;
 use service::ServiceError;
 use store_error::StoreErrorKind;
@@ -200,6 +201,12 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::Question(QuestionError::Answered { .. }) => {
             simple(StatusCode::CONFLICT, "question_answered", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::Withdrawn { .. }) => {
+            simple(StatusCode::CONFLICT, "question_withdrawn", Category::Conflict)
+        }
+        ServiceError::Turn(TurnError::AlreadyOpen { .. }) => {
+            simple(StatusCode::CONFLICT, "turn_open", Category::Conflict)
         }
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),

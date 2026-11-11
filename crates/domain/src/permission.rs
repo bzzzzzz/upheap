@@ -69,6 +69,9 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::StepUpdated
         | AuditAction::QuestionAsked
         | AuditAction::QuestionAnswered
+        | AuditAction::QuestionWithdrawn
+        | AuditAction::TurnOpened
+        | AuditAction::TurnTakenBack
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewCreated
@@ -104,10 +107,20 @@ pub enum ItemAction {
     AddStep,
     /// Ask a question or make a request on an open item.
     AskQuestion,
+    /// Send an open item that no agent has to an agent.
+    SendToAgent,
+    /// Take an open item back from the agent that has it.
+    TakeBack,
 }
 
-/// What `role` can do with `item` in `heap` at `now`. Empty for archived heaps.
-pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp) -> Vec<ItemAction> {
+/// What `role` can do with `item` in `heap` at `now`, given whether it has an open turn. Empty for archived heaps.
+pub fn allowed_item_actions(
+    item: &Item,
+    heap: &Heap,
+    role: Role,
+    has_open_turn: bool,
+    now: Timestamp,
+) -> Vec<ItemAction> {
     if heap.is_archived() || !Permission::EditItems.is_granted_to(role) {
         return Vec::new();
     }
@@ -118,6 +131,11 @@ pub fn allowed_item_actions(item: &Item, heap: &Heap, role: Role, now: Timestamp
             Kind::Task => actions.push(ItemAction::AddStep),
         }
         actions.push(ItemAction::AskQuestion);
+        actions.push(if has_open_turn {
+            ItemAction::TakeBack
+        } else {
+            ItemAction::SendToAgent
+        });
         return actions;
     }
     if item.can_reopen(now) {
@@ -411,6 +429,8 @@ pub enum HeapAction {
     EditContext,
     /// Change the heap's ranking weights, and its parameters' weights, together. Not offered while it is archived.
     EditWeights,
+    /// Set whether agents prepare the notes added to the heap. Not offered while it is archived.
+    SetAgentsPrepare,
     /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
     /// [`audit_permission`]).
     ViewHistory,
@@ -436,6 +456,7 @@ pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
     }
     if can_configure(heap, role) {
         actions.push(HeapAction::EditWeights);
+        actions.push(HeapAction::SetAgentsPrepare);
     }
     actions.push(HeapAction::ViewHistory);
     actions
@@ -481,6 +502,7 @@ mod tests {
             name: Name::parse("Ops").expect("valid"),
             policy: crate::heap::HeapPolicy::default(),
             context: None,
+            agents_prepare: false,
             archived_at: archived.then_some(Timestamp::EPOCH),
             version: Version::INITIAL,
         }
@@ -495,6 +517,7 @@ mod tests {
                 eq(&HeapAction::Archive),
                 eq(&HeapAction::EditContext),
                 eq(&HeapAction::EditWeights),
+                eq(&HeapAction::SetAgentsPrepare),
                 eq(&HeapAction::ViewHistory)
             ]
         );
@@ -639,7 +662,7 @@ mod tests {
     fn only_an_open_note_can_be_made_a_task_by_someone_who_can_edit() {
         let now = Timestamp::EPOCH;
         let has_make_task = |item: &Item, heap: &Heap, role| {
-            allowed_item_actions(item, heap, role, now).contains(&ItemAction::MakeTask)
+            allowed_item_actions(item, heap, role, false, now).contains(&ItemAction::MakeTask)
         };
 
         expect_that!(
@@ -664,7 +687,7 @@ mod tests {
     fn steps_are_added_to_an_open_task_and_edited_while_the_item_is_open() {
         let now = Timestamp::EPOCH;
         let has_add_step = |item: &Item, heap: &Heap| {
-            allowed_item_actions(item, heap, Role::Member, now).contains(&ItemAction::AddStep)
+            allowed_item_actions(item, heap, Role::Member, false, now).contains(&ItemAction::AddStep)
         };
 
         expect_that!(has_add_step(&item(Kind::Task, false), &heap(false)), eq(true));
@@ -687,10 +710,54 @@ mod tests {
     }
 
     #[gtest]
+    fn an_open_item_is_sent_without_a_turn_and_taken_back_with_one() {
+        let now = Timestamp::EPOCH;
+        let actions = |item: &Item, heap: &Heap, has_turn| {
+            let actions = allowed_item_actions(item, heap, Role::Member, has_turn, now);
+            (
+                actions.contains(&ItemAction::SendToAgent),
+                actions.contains(&ItemAction::TakeBack),
+            )
+        };
+
+        expect_that!(
+            actions(&item(Kind::Note, false), &heap(false), false),
+            eq((true, false))
+        );
+        expect_that!(actions(&item(Kind::Task, false), &heap(false), true), eq((false, true)));
+        expect_that!(
+            actions(&item(Kind::Task, true), &heap(false), false),
+            eq((false, false))
+        );
+        expect_that!(actions(&item(Kind::Task, true), &heap(false), true), eq((false, false)));
+        expect_that!(
+            actions(&item(Kind::Task, false), &heap(true), false),
+            eq((false, false))
+        );
+        expect_that!(actions(&item(Kind::Task, false), &heap(true), true), eq((false, false)));
+    }
+
+    #[gtest]
+    fn only_an_admin_sets_agents_prepare_on_an_active_heap() {
+        expect_that!(
+            allowed_heap_actions(&heap(false), Role::Admin),
+            contains(eq(&HeapAction::SetAgentsPrepare))
+        );
+        expect_that!(
+            allowed_heap_actions(&heap(false), Role::Member),
+            not(contains(eq(&HeapAction::SetAgentsPrepare)))
+        );
+        expect_that!(
+            allowed_heap_actions(&heap(true), Role::Admin),
+            not(contains(eq(&HeapAction::SetAgentsPrepare)))
+        );
+    }
+
+    #[gtest]
     fn a_question_is_asked_on_an_open_item_and_replied_to_while_open() {
         let now = Timestamp::EPOCH;
         let can_ask = |item: &Item, heap: &Heap| {
-            allowed_item_actions(item, heap, Role::Member, now).contains(&ItemAction::AskQuestion)
+            allowed_item_actions(item, heap, Role::Member, false, now).contains(&ItemAction::AskQuestion)
         };
 
         expect_that!(can_ask(&item(Kind::Note, false), &heap(false)), eq(true));
@@ -705,6 +772,10 @@ mod tests {
         );
         expect_that!(
             reply(&item(Kind::Task, false), &heap(false), QuestionState::Answered),
+            is_empty()
+        );
+        expect_that!(
+            reply(&item(Kind::Task, false), &heap(false), QuestionState::Withdrawn),
             is_empty()
         );
         expect_that!(

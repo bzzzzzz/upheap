@@ -5,6 +5,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::{KindDto, QuestionDto, StageDto};
+use crate::turns::TurnDto;
 
 /// What waits for the caller: every open question on an open item in their active heaps, most important first.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -56,6 +57,16 @@ pub struct WaitingItemDto {
     pub kind: KindDto,
     /// `null` in a build without the stage (the static, single-user one).
     pub stage: Option<StageDto>,
+    /// The item's open turn, if an agent was sent it and it hasn't been taken back.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub turn: Option<TurnDto>,
+    /// Whether an agent has the item: always `false` here, as a row's item waits for the caller.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub with_agent: bool,
 }
 
 /// The heap a row's item is in, and its team.

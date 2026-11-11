@@ -61,6 +61,7 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
             "archive",
             "edit_context",
             "edit_weights",
+            "set_agents_prepare",
             "view_history"
         ]))
     );
@@ -386,6 +387,7 @@ async fn an_admin_saves_the_name_and_context_in_one_version_with_two_entries() -
             "archive",
             "edit_context",
             "edit_weights",
+            "set_agents_prepare",
             "view_history"
         ]))
     );

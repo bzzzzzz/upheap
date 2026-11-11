@@ -1,7 +1,8 @@
 //! Questions and requests on an item: asked by someone, replied to by a person.
 //!
 //! A question is its own row with its own version, so replying never conflicts with editing the item
-//! (architecture.md, Data model). Questions are never deleted: an answered one stays, with its reply.
+//! (architecture.md, Data model). Questions are never deleted: an answered one stays, with its reply, and one
+//! withdrawn when its item was closed stays, withdrawn.
 
 use crate::heap::Heap;
 use crate::item::{Item, ItemError};
@@ -82,16 +83,19 @@ impl QuestionKind {
 pub enum QuestionState {
     Open,
     Answered,
+    /// Closing its item took it back, unanswered. Reopening the item doesn't bring it back.
+    Withdrawn,
 }
 
 impl QuestionState {
-    pub const ALL: [Self; 2] = [Self::Open, Self::Answered];
+    pub const ALL: [Self; 3] = [Self::Open, Self::Answered, Self::Withdrawn];
 
     /// Stable code used in storage and the API. Never renamed.
     pub const fn code(self) -> &'static str {
         match self {
             Self::Open => "open",
             Self::Answered => "answered",
+            Self::Withdrawn => "withdrawn",
         }
     }
 
@@ -192,6 +196,14 @@ pub struct Reply {
     pub replied_at: Timestamp,
 }
 
+/// When and by whom a question was withdrawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Withdrawal {
+    /// `None` when it can't be traced.
+    pub withdrawn_by: Option<UserId>,
+    pub withdrawn_at: Timestamp,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Question {
     pub id: QuestionId,
@@ -210,6 +222,8 @@ pub struct Question {
     pub asked_at: Timestamp,
     /// Set exactly when the question is answered.
     pub reply: Option<Reply>,
+    /// Set exactly when the question is withdrawn. A question has a reply or a withdrawal, never both.
+    pub withdrawal: Option<Withdrawal>,
     pub version: Version,
 }
 
@@ -273,6 +287,8 @@ pub enum QuestionError {
     StepNotFound { number: StepNumber },
     #[error("question {number} is already answered")]
     Answered { number: QuestionNumber },
+    #[error("question {number} was withdrawn when its item was closed")]
+    Withdrawn { number: QuestionNumber },
 }
 
 /// Why a reply was refused: the question can't take one, or the reply doesn't fit it.
@@ -307,6 +323,7 @@ impl Question {
             asked_by: Some(asked_by),
             asked_at: now,
             reply: None,
+            withdrawal: None,
             version: Version::INITIAL,
         }
     }
@@ -314,15 +331,31 @@ impl Question {
     pub const fn state(&self) -> QuestionState {
         if self.reply.is_some() {
             QuestionState::Answered
+        } else if self.withdrawal.is_some() {
+            QuestionState::Withdrawn
         } else {
             QuestionState::Open
+        }
+    }
+
+    /// This question withdrawn by `by` at `now`. The result keeps the old version; the store bumps it on write.
+    /// Only an open question is withdrawn: callers pick those.
+    #[must_use]
+    pub fn withdraw(&self, by: UserId, now: Timestamp) -> Self {
+        Self {
+            withdrawal: Some(Withdrawal {
+                withdrawn_by: Some(by),
+                withdrawn_at: now,
+            }),
+            ..self.clone()
         }
     }
 
     /// This question replied to by `replied_by` at `now`, picking `picked` and saying `comment`. The result keeps
     /// the old version; the store bumps it on write.
     ///
-    /// Fails with [`QuestionError::Answered`] when it already has a reply, and with a validation error when the
+    /// Fails with [`QuestionError::Answered`] when it already has a reply, with [`QuestionError::Withdrawn`] when it
+    /// was withdrawn, and with a validation error when the
     /// reply doesn't fit the question: a question without choices takes a comment and no pick; one with choices
     /// takes one pick, or one or more when `many`; a pick is a distinct index of the choices. Picks are kept in
     /// ascending order.
@@ -335,6 +368,9 @@ impl Question {
     ) -> Result<Self, ReplyError> {
         if self.reply.is_some() {
             return Err(QuestionError::Answered { number: self.number }.into());
+        }
+        if self.withdrawal.is_some() {
+            return Err(QuestionError::Withdrawn { number: self.number }.into());
         }
         let picked = self.check_picks(picked)?;
         if self.choices.is_empty() && comment.is_none() {
@@ -720,6 +756,24 @@ mod tests {
     fn a_closed_item_takes_no_questions() {
         expect_that!(check_questions_editable(&sample_item(false)), ok(anything()));
         expect_that!(check_questions_editable(&sample_item(true)), err(anything()));
+    }
+
+    #[gtest]
+    fn a_withdrawn_question_is_not_open_and_takes_no_reply() {
+        let open = question(QuestionKind::Question, &[], false);
+        let user = UserId::from_uuid(Uuid::from_u128(10));
+
+        let withdrawn = open.withdraw(user, Timestamp::EPOCH);
+
+        expect_that!(open.state(), eq(QuestionState::Open));
+        expect_that!(withdrawn.state(), eq(QuestionState::Withdrawn));
+        expect_that!(withdrawn.reply, none());
+        expect_that!(
+            withdrawn.reply(&[], Context::parse("x").expect("valid"), user, Timestamp::EPOCH),
+            err(eq(&ReplyError::Question(QuestionError::Withdrawn {
+                number: withdrawn.number
+            })))
+        );
     }
 
     #[gtest]

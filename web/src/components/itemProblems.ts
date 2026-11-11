@@ -17,6 +17,8 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   step_not_in_item: "That step isn't in this task any more.",
   too_many_questions: "An item has at most 100 questions.",
   question_answered: "Someone else replied to this question meanwhile.",
+  question_withdrawn: "This question was withdrawn.",
+  turn_open: "Someone already sent this to an agent.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };

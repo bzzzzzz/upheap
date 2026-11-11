@@ -14,6 +14,7 @@ pub struct Model {
     pub deadline_weight: i32,
     pub value_weight: i32,
     pub context: Option<String>,
+    pub agents_prepare: bool,
     pub created_at: i64,
     pub archived_at: Option<i64>,
     pub version: i32,

@@ -17,15 +17,18 @@ use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, Ra
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
+use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, with_agent};
 use domain::user::User;
-use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, ValidationError, Version};
+use domain::{
+    Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, TurnId, UserId, ValidationError, Version,
+};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
-use crate::audit::{describe_new_item, diff_items};
+use crate::audit::{describe_new_item, describe_new_turn, describe_withdrawal, diff_items};
 use crate::{Principal, RandomSource, ServiceError, Services};
 
 /// A client may keep ranking at an `as_of` for at most this long. Older values are replaced by the current time.
@@ -72,6 +75,18 @@ pub struct ItemView {
     /// Whether the item is open and has an open question, in an active heap (see
     /// [`domain::question::waits_for_you`]).
     pub waits_for_you: bool,
+    /// The item's open turn, when an agent has been sent it and it hasn't been taken back. Closed items have none.
+    pub turn: Option<TurnView>,
+    /// Whether an agent has the item (see [`domain::turn::with_agent`]).
+    pub with_agent: bool,
+}
+
+/// An open turn with the user who opened it.
+#[derive(Clone, Debug)]
+pub struct TurnView {
+    pub turn: Turn,
+    /// Who opened it, when that is known.
+    pub opened_by: Option<User>,
 }
 
 /// A question with the users it names and what the caller may do with it.
@@ -82,6 +97,8 @@ pub struct QuestionView {
     pub asked_by: Option<User>,
     /// Who replied, when it's answered and that is known.
     pub replied_by: Option<User>,
+    /// Who closed the item and so withdrew it, when it's withdrawn and that is known.
+    pub withdrawn_by: Option<User>,
     pub allowed_actions: Vec<QuestionAction>,
 }
 
@@ -242,7 +259,6 @@ impl Services {
                     continue;
                 }
             };
-            let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
             let stage_choices = allowed_stage_choices(&item, &access.heap, role);
             let step_actions = allowed_step_actions(&item, &access.heap, role);
             let tags = select_tags(&heap_tags, &item.tags);
@@ -258,7 +274,8 @@ impl Services {
                     created_by,
                     // Ranked items aren't closed, so they have no closer.
                     closed_by: None,
-                    allowed_actions,
+                    // Set below, once the open turns of the entries that are listed are known.
+                    allowed_actions: Vec::new(),
                     stage_choices,
                     // Lists carry the progress only, counted below for the entries that are listed.
                     steps: None,
@@ -267,6 +284,8 @@ impl Services {
                     questions: None,
                     // Set below, from one count for the entries that are listed.
                     waits_for_you: false,
+                    turn: None,
+                    with_agent: false,
                 },
                 position: 0,
                 contributors: entry.contributors,
@@ -301,20 +320,26 @@ impl Services {
             .map(|entry| entry.view.item.id)
             .collect();
         let mut step_progress = store::steps::count_step_progress(&self.db, &listed).await?;
-        // Nothing waits in an archived heap, so its items need no count.
-        let open_questions = if access.heap.is_archived() {
-            HashMap::new()
+        // Nothing waits, and no agent has anything, in an archived heap, so its items need no count.
+        let (open_questions, mut open_turns) = if access.heap.is_archived() {
+            (HashMap::new(), HashMap::new())
         } else {
-            store::questions::count_open_questions(&self.db, &listed).await?
+            let turns = store::turns::list_open_turns(&self.db, &listed).await?;
+            (
+                store::questions::count_open_questions(&self.db, &listed).await?,
+                turn_views(&self.db, turns.into_values()).await?,
+            )
         };
         for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
             let id = entry.view.item.id;
+            let open_questions = open_questions.get(&id).copied().unwrap_or(0) as usize;
+            let turn = open_turns.remove(&id);
             entry.view.step_progress = step_progress.remove(&id);
-            entry.view.waits_for_you = waits_for_you(
-                &entry.view.item,
-                &access.heap,
-                open_questions.get(&id).copied().unwrap_or(0) as usize,
-            );
+            entry.view.waits_for_you = waits_for_you(&entry.view.item, &access.heap, open_questions);
+            entry.view.with_agent = with_agent(&entry.view.item, &access.heap, open_questions, turn.is_some());
+            entry.view.allowed_actions =
+                allowed_item_actions(&entry.view.item, &access.heap, role, turn.is_some(), now);
+            entry.view.turn = turn;
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -410,7 +435,8 @@ impl Services {
         let items = items
             .into_iter()
             .map(|item| {
-                let allowed_actions = allowed_item_actions(&item, &access.heap, role, now);
+                // Closed items have no open turn: closing ends it.
+                let allowed_actions = allowed_item_actions(&item, &access.heap, role, false, now);
                 let stage_choices = allowed_stage_choices(&item, &access.heap, role);
                 let step_actions = allowed_step_actions(&item, &access.heap, role);
                 let step_progress = step_progress.remove(&item.id);
@@ -432,8 +458,10 @@ impl Services {
                     step_progress,
                     step_actions,
                     questions: None,
-                    // Closed items never wait.
+                    // Closed items never wait, and no agent has them.
                     waits_for_you: false,
+                    turn: None,
+                    with_agent: false,
                 }
             })
             .collect();
@@ -479,11 +507,42 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        // A heap set so agents prepare gives every new note a turn of one state, whoever added it (Work with agents,
+        // Opening a turn). It acts only here, on create, so it never opens a second turn on an item.
+        let opened = if access.heap.agents_prepare {
+            let turn = Turn::open(
+                TurnId::from_uuid(self.new_id(now)),
+                &item,
+                Reach::One,
+                None,
+                TurnSource::Prepare,
+                principal.user_id,
+                now,
+            );
+            store::turns::insert_turn(&txn, &turn).await?;
+            let entry = self.item_audit_entry(
+                &access.heap,
+                principal,
+                AuditAction::TurnOpened,
+                &item,
+                describe_new_turn(&turn),
+                now,
+            );
+            store::audit::insert_audit_entry(&txn, &entry).await?;
+            Some(turn)
+        } else {
+            None
+        };
         let created_by = store::users::find_user(&txn, principal.user_id).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, "item created");
-        let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, now);
+        tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, prepared = opened.is_some(), "item created");
+        // The creator opened the turn, if there is one.
+        let turn = opened.map(|turn| TurnView {
+            turn,
+            opened_by: created_by.clone(),
+        });
+        let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, turn.is_some(), now);
         let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
         let step_actions = allowed_step_actions(&item, &access.heap, access.membership.role);
         let values = describe_values(&item, &parameters);
@@ -502,6 +561,9 @@ impl Services {
             step_actions,
             questions: Some(Vec::new()),
             waits_for_you: false,
+            // A new item has no questions, so an open turn is an agent having it.
+            with_agent: turn.is_some(),
+            turn,
         })
     }
 
@@ -512,12 +574,17 @@ impl Services {
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let steps = store::steps::list_steps(&self.db, item.id).await?;
         let questions = store::questions::list_questions(&self.db, item.id).await?;
+        let open_turn = store::turns::find_open_turn(&self.db, item.id).await?;
         build_item_view(
             &self.db,
             &access.heap,
             access.membership.role,
             item,
-            ItemChildren { steps, questions },
+            ItemChildren {
+                steps,
+                questions,
+                open_turn,
+            },
             self.now(),
         )
         .await
@@ -573,6 +640,24 @@ impl Services {
             let children = ItemChildren::read_locking(&txn, current.id).await?;
             return build_item_view(&txn, &access.heap, role, current, children, now).await;
         };
+        // Starting or closing an item takes it back from the agent first, and closing withdraws its open questions;
+        // each has its own entry, written before the item's so the history reads in the order things happened.
+        let mut turns_taken_back = 0_usize;
+        let mut questions_withdrawn = 0_usize;
+        if edited.state.kind() == StateKind::InProgress && current.state.kind() != StateKind::InProgress {
+            turns_taken_back = self
+                .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Started, now)
+                .await?
+                .into();
+        } else if edited.is_closed() && !current.is_closed() {
+            turns_taken_back = self
+                .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Closed, now)
+                .await?
+                .into();
+            questions_withdrawn = self
+                .withdraw_open_questions(&txn, &access.heap, principal, &current, now)
+                .await?;
+        }
         let saved =
             store::items::update_item(&txn, &edited, expected, now)
                 .await?
@@ -593,7 +678,7 @@ impl Services {
         let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), "item updated");
+        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, "item updated");
         Ok(view)
     }
 
@@ -606,6 +691,19 @@ impl Services {
         diff: serde_json::Value,
         now: Timestamp,
     ) -> NewAuditEntry {
+        self.item_audit_entry_for(heap, principal, action, item.id, diff, now)
+    }
+
+    /// [`Self::item_audit_entry`] for an item known by its ID.
+    pub(crate) fn item_audit_entry_for(
+        &self,
+        heap: &Heap,
+        principal: Principal,
+        action: AuditAction,
+        item_id: ItemId,
+        diff: serde_json::Value,
+        now: Timestamp,
+    ) -> NewAuditEntry {
         NewAuditEntry {
             id: self.new_id(now),
             team_id: heap.team_id,
@@ -613,10 +711,45 @@ impl Services {
             actor: principal.user_id,
             action,
             entity_type: EntityType::Item,
-            entity_id: *item.id.as_uuid(),
+            entity_id: *item_id.as_uuid(),
             diff,
             created_at: now,
         }
+    }
+
+    /// Withdraws every open question of `item`, which is being closed: each gets its next version and a
+    /// `question_withdrawn` entry. Answered questions stay as they are. Says how many it withdrew. The caller holds
+    /// the heap lock.
+    async fn withdraw_open_questions(
+        &self,
+        txn: &store::DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        item: &Item,
+        now: Timestamp,
+    ) -> Result<usize, ServiceError> {
+        let questions = store::questions::list_questions_locking(txn, item.id).await?;
+        let mut withdrawn_count = 0;
+        for question in questions.iter().filter(|q| q.state() == QuestionState::Open) {
+            let withdrawn = question.withdraw(principal.user_id, now);
+            store::questions::update_question(txn, &withdrawn, question.version)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected: question.version,
+                    current: question.version.next(),
+                })?;
+            let entry = self.item_audit_entry(
+                heap,
+                principal,
+                AuditAction::QuestionWithdrawn,
+                item,
+                describe_withdrawal(question),
+                now,
+            );
+            store::audit::insert_audit_entry(txn, &entry).await?;
+            withdrawn_count += 1;
+        }
+        Ok(withdrawn_count)
     }
 }
 
@@ -624,15 +757,18 @@ impl Services {
 pub(crate) struct ItemChildren {
     pub steps: Vec<Step>,
     pub questions: Vec<Question>,
+    /// The item's open turn, if it has one.
+    pub open_turn: Option<Turn>,
 }
 
 impl ItemChildren {
-    /// The steps and questions of `item_id` as they are now, with locking reads (see
+    /// The steps, questions and open turn of `item_id` as they are now, with locking reads (see
     /// [`store::steps::list_steps_locking`]). A write calls it after the heap lock.
     pub(crate) async fn read_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Self, StoreError> {
         Ok(Self {
             steps: store::steps::list_steps_locking(db, item_id).await?,
             questions: store::questions::list_questions_locking(db, item_id).await?,
+            open_turn: store::turns::find_open_turn_locking(db, item_id).await?,
         })
     }
 }
@@ -647,8 +783,12 @@ pub(crate) async fn build_item_view(
     children: ItemChildren,
     now: Timestamp,
 ) -> Result<ItemView, ServiceError> {
-    let ItemChildren { steps, questions } = children;
-    let allowed_actions = allowed_item_actions(&item, heap, role, now);
+    let ItemChildren {
+        steps,
+        questions,
+        open_turn,
+    } = children;
+    let allowed_actions = allowed_item_actions(&item, heap, role, open_turn.is_some(), now);
     let stage_choices = allowed_stage_choices(&item, heap, role);
     let step_actions = allowed_step_actions(&item, heap, role);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
@@ -657,6 +797,11 @@ pub(crate) async fn build_item_view(
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
     let waits_for_you = waits_for_you(&item, heap, open_questions);
+    let with_agent = with_agent(&item, heap, open_questions, open_turn.is_some());
+    let turn = match open_turn {
+        Some(turn) => turn_views(db, vec![turn]).await?.remove(&item.id),
+        None => None,
+    };
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     Ok(ItemView {
         parameters: describe_values(&item, &parameters),
@@ -672,7 +817,36 @@ pub(crate) async fn build_item_view(
         step_actions,
         questions: Some(questions),
         waits_for_you,
+        turn,
+        with_agent,
     })
+}
+
+/// The open `turns` with the users who opened them, by item, in one query. Turns are opened by the team's members, so
+/// the users are few.
+pub(crate) async fn turn_views(
+    db: &impl ConnectionTrait,
+    turns: impl IntoIterator<Item = Turn>,
+) -> Result<HashMap<ItemId, TurnView>, ServiceError> {
+    let turns: Vec<Turn> = turns.into_iter().collect();
+    let ids: Vec<UserId> = turns
+        .iter()
+        .filter_map(|turn| turn.opened_by)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let users: HashMap<UserId, User> = store::users::list_users(db, &ids)
+        .await?
+        .into_iter()
+        .map(|user| (user.id, user))
+        .collect();
+    Ok(turns
+        .into_iter()
+        .map(|turn| {
+            let opened_by = pick_user(&users, turn.opened_by);
+            (turn.item_id, TurnView { turn, opened_by })
+        })
+        .collect())
 }
 
 /// `questions` of `item` with the users who asked and replied, and what `role` may do with each. The questions of
@@ -690,6 +864,10 @@ async fn build_question_views(
             [
                 question.asked_by,
                 question.reply.as_ref().and_then(|reply| reply.replied_by),
+                question
+                    .withdrawal
+                    .as_ref()
+                    .and_then(|withdrawal| withdrawal.withdrawn_by),
             ]
         })
         .flatten()
@@ -707,6 +885,13 @@ async fn build_question_views(
             allowed_actions: allowed_question_actions(item, heap, role, question.state()),
             asked_by: pick_user(&users, question.asked_by),
             replied_by: pick_user(&users, question.reply.as_ref().and_then(|reply| reply.replied_by)),
+            withdrawn_by: pick_user(
+                &users,
+                question
+                    .withdrawal
+                    .as_ref()
+                    .and_then(|withdrawal| withdrawal.withdrawn_by),
+            ),
             question,
         })
         .collect())

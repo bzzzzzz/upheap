@@ -108,7 +108,8 @@ function QuestionHead({
 
 /**
  * What an item is waiting for the person to answer (ux.md, The item): one row per open question, each with its reply
- * controls. Shown only while the item is open; a closed item's open questions are read in {@link AnsweredQuestions}.
+ * controls. Shown only while the item is open: closing withdraws its open questions, which {@link AnsweredQuestions}
+ * lists.
  * A row is shown when the server offers `reply` on the question, otherwise (an archived heap) as text. It stays
  * mounted when empty, for the live message after the last reply and the note about a reply someone else made.
  */
@@ -382,12 +383,13 @@ function ReplyControls({
 }
 
 /**
- * The questions that don't wait in {@link WaitsForYou}, folded above History: the answered ones, and on a closed item
- * the open ones too, which can be replied to once the item is reopened. Read-only.
+ * The questions that don't wait in {@link WaitsForYou}, folded above History: the answered ones and the ones closing
+ * the item withdrew. Read-only.
  */
 export function AnsweredQuestions({ item }: { item: Item }) {
-  const closed = isClosed(item.state);
-  const listed = (item.questions ?? []).filter((question) => question.state === "answered" || closed);
+  const listed = (item.questions ?? []).filter(
+    (question) => question.state === "answered" || question.state === "withdrawn",
+  );
   if (listed.length === 0) return null;
   return (
     <details className="group">
@@ -414,11 +416,12 @@ export function AnsweredQuestions({ item }: { item: Item }) {
   );
 }
 
-/** What became of a listed question: the reply and who made it, or that it is still open. */
+/** What became of a listed question: the reply and who made it, or that closing the item withdrew it. */
 function Outcome({ question }: { question: Question }) {
   const by = useUserName(question.reply?.replied_by);
   const reply = question.reply;
-  if (!reply) return <p className="text-sm text-muted">Open: reopen the item to reply.</p>;
+  if (question.state === "withdrawn") return <p className="text-sm text-muted">Withdrawn</p>;
+  if (!reply) return null;
   const labels = reply.picked.map((index) => question.choices[index]).join(", ");
   const who = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)}, ` : "";
   return (

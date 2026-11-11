@@ -90,7 +90,8 @@ impl Services {
     /// Replies to question `number` of an item if the question is still at version `expected`, picking `picked`
     /// (indices into its choices) and saying `comment`. Fails with [`ServiceError::NotFound`] when the item has
     /// no such question, with [`ItemError::Closed`](domain::item::ItemError::Closed) on a closed item, with
-    /// [`QuestionError::Answered`] when it already has a reply, and with a validation error when the reply doesn't
+    /// [`QuestionError::Answered`] when it already has a reply, with [`QuestionError::Withdrawn`] when closing the
+    /// item withdrew it, and with a validation error when the reply doesn't
     /// fit the question.
     pub async fn reply_to_question(
         &self,
@@ -120,6 +121,9 @@ impl Services {
         // Before the version: someone else's reply moved it, and "already answered" is the more useful thing to say.
         if current.reply.is_some() {
             return Err(QuestionError::Answered { number }.into());
+        }
+        if current.withdrawal.is_some() {
+            return Err(QuestionError::Withdrawn { number }.into());
         }
         if current.version != expected {
             return Err(ServiceError::VersionConflict {

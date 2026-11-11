@@ -13,6 +13,7 @@ use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
+use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
 use serde_json::{Map, Value};
@@ -318,6 +319,9 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
         (AuditAction::QuestionAnswered, _) => ("answered a question on", true),
+        (AuditAction::QuestionWithdrawn, _) => ("withdrew a question on", true),
+        (AuditAction::TurnOpened, _) => ("opened a turn on", true),
+        (AuditAction::TurnTakenBack, _) => ("took back a turn on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
@@ -355,6 +359,9 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::StepAdded
         | AuditAction::QuestionAsked
         | AuditAction::QuestionAnswered
+        | AuditAction::QuestionWithdrawn
+        | AuditAction::TurnOpened
+        | AuditAction::TurnTakenBack
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
@@ -381,7 +388,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 39] = [
+const FIELD_ORDER: [&str; 45] = [
     "step",
     "step_title",
     "step_context",
@@ -395,6 +402,11 @@ const FIELD_ORDER: [&str; 39] = [
     "question_step",
     "reply",
     "reply_comment",
+    "reach",
+    "goal",
+    "line",
+    "source",
+    "why",
     "title",
     "kind",
     "stage",
@@ -421,6 +433,7 @@ const FIELD_ORDER: [&str; 39] = [
     "items_switched",
     "ended_sign_ins",
     "list_view",
+    "agents_prepare",
 ];
 
 /// Fields left out: the action already says it, as with `archived_at` for an archiving.
@@ -529,6 +542,12 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "question_step" => "Step",
         "reply" => "Reply",
         "reply_comment" => "Comment",
+        "reach" => "Reach",
+        "goal" => "Goal",
+        "line" => "Line",
+        "source" => "Source",
+        "why" => "Why",
+        "agents_prepare" => "Agents prepare new notes",
         "title" => "Title",
         "kind" => "Kind",
         "stage" => "Stage",
@@ -573,6 +592,10 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
         // A question is named by its number, as `q2`, after its item's key.
         "question" => format!("q{}", value.as_u64()?),
+        "reach" => describe_reach(Reach::from_code(value.as_str()?)?).to_owned(),
+        "goal" => describe_goal(Goal::from_code(value.as_str()?)?).to_owned(),
+        "source" => describe_turn_source(TurnSource::from_code(value.as_str()?)?).to_owned(),
+        "why" => describe_why(TakeBackWhy::from_code(value.as_str()?)?).to_owned(),
         "question_kind" => describe_question_kind(QuestionKind::from_code(value.as_str()?)?).to_owned(),
         "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
@@ -630,6 +653,38 @@ const fn describe_question_kind(kind: QuestionKind) -> &'static str {
     match kind {
         QuestionKind::Question => "Question",
         QuestionKind::Request => "Request",
+    }
+}
+
+const fn describe_reach(reach: Reach) -> &'static str {
+    match reach {
+        Reach::One => "One state",
+        Reach::AllTheWay => "All the way",
+    }
+}
+
+const fn describe_goal(goal: Goal) -> &'static str {
+    match goal {
+        Goal::WithContext => "With context",
+        Goal::Defined => "Defined",
+        Goal::Done => "Done",
+    }
+}
+
+const fn describe_turn_source(source: TurnSource) -> &'static str {
+    match source {
+        TurnSource::GoAhead => "Sent by a person",
+        TurnSource::Prepare => "Prepared on add",
+    }
+}
+
+/// Why a turn was taken back, or a question withdrawn, as the entry's `why` records it.
+const fn describe_why(why: TakeBackWhy) -> &'static str {
+    match why {
+        TakeBackWhy::TakeBack => "Taken back",
+        TakeBackWhy::Started => "Started",
+        TakeBackWhy::Closed => "Closed",
+        TakeBackWhy::HeapArchived => "Heap archived",
     }
 }
 

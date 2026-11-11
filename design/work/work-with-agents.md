@@ -43,10 +43,12 @@ order.
    count, the new phone tabs, and "waits for you" on list rows.
    Done: on a phone, an open question is found and answered without opening an item. Covers Questions §3,
    Waiting §1.
-- [ ] 7. **Turns.** The go-ahead with its reach and line, the heap's prepare setting, who has an item, take back,
+- [x] 7. **Turns.** The go-ahead with its reach and line, the heap's prepare setting, who has an item, take back,
    and what the person's own changes do to a turn. In the web item and on list rows.
    Done: an item can be sent on and taken back, a new note in a heap that prepares gets a turn, and nothing
-   else does. Covers Stable states §1 to §4, Handing work §2, §3, §4, §7.
+   else does. Covers Stable states §1 to §4, Handing work §2, §3, §4, §7. Closing an item also withdraws its open
+   questions here. What is left for piece 8: withdrawing the agent's own questions on a take back, since no
+   question can be an agent's until runs exist.
 - [ ] 8. **The queue and runs.** `work next`; the claim; a run recorded with how it ended; writes made inside a run
    and what they're refused; `work reached` and its check; failed runs, and a turn that gets stuck and shows
    in Waiting for me.
@@ -96,5 +98,5 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
 
 ## Open questions
 
-- An open question on an item closed past its reopen window can't be answered or withdrawn. Waiting for me (piece 6)
-  must count only open items; piece 7 decides whether closing an item withdraws its open questions.
+- "Reached", a turn that gets stuck, Retry, and "Changes asked" at a stable state (piece 8): a turn is only opened
+  and taken back until runs exist, and "all the way" behaves as one state until piece 12.

@@ -53,6 +53,16 @@ pub fn describe_date(at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> String {
     date.strftime(format).to_string()
 }
 
+/// When something started, as a label that stays right for a day: the time ("14:02") if `at` is today in `tz`,
+/// else the date as [`describe_date`] says it ("yesterday", "3 Nov").
+pub fn describe_since(at: Timestamp, as_of: Timestamp, tz: &TimeZone) -> String {
+    if local_date(at, tz) == local_date(as_of, tz) {
+        at.to_jiff().to_zoned(tz.clone()).strftime("%H:%M").to_string()
+    } else {
+        describe_date(at, as_of, tz)
+    }
+}
+
 /// `due` as a fixed calendar date in `tz`, for records that are read long after they were written, such as the audit
 /// log: "12 Mar 2027" for an exact deadline, "around 12 Mar 2027" for a loose due time. Fuzzy and relative labels
 /// would be wrong by the time anyone reads them.
@@ -175,6 +185,14 @@ mod tests {
     fn day(n: i64) -> Timestamp {
         // 2027-01-01T12:00:00Z plus n days.
         Timestamp::from_millis(1_798_804_800_000 + Duration::from_days(n).as_millis()).expect("in range")
+    }
+
+    #[gtest]
+    fn since_is_the_time_today_and_the_date_before() {
+        // `day(0)` is 12:00 UTC.
+        expect_that!(describe_since(day(0), day(0), &utc()), eq("12:00"));
+        expect_that!(describe_since(day(-1), day(0), &utc()), eq("yesterday"));
+        expect_that!(describe_since(day(-5), day(0), &utc()), eq("27 Dec 2026"));
     }
 
     #[gtest]

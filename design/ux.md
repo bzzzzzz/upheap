@@ -149,6 +149,11 @@ saved a different context meanwhile, it shows above the kept draft under "Saved 
 it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
 Cancel give focus back to Edit. The local build has no Context card.
 
+The **Agents** card, under Context, has a switch, "Agents prepare new notes", with the line "Each note added here is
+sent to an agent to fill in its context, then comes back to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
+switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
+"off". The local build has no Agents card.
+
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
 (or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
@@ -224,7 +229,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
 3. The state circle marks the item done in one tap. An undo toast follows every state change from the list: bottom
    centre, above the tabs on a phone, gone after a few seconds. Changes made in the item save silently and have no
-   undo.
+   undo. The toast sits over the open item, so Sent to an agent can offer Undo from inside a phone's sheet; the
+   Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `x` marks
    done; `N` and `/` stay.
 5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
@@ -250,6 +256,17 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 13. An open item with an open question says **waits for you** at the end of its row, small, semibold and in the accent.
     On a phone, where the end of the row is tight, a small accent dot before the title stands for it. A screen reader
     hears ", waits for you" after the title on every width. The closed list and the static build never show it.
+14. An open item an agent has says **with an agent** at the end of its row, small, in the quiet ink and at normal
+    weight, where "waits for you" would be: the two never show together, as an item that waits for the person is
+    not the agent's. On a phone a small robot mark before the title stands for it. A screen reader hears ", with an
+    agent" after the title. Who has an item never changes its place. The closed list and the static build never show
+    it.
+15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
+    agent has “Rotate the certs”. Marking it done takes it back from the agent." The circle, a swipe, `x`, the
+    hover Start and ⋯ (Start, Won't do) go through the one ask, which is a dialog on a wide screen and a sheet on a
+    phone, with "Take back and mark done", "Take back and start" or "Take back and close", and Cancel. Cancel
+    puts a swiped row back and gives focus to the row. Blocked and Open don't ask. The change's Undo toast
+    restores the state only: the turn stays taken back.
 
 ## The item
 
@@ -311,10 +328,25 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     sending, that row's buttons are off. If it fails the row stays with its picks and comment and the reason shows
     under it. If someone else replied first, the row leaves and the section says "Someone else replied to “…”
     meanwhile." until the next reply. In an archived heap a row shows its text and details with no controls. A
-    closed item has no Waits for you: its open questions read in Questions, marked "Open: reopen the item to reply."
-14. **Questions n**, a closed disclosure just above History, lists the answered questions (and on a closed item the
-    open ones) in number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as
-    written>` and "<who>, <when>" in quiet text. It only reads; changing a reply is later.
+    closed item has no Waits for you: closing withdrew its open questions, which read in Questions as "Withdrawn".
+14. **Questions n**, a closed disclosure just above History, lists the answered questions and the withdrawn ones in
+    number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as written>` and
+    "<who>, <when>" in quiet text, or a muted "Withdrawn". It only reads; changing a reply is later.
+15. **Who has it** is a quiet block under Waits for you and above "Why it's #3", on an open item in an active heap
+    (not in the static build). With no agent it says "With you." and has **Send to an agent**, which opens a form:
+    a popover on a wide screen and a tablet, a sheet on a phone. The form has two choices, "To <where it goes>" (the
+    next stable state: with context, defined or done) and "All the way", or on a defined task the one line "To
+    done"; "A line for the agent (optional)"; Send and Cancel. Send acts at once, closes the form, gives focus to
+    Take back and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back without
+    asking or a second toast. With an agent the block says "With an agent since 14:02" (the time today, else the
+    date as the server words it: "yesterday", "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
+    "Prepared on add" for a note the heap's setting sent. If the item waits for the person it reads "An agent is
+    waiting for your answer, going to: …". **Take back** asks first, "Take this back from the agent? It stops, and
+    what it changed stays.", inline on a wide screen and in a sheet on a phone, and gives focus to Send to an agent
+    afterwards, with no toast. A failed send or take back says why under the block, and the form keeps its line.
+    Someone else's send first says "Someone already sent this to an agent." and the block shows it. Start, Done and
+    Won't do in the item ask before they take an item back ("An agent has this. Starting it takes it back. Take it
+    back and start it?"), inline beside the state buttons or in a sheet; Blocked and Open don't.
 
 ## Adding an item
 

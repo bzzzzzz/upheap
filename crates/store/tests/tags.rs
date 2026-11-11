@@ -34,6 +34,7 @@ async fn heap_in_new_database() -> Result<(DatabaseConnection, HeapId)> {
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         context: None,
+        agents_prepare: false,
         archived_at: None,
         version: Version::INITIAL,
     };

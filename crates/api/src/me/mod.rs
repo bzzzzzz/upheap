@@ -19,7 +19,7 @@ use service::waiting::WaitingRow;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::dto::{IfMatchHeader, to_question_dto};
+use crate::dto::{IfMatchHeader, to_question_dto, to_turn_dto};
 use crate::error::Problem;
 use crate::extract::{ApiJson, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::{ApiError, AppState, Authentication};
@@ -110,6 +110,8 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             kind: item.kind.into(),
             // As on an item: the stage is shown only in a build that has agents.
             stage: cfg!(feature = "agents").then(|| item.stage.into()),
+            turn: row.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
+            with_agent: row.with_agent,
         },
         heap: WaitingHeapDto {
             id: *row.heap.id.as_uuid(),

@@ -1508,7 +1508,7 @@
         "tags": [
           "heaps"
         ],
-        "summary": "Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and\nslug need an admin, the context any member. A body that sets a field the caller may not change is refused whole\nwith 403, and saves nothing. A save that changes nothing succeeds and keeps the version.",
+        "summary": "Renames the heap, changes its slug, writes its context or sets whether agents prepare new notes; send the heap's\n`version` in `If-Match`. The name, slug and `agents_prepare` need an admin, the context any member. A body that sets a field the caller may not change is refused whole\nwith 403, and saves nothing. A save that changes nothing succeeds and keeps the version.",
         "operationId": "update_heap",
         "parameters": [
           {
@@ -3076,6 +3076,220 @@
           },
           "428": {
             "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole\nitem. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no\n`If-Match`, and the item's `version` doesn't change. An item with an open question, or a blocked one, may be\nsent: the turn opens, and the item waits or is blocked as before.",
+        "operationId": "send_to_agent",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendToAgentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`, `item_closed` or `turn_open` (an agent already has the item)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Takes an item back from the agent that has it and answers with the whole item. An item with no open turn is\nanswered unchanged and nothing is recorded, so two clients taking back at once both succeed. The item's\n`version` doesn't change.",
+        "operationId": "take_back",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5706,6 +5920,9 @@
           "step_updated",
           "question_asked",
           "question_answered",
+          "question_withdrawn",
+          "turn_opened",
+          "turn_taken_back",
           "tag_created",
           "tag_updated",
           "saved_view_created",
@@ -6290,6 +6507,15 @@
           "blocks"
         ]
       },
+      "Goal": {
+        "type": "string",
+        "description": "The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with\ncontext and a task not yet defined go to `defined`, and a defined task goes to `done`.",
+        "enum": [
+          "with_context",
+          "defined",
+          "done"
+        ]
+      },
       "Heap": {
         "type": "object",
         "required": [
@@ -6297,12 +6523,17 @@
           "team_id",
           "slug",
           "name",
+          "agents_prepare",
           "open_count",
           "weights",
           "version",
           "allowed_actions"
         ],
         "properties": {
+          "agents_prepare": {
+            "type": "boolean",
+            "description": "Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap."
+          },
           "allowed_actions": {
             "type": "array",
             "items": {
@@ -6366,6 +6597,7 @@
           "unarchive",
           "edit_context",
           "edit_weights",
+          "set_agents_prepare",
           "view_history"
         ]
       },
@@ -6395,6 +6627,13 @@
         "type": "object",
         "description": "A change to a heap. Leave a field out to keep it.",
         "properties": {
+          "agents_prepare": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether agents prepare new notes. Needs an admin."
+          },
           "context": {
             "type": [
               "string",
@@ -6819,6 +7058,9 @@
           "created_at",
           "created_label",
           "waits_for_you",
+          "turn",
+          "next_goal",
+          "with_agent",
           "version",
           "allowed_actions"
         ],
@@ -6954,6 +7196,17 @@
           "need": {
             "$ref": "#/components/schemas/Need"
           },
+          "next_goal": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Goal",
+                "description": "The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item\nis sent. `null` on a closed item and in a build that has no agents."
+              }
+            ]
+          },
           "parameters": {
             "type": "array",
             "items": {
@@ -7023,6 +7276,17 @@
           "title": {
             "type": "string"
           },
+          "turn": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Turn",
+                "description": "The open turn: the item was sent to an agent and not taken back. `null` when there is none, and on a closed\nitem. Taking the item back, starting it, closing it and archiving its heap end the turn."
+              }
+            ]
+          },
           "version": {
             "type": "integer",
             "format": "int32",
@@ -7032,6 +7296,10 @@
           "waits_for_you": {
             "type": "boolean",
             "description": "Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the\ncaller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item\nand in an archived heap."
+          },
+          "with_agent": {
+            "type": "boolean",
+            "description": "Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for\nthe caller. Who has an item never changes its place in the list. On every response, lists included; always\n`false` on a closed item and in an archived heap."
           }
         }
       },
@@ -7044,7 +7312,9 @@
           "reopen",
           "make_task",
           "add_step",
-          "ask_question"
+          "ask_question",
+          "send_to_agent",
+          "take_back"
         ]
       },
       "ItemOption": {
@@ -8043,6 +8313,8 @@
           "state",
           "asked_at",
           "asked_label",
+          "withdrawn_at",
+          "withdrawn_by",
           "version",
           "allowed_actions"
         ],
@@ -8107,7 +8379,7 @@
               },
               {
                 "$ref": "#/components/schemas/QuestionReply",
-                "description": "`null` while the question is open."
+                "description": "`null` unless the question is answered."
               }
             ]
           },
@@ -8132,6 +8404,25 @@
             "format": "int32",
             "description": "Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.",
             "minimum": 0
+          },
+          "withdrawn_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "When closing the item withdrew the question, in UTC milliseconds; `null` unless the question is withdrawn."
+          },
+          "withdrawn_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef",
+                "description": "Who closed the item and so withdrew the question. `null` unless the question is withdrawn, or when it can't be\ntraced."
+              }
+            ]
           }
         }
       },
@@ -8243,7 +8534,8 @@
         "description": "Whether a question still waits for a reply.",
         "enum": [
           "open",
-          "answered"
+          "answered",
+          "withdrawn"
         ]
       },
       "RankedItem": {
@@ -8454,6 +8746,14 @@
         },
         "additionalProperties": false
       },
+      "Reach": {
+        "type": "string",
+        "description": "How far a turn is meant to go.\n\n- `one`: to the next stable state (`goal`), then back to the person.\n- `all_the_way`: on through the stable states until the work is done. Until agents run turns it behaves as `one`.",
+        "enum": [
+          "one",
+          "all_the_way"
+        ]
+      },
       "RegisterRequest": {
         "type": "object",
         "required": [
@@ -8599,6 +8899,26 @@
                 "$ref": "#/components/schemas/ListViewInput"
               }
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendToAgentRequest": {
+        "type": "object",
+        "description": "Sends an item to an agent.",
+        "required": [
+          "reach"
+        ],
+        "properties": {
+          "line": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Something to tell the agent: plain text, at most 2,000 characters, line breaks allowed; blank or `null` means\nnone."
+          },
+          "reach": {
+            "$ref": "#/components/schemas/Reach"
           }
         },
         "additionalProperties": false
@@ -9044,6 +9364,63 @@
           }
         }
       },
+      "Turn": {
+        "type": "object",
+        "description": "An item's open turn: the item has been sent to an agent and not taken back.",
+        "required": [
+          "reach",
+          "goal",
+          "source",
+          "opened_at",
+          "opened_label"
+        ],
+        "properties": {
+          "goal": {
+            "$ref": "#/components/schemas/Goal"
+          },
+          "line": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing."
+          },
+          "opened_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "opened_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRef",
+                "description": "Who sent the item, or added the note in a heap that prepares them. `null` when it can't be traced."
+              }
+            ]
+          },
+          "opened_label": {
+            "type": "string",
+            "description": "When the turn opened, in the client's time zone: the time today (\"14:02\"), else the date (\"yesterday\",\n\"3 Nov\"). Computed for the response, like the labels beside other times."
+          },
+          "reach": {
+            "$ref": "#/components/schemas/Reach"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TurnSource"
+          }
+        }
+      },
+      "TurnSource": {
+        "type": "string",
+        "description": "How a turn came to be opened.\n\n- `go_ahead`: a person sent the item.\n- `prepare`: the heap is set so agents prepare new notes, and this one was added.",
+        "enum": [
+          "go_ahead",
+          "prepare"
+        ]
+      },
       "User": {
         "type": "object",
         "required": [
@@ -9197,7 +9574,9 @@
           "id",
           "key",
           "title",
-          "kind"
+          "kind",
+          "turn",
+          "with_agent"
         ],
         "properties": {
           "id": {
@@ -9225,6 +9604,21 @@
           },
           "title": {
             "type": "string"
+          },
+          "turn": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Turn",
+                "description": "The item's open turn, if an agent was sent it and it hasn't been taken back."
+              }
+            ]
+          },
+          "with_agent": {
+            "type": "boolean",
+            "description": "Whether an agent has the item: always `false` here, as a row's item waits for the caller."
           }
         }
       },

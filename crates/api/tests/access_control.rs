@@ -103,6 +103,8 @@ enum RequestBody {
     NewQuestion,
     /// The reply to the target question, which has no choices.
     ReplyToQuestion,
+    /// Sending an item to an agent, one state.
+    SendToAgent,
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
@@ -563,6 +565,22 @@ fn endpoints() -> Vec<Endpoint> {
             edit,
             Target::ItemWithQuestion,
             RequestBody::ReplyToQuestion,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/turn",
+            edit,
+            Target::OpenItem,
+            RequestBody::SendToAgent,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::DELETE,
+            "/teams/{team}/heaps/{heap}/items/{item}/turn",
+            edit,
+            Target::OpenItem,
+            RequestBody::Empty,
             StatusCode::OK,
         ),
         row(
@@ -1089,6 +1107,7 @@ impl World {
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
             RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
             RequestBody::ReplyToQuestion => Some(json!({ "reply": { "comment": "Internal" } })),
+            RequestBody::SendToAgent => Some(json!({ "reach": "one" })),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),

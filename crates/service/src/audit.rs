@@ -8,6 +8,7 @@ use domain::question::Question;
 use domain::saved_view::SavedView;
 use domain::step::Step;
 use domain::tag::Tag;
+use domain::turn::{TakeBackWhy, Turn};
 use domain::{OptionId, ParameterId};
 use serde_json::{Map, Value, json};
 
@@ -99,6 +100,30 @@ pub(crate) fn describe_reply(question: &Question) -> Value {
         "reply": (!picked.is_empty()).then(|| picked.join(", ")),
         "reply_comment": reply.and_then(|reply| reply.comment.as_ref()).map(|comment| comment.as_str()),
     })
+}
+
+/// The question withdrawn when its item was closed, for its `question_withdrawn` entry.
+pub(crate) fn describe_withdrawal(question: &Question) -> Value {
+    json!({
+        "question": question.number.get(),
+        "question_text": question.text.as_str(),
+        "why": TakeBackWhy::Closed.code(),
+    })
+}
+
+/// A turn just opened, for its `turn_opened` entry. The line is `null` when there is none.
+pub(crate) fn describe_new_turn(turn: &Turn) -> Value {
+    json!({
+        "reach": turn.reach.code(),
+        "goal": turn.goal.code(),
+        "line": turn.line.as_ref().map(domain::turn::TurnLine::as_str),
+        "source": turn.source.code(),
+    })
+}
+
+/// A turn just taken back, for its `turn_taken_back` entry.
+pub(crate) fn describe_take_back(turn: &Turn, why: TakeBackWhy) -> Value {
+    json!({ "goal": turn.goal.code(), "why": why.code() })
 }
 
 fn step_name(step: &Step) -> Value {

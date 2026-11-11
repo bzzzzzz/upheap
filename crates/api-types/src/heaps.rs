@@ -21,6 +21,9 @@ pub enum HeapActionDto {
     EditContext,
     /// Change the heap's weights and its parameters' weights, on `PATCH …/weights`.
     EditWeights,
+    /// Set whether agents prepare new notes, on `PATCH` with `agents_prepare`. Offered to admins while the heap is
+    /// active.
+    SetAgentsPrepare,
     ViewHistory,
 }
 
@@ -32,6 +35,7 @@ impl From<HeapAction> for HeapActionDto {
             HeapAction::Unarchive => Self::Unarchive,
             HeapAction::EditContext => Self::EditContext,
             HeapAction::EditWeights => Self::EditWeights,
+            HeapAction::SetAgentsPrepare => Self::SetAgentsPrepare,
             HeapAction::ViewHistory => Self::ViewHistory,
         }
     }
@@ -74,6 +78,12 @@ pub struct HeapDto {
     /// What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
     /// written: plain text for now, Markdown later. `null` when nobody has written one.
     pub context: Option<String>,
+    /// Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub agents_prepare: bool,
     /// When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
     pub archived_at: Option<i64>,
     /// Items the heap's list shows by default, before filters: open and in progress ones, as the list's
@@ -103,6 +113,9 @@ pub struct HeapPatchDto {
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub context: Option<Option<String>>,
+    /// Whether agents prepare new notes. Needs an admin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents_prepare: Option<bool>,
 }
 
 /// New weights for the heap and its parameters, saved together. Leave a weight out to keep it.

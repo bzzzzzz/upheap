@@ -38,6 +38,7 @@ async fn weights_round_trip_and_a_stored_weight_over_100_is_a_corrupt_row() -> R
             ..HeapPolicy::default()
         },
         context: None,
+        agents_prepare: false,
         archived_at: None,
         version: Version::INITIAL,
     };
@@ -80,6 +81,7 @@ async fn a_context_round_trips_through_insert_and_update() -> Result<()> {
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         context: HeapContext::parse("Line one\n\tline two")?,
+        agents_prepare: false,
         archived_at: None,
         version: Version::INITIAL,
     };

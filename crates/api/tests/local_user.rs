@@ -50,16 +50,70 @@ async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
     expect_that!(detail.status, eq(StatusCode::OK));
     expect_that!(detail.body["allowed_actions"], eq(&json!(["create_heap"])));
     expect_that!(detail.body["members"][0]["allowed_actions"], eq(&json!([])));
-    expect_that!(
-        detail.body["heaps"][0]["allowed_actions"],
-        eq(&json!([
+    // Setting that agents prepare new notes is only in a build that has agents.
+    let heap_actions = if cfg!(feature = "agents") {
+        json!([
             "rename",
             "archive",
             "edit_context",
             "edit_weights",
+            "set_agents_prepare",
             "view_history"
-        ]))
-    );
+        ])
+    } else {
+        json!(["rename", "archive", "edit_context", "edit_weights", "view_history"])
+    };
+    expect_that!(detail.body["heaps"][0]["allowed_actions"], eq(&heap_actions));
+    Ok(())
+}
+
+#[cfg(not(feature = "agents"))]
+#[gtest]
+#[tokio::test]
+async fn a_build_without_agents_offers_no_turns() -> Result<()> {
+    // Arrange
+    let app = TestApp::start_local().await?;
+    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
+    let heap = me.body["teams"][0]["heaps"][0]["id"]
+        .as_str()
+        .context("heap")?
+        .to_owned();
+    let heap_url = app.heap_url(&heap).await?;
+    let created = app
+        .send(
+            Method::POST,
+            &format!("{heap_url}/items"),
+            None,
+            Some(json!({ "need": "expected", "title": "Water the plants" })),
+        )
+        .await?;
+    let key = created.body["key"].as_str().context("key")?.to_owned();
+    let heap_body = app.send(Method::GET, &heap_url, None, None).await?;
+
+    // Act
+    let turn_url = format!("{heap_url}/items/{key}/turn");
+    let sent = app
+        .send(Method::POST, &turn_url, None, Some(json!({ "reach": "one" })))
+        .await?;
+    let taken = app.send(Method::DELETE, &turn_url, None, None).await?;
+    let set = app
+        .send_with(
+            Method::PATCH,
+            &heap_url,
+            None,
+            Some(json!({ "agents_prepare": true })),
+            &[common::CSRF, ("if-match", &heap_body.body["version"].to_string())],
+        )
+        .await?;
+
+    // Assert
+    let actions = created.body["allowed_actions"].as_array().context("actions")?;
+    expect_that!(actions.contains(&json!("send_to_agent")), eq(false));
+    expect_that!(actions.contains(&json!("take_back")), eq(false));
+    expect_that!(created.body["next_goal"], eq(&json!(null)));
+    expect_that!(sent.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(taken.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(set.status, eq(StatusCode::FORBIDDEN));
     Ok(())
 }
 

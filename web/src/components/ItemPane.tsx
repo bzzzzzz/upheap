@@ -6,16 +6,19 @@ import { ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
+import { gerund, takesBack } from "./agentConfirm";
 import { AuditHistory } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
 import { useCopyLink } from "./copyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
 import { DuePicker, DueRows } from "./DuePicker";
+import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
 import { ItemMore } from "./ItemMore";
 import { AnsweredQuestions, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
+import { ItemTurn } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import {
   changeLabel,
@@ -272,6 +275,36 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const canReopen = item.allowed_actions.includes("reopen");
   const canChangeState = item.allowed_actions.includes("change_state") || canReopen;
   const save = (patch: ItemPatch) => update.mutate({ item, patch });
+  // A change to a state that takes the item back from the agent that has it asks first (ux.md, The item); the server
+  // does the take back with the change.
+  const [askState, setAskState] = useState<ItemState | null>(null);
+  const asker = useRef<HTMLElement | null>(null);
+  const saveAsking = (patch: ItemPatch) => {
+    if (patch.state != null && takesBack(item, patch.state)) {
+      asker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setAskState(patch.state);
+    } else {
+      save(patch);
+    }
+  };
+  const cancelAsking = () => {
+    setAskState(null);
+    // After the confirm has gone, which had the focus.
+    window.setTimeout(() => asker.current?.focus());
+  };
+  const confirmAsking = askState !== null && (
+    <TakeBackAndChange
+      state={askState}
+      phone={phone}
+      title={item.title}
+      pending={update.isPending}
+      onConfirm={() => {
+        save({ state: askState });
+        setAskState(null);
+      }}
+      onCancel={cancelAsking}
+    />
+  );
 
   const fix = (gap: HeldBackGap) => {
     if (gap === "need") focusField(needId, "[data-selected]", "button");
@@ -328,10 +361,11 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           item={item}
           disabled={!canChangeState}
           canReopen={canReopen}
-          onChange={(state) => state !== item.state && save({ state })}
-          save={save}
+          onChange={(state) => state !== item.state && saveAsking({ state })}
+          save={saveAsking}
         />
       )}
+      {!phone && confirmAsking}
       {item.state === "blocked" && (
         <BlockerSelect
           value={item.blocked_by}
@@ -342,6 +376,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       )}
 
       <WaitsForYou heapRef={heapRef} item={item} />
+
+      <ItemTurn heapRef={heapRef} item={item} />
 
       {entry && (entry.contributors.length > 0 || entry.held_back_by.length > 0) && (
         <WhyItRanks entry={entry} onFix={canEdit ? fix : undefined} phone={phone} />
@@ -478,11 +514,81 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           item={item}
           disabled={!canChangeState}
           canReopen={canReopen}
-          onChange={(state) => state !== item.state && save({ state })}
-          save={save}
+          onChange={(state) => state !== item.state && saveAsking({ state })}
+          save={saveAsking}
         />
       )}
+      {phone && confirmAsking}
     </div>
+  );
+}
+
+/**
+ * Asks before a state change takes the item back from the agent that has it: inline beside the state buttons on a wide
+ * screen, a sheet on a phone.
+ */
+function TakeBackAndChange({
+  state,
+  phone,
+  title,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  state: ItemState;
+  phone: boolean;
+  title: string;
+  pending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const questionId = useId();
+  const verb = state === "in_progress" ? "start" : "close";
+  const question = `An agent has this. ${gerund(state)} it takes it back. Take it back and ${verb} it?`;
+  const confirmLabel = `Take back and ${verb}`;
+  if (!phone) {
+    return (
+      <InlineConfirm
+        question={question}
+        confirmLabel={confirmLabel}
+        pending={pending}
+        error={null}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+  }
+  return (
+    <Sheet
+      title="Take back from the agent?"
+      role="alertdialog"
+      describedBy={questionId}
+      isOpen
+      onClose={onCancel}
+      aside={title}
+    >
+      <div className="flex flex-col gap-2 pb-1">
+        <p id={questionId} className="px-1 py-1 text-[15px] text-ink">
+          {question}
+        </p>
+        <button
+          type="button"
+          autoFocus
+          disabled={pending}
+          onClick={onConfirm}
+          className="min-h-13 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:opacity-40"
+        >
+          {confirmLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="min-h-13 rounded-xl border border-line text-[15px] text-ink"
+        >
+          Cancel
+        </button>
+      </div>
+    </Sheet>
   );
 }
 

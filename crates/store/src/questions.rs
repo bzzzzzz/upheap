@@ -2,7 +2,9 @@
 //! version. Questions are never deleted: an answered one keeps its row, with its reply.
 
 use domain::item::StateKind;
-use domain::question::{Choices, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, Reply};
+use domain::question::{
+    Choices, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, Reply, Withdrawal,
+};
 use domain::step::StepNumber;
 use domain::text::Context;
 use domain::validation::Field;
@@ -127,10 +129,11 @@ async fn read_questions(db: &impl ConnectionTrait, item_id: ItemId, lock: bool) 
     rows.into_iter().map(to_question).collect()
 }
 
-/// Writes `question`'s reply if the stored row still has version `expected`, and returns it with its new version.
+/// Writes `question`'s reply or withdrawal if the stored row still has version `expected`, and returns it with its
+/// new version.
 ///
 /// Returns `None` when the stored version differs, meaning someone else wrote first; nothing is written then. What
-/// the asker wrote never changes, so only the state and the reply are written.
+/// the asker wrote never changes, so only the state, the reply and the withdrawal are written.
 pub async fn update_question(
     db: &impl ConnectionTrait,
     question: &Question,
@@ -142,6 +145,7 @@ pub async fn update_question(
     };
     let id = id_to_db(question.id.as_uuid());
     let reply = saved.reply.as_ref();
+    let withdrawal = saved.withdrawal.as_ref();
     let result = item_questions::Entity::update_many()
         .set(item_questions::ActiveModel {
             state: Set(saved.state().code().to_owned()),
@@ -151,6 +155,10 @@ pub async fn update_question(
                 .and_then(|reply| reply.replied_by)
                 .map(|user| id_to_db(user.as_uuid()))),
             replied_at: Set(reply.map(|reply| reply.replied_at.as_millis())),
+            withdrawn_by: Set(withdrawal
+                .and_then(|withdrawal| withdrawal.withdrawn_by)
+                .map(|user| id_to_db(user.as_uuid()))),
+            withdrawn_at: Set(withdrawal.map(|withdrawal| withdrawal.withdrawn_at.as_millis())),
             version: Set(version_to_db(saved.version, TABLE, &id)?),
             ..Default::default()
         })
@@ -174,6 +182,7 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
         .map(|step| i32::try_from(step.get()).map_err(|_| StoreError::corrupt(TABLE, &id, "step number overflow")))
         .transpose()?;
     let reply = question.reply.as_ref();
+    let withdrawal = question.withdrawal.as_ref();
     Ok(item_questions::ActiveModel {
         version: Set(version_to_db(question.version, TABLE, &id)?),
         id: Set(id),
@@ -194,6 +203,10 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
             .and_then(|reply| reply.replied_by)
             .map(|user| id_to_db(user.as_uuid()))),
         replied_at: Set(reply.map(|reply| reply.replied_at.as_millis())),
+        withdrawn_by: Set(withdrawal
+            .and_then(|withdrawal| withdrawal.withdrawn_by)
+            .map(|user| id_to_db(user.as_uuid()))),
+        withdrawn_at: Set(withdrawal.map(|withdrawal| withdrawal.withdrawn_at.as_millis())),
     })
 }
 
@@ -225,8 +238,22 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
                 .ok_or_else(|| read.corrupt(format!("step number {step} is not positive")))
         })
         .transpose()?;
+    let withdrawal = match (state, row.withdrawn_at) {
+        (QuestionState::Withdrawn, Some(withdrawn_at)) => Some(Withdrawal {
+            withdrawn_by: row
+                .withdrawn_by
+                .as_deref()
+                .map(|user| read.uuid(user).map(UserId::from_uuid))
+                .transpose()?,
+            withdrawn_at: read.timestamp(withdrawn_at)?,
+        }),
+        (QuestionState::Withdrawn, None) | (_, Some(_)) => {
+            return Err(read.corrupt("the state and the withdrawal disagree".to_owned()));
+        }
+        (_, None) => None,
+    };
     let reply = match (state, row.reply_picked.as_deref(), row.replied_at) {
-        (QuestionState::Open, None, None) => None,
+        (QuestionState::Open | QuestionState::Withdrawn, None, None) => None,
         (QuestionState::Answered, Some(picked), Some(replied_at)) => {
             let comment = match row.reply_comment.as_deref() {
                 Some(raw) => Context::parse_as(raw, Field::Comment).map_err(|e| read.corrupt(e.to_string()))?,
@@ -262,6 +289,7 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
             .transpose()?,
         asked_at: read.timestamp(row.asked_at)?,
         reply,
+        withdrawal,
         version: read.version(row.version)?,
     })
 }

@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { ClosedGroup, ItemState, Kind, Need, Size, Stage } from "../api/client";
+import type { ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
 
 export const SIZES: readonly Size[] = ["s", "m", "l", "xl"];
 
@@ -29,6 +29,13 @@ export const STAGE_LABELS: Record<Stage, string> = {
   as_written: "As written",
   with_context: "With context",
   defined: "Defined",
+};
+
+/** Where a turn goes, in a sentence: "going to: with context". */
+export const GOAL_LABELS: Record<Goal, string> = {
+  with_context: "with context",
+  defined: "defined",
+  done: "done",
 };
 
 export const STATE_LABELS: Record<ItemState, string> = {

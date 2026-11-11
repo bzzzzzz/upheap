@@ -19,6 +19,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::turns::{GoalDto, TurnDto};
+
 /// Effort or impact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -242,6 +244,11 @@ pub enum ItemActionDto {
     AddStep,
     /// Ask a question or make a request on the item. Offered for an open item the caller may edit.
     AskQuestion,
+    /// Send the item to an agent, on `POST …/turn`. Offered for an open item the caller may edit that no agent has.
+    SendToAgent,
+    /// Take the item back from the agent, on `DELETE …/turn`. Offered for an open item the caller may edit that has
+    /// an open turn.
+    TakeBack,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -253,6 +260,8 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::MakeTask => Self::MakeTask,
             ItemAction::AddStep => Self::AddStep,
             ItemAction::AskQuestion => Self::AskQuestion,
+            ItemAction::SendToAgent => Self::SendToAgent,
+            ItemAction::TakeBack => Self::TakeBack,
         }
     }
 }
@@ -395,6 +404,9 @@ impl TryFrom<QuestionKindDto> for QuestionKind {
 pub enum QuestionStateDto {
     Open,
     Answered,
+    /// Closing the item took the question back, unanswered. Reopening the item doesn't bring it back, and it takes
+    /// no reply.
+    Withdrawn,
     /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -406,6 +418,7 @@ impl From<QuestionState> for QuestionStateDto {
         match state {
             QuestionState::Open => Self::Open,
             QuestionState::Answered => Self::Answered,
+            QuestionState::Withdrawn => Self::Withdrawn,
         }
     }
 }
@@ -469,8 +482,19 @@ pub struct QuestionDto {
     pub asked_at: i64,
     /// When it was asked, ready to show: "today", "2 days ago".
     pub asked_label: String,
-    /// `null` while the question is open.
+    /// `null` unless the question is answered.
     pub reply: Option<QuestionReplyDto>,
+    /// When closing the item withdrew the question, in UTC milliseconds; `null` unless the question is withdrawn.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub withdrawn_at: Option<i64>,
+    /// Who closed the item and so withdrew the question. `null` unless the question is withdrawn, or when it can't be
+    /// traced.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub withdrawn_by: Option<UserRefDto>,
     /// Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -702,6 +726,22 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub waits_for_you: bool,
+    /// The open turn: the item was sent to an agent and not taken back. `null` when there is none, and on a closed
+    /// item. Taking the item back, starting it, closing it and archiving its heap end the turn.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub turn: Option<TurnDto>,
+    /// The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item
+    /// is sent. `null` on a closed item and in a build that has no agents.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub next_goal: Option<GoalDto>,
+    /// Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for
+    /// the caller. Who has an item never changes its place in the list. On every response, lists included; always
+    /// `false` on a closed item and in an archived heap.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub with_agent: bool,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -905,12 +945,13 @@ mod tests {
     use super::*;
     use crate::audit::{AuditActionDto, AuditLogDto};
     use crate::me::{MeActionDto, MeDto};
+    use crate::turns::{GoalDto, ReachDto, TurnSourceDto};
 
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
     fn question_from_a_later_server() -> serde_json::Value {
         json!([{
             "number": 1, "kind": "review", "text": "Look", "details": null, "choices": [], "many": false,
-            "step": null, "state": "withdrawn", "asked_by": null, "asked_at": 0, "asked_label": "today",
+            "step": null, "state": "parked", "asked_by": null, "asked_at": 0, "asked_label": "today",
             "reply": null, "version": 1, "allowed_actions": ["reply", "withdraw"],
         }])
     }
@@ -931,7 +972,9 @@ mod tests {
                 "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
-                "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
+                "closed_group": "last_month",
+                "turn": { "reach": "until_done", "goal": "reviewed", "line": null, "source": "schedule", "opened_at": 0, "opened_by": null },
+                "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
                 "steps": [{
                     "id": Uuid::nil(), "number": 1, "title": "Run in staging", "context": null, "state": "parked",
                     "version": 1, "allowed_actions": ["edit", "reorder"],
@@ -958,6 +1001,10 @@ mod tests {
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
         expect_that!(ranked.item.kind, eq(KindDto::Unknown));
         expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
+        let turn = ranked.item.turn.or_fail()?;
+        expect_that!(turn.reach, eq(ReachDto::Unknown));
+        expect_that!(turn.goal, eq(GoalDto::Unknown));
+        expect_that!(turn.source, eq(TurnSourceDto::Unknown));
         let steps = ranked.item.steps.or_fail()?;
         expect_that!(steps[0].state, eq(StepStateDto::Unknown));
         expect_that!(steps[0].allowed_actions, elements_are![eq(&StepActionDto::Edit)]);

@@ -113,6 +113,10 @@ pub enum Field {
     Comment,
     /// The reply in a question's edit.
     Reply,
+    /// The line the person sends an agent with.
+    Line,
+    /// How far a turn goes.
+    Reach,
 }
 
 impl Field {
@@ -144,6 +148,8 @@ impl Field {
             Self::Picked => "picked",
             Self::Comment => "comment",
             Self::Reply => "reply",
+            Self::Line => "line",
+            Self::Reach => "reach",
         }
     }
 }

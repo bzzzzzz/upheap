@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
+import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
 import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
@@ -45,6 +46,8 @@ export function HeapPage({
   const { search, setSearch } = useListSearch();
   const [panel, setPanel] = useState<Panel>(null);
   const changeState = useChangeState(heapRef, list.data);
+  // A change to an item an agent has asks first: every way of changing a state in the list goes through it.
+  const agentConfirm = useConfirmAgentStateChange(changeState.run);
   const closeItem = useCloseItem(heapRef, itemKey);
 
   // The list's keys (ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
@@ -94,10 +97,11 @@ export function HeapPage({
           onSearch={setSearch}
           panel={panel}
           onPanel={setPanel}
-          onChangeState={changeState.run}
+          onChangeState={agentConfirm.onChangeState}
         />
       </div>
       {pane}
+      {agentConfirm.confirm}
     </div>
   );
 }

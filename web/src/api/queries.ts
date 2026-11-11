@@ -36,6 +36,7 @@ import {
   type ParameterPatch,
   type RankingPreviewRequest,
   type Role,
+  type SendToAgent,
   type Question,
   type QuestionReply,
   type Step,
@@ -390,6 +391,53 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
     },
     // The lists say which items wait for you, and Waiting for me what does.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
+  });
+}
+
+/**
+ * Sends the item to an agent. The answer is the whole item, with its turn, and replaces the cached one; sending
+ * needs no version, as a turn is its own row. A send refused because someone else sent the item first fetches it again.
+ */
+export function useSendToAgent(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ item, body }: { item: Item; body: SendToAgent }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn", {
+          params: { path: { ...heap, item: item.key } },
+          body,
+        }),
+      ),
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onError: (error, { item }) => {
+      if (error instanceof ApiProblem && error.code === "turn_open") {
+        void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+      }
+    },
+    // Not returned: the mutation is done once the server has the turn, and the lists catch up after. The lists say
+    // which items an agent has, and a turn moves an item's allowed actions.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
+  });
+}
+
+/** Takes the item back from the agent. Taking back what no agent has is not an error: the item comes back as it is. */
+export function useTakeBack(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: Item) =>
+      unwrap(
+        await api.DELETE("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn", {
+          params: { path: { ...heap, item: item.key } },
+        }),
+      ),
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
@@ -915,7 +963,7 @@ export function useUpdateHeap(team: string) {
       patch,
     }: {
       heap: Heap;
-      patch: { name?: string; slug?: string; context?: string | null };
+      patch: { name?: string; slug?: string; context?: string | null; agents_prepare?: boolean };
     }) =>
       unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}", {

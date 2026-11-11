@@ -66,8 +66,9 @@ const SHOW_FOR_MS = 6000;
 
 /**
  * The toast after a change from the list (ux.md, The list §3): bottom centre, above the phone's tabs. It goes
- * after a few seconds, or when Undo or ✕ is pressed. Under the Add dialog and the phone's sheets, so a toast from the
- * last item added never covers the dialog's buttons.
+ * after a few seconds, or when Undo or ✕ is pressed. Over the open item (a phone's sheet is the item, and Send to an
+ * agent offers Undo from inside it), under the Add dialog and the phone's other sheets, so a toast from the last item
+ * added never covers the dialog's buttons.
  */
 function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
   useEffect(() => {
@@ -79,7 +80,7 @@ function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () =>
   return (
     <div
       role={toast?.error ? "alert" : "status"}
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-center px-4 sm:bottom-6"
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-45 flex justify-center px-4 sm:bottom-6"
     >
       {toast && (
         <div

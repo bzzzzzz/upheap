@@ -52,7 +52,11 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
 
 fn render(heap: &HeapDto, team: &str, handle: &str, out: &mut Output) -> std::io::Result<()> {
     let archived = if heap.archived_at.is_some() { " · archived" } else { "" };
-    out.line_toned(&format!("{} · {team}{archived}", heap.name), Tone::Strong)?;
+    let prepare = if heap.agents_prepare { "on" } else { "off" };
+    out.line_toned(
+        &format!("{} · {team}{archived} · agents prepare new notes: {prepare}", heap.name),
+        Tone::Strong,
+    )?;
     out.line("")?;
     out.line_toned("Context", Tone::Strong)?;
     match heap.context.as_deref().filter(|text| !text.is_empty()) {

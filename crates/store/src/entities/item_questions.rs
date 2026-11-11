@@ -21,6 +21,8 @@ pub struct Model {
     pub reply_comment: Option<String>,
     pub replied_by: Option<String>,
     pub replied_at: Option<i64>,
+    pub withdrawn_by: Option<String>,
+    pub withdrawn_at: Option<i64>,
     pub version: i32,
 }
 

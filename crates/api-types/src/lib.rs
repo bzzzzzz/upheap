@@ -25,6 +25,7 @@ pub mod questions;
 pub mod steps;
 pub mod tags;
 pub mod teams;
+pub mod turns;
 pub mod users;
 pub mod views;
 pub mod waiting;
