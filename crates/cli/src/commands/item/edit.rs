@@ -1,6 +1,6 @@
 //! `upheap item edit <item>`: change an item's fields.
 
-use api_types::common::{ItemDto, NeedDto, SizeDto};
+use api_types::common::{ItemDto, NeedDto, SizeDto, StageDto};
 use api_types::items::ItemPatchDto;
 use api_types::tags::TagListDto;
 use clap::Args;
@@ -31,6 +31,9 @@ pub struct EditArgs {
     /// The item's context, read from this file, or from stdin for `-`
     #[arg(long, value_name = "FILE", conflicts_with = "no_description")]
     pub context_file: Option<String>,
+    /// How far it's been prepared: as_written, with_context, defined. Only a task can be defined
+    #[arg(long, value_name = "STAGE", value_parser = parse_stage)]
+    pub stage: Option<StageDto>,
     /// How much work: s, m, l, xl
     #[arg(long, value_name = "SIZE", value_parser = parse_api_value::<SizeDto>, conflicts_with = "no_effort")]
     pub effort: Option<SizeDto>,
@@ -71,6 +74,7 @@ impl EditArgs {
             || self.need.is_some()
             || self.description.is_some()
             || self.context_file.is_some()
+            || self.stage.is_some()
             || self.effort.is_some()
             || self.impact.is_some()
             || self.due.is_some()
@@ -132,6 +136,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         title: args.title,
         description,
         need: args.need,
+        stage: args.stage,
         effort: clearing(args.effort, args.no_effort),
         impact: clearing(args.impact, args.no_impact),
         due,
@@ -148,6 +153,17 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         Mode::Human => out.line(&format!("Updated {}: {}.", edited.value.key, edited.value.title))?,
     }
     Ok(())
+}
+
+/// Reads `--stage`. The stage type takes any unknown word as a stage a newer server added, which a request can't
+/// carry, so only the three it knows are taken.
+fn parse_stage(raw: &str) -> Result<StageDto, String> {
+    match parse_api_value::<StageDto>(raw)? {
+        StageDto::Unknown => Err(format!(
+            "unknown stage `{raw}`, expected one of `as_written`, `with_context`, `defined`"
+        )),
+        stage => Ok(stage),
+    }
 }
 
 /// A patch field for a value that can be set or cleared: the value, `null` for its `--no-` flag, or left out.
@@ -192,6 +208,16 @@ mod tests {
         let merged = merge_tags(&item, vec![c, a], &[b]);
 
         verify_that!(merged, elements_are![eq(&a), eq(&c)])
+    }
+
+    #[gtest]
+    fn a_stage_is_one_of_the_three_known() {
+        expect_that!(parse_stage("with_context"), ok(eq(&StageDto::WithContext)));
+        expect_that!(parse_stage("defined"), ok(eq(&StageDto::Defined)));
+        expect_that!(
+            parse_stage("reviewed"),
+            err(contains_substring("unknown stage `reviewed`"))
+        );
     }
 
     #[gtest]
