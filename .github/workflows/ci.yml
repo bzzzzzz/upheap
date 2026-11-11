@@ -20,6 +20,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: "1.95"
+  WASM_PACK_VERSION: "0.14.0"
+  # Where wasm-pack keeps the tools it downloads (binaryen's wasm-opt, and wasm-bindgen built from source), so the
+  # cache step below can name it.
+  WASM_PACK_CACHE: /home/runner/.cache/.wasm-pack
 
 jobs:
   rust:
@@ -187,7 +191,16 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: wasm-pack@0.14.0
+          tool: wasm-pack@${{ env.WASM_PACK_VERSION }}
+
+      # wasm-pack downloads wasm-opt from github.com on first use, which fails now and then (a 504). The cache means
+      # most runs don't download it; the lockfile in the key refreshes the wasm-bindgen it builds, and the restore
+      # key keeps the older cache when only that changes.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.WASM_PACK_CACHE }}
+          key: wasm-pack-${{ runner.os }}-${{ env.WASM_PACK_VERSION }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: wasm-pack-${{ runner.os }}-${{ env.WASM_PACK_VERSION }}-
 
       - uses: actions/setup-node@v4
         with:
@@ -198,8 +211,15 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      # A cache miss still downloads wasm-opt, and wasm-pack picks the URL, so the build is tried up to 3 times. A
+      # compile error fails all 3, with its message each time.
       - name: Build the backend
-        run: npm run build:backend
+        run: |
+          for i in 1 2 3; do
+            npm run build:backend && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 10))
+          done
 
       - name: Size budget
         run: |
@@ -216,10 +236,19 @@ jobs:
       - name: Smoke test in Node
         run: npm run smoke:local
 
+      # apt-get fails now and then on a mirror that is out of sync, so the install is tried up to 3 times.
+      - name: Install Chromium
+        run: |
+          for i in 1 2 3; do
+            npx playwright install --with-deps chromium && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 15))
+          done
+
       # Builds the web app, serves it as GitHub Pages does and runs the golden paths that apply, with export and
       # import and the tab lock (web/playwright.local.config.ts).
       - name: Playwright against the static build
-        run: npx playwright install --with-deps chromium && npm run e2e:local
+        run: npm run e2e:local
 
       - name: Upload report
         if: failure()
@@ -252,7 +281,17 @@ jobs:
 
       - name: Install
         working-directory: web
-        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+        run: npm ci --no-audit --no-fund
+
+      # apt-get fails now and then on a mirror that is out of sync, so the install is tried up to 3 times.
+      - name: Install Chromium
+        working-directory: web
+        run: |
+          for i in 1 2 3; do
+            npx playwright install --with-deps chromium && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 15))
+          done
 
       # Compiled here rather than inside Playwright's server start-up, so its time shows and doesn't count
       # against the start-up timeout.

@@ -162,6 +162,7 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
   );
   await takeBackAsk(page).getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(who(page)).toContainText("With an agent since");
+  await expect(state.getByRole("button", { name: "Start", exact: true })).toBeFocused();
 
   await state.getByRole("button", { name: "Block", exact: true }).click();
   await expect(takeBackAsk(page)).toHaveCount(0);

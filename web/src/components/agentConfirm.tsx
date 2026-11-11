@@ -3,9 +3,10 @@ import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import type { Item, ItemState } from "../api/client";
 import { compactButtonClass } from "./buttons";
-import { focusRowOf, type ChangeState } from "./ItemRow";
+import { rowOf, type ChangeState } from "./ItemRow";
 import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** What Take back asks before it takes an item back from an agent, on the item and on a stuck row. */
 export const TAKE_BACK_QUESTION = "Take this back from the agent? It stops, and what it changed stays.";
@@ -45,6 +46,7 @@ export function useConfirmAgentStateChange(change: ChangeState): { onChangeState
     if (takesBack(item, state)) setAsking({ item, state, onError });
     else change(item, state, onError);
   };
+  const focusAfterRender = useFocusAfterRender();
   const stop = () => setAsking(null);
   const confirm = asking && (
     <AgentStateConfirm
@@ -57,8 +59,7 @@ export function useConfirmAgentStateChange(change: ChangeState): { onChangeState
       onCancel={() => {
         stop();
         asking.onError?.();
-        // After the dialog has gone, which would otherwise put the focus back where it found it.
-        window.setTimeout(() => focusRowOf(asking.item.key));
+        focusAfterRender(() => rowOf(asking.item.key));
       }}
     />
   );
