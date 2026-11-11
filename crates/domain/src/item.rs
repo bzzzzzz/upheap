@@ -204,6 +204,9 @@ pub enum StateKind {
 impl StateKind {
     pub const ALL: [Self; 5] = [Self::Open, Self::InProgress, Self::Blocked, Self::Done, Self::WontDo];
 
+    /// The states of an item that isn't closed, which are the ones that rank.
+    pub const OPEN: [Self; 3] = [Self::Open, Self::InProgress, Self::Blocked];
+
     pub const fn is_closed(self) -> bool {
         matches!(self, Self::Done | Self::WontDo)
     }

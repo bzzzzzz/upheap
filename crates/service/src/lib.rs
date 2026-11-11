@@ -30,6 +30,7 @@ pub mod tags;
 pub mod teams;
 #[cfg(feature = "accounts")]
 pub mod users;
+pub mod waiting;
 
 use std::sync::{Arc, Mutex};
 

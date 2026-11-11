@@ -3,6 +3,7 @@
 //! A question is its own row with its own version, so replying never conflicts with editing the item
 //! (architecture.md, Data model). Questions are never deleted: an answered one stays, with its reply.
 
+use crate::heap::Heap;
 use crate::item::{Item, ItemError};
 use crate::step::StepNumber;
 use crate::text::{Context, parse_positive, parse_required};
@@ -387,6 +388,12 @@ pub const fn check_questions_editable(item: &Item) -> Result<(), ItemError> {
         return Err(ItemError::Closed { item_id: item.id });
     }
     Ok(())
+}
+
+/// Whether `item` waits for the person: it is open, its heap is active and it has an open question, whoever asked it
+/// (Waiting for me). The heap's other rules, such as the role, don't matter: any member sees it waiting.
+pub const fn waits_for_you(item: &Item, heap: &Heap, open_questions: usize) -> bool {
+    !item.is_closed() && !heap.is_archived() && open_questions > 0
 }
 
 /// Checks that `fields` can be asked on `item`, whose questions are `questions` and whose steps are numbered

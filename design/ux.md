@@ -97,11 +97,11 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width | Navigation | List | Item |
 | --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Closed, + (Add), Settings, More | Full width, compact rows | Bottom sheet over the list |
-| Tablet, 640–1023 px | An 80 px rail: the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams, Account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
+| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More (the local build: Open, Closed, +, Settings, More) | Full width, compact rows | Bottom sheet over the list |
+| Tablet, 640–1023 px | An 80 px rail: Waiting (server build), the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it (server build), a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams, Account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
+**More** on a phone holds Settings (server build), Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
 rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password (server build), Appearance, Command line (server build) and Your data (local
 build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -112,7 +112,20 @@ the team in the URL (a link to its page, shown on the heap's pages and the team'
 where Teams already leads to the one team), Teams and Account. The heap's title names its team too ("Product ·
 Acme"), on the phone's top bar as well, except for a heap in the personal team.
 
-A phone's tabs have room for four: Settings sits right of the +, and Activity goes into More with the account pages.
+A phone's tabs have room for four: Waiting sits left of the + and Closed right of it, and Settings and Activity go
+into More with the account pages. The local build has nothing to wait for, so it keeps Open, Closed, +, Settings and
+More, and no Waiting anywhere.
+
+**Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
+me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
+the icon. There is no count at zero, and the entry stays. The count is the number of open questions across the
+person's heaps, fetched with the page, kept fresh for 30 seconds and fetched again on focus and after a reply or an
+item's change; nothing polls.
+
+Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
+shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
+that is `/waiting`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
+there and active, else the first active heap, else the first.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
 wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
@@ -234,6 +247,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 11. Active filters and changed view settings show as the removable chips of point 8, so the user always sees why the
     list is short.
 12. The hidden-items note offers the fix: "3 blocked items are hidden. Show them."
+13. An open item with an open question says **waits for you** at the end of its row, small, semibold and in the accent.
+    On a phone, where the end of the row is tight, a small accent dot before the title stands for it. A screen reader
+    hears ", waits for you" after the title on every width. The closed list and the static build never show it.
 
 ## The item
 
@@ -335,6 +351,34 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 5. **Due starts at None** in the Add dialog, with the rough choices one tap away. On a phone's row of due chips
    nothing is picked instead, and a second tap on a chip clears it. In the item, the picker is a sheet of 52 px rows
    with Exact date and Clear due.
+
+## Waiting for me
+
+The page at `/waiting` (server build): every open question on an open item in the person's active heaps, answered in
+its row.
+
+1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
+   first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
+   Rows are one column at the app's content width, separated by thin rules; no item pane opens beside the page.
+2. A row is the item's Waits for you row, the same component, with a head line of its own: the kind ("Request",
+   "Question", "Question · pick any"), the item's title as an accent, underlined link to the item in its heap, the heap's
+   name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
+   one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action
+   shows no controls.
+3. **Details ▸** holds the details as written and under them **Context ▸**, which unfolds the item's context and the
+   heap's, each under a small heading ("This item", the heap's name), or "No context". They are fetched when Context is
+   opened, not with the page. A question without details shows Context alone.
+4. After a reply there is no toast: the row leaves, the count drops, the focus goes to the row that took its place if it
+   was lost with the row, else to the heading, and a polite live region says Replied to “<text>”. If it fails the row
+   stays with its picks and comment and the reason shows under it. If someone else replied first, or the item closed
+   first, the row leaves and a note at the top of the list says so; the closed case keeps the comment so it can be
+   copied. The notes stay until the next reply or until the person leaves the page. Drafts belong to their row and
+   survive a refresh.
+5. On a phone every control is 44 px, Reply spans the width, and Done and Can't be done share a row at half the width
+   each.
+6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
+   from agents and teammates show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
+   "Showing the 500 most important of n."
 
 ## Closed
 

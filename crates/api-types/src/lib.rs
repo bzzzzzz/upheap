@@ -27,3 +27,4 @@ pub mod tags;
 pub mod teams;
 pub mod users;
 pub mod views;
+pub mod waiting;

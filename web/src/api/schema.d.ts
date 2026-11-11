@@ -235,6 +235,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/waiting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What waits for the signed-in user: the open questions and requests on open items in the active heaps of their
+         *     teams, one row each, most important first. Rows are ordered by the item's ranking score in its own heap, highest
+         *     first (blockers' inheritance included), then by heap name, the item's position and the question's number; all
+         *     heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+         */
+        get: operations["get_waiting"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/authorize": {
         parameters: {
             query?: never;
@@ -1572,6 +1594,12 @@ export interface components {
              * @description Send back in `If-Match` when editing.
              */
             version: number;
+            /**
+             * @description Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the
+             *     caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
+             *     and in an archived heap.
+             */
+            waits_for_you: boolean;
         };
         /**
          * @description An action the caller can take on an item. Clients show controls only for these.
@@ -2408,6 +2436,60 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        /** @description What waits for the caller: every open question on an open item in their active heaps, most important first. */
+        Waiting: {
+            /**
+             * Format: int32
+             * @description How many questions wait. At most 500 are in `rows`; this is the true total.
+             */
+            count: number;
+            /**
+             * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
+             *     its heap, then the question's number. Heaps weigh the same for now.
+             */
+            rows: components["schemas"]["WaitingRow"][];
+        };
+        /** @description The heap a row's item is in, and its team. */
+        WaitingHeap: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            /** @description The team's name as `GET /me` shows it. */
+            team_name: string;
+            team_slug: string;
+        };
+        /** @description The item a row is on. */
+        WaitingItem: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Five characters, unique within the heap.
+             * @example k3x9a
+             */
+            key: string;
+            kind: components["schemas"]["Kind"];
+            stage?: null | components["schemas"]["Stage"];
+            title: string;
+        };
+        /** @description One thing that waits. */
+        WaitingRow: {
+            heap: components["schemas"]["WaitingHeap"];
+            item: components["schemas"]["WaitingItem"];
+            kind: components["schemas"]["WaitingRowKind"];
+            /** @description The open question, as the item carries it. */
+            question: components["schemas"]["Question"];
+            /**
+             * @description The title of the step the question names, so a client needn't load the item's steps. `null` when it names
+             *     none, or one that no longer exists.
+             */
+            step_title?: string | null;
+        };
+        /**
+         * @description What kind of thing waits. Only questions for now: more kinds can join.
+         * @enum {string}
+         */
+        WaitingRowKind: "question";
     };
     responses: never;
     parameters: never;
@@ -2935,6 +3017,37 @@ export interface operations {
             };
             /** @description No such sign-in, or it isn't the caller's */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_waiting: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Waiting"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

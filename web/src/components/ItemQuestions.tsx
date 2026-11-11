@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import { ApiProblem, type HeapRef, type Item, type Question, type QuestionReply } from "../api/client";
@@ -21,16 +21,20 @@ const pickBoxClass =
 const isClosedMeanwhile = (error: Error) => error instanceof ApiProblem && error.code === "item_closed";
 
 /** The id of a question's short text, which its controls are described by. */
-const textId = (item: Item, question: Question) => `question-text-${item.id}-${question.number}`;
+const textId = (itemId: string, question: Question) => `question-text-${itemId}-${question.number}`;
 
 /** The replies that mean the question is answered already, so the item is fetched again and the row leaves. */
 const isAnsweredMeanwhile = (error: Error) =>
   error instanceof ApiProblem && (error.code === "version_conflict" || error.code === "question_answered");
 
+/** "Question", "Question · pick any" or "Request": what the question is. */
+export function kindWord(question: Question) {
+  return `${question.kind === "request" ? "Request" : "Question"}${question.many ? " · pick any" : ""}`;
+}
+
 /** "Question", "Question · pick any", "Request", then the step it names. */
 function kindLine(item: Item, question: Question) {
-  const parts = [question.kind === "request" ? "Request" : "Question"];
-  if (question.many) parts.push("pick any");
+  const parts = [kindWord(question)];
   if (question.step !== null && question.step !== undefined) {
     const title = item.steps?.find((step) => step.number === question.step)?.title;
     parts.push(title ? `step “${title}”` : `step ${question.step}`);
@@ -38,32 +42,66 @@ function kindLine(item: Item, question: Question) {
   return parts.join(" · ");
 }
 
-/** A question's kind line, its short text and its details behind a disclosure: what every row shows. */
-function QuestionHead({ item, question }: { item: Item; question: Question }) {
+/** A button that folds `children` open under it. */
+function Disclosure({ label, children }: { label: string; children: ReactNode }) {
   const [shown, setShown] = useState(false);
   return (
     <>
-      <p className="text-xs text-muted">{kindLine(item, question)}</p>
-      <p id={textId(item, question)} className="text-base leading-snug font-semibold break-words">
+      <Button
+        onPress={() => setShown((current) => !current)}
+        aria-expanded={shown}
+        data-details=""
+        className={detailsButtonClass}
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className={`size-3.5 transition-transform motion-reduce:transition-none ${shown ? "rotate-90" : ""}`}
+        />
+        {label}
+      </Button>
+      {shown && children}
+    </>
+  );
+}
+
+/**
+ * A question's head line, its short text and its details behind a disclosure: what every row shows. `context`, for a
+ * row that sits away from its item, is folded under the details, or alone as "Context" when there are none.
+ */
+function QuestionHead({
+  itemId,
+  line,
+  question,
+  context,
+}: {
+  itemId: string;
+  line: ReactNode;
+  question: Question;
+  context?: ReactNode;
+}) {
+  const details = question.details ? (
+    <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">{question.details}</p>
+  ) : null;
+  let folded: ReactNode = null;
+  if (details && context) {
+    folded = (
+      <Disclosure label="Details">
+        {details}
+        <Disclosure label="Context">{context}</Disclosure>
+      </Disclosure>
+    );
+  } else if (details) {
+    folded = <Disclosure label="Details">{details}</Disclosure>;
+  } else if (context) {
+    folded = <Disclosure label="Context">{context}</Disclosure>;
+  }
+  return (
+    <>
+      {line}
+      <p id={textId(itemId, question)} className="text-base leading-snug font-semibold break-words">
         {question.text}
       </p>
-      {question.details && (
-        <>
-          <Button
-            onPress={() => setShown((current) => !current)}
-            aria-expanded={shown}
-            data-details=""
-            className={detailsButtonClass}
-          >
-            <ChevronRight
-              aria-hidden="true"
-              className={`size-3.5 transition-transform motion-reduce:transition-none ${shown ? "rotate-90" : ""}`}
-            />
-            Details
-          </Button>
-          {shown && <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">{question.details}</p>}
-        </>
-      )}
+      {folded}
     </>
   );
 }
@@ -134,6 +172,7 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
                 key={question.number}
                 heapRef={heapRef}
                 item={item}
+                line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
                 question={question}
                 onReplied={onReplied}
                 onElsewhere={onElsewhere}
@@ -160,17 +199,27 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
   );
 }
 
-function QuestionRow({
+/**
+ * One open question with its reply controls, in the item's Waits for you and on the Waiting for me page. `line` is the
+ * row's own first line, and `context` what the page folds under the details. The reply and its failures are the
+ * same in both: the caller says what to do once the row has been replied to, or turns out to be answered already or
+ * on a closed item.
+ */
+export function QuestionRow({
   heapRef,
   item,
+  line,
   question,
+  context,
   onReplied,
   onElsewhere,
   onRefused,
 }: {
   heapRef: HeapRef;
-  item: Item;
+  item: { id: string; key: string };
+  line: ReactNode;
   question: Question;
+  context?: ReactNode;
   onReplied: (question: Question) => void;
   onElsewhere: (question: Question) => void;
   onRefused: (question: Question, comment: string | null) => void;
@@ -188,11 +237,11 @@ function QuestionRow({
     );
 
   return (
-    <li data-question={question.number} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
-      <QuestionHead item={item} question={question} />
+    <li data-item={item.id} data-question={question.number} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+      <QuestionHead itemId={item.id} line={line} question={question} context={context} />
       {canReply && (
         <ReplyControls
-          describedBy={textId(item, question)}
+          describedBy={textId(item.id, question)}
           question={question}
           pending={reply.isPending}
           onSend={send}
@@ -235,14 +284,14 @@ function ReplyControls({
     return (
       <div className="flex flex-col gap-2">
         {commentField("Comment, optional")}
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
           {question.choices.map((label, index) => (
             <Button
               key={label}
               aria-describedby={describedBy}
               isDisabled={pending}
               onPress={() => onSend({ picked: [index], comment: note })}
-              className={`${index === 0 ? compactButtonClass.primary : compactButtonClass.bordered} ${focusClass} max-sm:flex-1`}
+              className={`${index === 0 ? compactButtonClass.primary : compactButtonClass.bordered} ${focusClass}`}
             >
               {label}
             </Button>
@@ -352,7 +401,11 @@ export function AnsweredQuestions({ item }: { item: Item }) {
       <ul className="mt-1 flex flex-col divide-y divide-line pl-3">
         {listed.map((question) => (
           <li key={question.number} className="flex flex-col gap-1 py-3 first:pt-1 last:pb-1">
-            <QuestionHead item={item} question={question} />
+            <QuestionHead
+              itemId={item.id}
+              line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
+              question={question}
+            />
             <Outcome question={question} />
           </li>
         ))}
