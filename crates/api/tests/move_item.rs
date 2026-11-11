@@ -373,6 +373,55 @@ async fn the_history_follows_the_item_to_the_new_heap() -> Result<()> {
     Ok(())
 }
 
+/// The heap's own log, without `entity_id`.
+async fn heap_log(app: &TestApp, session: &str, heap: &str) -> Result<Value> {
+    let audit = get(app, session, &format!("{}/audit", app.heap_url(heap).await?)).await?;
+    Ok(audit.body)
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_plain_heap_logs_name_what_moved_between_the_heaps() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let infra = w.app.new_tag_id(&w.session, &w.from, "infra").await?;
+    edit(&w.app, &w.session, &w.item, json!({ "tag_ids": [infra] })).await?;
+    w.app.clock.advance(Duration::from_millis(1));
+
+    // Act
+    let moved = w.moved().await?;
+    let target_log = heap_log(&w.app, &w.session, &w.to).await?;
+    let source_log = heap_log(&w.app, &w.session, &w.from).await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::OK));
+    let move_entry = &target_log["entries"][0];
+    expect_that!(move_entry["action"], eq(&json!("item_moved")));
+    expect_that!(
+        changes(move_entry),
+        contains(eq(
+            &json!({ "field": "heap", "label": "Heap", "before": "Personal", "after": "Agent work" })
+        ))
+    );
+    expect_that!(
+        changes(move_entry),
+        contains(eq(
+            &json!({ "field": "tags", "label": "Tags", "before": "infra", "after": null })
+        ))
+    );
+    let item_entries: Vec<&Value> = source_log["entries"]
+        .as_array()
+        .context("entries")?
+        .iter()
+        .filter(|entry| entry["entity"]["type"] == "item")
+        .collect();
+    expect_that!(item_entries.len(), ge(2));
+    for entry in item_entries {
+        expect_that!(entry["entity"]["label"], eq(&json!("Rotate the certs")));
+    }
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn a_key_the_target_heap_has_is_replaced_by_a_new_one() -> Result<()> {

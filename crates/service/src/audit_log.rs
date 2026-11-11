@@ -107,34 +107,28 @@ impl Services {
         };
         let (entries, next) = self.read_page(scope, &actions, request).await?;
 
+        // An item's history follows it between the heaps of the team, and so can a blocker, so what the entries name
+        // may be in any heap of the team: the heaps' names, their tags, parameters and options, and the items.
+        // Size assumption: a team holds a handful of heaps, each with tens of tags and parameters, so all of them are
+        // loaded on every read. If teams grow to many heaps, load only the heaps the page's entries name, including
+        // those in `item_moved` diffs.
         let mut names = Names::default();
-        names.insert(*access.heap.id.as_uuid(), access.heap.name.as_str());
-        // The heaps whose tags and parameters the entries may name: this one, and in an entity's history the others its
-        // entries were recorded in. A move's entry names the heaps it went between, and a blocker may have moved since.
-        let mut heaps = vec![heap_id];
-        let mut other_team_heaps = Vec::new();
-        if request.entity_id.is_some() {
-            for heap in store::heaps::list_heaps_for_teams(&self.db, &[access.heap.team_id]).await? {
-                names.insert(*heap.id.as_uuid(), heap.name.as_str());
-                if heap.id != heap_id {
-                    other_team_heaps.push(heap.id);
-                }
-            }
-            for other in entries.iter().filter_map(|entry| entry.heap_id) {
-                if !heaps.contains(&other) {
-                    heaps.push(other);
-                }
+        let mut team_heaps = vec![heap_id];
+        for heap in store::heaps::list_heaps_for_teams(&self.db, &[access.heap.team_id]).await? {
+            names.insert(*heap.id.as_uuid(), heap.name.as_str());
+            if heap.id != heap_id {
+                team_heaps.push(heap.id);
             }
         }
-        for heap in heaps {
-            self.insert_heap_vocabulary(&mut names, heap).await?;
+        for heap in &team_heaps {
+            self.insert_heap_vocabulary(&mut names, *heap).await?;
         }
         // The items the entries name, looked for in this heap and then in the team's others until all are found.
         let mut missing: Vec<ItemId> = collect_referenced_items(&entries)
             .into_iter()
             .map(ItemId::from_uuid)
             .collect();
-        for heap in std::iter::once(heap_id).chain(other_team_heaps) {
+        for heap in team_heaps {
             if missing.is_empty() {
                 break;
             }
