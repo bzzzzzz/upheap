@@ -16,7 +16,7 @@ fn heap(slug: &str) -> serde_json::Value {
 
 fn team(slug: &str, heaps: &[&str]) -> serde_json::Value {
     json!({
-        "id": Uuid::new_v4(), "slug": slug, "name": slug, "personal": false, "role": "admin", "member_count": 1,
+        "id": Uuid::new_v4(), "slug": slug, "name": slug, "personal": slug == "ada", "role": "admin", "member_count": 1,
         "heaps": heaps.iter().map(|h| heap(h)).collect::<Vec<_>>(),
     })
 }
@@ -53,6 +53,14 @@ fn a_heap_name_is_team_slash_heap_or_a_slug() -> googletest::Result<()> {
         )?;
     }
     Ok(())
+}
+
+#[gtest]
+fn the_personal_team_is_found_or_missing() -> googletest::Result<()> {
+    let mut me = me()?;
+    verify_that!(find_personal_team(&me)?, eq("ada"))?;
+    me.teams.retain(|team| !team.personal);
+    verify_that!(find_personal_team(&me), err(pat!(LookupError::NoPersonalTeam)))
 }
 
 #[gtest]

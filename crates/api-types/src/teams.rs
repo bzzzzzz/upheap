@@ -95,13 +95,14 @@ pub struct TeamDto {
 }
 
 /// A new team or heap.
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateNamedRequest)]
 pub struct CreateNamedDto {
     /// 1 to 100 characters.
     pub name: String,
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
     /// one made from the name: "My Team" gets `my-team`, or `my-team-2` if that is taken.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
 }
 
