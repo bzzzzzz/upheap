@@ -120,7 +120,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   item (in the same transaction as the change, with its own `turn_taken_back` entry first) and by archiving the heap
   (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
   an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
-  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new note, whoever added it. Neither
+  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it. Neither
   changes ranking.
 - **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it

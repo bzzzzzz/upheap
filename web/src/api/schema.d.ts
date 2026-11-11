@@ -1528,6 +1528,7 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            kind?: null | components["schemas"]["Kind"];
             /** @description Required: every item says how much it's needed. */
             need: components["schemas"]["Need"];
             /** @description An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use. */
@@ -1632,7 +1633,10 @@ export interface components {
          */
         Goal: "with_context" | "defined" | "done";
         Heap: {
-            /** @description Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap. */
+            /**
+             * @description Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with
+             *     context, a task to defined. Off for a new heap.
+             */
             agents_prepare: boolean;
             allowed_actions: components["schemas"]["HeapAction"][];
             /**
@@ -2912,7 +2916,7 @@ export interface components {
          * @description How a turn came to be opened.
          *
          *     - `go_ahead`: a person sent the item.
-         *     - `prepare`: the heap is set so agents prepare new notes, and this one was added.
+         *     - `prepare`: the heap is set so agents prepare new items, and this one was added.
          * @enum {string}
          */
         TurnSource: "go_ahead" | "prepare";
@@ -4613,7 +4617,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
             422: {
                 headers: {
                     [name: string]: unknown;

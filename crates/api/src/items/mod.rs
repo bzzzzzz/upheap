@@ -161,7 +161,7 @@ async fn list_closed(
 /// Adds an item. Only the title is required.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
     params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
-    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
+    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
 async fn create_item(
     State(state): State<AppState>,
     path: HeapPath,

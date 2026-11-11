@@ -429,6 +429,29 @@ async fn an_admin_sets_that_agents_prepare_and_a_member_may_not() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn a_task_added_in_a_prepare_heap_gets_a_turn_to_define_it() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (admin, heap) = app.register("admin@example.test").await?;
+    set_prepare(&app, &admin, &heap, true).await?;
+
+    // Act
+    let created = app
+        .new_item(&admin, &heap, json!({ "title": "Rotate the certs", "kind": "task" }))
+        .await?;
+    let key = created["key"].as_str().context("no key")?;
+    let prepared = get(&app, &admin, &heap, key).await?;
+
+    // Assert
+    expect_that!(prepared["kind"], eq(&json!("task")));
+    expect_that!(prepared["turn"]["source"], eq(&json!("prepare")));
+    expect_that!(prepared["turn"]["reach"], eq(&json!("one")));
+    expect_that!(prepared["turn"]["goal"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn setting_agents_prepare_is_audited_with_before_and_after() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

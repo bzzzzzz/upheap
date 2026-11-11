@@ -84,7 +84,7 @@ impl Goal {
 pub enum TurnSource {
     /// The person sent the item.
     GoAhead,
-    /// The heap is set so agents prepare every new note.
+    /// The heap is set so agents prepare every new item.
     Prepare,
 }
 
@@ -322,6 +322,7 @@ mod tests {
 
     fn item(kind: Kind, stage: Stage) -> Item {
         let fields = NewItem {
+            kind,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,
@@ -339,7 +340,6 @@ mod tests {
             UserId::from_uuid(Uuid::from_u128(10)),
             Timestamp::EPOCH,
         );
-        item.kind = kind;
         item.stage = stage;
         item
     }
@@ -438,6 +438,7 @@ mod run_tests {
 
     fn note() -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,

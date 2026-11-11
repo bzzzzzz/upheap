@@ -78,7 +78,8 @@ pub struct HeapDto {
     /// What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
     /// written: plain text for now, Markdown later. `null` when nobody has written one.
     pub context: Option<String>,
-    /// Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap.
+    /// Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with
+    /// context, a task to defined. Off for a new heap.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
     // says required.
     #[serde(default)]

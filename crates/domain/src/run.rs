@@ -319,6 +319,7 @@ mod tests {
 
     fn item() -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,

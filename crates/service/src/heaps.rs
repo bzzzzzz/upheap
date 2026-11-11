@@ -32,7 +32,7 @@ pub struct HeapPatch {
     pub name: Option<Name>,
     pub slug: Option<Handle>,
     pub context: Option<Option<Context>>,
-    /// Whether agents prepare every new note (Work with agents, Opening a turn).
+    /// Whether agents prepare every new item (Work with agents, Opening a turn).
     pub agents_prepare: Option<bool>,
 }
 

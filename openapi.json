@@ -2475,7 +2475,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
+            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7362,6 +7362,17 @@
               }
             ]
           },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Kind",
+                "description": "`\"note\"` when left out or `null`. A new item is always as written, so a task starts at that stage."
+              }
+            ]
+          },
           "need": {
             "$ref": "#/components/schemas/Need",
             "description": "Required: every item says how much it's needed."
@@ -7632,7 +7643,7 @@
         "properties": {
           "agents_prepare": {
             "type": "boolean",
-            "description": "Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap."
+            "description": "Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with\ncontext, a task to defined. Off for a new heap."
           },
           "allowed_actions": {
             "type": "array",
@@ -10757,7 +10768,7 @@
       },
       "TurnSource": {
         "type": "string",
-        "description": "How a turn came to be opened.\n\n- `go_ahead`: a person sent the item.\n- `prepare`: the heap is set so agents prepare new notes, and this one was added.",
+        "description": "How a turn came to be opened.\n\n- `go_ahead`: a person sent the item.\n- `prepare`: the heap is set so agents prepare new items, and this one was added.",
         "enum": [
           "go_ahead",
           "prepare"

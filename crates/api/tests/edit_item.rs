@@ -330,3 +330,62 @@ async fn a_closed_item_shows_no_stage_refuses_kind_changes_and_keeps_both_when_r
     expect_that!(reopened.body["stage"], eq(&json!("defined")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn an_item_is_created_as_a_task_when_the_kind_says_so() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let task = app
+        .create_item(&session, &heap, json!({ "title": "Rotate keys", "kind": "task" }))
+        .await?;
+    let note = app
+        .create_item(&session, &heap, json!({ "title": "Maybe", "kind": "note" }))
+        .await?;
+    let unset = app.create_item(&session, &heap, json!({ "title": "Plain" })).await?;
+    let null = app
+        .create_item(&session, &heap, json!({ "title": "Null", "kind": null }))
+        .await?;
+
+    // Assert
+    expect_that!(task.status, eq(StatusCode::CREATED));
+    expect_that!(task.body["kind"], eq(&json!("task")));
+    expect_that!(task.body["stage"], eq(&json!("as_written")));
+    expect_that!(task.body["state"], eq(&json!("open")));
+    expect_that!(note.body["kind"], eq(&json!("note")));
+    expect_that!(unset.body["kind"], eq(&json!("note")));
+    expect_that!(null.status, eq(StatusCode::CREATED));
+    expect_that!(null.body["kind"], eq(&json!("note")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_unknown_kind_on_create_is_refused_and_adds_nothing() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let refused = app
+        .create_item(&session, &heap, json!({ "title": "Remind me", "kind": "reminder" }))
+        .await?;
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(refused.body["code"], eq(&json!("value_unknown")));
+    expect_that!(list.body["ranked"], eq(&json!([])));
+    expect_that!(list.body["pinned"], eq(&json!([])));
+    Ok(())
+}
