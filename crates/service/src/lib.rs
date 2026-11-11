@@ -21,6 +21,8 @@ pub mod me;
 #[cfg(feature = "accounts")]
 pub mod oauth;
 pub mod parameters;
+#[cfg(feature = "accounts")]
+pub mod password_reset;
 mod personal;
 pub mod questions;
 mod random;

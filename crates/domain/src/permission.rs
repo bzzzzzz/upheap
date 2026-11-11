@@ -44,7 +44,8 @@ impl Permission {
 /// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
 /// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
 ///
-/// A password change is recorded in the user's personal team, whose one member is its admin, so only the user sees it.
+/// A password change, a reset link being made and a password set with one are recorded in the user's personal team,
+/// whose one member is its admin, so only the user sees them.
 pub const fn audit_permission(action: AuditAction) -> Permission {
     match action {
         AuditAction::UserRegistered | AuditAction::UserUpdated => Permission::ViewTeam,
@@ -57,7 +58,9 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::MemberJoined
         | AuditAction::InviteLinkCreated
         | AuditAction::InviteLinkRevoked
-        | AuditAction::PasswordChanged => Permission::ManageTeam,
+        | AuditAction::PasswordChanged
+        | AuditAction::PasswordResetLinkMade
+        | AuditAction::PasswordReset => Permission::ManageTeam,
         AuditAction::HeapCreated
         | AuditAction::HeapUpdated
         | AuditAction::HeapArchived

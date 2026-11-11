@@ -75,6 +75,9 @@ enum Target {
     /// A working invite link of a team of its own, made by a new admin none of the callers know, so every caller is a
     /// newcomer to it and joining leaves the shared team alone. Its token is in `{token}`.
     ForeignInviteLink,
+    /// A working password reset link of an account of its own, in `{token}`, so resetting it ends none of the callers'
+    /// sign-ins.
+    ResetLink,
     /// The caller's own user, with its version for `If-Match`.
     Me,
     /// A sign-in of the CLI as the caller, in `{id}`.
@@ -134,6 +137,8 @@ enum RequestBody {
     DisplayName,
     /// The password of the account from [`Target::OwnAccount`], as both the current and the new one.
     ChangePassword,
+    /// The new password for the account of [`Target::ResetLink`].
+    NewPassword,
     /// The CLI's authorization request.
     Authorization,
     /// A form exchanging the code from [`Target::AuthorizationCode`], as the CLI sends it, without cookie or CSRF
@@ -286,6 +291,22 @@ fn endpoints() -> Vec<Endpoint> {
             SignedIn,
             Target::OwnAccount,
             RequestBody::ChangePassword,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/password-resets/{token}",
+            Public,
+            Target::ResetLink,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/password-resets/{token}",
+            Public,
+            Target::ResetLink,
+            RequestBody::NewPassword,
             StatusCode::OK,
         ),
         row(
@@ -1059,6 +1080,13 @@ impl World {
         Ok(made.body["token"].as_str().context("link has no token")?.to_owned())
     }
 
+    /// The token of a working reset link of a new account.
+    async fn new_reset_token(&self) -> Result<String> {
+        let email = format!("{}@example.test", self.unique_name("user"));
+        self.app.register(&email).await?;
+        self.app.make_reset_link(&common::username_for(&email)).await
+    }
+
     /// A new heap in the shared team, created by its admin. Returns its slug.
     async fn new_heap(&self) -> Result<String> {
         let created = self
@@ -1127,6 +1155,7 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::NewPassword => Some(json!({ "password": PASSWORD })),
             RequestBody::ChangePassword => Some(json!({ "current_password": PASSWORD, "password": PASSWORD })),
             RequestBody::Authorization => Some(common::cli_authorization()),
             // Sent as forms by `call`.
@@ -1190,6 +1219,7 @@ impl World {
                 path = path.replace("{id}", id);
             }
             Target::ForeignInviteLink => path = path.replace("{token}", &self.new_invite_token().await?),
+            Target::ResetLink => path = path.replace("{token}", &self.new_reset_token().await?),
             Target::Me => {
                 if let Some(session) = &session {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;

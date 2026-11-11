@@ -26,6 +26,8 @@ mod me;
 #[cfg(feature = "accounts")]
 mod oauth;
 mod parameters;
+#[cfg(feature = "accounts")]
+mod password_resets;
 mod paths;
 mod questions;
 mod request_id;
@@ -178,6 +180,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(oauth::authorize_routes())
         .merge(users::routes())
         .merge(invites::routes())
+        .merge(password_resets::routes())
         .merge(me::sign_ins::routes())
         .merge(me::password::routes());
     // Turns are for a build that has agents.
