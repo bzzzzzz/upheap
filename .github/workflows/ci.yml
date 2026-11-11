@@ -44,6 +44,9 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Test the API without agents, as the local build has it
+        run: cargo test -p api --no-default-features --features accounts,trace-and-timeout --test local_user --locked
+
       - name: OpenAPI spec is up to date
         run: |
           cargo run --quiet --locked -p server -- openapi > openapi.json
