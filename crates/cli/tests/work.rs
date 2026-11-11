@@ -226,7 +226,8 @@ async fn what_a_run_is_refused_is_exit_3_with_the_servers_message_and_a_hint() -
         contains_substring(format!("hint: This run holds {note}; write to it only.").as_str())
     );
     expect_that!(done.exited(3), eq(true));
-    expect_that!(done.stderr, contains_substring("(run_forbidden)"));
+    expect_that!(done.stderr, contains_substring("(run_done_needs_review)"));
+    expect_that!(done.stderr, not(contains_substring("hint:")));
     expect_that!(not_reached.exited(3), eq(true));
     expect_that!(
         not_reached.stderr,

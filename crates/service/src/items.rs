@@ -14,7 +14,7 @@ use domain::permission::{
 };
 use domain::question::{Question, QuestionState, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
-use domain::run::{RunError, RunForbidden};
+use domain::run::{LAPSE_FAILURE, RunError, RunForbidden};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -339,7 +339,7 @@ impl Services {
             let turns = store::turns::list_open_turns(&self.db, &listed).await?;
             (
                 store::questions::count_open_questions(&self.db, &listed).await?,
-                turn_views(&self.db, turns.into_values()).await?,
+                turn_views(&self.db, turns.into_values(), now, false).await?,
             )
         };
         for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
@@ -817,8 +817,13 @@ pub(crate) async fn build_item_view(
         questions,
         open_turn,
     } = children;
-    let stuck = open_turn.as_ref().is_some_and(Turn::is_stuck);
-    let allowed_actions = allowed_item_actions(&item, heap, role, open_turn.is_some(), stuck, now);
+    // The turn reads with a lapsed run counted as failed, so everything below agrees on whether it is stuck.
+    let turn = match open_turn {
+        Some(turn) => turn_views(db, vec![turn], now, true).await?.remove(&item.id),
+        None => None,
+    };
+    let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
+    let allowed_actions = allowed_item_actions(&item, heap, role, turn.is_some(), stuck, now);
     let stage_choices = allowed_stage_choices(&item, heap, role);
     let step_actions = allowed_step_actions(&item, heap, role);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
@@ -827,11 +832,7 @@ pub(crate) async fn build_item_view(
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
     let waits_for_you = waits_for_you(&item, heap, open_questions, stuck);
-    let with_agent = with_agent(&item, heap, open_questions, open_turn.is_some(), stuck);
-    let turn = match open_turn {
-        Some(turn) => turn_views(db, vec![turn]).await?.remove(&item.id),
-        None => None,
-    };
+    let with_agent = with_agent(&item, heap, open_questions, turn.is_some(), stuck);
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     Ok(ItemView {
         parameters: describe_values(&item, &parameters),
@@ -852,11 +853,17 @@ pub(crate) async fn build_item_view(
     })
 }
 
-/// The open `turns` with the users who opened them, by item, in one query. Turns are opened by the team's members, so
-/// the users are few.
+/// The open `turns` with the users who opened them, by item, in one query each for the users, the runs, the runs that
+/// went quiet and the failures. Turns are opened by the team's members, so the users are few.
+///
+/// Each view's turn is read as of `now` ([`Turn::counting_lapse`]): a turn with a lapsed run counts it as failed, so
+/// it may be stuck though its stored count says otherwise, and its reason is the lapse. `lock` makes the read of the
+/// runs a locking one, for a caller that has taken the heap lock.
 pub(crate) async fn turn_views(
     db: &impl ConnectionTrait,
     turns: impl IntoIterator<Item = Turn>,
+    now: Timestamp,
+    lock: bool,
 ) -> Result<HashMap<ItemId, TurnView>, ServiceError> {
     let turns: Vec<Turn> = turns.into_iter().collect();
     let ids: Vec<UserId> = turns
@@ -871,9 +878,20 @@ pub(crate) async fn turn_views(
         .map(|user| (user.id, user))
         .collect();
     let turn_ids: Vec<TurnId> = turns.iter().map(|turn| turn.id).collect();
+    let lapsed: HashSet<TurnId> = store::runs::list_unended_runs_for_turns(db, &turn_ids, lock)
+        .await?
+        .into_iter()
+        .filter(|run| run.is_lapsed(now))
+        .map(|run| run.turn_id)
+        .collect();
+    let turns: Vec<Turn> = turns
+        .iter()
+        .map(|turn| turn.counting_lapse(lapsed.contains(&turn.id)))
+        .collect();
+    // A lapsed run is the latest failure there is, and isn't stored yet.
     let stuck_ids: Vec<TurnId> = turns
         .iter()
-        .filter(|turn| turn.is_stuck())
+        .filter(|turn| turn.is_stuck() && !lapsed.contains(&turn.id))
         .map(|turn| turn.id)
         .collect();
     let runs = store::runs::count_runs_for_turns(db, &turn_ids).await?;
@@ -882,10 +900,15 @@ pub(crate) async fn turn_views(
         .into_iter()
         .map(|turn| {
             let opened_by = pick_user(&users, turn.opened_by);
+            let stuck_reason = if lapsed.contains(&turn.id) {
+                Some(LAPSE_FAILURE.to_owned())
+            } else {
+                reasons.remove(&turn.id)
+            };
             let view = TurnView {
                 opened_by,
                 runs: runs.get(&turn.id).copied().unwrap_or(0),
-                stuck_reason: reasons.remove(&turn.id),
+                stuck_reason,
                 turn,
             };
             (view.turn.item_id, view)

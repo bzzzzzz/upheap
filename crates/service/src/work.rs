@@ -18,7 +18,7 @@ use domain::step::StepState;
 use domain::team::Team;
 use domain::turn::Turn;
 use domain::validation::Field;
-use domain::{HeapId, ItemId, RunId, Timestamp, ValidationError};
+use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active};
@@ -103,13 +103,16 @@ impl Services {
         let heaps = self.resolve_queue_heaps(principal, heaps).await?;
         let now = self.now();
         let heap_ids: Vec<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
-        let live: HashSet<ItemId> = store::runs::list_unended_runs_in_heaps(&self.db, &heap_ids, false)
-            .await?
-            .into_iter()
-            .filter(|run| run.is_live(now))
-            .map(|run| run.item_id)
-            .collect();
-        let queue = self.read_queue(&self.db, &heaps, &live, now, false).await?;
+        let mut live = HashSet::new();
+        let mut lapsed = HashSet::new();
+        for run in store::runs::list_unended_runs_in_heaps(&self.db, &heap_ids, false).await? {
+            if run.is_live(now) {
+                live.insert(run.item_id);
+            } else {
+                lapsed.insert(run.turn_id);
+            }
+        }
+        let queue = self.read_queue(&self.db, &heaps, &live, &lapsed, now, false).await?;
         Ok(NextView {
             item: queue.first,
             waiting_count: queue.waiting_count,
@@ -143,7 +146,8 @@ impl Services {
                 live.insert(run.item_id);
             }
         }
-        let queue = self.read_queue(&txn, &heaps, &live, now, true).await?;
+        // Every lapsed run was written above, so none is left to count.
+        let queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
         let Some(mut work) = queue.first else {
             // Lapsed runs written above stay written.
             txn.commit().await.map_err(StoreError::from)?;
@@ -228,8 +232,9 @@ impl Services {
         store::runs::end_run(&txn, &ended_run).await?;
         let ended_turn = turn.reached(principal.user_id, now);
         store::turns::end_turn(&txn, &ended_turn).await?;
-        // A goal that is not a stage never passes the check, so there is a stage to move to.
-        let after = turn.goal.stage().unwrap_or(item.stage);
+        // A goal that is not a stage never passes the check, so there is a stage to move to. The person may have
+        // taken the item further than the goal while the agent worked, and reaching never moves it back.
+        let after = turn.goal.stage().map_or(item.stage, |goal| goal.max(item.stage));
         let before = item.stage;
         let item = if after == before {
             item
@@ -280,7 +285,7 @@ impl Services {
     ///   whatever was sent.
     /// - A run that has ended keeps its end; only the cost is recorded.
     ///
-    /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::Over`].
+    /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::CostRecorded`].
     pub async fn finish_run(
         &self,
         principal: Principal,
@@ -291,7 +296,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (mut run, _) = self.lock_run(&txn, principal, run_id).await?;
         if cost_micro_usd.is_some() && run.cost_micro_usd.is_some() {
-            return Err(RunError::Over.into());
+            return Err(RunError::CostRecorded.into());
         }
         let now = self.now();
         if run.ended.is_none() {
@@ -305,7 +310,7 @@ impl Services {
                     self.record_failed_run(&txn, &turn).await?;
                     run.ended_as(RunEnd::Failed, now, None, Vec::new(), Some(LAPSE_FAILURE.to_owned()))
                 }
-                Some(turn) if store::questions::count_questions_in_run(&txn, run.id).await? > 0 => {
+                Some(turn) if store::questions::run_asked_locking(&txn, run.id).await? => {
                     store::turns::set_failed_runs(&txn, turn.id, 0).await?;
                     run.ended_as(RunEnd::Asked, now, None, Vec::new(), None)
                 }
@@ -403,7 +408,12 @@ impl Services {
     }
 
     /// Writes the lapsed `run` as failed, and counts it against its turn.
-    async fn end_lapsed_run(&self, txn: &impl ConnectionTrait, run: &Run, now: Timestamp) -> Result<(), ServiceError> {
+    pub(crate) async fn end_lapsed_run(
+        &self,
+        txn: &impl ConnectionTrait,
+        run: &Run,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
         let ended = run.ended_as(RunEnd::Failed, now, None, Vec::new(), Some(LAPSE_FAILURE.to_owned()));
         if !store::runs::end_run(txn, &ended).await? {
             return Ok(());
@@ -445,17 +455,23 @@ impl Services {
     }
 
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
-    /// have a live run. Ranks each heap that has something in the queue once.
+    /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
+    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
         heaps: &[QueueHeap],
         live: &HashSet<ItemId>,
+        lapsed: &HashSet<TurnId>,
         now: Timestamp,
         lock: bool,
     ) -> Result<Queue, ServiceError> {
         let heap_ids: Vec<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
-        let turns = store::turns::list_open_turns_in_heaps(db, &heap_ids, lock).await?;
+        let turns: Vec<(HeapId, Turn)> = store::turns::list_open_turns_in_heaps(db, &heap_ids, lock)
+            .await?
+            .into_iter()
+            .map(|(heap_id, turn)| (heap_id, turn.counting_lapse(lapsed.contains(&turn.id))))
+            .collect();
         let with_question: HashSet<ItemId> = store::questions::list_open_questions_on_open_items(db, &heap_ids)
             .await?
             .into_iter()

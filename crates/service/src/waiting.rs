@@ -1,7 +1,7 @@
 //! Waiting for me: every open question on an open item, and every item whose agent turn is stuck, across the caller's
 //! heaps, most important first.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::heap::Heap;
 use domain::item::{Item, Title};
@@ -10,7 +10,7 @@ use domain::step::StepNumber;
 use domain::team::{Role, Team};
 use domain::turn::{Goal, Turn, with_agent};
 use domain::user::User;
-use domain::{HeapId, ItemId, UserId};
+use domain::{HeapId, ItemId, TurnId, UserId};
 
 use crate::items::{QuestionView, TurnView, rank_open_items, turn_views};
 use crate::{Principal, ServiceError, Services};
@@ -125,9 +125,18 @@ impl Services {
             .collect();
         let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
         let mut waiting = store::questions::list_open_questions_on_open_items(&self.db, &heap_ids).await?;
+        let as_of = self.now();
+        // A turn with a lapsed run counts it as failed, so it can be stuck before the lapse is written.
+        let lapsed: HashSet<TurnId> = store::runs::list_unended_runs_in_heaps(&self.db, &heap_ids, false)
+            .await?
+            .into_iter()
+            .filter(|run| run.is_lapsed(as_of))
+            .map(|run| run.turn_id)
+            .collect();
         let mut stuck: Vec<(HeapId, Turn)> = store::turns::list_open_turns_in_heaps(&self.db, &heap_ids, false)
             .await?
             .into_iter()
+            .map(|(heap_id, turn)| (heap_id, turn.counting_lapse(lapsed.contains(&turn.id))))
             .filter(|(_, turn)| turn.is_stuck())
             .collect();
         if waiting.is_empty() && stuck.is_empty() {
@@ -137,7 +146,6 @@ impl Services {
             });
         }
 
-        let as_of = self.now();
         let mut candidates = Vec::with_capacity(waiting.len());
         for (heap_index, heap) in heaps.iter().enumerate() {
             let (mine, rest): (Vec<_>, Vec<_>) = waiting.into_iter().partition(|(id, _)| *id == heap.id);
@@ -229,10 +237,11 @@ impl Services {
         let open_turns = turn_views(
             &self.db,
             store::turns::list_open_turns(&self.db, &item_ids).await?.into_values(),
+            as_of,
+            false,
         )
         .await?;
 
-        let as_of = self.now();
         let rows = candidates
             .into_iter()
             .filter_map(|candidate| {

@@ -18,6 +18,10 @@ pub struct Problem {
     /// at, such as `my-team` for `My-Team`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+    /// The key of the item the error is about, when it is one other than the item asked for: the item a run holds,
+    /// for `run_wrong_item`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_key: Option<String>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,

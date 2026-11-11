@@ -328,11 +328,11 @@ async fn a_question_remembers_the_run_it_was_asked_in() -> Result<()> {
     // Act
     let listed = store::questions::list_questions(&world.db, item.id).await?;
     let of_turn = store::questions::list_open_questions_for_runs_of_turn_locking(&world.db, turn.id).await?;
-    let asked = store::questions::count_questions_in_run(&world.db, run.id).await?;
+    let asked = store::questions::run_asked_locking(&world.db, run.id).await?;
 
     // Assert
     expect_that!(listed, elements_are![eq(&agents), eq(&person)]);
     expect_that!(of_turn, elements_are![eq(&agents)]);
-    expect_that!(asked, eq(1));
+    expect_that!(asked, eq(true));
     Ok(())
 }

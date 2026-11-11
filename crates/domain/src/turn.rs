@@ -249,6 +249,19 @@ impl Turn {
         self.ended.is_none() && self.failed_runs >= STUCK_AFTER
     }
 
+    /// The turn as it reads right now: when it has a run nobody has heard from for [`crate::run::CLAIM_LAPSE`]
+    /// (`lapsed_unended`), that run counts as failed though it isn't written yet (architecture.md, Runs), so
+    /// `failed_runs` is one more. Every place that reads whether a turn is stuck, or how many runs failed, reads
+    /// through this, so none disagrees with another. Never write the result back: the stored count only grows when a
+    /// lapsed run is written.
+    #[must_use]
+    pub fn counting_lapse(&self, lapsed_unended: bool) -> Self {
+        Self {
+            failed_runs: self.failed_runs.saturating_add(u32::from(lapsed_unended)),
+            ..self.clone()
+        }
+    }
+
     /// This turn ended because its goal was reached, by `by` at `now`.
     #[must_use]
     pub fn reached(&self, by: UserId, now: Timestamp) -> Self {

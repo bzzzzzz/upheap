@@ -465,7 +465,8 @@ async fn a_golden_turn_takes_a_note_to_with_context() -> Result<()> {
     expect_that!(finished.body["end"], eq(&json!("reached")));
     expect_that!(finished.body["cost_usd"], eq(&json!(0.31)));
     expect_that!(again.status, eq(StatusCode::CONFLICT));
-    expect_that!(code(&again), some(eq("run_over")));
+    expect_that!(code(&again), some(eq("run_cost_recorded")));
+    expect_that!(again.body["title"], eq(&json!("The run's cost is already recorded.")));
     // The write and the turn's end are audited with the run; the creation and the turn's opening are not.
     let in_run: Vec<(&str, bool)> = entries
         .iter()
@@ -617,7 +618,7 @@ async fn reaching_done_never_passes_yet() -> Result<()> {
         ))
     );
     expect_that!(done.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(code(&done), some(eq("run_forbidden")));
+    expect_that!(code(&done), some(eq("run_done_needs_review")));
     expect_that!(
         done.body["title"],
         eq(&json!(
@@ -912,6 +913,7 @@ async fn a_run_writes_only_to_its_own_item_and_only_while_it_lasts() -> Result<(
         wrong_item.body["title"],
         eq(&json!(format!("This run is for item {mine}.")))
     );
+    expect_that!(wrong_item.body["item_key"], eq(&json!(mine)));
     expect_that!(unknown_run.status, eq(StatusCode::NOT_FOUND));
     expect_that!(reached.status, eq(StatusCode::OK));
     for response in [&after, &heartbeat, &reached_again] {
@@ -1206,6 +1208,92 @@ async fn a_write_in_a_run_counts_as_hearing_from_it() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn reaching_a_goal_the_person_went_past_keeps_the_stage() -> Result<()> {
+    // Arrange: a note sent for context, whose person makes it a defined task while the agent works.
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+    let described = w
+        .edit(
+            &key,
+            json!({ "description": "Rotate them before Friday", "kind": "task" }),
+        )
+        .await?;
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
+
+    // Assert
+    expect_that!(described.status, eq(StatusCode::OK));
+    expect_that!(defined.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(item["stage"], eq(&json!("defined")));
+    let reached_diff = &entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?
+        .1;
+    expect_that!(reached_diff["goal"], eq(&json!("with_context")));
+    expect_that!(reached_diff["stage"]["before"], eq(&json!("defined")));
+    expect_that!(reached_diff["stage"]["after"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn two_claims_at_once_never_get_the_same_item() -> Result<()> {
+    // Arrange: two items for the agents, and one.
+    let w = world().await?;
+    let first = w.add_sent("Rotate the certs").await?;
+    let second = w.add_sent("Renew the domain").await?;
+
+    // Act
+    let (a, b) = tokio::join!(w.claim(), w.claim());
+    let (a, b) = (a?, b?);
+
+    // Assert
+    expect_that!(a.status, eq(StatusCode::CREATED));
+    expect_that!(b.status, eq(StatusCode::CREATED));
+    let mut keys = vec![
+        a.body["run"]["item"]["key"].as_str().context("key")?.to_owned(),
+        b.body["run"]["item"]["key"].as_str().context("key")?.to_owned(),
+    ];
+    keys.sort();
+    let mut both = vec![first, second];
+    both.sort();
+    expect_that!(keys, eq(&both));
+    expect_that!(w.app.count_rows("item_runs").await?, eq(2));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn two_claims_at_once_on_one_item_give_it_to_one() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let _key = w.add_sent("Rotate the certs").await?;
+
+    // Act
+    let (a, b) = tokio::join!(w.claim(), w.claim());
+    let (a, b) = (a?, b?);
+
+    // Assert
+    let claimed = [&a, &b].into_iter().filter(|r| r.status == StatusCode::CREATED).count();
+    let empty = [&a, &b]
+        .into_iter()
+        .filter(|r| r.status == StatusCode::OK && r.body["run"].is_null())
+        .count();
+    expect_that!(claimed, eq(1));
+    expect_that!(empty, eq(1));
+    expect_that!(w.app.count_rows("item_runs").await?, eq(1));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn three_lapsed_runs_make_the_turn_stuck_and_a_retry_puts_it_back() -> Result<()> {
     // Arrange: an item whose runs go quiet.
     let w = world().await?;
@@ -1219,8 +1307,8 @@ async fn three_lapsed_runs_make_the_turn_stuck_and_a_retry_puts_it_back() -> Res
     let still_first_failed = w.finish(&first, json!({})).await?;
     w.app.clock.advance(Duration::from_minutes(31));
     let third = w.claimed().await?;
+    // The third run lapses and nobody claims again, so the lapse isn't written: it still counts as failed.
     w.app.clock.advance(Duration::from_minutes(31));
-    let nothing = w.claim().await?;
     let queue = w.next().await?;
     let item = w.get(&key).await?;
     let waiting = w.waiting().await?;
@@ -1255,9 +1343,6 @@ async fn three_lapsed_runs_make_the_turn_stuck_and_a_retry_puts_it_back() -> Res
         eq(&json!("Nothing was heard from the run for 30 minutes."))
     );
     expect_that!(third, not(eq(&second)));
-    expect_that!(nothing.status, eq(StatusCode::OK));
-    expect_that!(nothing.body["run"], eq(&Value::Null));
-    expect_that!(nothing.body["waiting_count"], eq(&json!(1)));
     expect_that!(queue.body["item"], eq(&Value::Null));
     expect_that!(queue.body["waiting_count"], eq(&json!(1)));
     expect_that!(item["turn"]["stuck"], eq(true));
@@ -1486,7 +1571,7 @@ async fn the_cost_is_set_once() -> Result<()> {
     // Kept in whole millionths of a dollar.
     expect_that!(first.body["cost_usd"], eq(&json!(0.123457)));
     expect_that!(second.status, eq(StatusCode::CONFLICT));
-    expect_that!(code(&second), some(eq("run_over")));
+    expect_that!(code(&second), some(eq("run_cost_recorded")));
     expect_that!(without.status, eq(StatusCode::OK));
     expect_that!(without.body["cost_usd"], eq(&json!(0.123457)));
     Ok(())

@@ -63,6 +63,28 @@ pub async fn list_unended_runs_for_turn_locking(
         .collect()
 }
 
+/// The runs that have not ended among the turns `turn_ids`, in one query per [`IN_LIST_CHUNK`] turns, as locking reads
+/// when `lock` is set. Live ones and lapsed ones both: the caller tells them apart by time.
+pub async fn list_unended_runs_for_turns(
+    db: &impl ConnectionTrait,
+    turn_ids: &[TurnId],
+    lock: bool,
+) -> Result<Vec<Run>, StoreError> {
+    let ids: Vec<String> = turn_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut runs = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let query = item_runs::Entity::find()
+            .filter(item_runs::Column::TurnId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_runs::Column::EndedAt.is_null())
+            .order_by_asc(item_runs::Column::StartedAt)
+            .order_by_asc(item_runs::Column::Id);
+        for row in crate::items::shared_if(query, lock).all(db).await? {
+            runs.push(to_run(row)?);
+        }
+    }
+    Ok(runs)
+}
+
 /// The runs that have not ended on the items of `heap_ids`, in one query per [`IN_LIST_CHUNK`] heaps, as locking reads
 /// when `lock` is set. Live ones and lapsed ones both: the caller tells them apart by time.
 pub async fn list_unended_runs_in_heaps(

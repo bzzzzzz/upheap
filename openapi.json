@@ -5960,7 +5960,7 @@
             }
           },
           "403": {
-            "description": "`forbidden`, or `run_forbidden` from inside a run",
+            "description": "`forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done",
             "content": {
               "application/json": {
                 "schema": {
@@ -6015,7 +6015,7 @@
         "tags": [
           "work"
         ],
-        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_over`.",
+        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.",
         "operationId": "finish_run",
         "parameters": [
           {
@@ -6070,7 +6070,7 @@
             }
           },
           "409": {
-            "description": "`run_over`: the cost was already set",
+            "description": "`run_cost_recorded`: the cost was already set",
             "content": {
               "application/json": {
                 "schema": {
@@ -8866,6 +8866,13 @@
               "null"
             ],
             "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`."
+          },
+          "item_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key of the item the error is about, when it is one other than the item asked for: the item a run holds,\nfor `run_wrong_item`."
           },
           "request_id": {
             "type": [

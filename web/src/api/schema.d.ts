@@ -1095,7 +1095,7 @@ export interface paths {
          * Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
          *     asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
          *     stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
-         *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_over`.
+         *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
          */
         post: operations["finish_run"];
         delete?: never;
@@ -2168,6 +2168,11 @@ export interface components {
              *     at, such as `my-team` for `My-Team`.
              */
             hint?: string | null;
+            /**
+             * @description The key of the item the error is about, when it is one other than the item asked for: the item a run holds,
+             *     for `run_wrong_item`.
+             */
+            item_key?: string | null;
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -6685,7 +6690,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `forbidden`, or `run_forbidden` from inside a run */
+            /** @description `forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6765,7 +6770,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `run_over`: the cost was already set */
+            /** @description `run_cost_recorded`: the cost was already set */
             409: {
                 headers: {
                     [name: string]: unknown;

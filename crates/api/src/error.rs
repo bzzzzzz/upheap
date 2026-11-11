@@ -13,7 +13,7 @@ use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::question::QuestionError;
-use domain::run::RunError;
+use domain::run::{RunError, RunForbidden};
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::turn::TurnError;
@@ -95,6 +95,7 @@ struct Classified {
     title: String,
     field: Option<&'static str>,
     hint: Option<String>,
+    item_key: Option<String>,
     category: Category,
 }
 
@@ -105,6 +106,7 @@ fn classify(err: &ApiError) -> Classified {
         title: title.to_owned(),
         field: None,
         hint: None,
+        item_key: None,
         category,
     };
     match err {
@@ -144,6 +146,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         title: err.to_string(),
         field: None,
         hint: None,
+        item_key: None,
         category,
     };
     match err {
@@ -213,11 +216,18 @@ fn classify_service(err: &ServiceError) -> Classified {
             simple(StatusCode::CONFLICT, "turn_not_stuck", Category::Conflict)
         }
         ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
-        ServiceError::Run(RunError::WrongItem { .. }) => {
-            simple(StatusCode::FORBIDDEN, "run_wrong_item", Category::Permission)
+        ServiceError::Run(RunError::CostRecorded) => {
+            simple(StatusCode::CONFLICT, "run_cost_recorded", Category::Conflict)
         }
-        ServiceError::Run(RunError::Forbidden(_)) => {
+        ServiceError::Run(RunError::WrongItem { key }) => Classified {
+            item_key: Some(key.to_string()),
+            ..simple(StatusCode::FORBIDDEN, "run_wrong_item", Category::Permission)
+        },
+        ServiceError::Run(RunError::Forbidden(RunForbidden::Person)) => {
             simple(StatusCode::FORBIDDEN, "run_forbidden", Category::Permission)
+        }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::Done)) => {
+            simple(StatusCode::FORBIDDEN, "run_done_needs_review", Category::Permission)
         }
         ServiceError::NotReached(_) => simple(StatusCode::UNPROCESSABLE_ENTITY, "not_reached", Category::Caller),
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
@@ -292,6 +302,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 title: "The database is unavailable; try again shortly".to_owned(),
                 field: None,
                 hint: None,
+                item_key: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -407,6 +418,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         title: err.to_string(),
         field,
         hint,
+        item_key: None,
         category: Category::Caller,
     }
 }
@@ -418,6 +430,7 @@ fn unexpected() -> Classified {
         title: "Something went wrong on the server".to_owned(),
         field: None,
         hint: None,
+        item_key: None,
         category: Category::Unexpected,
     }
 }
@@ -445,6 +458,7 @@ impl IntoResponse for ApiError {
             status: classified.status.as_u16(),
             field: classified.field.map(str::to_owned),
             hint: classified.hint,
+            item_key: classified.item_key,
             request_id,
         };
         let mut response = (

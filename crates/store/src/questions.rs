@@ -111,13 +111,12 @@ pub async fn list_open_questions_for_runs_of_turn_locking(
     rows.into_iter().map(to_question).collect()
 }
 
-/// How many questions, in any state, were asked in the run `run_id`.
-pub async fn count_questions_in_run(db: &impl ConnectionTrait, run_id: RunId) -> Result<u64, StoreError> {
-    use sea_orm::PaginatorTrait;
-    Ok(item_questions::Entity::find()
-        .filter(item_questions::Column::RunId.eq(id_to_db(run_id.as_uuid())))
-        .count(db)
-        .await?)
+/// Whether any question, in any state, was asked in the run `run_id`, as a locking read (`FOR SHARE` on MySQL and
+/// Postgres, which see the latest committed rows rather than the transaction's snapshot). A plain count would read
+/// from the snapshot, and an aggregate can't be locked, so it looks for one row.
+pub async fn run_asked_locking(db: &impl ConnectionTrait, run_id: RunId) -> Result<bool, StoreError> {
+    let query = item_questions::Entity::find().filter(item_questions::Column::RunId.eq(id_to_db(run_id.as_uuid())));
+    Ok(crate::items::shared_if(query, true).limit(1).one(db).await?.is_some())
 }
 
 /// How many open questions each of `item_ids` has, in one grouped query per [`IN_LIST_CHUNK`] items, without loading

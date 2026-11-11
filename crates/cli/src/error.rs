@@ -233,16 +233,10 @@ impl CliError {
 fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
     match problem.code.as_str() {
         "run_over" => Some("This run is over. Stop.".to_owned()),
-        // The server's message names the item: "This run is for item k3x9a."
-        "run_wrong_item" => {
-            let key = problem
-                .title
-                .trim_end_matches('.')
-                .rsplit(' ')
-                .next()
-                .unwrap_or_default();
-            Some(format!("This run holds {key}; write to it only."))
-        }
+        "run_wrong_item" => problem
+            .item_key
+            .as_ref()
+            .map(|key| format!("This run holds {key}; write to it only.")),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
         "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
         _ => None,
@@ -281,7 +275,10 @@ fn client_exit_code(err: &ClientError) -> u8 {
         ClientError::Redirected { .. } => 2,
         // Refused because of the run, not the caller: a rule to read, not a missing permission.
         ClientError::Problem { problem, .. }
-            if matches!(problem.code.as_str(), "run_forbidden" | "run_wrong_item" | "run_over") =>
+            if matches!(
+                problem.code.as_str(),
+                "run_forbidden" | "run_done_needs_review" | "run_wrong_item" | "run_over" | "run_cost_recorded"
+            ) =>
         {
             3
         }
@@ -317,6 +314,7 @@ mod tests {
                 status,
                 field: None,
                 hint: None,
+                item_key: None,
                 request_id: None,
             }),
             body: String::new(),
@@ -367,17 +365,29 @@ mod tests {
             let mut err = problem(status, code);
             if let ClientError::Problem { problem, .. } = &mut err {
                 problem.title = title.to_owned();
+                if code == "run_wrong_item" {
+                    problem.item_key = Some("k3x9a".to_owned());
+                }
             }
             CliError::Client(err)
         };
         let over = run_refusal(409, "run_over", "This run is over.");
-        let wrong = run_refusal(403, "run_wrong_item", "This run is for item k3x9a.");
+        let wrong = run_refusal(403, "run_wrong_item", "This run is for another item.");
         let forbidden = run_refusal(403, "run_forbidden", "Only the person does that.");
+        let done = run_refusal(
+            403,
+            "run_done_needs_review",
+            "An agent closes a task as done only after a review.",
+        );
+        let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
 
-        for err in [&over, &wrong, &forbidden, &missed] {
+        for err in [&over, &wrong, &forbidden, &done, &recorded, &missed] {
             expect_that!(err.exit_code(), eq(3));
         }
+        // Their messages say it all: a hint would only contradict them.
+        expect_that!(done.to_message(), not(contains(starts_with("hint:"))));
+        expect_that!(recorded.to_message(), not(contains(starts_with("hint:"))));
         expect_that!(over.to_message(), contains(eq("hint: This run is over. Stop.")));
         expect_that!(
             wrong.to_message(),

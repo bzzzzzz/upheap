@@ -197,6 +197,9 @@ pub enum RunError {
     /// A write in a run names an item other than the run's.
     #[error("This run is for item {key}.")]
     WrongItem { key: ItemKey },
+    /// The cost of the run was sent before: it is set once.
+    #[error("The run's cost is already recorded.")]
+    CostRecorded,
     /// A write only the person makes, tried inside a run.
     #[error("{0}")]
     Forbidden(RunForbidden),

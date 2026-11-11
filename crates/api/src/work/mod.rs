@@ -158,7 +158,7 @@ fn split_heaps(raw: &str) -> Vec<String> {
         (status = 201, description = "A run started", body = ClaimDto),
         (status = 200, description = "Nothing to claim: `run` is `null`", body = ClaimDto),
         (status = 400, description = "`invalid_body`", body = Problem),
-        (status = 403, description = "`forbidden`, or `run_forbidden` from inside a run", body = Problem),
+        (status = 403, description = "`forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done", body = Problem),
         (status = 404, description = "A heap outside the caller's teams", body = Problem),
         (status = 409, description = "`heap_archived`", body = Problem),
         (status = 422, description = "`invalid_fields` (`field` `heaps`)", body = Problem),
@@ -228,14 +228,14 @@ async fn reached(
 /// Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
 /// asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
 /// stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
-/// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_over`.
+/// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
 #[utoipa::path(post, path = "/work/runs/{run}/finish", tag = "work", security(("session" = [])),
     params(RunParams), request_body = FinishRequestDto,
     responses(
         (status = 200, body = RunDto),
         (status = 400, description = "`invalid_body`", body = Problem),
         (status = 404, description = "No such run, or not the caller's", body = Problem),
-        (status = 409, description = "`run_over`: the cost was already set", body = Problem),
+        (status = 409, description = "`run_cost_recorded`: the cost was already set", body = Problem),
         (status = 422, description = "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000", body = Problem),
     ))]
 async fn finish_run(

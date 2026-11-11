@@ -134,9 +134,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
   wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
   take back touches it; no job sweeps for them. A turn is **stuck** when `STUCK_AFTER` (3) of its runs in a row
-  failed: a count on the turn, set back to 0 by a run that asked a question or by Retry. A stuck turn is out of the
-  queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of its own kind with
-  the latest failure as the reason. Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
+  failed: a count on the turn, set back to 0 by a run that asked a question or by Retry. A lapsed run not written yet
+  counts in that number too: wherever a turn is read, the queue, the item, a list row, Waiting for me, `Turn::counting_lapse`
+  adds one to its count when it has such a run, so a turn whose third run went quiet is stuck at once, though nobody
+  has claimed since. Retry writes that lapsed run as failed, then resets the count, so it doesn't count twice. A stuck
+  turn is out of the queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of
+  its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
   failure, and withdraws the open questions asked in a run of it; the person's own stay open.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads (the `agents` feature only; a
   build without it ignores the header) into `Principal::run`. A write made in a run must be on the allowlist in
@@ -146,7 +149,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
-  stage to the goal.
+  stage to the goal, unless the person has taken it further meanwhile: it never moves back. A refusal of a write in a
+  run carries its own code (`run_wrong_item` with the run's item in `item_key`, `run_done_needs_review`,
+  `run_cost_recorded`) so the CLI's hint never has to read a message.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.

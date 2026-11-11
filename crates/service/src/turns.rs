@@ -9,7 +9,7 @@ use domain::audit::AuditAction;
 use domain::heap::Heap;
 use domain::item::ItemError;
 use domain::permission::Permission;
-use domain::run::RunEnd;
+use domain::run::{Run, RunEnd};
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
 use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
@@ -131,12 +131,24 @@ impl Services {
         let item = store::items::find_item_locking(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let turn = store::turns::find_open_turn_locking(&txn, item.id)
-            .await?
-            .filter(Turn::is_stuck)
-            .ok_or(TurnError::NotStuck { item_id: item.id })?;
-
         let now = self.now();
+        let open = store::turns::find_open_turn_locking(&txn, item.id)
+            .await?
+            .ok_or(TurnError::NotStuck { item_id: item.id })?;
+        let lapsed: Vec<Run> = store::runs::list_unended_runs_for_turn_locking(&txn, open.id)
+            .await?
+            .into_iter()
+            .filter(|run| run.is_lapsed(now))
+            .collect();
+        let turn = open.counting_lapse(!lapsed.is_empty());
+        if !turn.is_stuck() {
+            return Err(TurnError::NotStuck { item_id: item.id }.into());
+        }
+        // A lapsed run counts as failed until it is written, so write it: left unended it would count again after
+        // the reset.
+        for run in &lapsed {
+            self.end_lapsed_run(&txn, run, now).await?;
+        }
         if !store::turns::set_failed_runs(&txn, turn.id, 0).await? {
             return Err(TurnError::NotStuck { item_id: item.id }.into());
         }
