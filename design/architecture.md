@@ -327,7 +327,9 @@ a fixed time.
    several, then reads the item with a locking read and checks its version. Two moves in opposite directions can't
    wait for each other, and the second of two moves of one item finds it changed. A blocker is part of a heap's
    state, so a move takes the item's blocking links to its old heap away both ways: the items that waited for it, and
-   the one it waited for, stay blocked with nobody picked.
+   the one it waited for, stay blocked with nobody picked. Since an item's heap can change, a write that finds the
+   heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
+   refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
    same heap. Closing a blocker later doesn't unblock what waits for it; the blocked item shows the closed blocker
