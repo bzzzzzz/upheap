@@ -8,7 +8,7 @@ use domain::run::{RunError, RunForbidden};
 use domain::{HeapId, ItemId, Version};
 use store::{StoreError, TransactionTrait};
 
-use crate::access::{authorize_heap, ensure_active};
+use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
 use crate::audit::{diff_items, diff_moved};
 use crate::items::{ItemChildren, ItemView, build_item_view, new_item_key};
 use crate::{Principal, ServiceError, Services};
@@ -75,10 +75,7 @@ impl Services {
             (second, first)
         };
 
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .filter(|item| item.heap_id == from_heap)
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, from_heap, expected).await?;
         if item.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,
