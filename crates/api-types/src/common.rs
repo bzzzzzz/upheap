@@ -249,6 +249,9 @@ pub enum ItemActionDto {
     /// Take the item back from the agent, on `DELETE …/turn`. Offered for an open item the caller may edit that has
     /// an open turn.
     TakeBack,
+    /// Let the agents try again, on `POST …/turn/retry`. Offered for an open item the caller may edit whose turn is
+    /// stuck.
+    Retry,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -262,6 +265,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::AskQuestion => Self::AskQuestion,
             ItemAction::SendToAgent => Self::SendToAgent,
             ItemAction::TakeBack => Self::TakeBack,
+            ItemAction::Retry => Self::Retry,
         }
     }
 }

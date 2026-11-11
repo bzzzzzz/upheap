@@ -72,6 +72,8 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::QuestionWithdrawn
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
+        | AuditAction::TurnReached
+        | AuditAction::TurnRetried
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewCreated
@@ -111,14 +113,18 @@ pub enum ItemAction {
     SendToAgent,
     /// Take an open item back from the agent that has it.
     TakeBack,
+    /// Let the agents try again at an item whose turn is stuck.
+    Retry,
 }
 
-/// What `role` can do with `item` in `heap` at `now`, given whether it has an open turn. Empty for archived heaps.
+/// What `role` can do with `item` in `heap` at `now`, given whether it has an open turn and whether that turn is
+/// `stuck`. Empty for archived heaps.
 pub fn allowed_item_actions(
     item: &Item,
     heap: &Heap,
     role: Role,
     has_open_turn: bool,
+    stuck: bool,
     now: Timestamp,
 ) -> Vec<ItemAction> {
     if heap.is_archived() || !Permission::EditItems.is_granted_to(role) {
@@ -131,6 +137,9 @@ pub fn allowed_item_actions(
             Kind::Task => actions.push(ItemAction::AddStep),
         }
         actions.push(ItemAction::AskQuestion);
+        if has_open_turn && stuck {
+            actions.push(ItemAction::Retry);
+        }
         actions.push(if has_open_turn {
             ItemAction::TakeBack
         } else {
@@ -662,7 +671,7 @@ mod tests {
     fn only_an_open_note_can_be_made_a_task_by_someone_who_can_edit() {
         let now = Timestamp::EPOCH;
         let has_make_task = |item: &Item, heap: &Heap, role| {
-            allowed_item_actions(item, heap, role, false, now).contains(&ItemAction::MakeTask)
+            allowed_item_actions(item, heap, role, false, false, now).contains(&ItemAction::MakeTask)
         };
 
         expect_that!(
@@ -687,7 +696,7 @@ mod tests {
     fn steps_are_added_to_an_open_task_and_edited_while_the_item_is_open() {
         let now = Timestamp::EPOCH;
         let has_add_step = |item: &Item, heap: &Heap| {
-            allowed_item_actions(item, heap, Role::Member, false, now).contains(&ItemAction::AddStep)
+            allowed_item_actions(item, heap, Role::Member, false, false, now).contains(&ItemAction::AddStep)
         };
 
         expect_that!(has_add_step(&item(Kind::Task, false), &heap(false)), eq(true));
@@ -713,7 +722,7 @@ mod tests {
     fn an_open_item_is_sent_without_a_turn_and_taken_back_with_one() {
         let now = Timestamp::EPOCH;
         let actions = |item: &Item, heap: &Heap, has_turn| {
-            let actions = allowed_item_actions(item, heap, Role::Member, has_turn, now);
+            let actions = allowed_item_actions(item, heap, Role::Member, has_turn, false, now);
             (
                 actions.contains(&ItemAction::SendToAgent),
                 actions.contains(&ItemAction::TakeBack),
@@ -738,6 +747,21 @@ mod tests {
     }
 
     #[gtest]
+    fn retry_is_offered_on_a_stuck_turn_and_not_in_an_archived_heap() {
+        let now = Timestamp::EPOCH;
+        let task = item(Kind::Task, false);
+
+        let stuck = allowed_item_actions(&task, &heap(false), Role::Member, true, true, now);
+        expect_that!(stuck, contains(eq(&ItemAction::Retry)));
+        expect_that!(stuck, contains(eq(&ItemAction::TakeBack)));
+
+        let running = allowed_item_actions(&task, &heap(false), Role::Member, true, false, now);
+        expect_that!(running, not(contains(eq(&ItemAction::Retry))));
+        let archived = allowed_item_actions(&task, &heap(true), Role::Member, true, true, now);
+        expect_that!(archived, is_empty());
+    }
+
+    #[gtest]
     fn only_an_admin_sets_agents_prepare_on_an_active_heap() {
         expect_that!(
             allowed_heap_actions(&heap(false), Role::Admin),
@@ -757,7 +781,7 @@ mod tests {
     fn a_question_is_asked_on_an_open_item_and_replied_to_while_open() {
         let now = Timestamp::EPOCH;
         let can_ask = |item: &Item, heap: &Heap| {
-            allowed_item_actions(item, heap, Role::Member, false, now).contains(&ItemAction::AskQuestion)
+            allowed_item_actions(item, heap, Role::Member, false, false, now).contains(&ItemAction::AskQuestion)
         };
 
         expect_that!(can_ask(&item(Kind::Note, false), &heap(false)), eq(true));

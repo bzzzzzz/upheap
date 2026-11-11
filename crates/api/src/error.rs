@@ -13,6 +13,7 @@ use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::question::QuestionError;
+use domain::run::RunError;
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::turn::TurnError;
@@ -208,6 +209,17 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Turn(TurnError::AlreadyOpen { .. }) => {
             simple(StatusCode::CONFLICT, "turn_open", Category::Conflict)
         }
+        ServiceError::Turn(TurnError::NotStuck { .. }) => {
+            simple(StatusCode::CONFLICT, "turn_not_stuck", Category::Conflict)
+        }
+        ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
+        ServiceError::Run(RunError::WrongItem { .. }) => {
+            simple(StatusCode::FORBIDDEN, "run_wrong_item", Category::Permission)
+        }
+        ServiceError::Run(RunError::Forbidden(_)) => {
+            simple(StatusCode::FORBIDDEN, "run_forbidden", Category::Permission)
+        }
+        ServiceError::NotReached(_) => simple(StatusCode::UNPROCESSABLE_ENTITY, "not_reached", Category::Caller),
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "step_not_in_item", Category::Caller)
@@ -377,6 +389,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::LimitOutOfRange { .. } => ("limit_out_of_range", Some("limit")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
         ValidationError::ValueUnknown { field } => ("value_unknown", Some(field.as_str())),
+        ValidationError::FieldInvalid { field } => ("invalid_fields", Some(field.as_str())),
         ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
         ValidationError::ItemKeyInvalid => ("invalid_item_key", None),
         ValidationError::MultipleLines { field } => ("field_not_single_line", Some(field.as_str())),

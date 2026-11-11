@@ -24,6 +24,7 @@ mod m20261121_000018_heap_context;
 mod m20261122_000019_long_text_on_mysql;
 mod m20261123_000020_item_questions;
 mod m20261124_000021_item_turns;
+mod m20261125_000022_item_runs;
 
 pub struct Migrator;
 
@@ -52,6 +53,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261122_000019_long_text_on_mysql::Migration),
             Box::new(m20261123_000020_item_questions::Migration),
             Box::new(m20261124_000021_item_turns::Migration),
+            Box::new(m20261125_000022_item_runs::Migration),
         ]
     }
 }

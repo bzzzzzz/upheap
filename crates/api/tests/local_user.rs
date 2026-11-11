@@ -96,6 +96,29 @@ async fn a_build_without_agents_offers_no_turns() -> Result<()> {
         .send(Method::POST, &turn_url, None, Some(json!({ "reach": "one" })))
         .await?;
     let taken = app.send(Method::DELETE, &turn_url, None, None).await?;
+    let retried = app.send(Method::POST, &format!("{turn_url}/retry"), None, None).await?;
+    let next = app
+        .send(Method::GET, "/api/v1/work/next?heaps=me/personal", None, None)
+        .await?;
+    let claimed = app
+        .send(
+            Method::POST,
+            "/api/v1/work/runs",
+            None,
+            Some(json!({ "heaps": ["me/personal"] })),
+        )
+        .await?;
+    // A build without runs ignores the header, even a malformed one: the write is just a person's.
+    let item_url = format!("{heap_url}/items/{key}");
+    let with_header = app
+        .send_with(
+            Method::POST,
+            &format!("{item_url}/steps"),
+            None,
+            Some(json!({ "title": "A step" })),
+            &[common::CSRF, ("upheap-run", "not-a-run")],
+        )
+        .await?;
     let set = app
         .send_with(
             Method::PATCH,
@@ -113,6 +136,12 @@ async fn a_build_without_agents_offers_no_turns() -> Result<()> {
     expect_that!(created.body["next_goal"], eq(&json!(null)));
     expect_that!(sent.status, eq(StatusCode::NOT_FOUND));
     expect_that!(taken.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(retried.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(next.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(claimed.status, eq(StatusCode::NOT_FOUND));
+    // The note can't take steps, but the answer is the person's, not a run's or a header's.
+    expect_that!(with_header.status, not(eq(StatusCode::BAD_REQUEST)));
+    expect_that!(with_header.status, not(eq(StatusCode::FORBIDDEN)));
     expect_that!(set.status, eq(StatusCode::FORBIDDEN));
     Ok(())
 }

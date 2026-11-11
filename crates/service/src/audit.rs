@@ -8,7 +8,7 @@ use domain::question::Question;
 use domain::saved_view::SavedView;
 use domain::step::Step;
 use domain::tag::Tag;
-use domain::turn::{TakeBackWhy, Turn};
+use domain::turn::{Goal, TakeBackWhy, Turn};
 use domain::{OptionId, ParameterId};
 use serde_json::{Map, Value, json};
 
@@ -102,12 +102,13 @@ pub(crate) fn describe_reply(question: &Question) -> Value {
     })
 }
 
-/// The question withdrawn when its item was closed, for its `question_withdrawn` entry.
-pub(crate) fn describe_withdrawal(question: &Question) -> Value {
+/// The question withdrawn when its item was closed, or taken back from the agent that asked it, for its
+/// `question_withdrawn` entry.
+pub(crate) fn describe_withdrawal(question: &Question, why: TakeBackWhy) -> Value {
     json!({
         "question": question.number.get(),
         "question_text": question.text.as_str(),
-        "why": TakeBackWhy::Closed.code(),
+        "why": why.code(),
     })
 }
 
@@ -124,6 +125,19 @@ pub(crate) fn describe_new_turn(turn: &Turn) -> Value {
 /// A turn just taken back, for its `turn_taken_back` entry.
 pub(crate) fn describe_take_back(turn: &Turn, why: TakeBackWhy) -> Value {
     json!({ "goal": turn.goal.code(), "why": why.code() })
+}
+
+/// A turn whose goal a run reached, for its `turn_reached` entry: the goal, and the stage the item moved from and to.
+pub(crate) fn describe_reached(goal: Goal, before: Stage, after: Stage) -> Value {
+    json!({
+        "goal": goal.code(),
+        "stage": { "before": before.code(), "after": after.code() },
+    })
+}
+
+/// A stuck turn let go again, for its `turn_retried` entry.
+pub(crate) fn describe_retry(turn: &Turn) -> Value {
+    json!({ "goal": turn.goal.code() })
 }
 
 fn step_name(step: &Step) -> Value {

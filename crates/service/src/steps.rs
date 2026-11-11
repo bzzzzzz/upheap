@@ -12,7 +12,7 @@ use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
 use crate::audit::{describe_new_step, diff_steps};
-use crate::items::{ItemChildren, ItemView, build_item_view};
+use crate::items::{ItemChildren, ItemView, build_item_view, commit_if_in_run, in_run};
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -32,7 +32,10 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        self.check_run_write(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = store::items::find_item_locking(&txn, item_id)
@@ -89,7 +92,10 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        self.check_run_write(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = store::items::find_item_locking(&txn, item_id)
@@ -116,7 +122,10 @@ impl Services {
                 questions: store::questions::list_questions_locking(&txn, item.id).await?,
                 open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
             };
-            return build_item_view(&txn, &access.heap, role, item, children, now).await;
+            let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
+            // A write in a run that changes nothing still tells the run it was heard.
+            commit_if_in_run(txn, principal).await?;
+            return Ok(view);
         };
         let saved = store::steps::update_step(&txn, &edited, expected)
             .await?

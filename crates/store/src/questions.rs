@@ -8,7 +8,7 @@ use domain::question::{
 use domain::step::StepNumber;
 use domain::text::Context;
 use domain::validation::Field;
-use domain::{HeapId, ItemId, QuestionId, UserId, Version};
+use domain::{HeapId, ItemId, QuestionId, RunId, TurnId, UserId, Version};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use crate::StoreError;
 use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
-use crate::entities::{item_questions, items};
+use crate::entities::{item_questions, item_runs, items};
 
 const TABLE: &str = "item_questions";
 
@@ -88,6 +88,36 @@ pub async fn list_open_questions_on_open_items(
         }
     }
     Ok(found)
+}
+
+/// The open questions asked in a run of the turn `turn_id`, in number order, as locking reads (see
+/// [`list_questions_locking`]). Taking a turn back withdraws these and leaves the person's own questions open.
+pub async fn list_open_questions_for_runs_of_turn_locking(
+    db: &impl ConnectionTrait,
+    turn_id: TurnId,
+) -> Result<Vec<Question>, StoreError> {
+    let query = item_questions::Entity::find()
+        .join(
+            JoinType::InnerJoin,
+            item_questions::Entity::belongs_to(item_runs::Entity)
+                .from(item_questions::Column::RunId)
+                .to(item_runs::Column::Id)
+                .into(),
+        )
+        .filter(item_runs::Column::TurnId.eq(id_to_db(turn_id.as_uuid())))
+        .filter(item_questions::Column::State.eq(QuestionState::Open.code()))
+        .order_by_asc(item_questions::Column::Number);
+    let rows = crate::items::shared_if(query, true).all(db).await?;
+    rows.into_iter().map(to_question).collect()
+}
+
+/// How many questions, in any state, were asked in the run `run_id`.
+pub async fn count_questions_in_run(db: &impl ConnectionTrait, run_id: RunId) -> Result<u64, StoreError> {
+    use sea_orm::PaginatorTrait;
+    Ok(item_questions::Entity::find()
+        .filter(item_questions::Column::RunId.eq(id_to_db(run_id.as_uuid())))
+        .count(db)
+        .await?)
 }
 
 /// How many open questions each of `item_ids` has, in one grouped query per [`IN_LIST_CHUNK`] items, without loading
@@ -207,6 +237,7 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
             .and_then(|withdrawal| withdrawal.withdrawn_by)
             .map(|user| id_to_db(user.as_uuid()))),
         withdrawn_at: Set(withdrawal.map(|withdrawal| withdrawal.withdrawn_at.as_millis())),
+        run_id: Set(question.run_id.map(|run| id_to_db(run.as_uuid()))),
     })
 }
 
@@ -290,6 +321,11 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
         asked_at: read.timestamp(row.asked_at)?,
         reply,
         withdrawal,
+        run_id: row
+            .run_id
+            .as_deref()
+            .map(|run| read.uuid(run).map(RunId::from_uuid))
+            .transpose()?,
         version: read.version(row.version)?,
     })
 }

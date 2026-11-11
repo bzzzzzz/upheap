@@ -459,6 +459,7 @@ impl Services {
             entity_type: EntityType::Heap,
             entity_id: *heap.id.as_uuid(),
             diff,
+            run_id: None,
             created_at: now,
         }
     }

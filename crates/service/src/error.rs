@@ -4,6 +4,7 @@ use domain::oauth::{AuthorizationError, GrantError};
 use domain::parameter::ParameterError;
 use domain::permission::Permission;
 use domain::question::QuestionError;
+use domain::run::{NotReached, RunError};
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::turn::TurnError;
@@ -56,6 +57,12 @@ pub enum ServiceError {
     Question(#[from] QuestionError),
     #[error(transparent)]
     Turn(#[from] TurnError),
+    /// A run that can't take the write, or a write a run is refused.
+    #[error(transparent)]
+    Run(#[from] RunError),
+    /// `work reached` on an item that is not at the turn's goal.
+    #[error(transparent)]
+    NotReached(#[from] NotReached),
     /// A tag ID in the request doesn't name a tag of the item's heap.
     #[error("tag {tag_id} is not a tag of this heap")]
     TagNotInHeap { tag_id: TagId },

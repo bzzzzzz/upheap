@@ -189,7 +189,10 @@ impl Services {
         // a taken username.
         link.check_join(now, None)?;
         let (grant, _, _) = self.insert_account(&txn, account, now).await?;
-        let principal = Principal { user_id: grant.user.id };
+        let principal = Principal {
+            user_id: grant.user.id,
+            run: None,
+        };
         self.admit_through_link(&txn, principal, &link, now).await?;
         let detail = load_team_detail(&txn, principal, team).await?;
         txn.commit().await.map_err(StoreError::from)?;

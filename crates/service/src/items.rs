@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{Item, ItemPatch, ItemSummary, NewItem, Stage, StateKind};
+use domain::item::{Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
 use domain::list_view::{Group, ListView};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
@@ -14,6 +14,7 @@ use domain::permission::{
 };
 use domain::question::{Question, QuestionState, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
+use domain::run::{RunError, RunForbidden};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::Role;
@@ -87,6 +88,17 @@ pub struct TurnView {
     pub turn: Turn,
     /// Who opened it, when that is known.
     pub opened_by: Option<User>,
+    /// How many runs the turn has had, ended or not.
+    pub runs: u32,
+    /// Why the latest failed run failed, when the turn is stuck (see [`Turn::is_stuck`]).
+    pub stuck_reason: Option<String>,
+}
+
+impl TurnView {
+    /// Whether the turn is stuck.
+    pub const fn is_stuck(&self) -> bool {
+        self.turn.is_stuck()
+    }
 }
 
 /// A question with the users it names and what the caller may do with it.
@@ -335,10 +347,11 @@ impl Services {
             let open_questions = open_questions.get(&id).copied().unwrap_or(0) as usize;
             let turn = open_turns.remove(&id);
             entry.view.step_progress = step_progress.remove(&id);
-            entry.view.waits_for_you = waits_for_you(&entry.view.item, &access.heap, open_questions);
-            entry.view.with_agent = with_agent(&entry.view.item, &access.heap, open_questions, turn.is_some());
+            let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
+            entry.view.waits_for_you = waits_for_you(&entry.view.item, &access.heap, open_questions, stuck);
+            entry.view.with_agent = with_agent(&entry.view.item, &access.heap, open_questions, turn.is_some(), stuck);
             entry.view.allowed_actions =
-                allowed_item_actions(&entry.view.item, &access.heap, role, turn.is_some(), now);
+                allowed_item_actions(&entry.view.item, &access.heap, role, turn.is_some(), stuck, now);
             entry.view.turn = turn;
         }
 
@@ -436,7 +449,7 @@ impl Services {
             .into_iter()
             .map(|item| {
                 // Closed items have no open turn: closing ends it.
-                let allowed_actions = allowed_item_actions(&item, &access.heap, role, false, now);
+                let allowed_actions = allowed_item_actions(&item, &access.heap, role, false, false, now);
                 let stage_choices = allowed_stage_choices(&item, &access.heap, role);
                 let step_actions = allowed_step_actions(&item, &access.heap, role);
                 let step_progress = step_progress.remove(&item.id);
@@ -541,8 +554,11 @@ impl Services {
         let turn = opened.map(|turn| TurnView {
             turn,
             opened_by: created_by.clone(),
+            runs: 0,
+            stuck_reason: None,
         });
-        let allowed_actions = allowed_item_actions(&item, &access.heap, access.membership.role, turn.is_some(), now);
+        let allowed_actions =
+            allowed_item_actions(&item, &access.heap, access.membership.role, turn.is_some(), false, now);
         let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
         let step_actions = allowed_step_actions(&item, &access.heap, access.membership.role);
         let values = describe_values(&item, &parameters);
@@ -608,7 +624,13 @@ impl Services {
         let current = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap_write(&txn, principal, current.heap_id, Permission::EditItems).await?;
+        let access = authorize_heap_write(&txn, principal, current.heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        if principal.run.is_some() {
+            check_run_patch(&patch)?;
+            self.check_run_write(&txn, principal, item_id, self.now()).await?;
+        }
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,
@@ -638,13 +660,19 @@ impl Services {
         }
         let Some(edited) = edited else {
             let children = ItemChildren::read_locking(&txn, current.id).await?;
-            return build_item_view(&txn, &access.heap, role, current, children, now).await;
+            let view = build_item_view(&txn, &access.heap, role, current, children, now).await?;
+            // A write in a run that changes nothing still tells the run it was heard.
+            commit_if_in_run(txn, principal).await?;
+            return Ok(view);
         };
         // Starting or closing an item takes it back from the agent first, and closing withdraws its open questions;
         // each has its own entry, written before the item's so the history reads in the order things happened.
         let mut turns_taken_back = 0_usize;
         let mut questions_withdrawn = 0_usize;
-        if edited.state.kind() == StateKind::InProgress && current.state.kind() != StateKind::InProgress {
+        if principal.run.is_some() {
+            // An agent that starts the item it works on keeps its turn (design, Queue). Closing isn't allowed in a
+            // run, so there is nothing else to take back.
+        } else if edited.state.kind() == StateKind::InProgress && current.state.kind() != StateKind::InProgress {
             turns_taken_back = self
                 .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Started, now)
                 .await?
@@ -713,6 +741,7 @@ impl Services {
             entity_type: EntityType::Item,
             entity_id: *item_id.as_uuid(),
             diff,
+            run_id: principal.run,
             created_at: now,
         }
     }
@@ -743,7 +772,7 @@ impl Services {
                 principal,
                 AuditAction::QuestionWithdrawn,
                 item,
-                describe_withdrawal(question),
+                describe_withdrawal(question, TakeBackWhy::Closed),
                 now,
             );
             store::audit::insert_audit_entry(txn, &entry).await?;
@@ -788,7 +817,8 @@ pub(crate) async fn build_item_view(
         questions,
         open_turn,
     } = children;
-    let allowed_actions = allowed_item_actions(&item, heap, role, open_turn.is_some(), now);
+    let stuck = open_turn.as_ref().is_some_and(Turn::is_stuck);
+    let allowed_actions = allowed_item_actions(&item, heap, role, open_turn.is_some(), stuck, now);
     let stage_choices = allowed_stage_choices(&item, heap, role);
     let step_actions = allowed_step_actions(&item, heap, role);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
@@ -796,8 +826,8 @@ pub(crate) async fn build_item_view(
     let blocked_by = find_blocker(db, &item).await?;
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
-    let waits_for_you = waits_for_you(&item, heap, open_questions);
-    let with_agent = with_agent(&item, heap, open_questions, open_turn.is_some());
+    let waits_for_you = waits_for_you(&item, heap, open_questions, stuck);
+    let with_agent = with_agent(&item, heap, open_questions, open_turn.is_some(), stuck);
     let turn = match open_turn {
         Some(turn) => turn_views(db, vec![turn]).await?.remove(&item.id),
         None => None,
@@ -840,11 +870,25 @@ pub(crate) async fn turn_views(
         .into_iter()
         .map(|user| (user.id, user))
         .collect();
+    let turn_ids: Vec<TurnId> = turns.iter().map(|turn| turn.id).collect();
+    let stuck_ids: Vec<TurnId> = turns
+        .iter()
+        .filter(|turn| turn.is_stuck())
+        .map(|turn| turn.id)
+        .collect();
+    let runs = store::runs::count_runs_for_turns(db, &turn_ids).await?;
+    let mut reasons = store::runs::latest_failure_for_turns(db, &stuck_ids).await?;
     Ok(turns
         .into_iter()
         .map(|turn| {
             let opened_by = pick_user(&users, turn.opened_by);
-            (turn.item_id, TurnView { turn, opened_by })
+            let view = TurnView {
+                opened_by,
+                runs: runs.get(&turn.id).copied().unwrap_or(0),
+                stuck_reason: reasons.remove(&turn.id),
+                turn,
+            };
+            (view.turn.item_id, view)
         })
         .collect())
 }
@@ -1175,4 +1219,55 @@ async fn new_item_key(
         }
         tracing::debug!(%heap_id, "item key taken, drawing another");
     }
+}
+
+/// A write only the person makes, tried in a run.
+const fn forbidden() -> ServiceError {
+    ServiceError::Run(RunError::Forbidden(RunForbidden::Person))
+}
+
+/// Refuses a patch made in a run unless it only sets the context, makes a note a task, or starts the item (design,
+/// Queue and Runs). Any other field, or any other state, refuses the whole patch.
+fn check_run_patch(patch: &ItemPatch) -> Result<(), ServiceError> {
+    match patch.state {
+        None | Some(StateKind::InProgress) => {}
+        Some(StateKind::Done) => return Err(RunError::Forbidden(RunForbidden::Done).into()),
+        Some(_) => return Err(forbidden()),
+    }
+    if patch.kind.is_some_and(|kind| kind != Kind::Task) {
+        return Err(forbidden());
+    }
+    let other_fields = patch.title.is_some()
+        || patch.need.is_some()
+        || patch.stage.is_some()
+        || patch.effort.is_some()
+        || patch.impact.is_some()
+        || patch.due.is_some()
+        || patch.tags.is_some()
+        || !patch.parameters.is_empty()
+        || patch.blocked_by.is_some();
+    if other_fields {
+        return Err(forbidden());
+    }
+    Ok(())
+}
+
+/// An archived heap read as a run's: its turn was taken back when the heap was archived, so the run is over.
+pub(crate) fn in_run(principal: Principal, error: ServiceError) -> ServiceError {
+    match error {
+        ServiceError::HeapArchived { .. } if principal.run.is_some() => RunError::Over.into(),
+        other => other,
+    }
+}
+
+/// Commits `txn` when the request is made in a run, so what the run's check wrote (that it was heard) is kept by a
+/// write that changed nothing. Other requests that change nothing leave their transaction to roll back.
+pub(crate) async fn commit_if_in_run(
+    txn: store::DatabaseTransaction,
+    principal: Principal,
+) -> Result<(), ServiceError> {
+    if principal.run.is_some() {
+        txn.commit().await.map_err(StoreError::from)?;
+    }
+    Ok(())
 }

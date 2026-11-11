@@ -16,7 +16,9 @@ use crate::paths::{ItemParams, ItemPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(send_to_agent, take_back))
+    OpenApiRouter::new()
+        .routes(routes!(send_to_agent, take_back))
+        .routes(routes!(retry_turn))
 }
 
 /// Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
@@ -62,5 +64,25 @@ async fn take_back(
     ClientTimeZone(tz): ClientTimeZone,
 ) -> Result<Json<ItemDto>, ApiError> {
     let view = state.services.take_back(path.principal, path.item_id).await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Lets the agents try again at an item whose turn is stuck (3 runs in a row failed) and answers with the whole item.
+/// The count of failed runs goes back to 0, so the item is in the queue again, and `turn_retried` is recorded. Any
+/// member who may edit items may. It needs no `If-Match`, and the item's `version` doesn't change. An item with no
+/// open turn, or one that isn't stuck, is `turn_not_stuck`.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/turn/retry", tag = "items", security(("session" = [])),
+    params(ItemParams, TimeZoneHeader),
+    responses(
+        (status = 200, body = ItemDto),
+        (status = 404, body = Problem),
+        (status = 409, description = "`heap_archived` or `turn_not_stuck`", body = Problem),
+    ))]
+async fn retry_turn(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+) -> Result<Json<ItemDto>, ApiError> {
+    let view = state.services.retry_turn(path.principal, path.item_id).await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }

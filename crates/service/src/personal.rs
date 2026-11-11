@@ -41,7 +41,10 @@ impl Services {
     pub async fn open_local_user(&self) -> Result<Principal, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         if let Some(user) = store::users::find_first_user(&txn).await? {
-            return Ok(Principal { user_id: user.id });
+            return Ok(Principal {
+                user_id: user.id,
+                run: None,
+            });
         }
         let made = self
             .insert_personal_user(
@@ -56,7 +59,10 @@ impl Services {
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(user_id = %made.user.id, team_id = %made.team.id, heap_id = %made.heap.id, "local user created");
-        Ok(Principal { user_id: made.user.id })
+        Ok(Principal {
+            user_id: made.user.id,
+            run: None,
+        })
     }
 
     /// Inserts a new user, their personal team with `username` as its slug and them as its only admin, and a first
@@ -123,6 +129,7 @@ impl Services {
             entity_type,
             entity_id,
             diff,
+            run_id: None,
             created_at: now,
         };
         let entries = [

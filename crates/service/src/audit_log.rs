@@ -322,6 +322,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::QuestionWithdrawn, _) => ("withdrew a question on", true),
         (AuditAction::TurnOpened, _) => ("opened a turn on", true),
         (AuditAction::TurnTakenBack, _) => ("took back a turn on", true),
+        (AuditAction::TurnReached, _) => ("reached the goal of a turn on", true),
+        (AuditAction::TurnRetried, _) => ("let agents try again on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
@@ -362,6 +364,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::QuestionWithdrawn
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
+        | AuditAction::TurnRetried
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
@@ -376,6 +379,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
         | AuditAction::ItemUpdated
+        | AuditAction::TurnReached
         | AuditAction::StepUpdated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewUpdated
@@ -744,6 +748,7 @@ mod tests {
             entity_type,
             entity_id: Uuid::from_u128(4),
             diff,
+            run_id: None,
             created_at: Timestamp::EPOCH,
         }
     }

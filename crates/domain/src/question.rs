@@ -9,7 +9,7 @@ use crate::item::{Item, ItemError};
 use crate::step::StepNumber;
 use crate::text::{Context, parse_positive, parse_required};
 use crate::validation::Field;
-use crate::{ItemId, QuestionId, Timestamp, UserId, ValidationError, Version};
+use crate::{ItemId, QuestionId, RunId, Timestamp, UserId, ValidationError, Version};
 
 /// The most questions one item has, answered ones included. This is the size assumption that lets every response
 /// that carries an item carry all of its questions (architecture.md, Data model).
@@ -224,6 +224,9 @@ pub struct Question {
     pub reply: Option<Reply>,
     /// Set exactly when the question is withdrawn. A question has a reply or a withdrawal, never both.
     pub withdrawal: Option<Withdrawal>,
+    /// The run it was asked in, when an agent asked it: taking the item back withdraws the open questions of its
+    /// runs, and the person's own stay open.
+    pub run_id: Option<RunId>,
     pub version: Version,
 }
 
@@ -324,8 +327,15 @@ impl Question {
             asked_at: now,
             reply: None,
             withdrawal: None,
+            run_id: None,
             version: Version::INITIAL,
         }
+    }
+
+    /// This question as asked in `run`, when it was asked in one.
+    #[must_use]
+    pub fn asked_in(self, run: Option<RunId>) -> Self {
+        Self { run_id: run, ..self }
     }
 
     pub const fn state(&self) -> QuestionState {
@@ -426,10 +436,10 @@ pub const fn check_questions_editable(item: &Item) -> Result<(), ItemError> {
     Ok(())
 }
 
-/// Whether `item` waits for the person: it is open, its heap is active and it has an open question, whoever asked it
-/// (Waiting for me). The heap's other rules, such as the role, don't matter: any member sees it waiting.
-pub const fn waits_for_you(item: &Item, heap: &Heap, open_questions: usize) -> bool {
-    !item.is_closed() && !heap.is_archived() && open_questions > 0
+/// Whether `item` waits for the person: it is open, its heap is active and it has an open question, whoever asked it,
+/// or its open turn is `stuck` (Waiting for me). The heap's other rules, such as the role, don't matter: any member sees it waiting.
+pub const fn waits_for_you(item: &Item, heap: &Heap, open_questions: usize, stuck: bool) -> bool {
+    !item.is_closed() && !heap.is_archived() && (open_questions > 0 || stuck)
 }
 
 /// Checks that `fields` can be asked on `item`, whose questions are `questions` and whose steps are numbered

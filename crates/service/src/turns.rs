@@ -9,12 +9,13 @@ use domain::audit::AuditAction;
 use domain::heap::Heap;
 use domain::item::ItemError;
 use domain::permission::Permission;
+use domain::run::RunEnd;
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
 use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
-use crate::audit::{describe_new_turn, describe_take_back};
+use crate::audit::{describe_new_turn, describe_retry, describe_take_back, describe_withdrawal};
 use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
 
@@ -118,6 +119,50 @@ impl Services {
         Ok(view)
     }
 
+    /// Lets the agents try again at an item whose turn is stuck: the count of failed runs goes back to 0, so the item is
+    /// in the queue again, and `turn_retried` is recorded. Any member may. Fails with [`TurnError::NotStuck`] when the
+    /// item has no open turn or its turn is not stuck, and with [`ServiceError::HeapArchived`] in an archived heap.
+    pub async fn retry_turn(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let found = store::items::find_item(&txn, item_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let item = store::items::find_item_locking(&txn, item_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let turn = store::turns::find_open_turn_locking(&txn, item.id)
+            .await?
+            .filter(Turn::is_stuck)
+            .ok_or(TurnError::NotStuck { item_id: item.id })?;
+
+        let now = self.now();
+        if !store::turns::set_failed_runs(&txn, turn.id, 0).await? {
+            return Err(TurnError::NotStuck { item_id: item.id }.into());
+        }
+        let entry = self.item_audit_entry(
+            &access.heap,
+            principal,
+            AuditAction::TurnRetried,
+            &item,
+            describe_retry(&turn),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let children = ItemChildren::read_locking(&txn, item.id).await?;
+        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %access.heap.id,
+            item_id = %item_id,
+            user_id = %principal.user_id,
+            failed_runs = turn.failed_runs,
+            "turn retried"
+        );
+        Ok(view)
+    }
+
     /// Ends the open turn of `item_id`, if it has one, with its `turn_taken_back` entry, and says whether there was
     /// one. The caller holds the heap lock, which keeps two writes from ending or opening a turn at once.
     pub(crate) async fn take_back_open_turn(
@@ -137,6 +182,10 @@ impl Services {
 
     /// Ends `turn`, which the caller read under the heap lock, with its `turn_taken_back` entry. Says whether it
     /// was still open.
+    ///
+    /// The turn's runs that haven't ended, live or lapsed, end as taken back, which is not a failure. The open
+    /// questions asked in a run of the turn are withdrawn, each with its `question_withdrawn` entry; the person's own
+    /// stay open.
     pub(crate) async fn take_back_turn(
         &self,
         txn: &impl ConnectionTrait,
@@ -159,6 +208,29 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(txn, &entry).await?;
+        for run in store::runs::list_unended_runs_for_turn_locking(txn, turn.id).await? {
+            let ended = run.ended_as(RunEnd::TakenBack, now, None, Vec::new(), None);
+            store::runs::end_run(txn, &ended).await?;
+        }
+        let questions = store::questions::list_open_questions_for_runs_of_turn_locking(txn, turn.id).await?;
+        for question in &questions {
+            let withdrawn = question.withdraw(principal.user_id, now);
+            store::questions::update_question(txn, &withdrawn, question.version)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected: question.version,
+                    current: question.version.next(),
+                })?;
+            let entry = self.item_audit_entry_for(
+                heap,
+                principal,
+                AuditAction::QuestionWithdrawn,
+                turn.item_id,
+                describe_withdrawal(question, why),
+                now,
+            );
+            store::audit::insert_audit_entry(txn, &entry).await?;
+        }
         Ok(true)
     }
 }

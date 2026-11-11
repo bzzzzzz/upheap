@@ -62,6 +62,9 @@ pub enum ValidationError {
     /// A reply picks more than one where the question takes one.
     #[error("this question takes one pick")]
     PickTooMany,
+    /// A field is not valid and no more specific rule says why, such as a link that is not a web address.
+    #[error("{field} is not valid")]
+    FieldInvalid { field: Field },
     /// A field names a value the server doesn't know, such as an enum value from a newer client.
     #[error("{field} is not a value this server knows")]
     ValueUnknown { field: Field },
@@ -117,6 +120,14 @@ pub enum Field {
     Line,
     /// How far a turn goes.
     Reach,
+    /// The heaps an agent asks the queue about.
+    Heaps,
+    /// What a run says it reached.
+    Result,
+    /// The links a run reached with.
+    Links,
+    /// What a run cost, in US dollars.
+    CostUsd,
 }
 
 impl Field {
@@ -150,6 +161,10 @@ impl Field {
             Self::Reply => "reply",
             Self::Line => "line",
             Self::Reach => "reach",
+            Self::Heaps => "heaps",
+            Self::Result => "result",
+            Self::Links => "links",
+            Self::CostUsd => "cost_usd",
         }
     }
 }

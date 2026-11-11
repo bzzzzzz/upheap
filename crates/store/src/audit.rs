@@ -1,7 +1,7 @@
 //! The audit log. Insert-only: there is no update or delete function, on purpose.
 
 use domain::audit::{AuditAction, EntityType};
-use domain::{HeapId, InviteLinkId, TeamId, Timestamp, UserId};
+use domain::{HeapId, InviteLinkId, RunId, TeamId, Timestamp, UserId};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder,
     QuerySelect, sea_query::Expr,
@@ -28,6 +28,8 @@ pub struct NewAuditEntry {
     pub entity_id: Uuid,
     /// Changed fields as `{"field": {"before": …, "after": …}}`, or the created values. Never contains secrets.
     pub diff: serde_json::Value,
+    /// The run the change was made in, when an agent made it.
+    pub run_id: Option<RunId>,
     pub created_at: Timestamp,
 }
 
@@ -48,6 +50,7 @@ fn to_row(entry: &NewAuditEntry) -> audit_log::ActiveModel {
         entity_type: Set(entry.entity_type.as_str().to_owned()),
         entity_id: Set(id_to_db(&entry.entity_id)),
         diff: Set(entry.diff.to_string()),
+        run_id: Set(entry.run_id.map(|run| id_to_db(run.as_uuid()))),
         created_at: Set(entry.created_at.as_millis()),
     }
 }
@@ -77,6 +80,8 @@ pub struct AuditEntry {
     pub entity_id: Uuid,
     /// As written: see [`NewAuditEntry::diff`].
     pub diff: serde_json::Value,
+    /// The run the change was made in, when an agent made it.
+    pub run_id: Option<RunId>,
     pub created_at: Timestamp,
 }
 
@@ -212,6 +217,11 @@ fn to_entry(row: audit_log::Model) -> Result<AuditEntry, StoreError> {
         entity_type,
         entity_id: read.uuid(&row.entity_id)?,
         diff,
+        run_id: row
+            .run_id
+            .as_deref()
+            .map(|run| read.uuid(run).map(RunId::from_uuid))
+            .transpose()?,
         created_at: read.timestamp(row.created_at)?,
     })
 }

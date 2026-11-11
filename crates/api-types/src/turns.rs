@@ -117,11 +117,35 @@ pub struct TurnDto {
     pub opened_label: String,
     /// Who sent the item, or added the note in a heap that prepares them. `null` when it can't be traced.
     pub opened_by: Option<UserRefDto>,
+    /// Whether the turn's runs keep failing: 3 in a row failed. A stuck turn is not in the agents' queue, and its item
+    /// waits for the person, who can retry or take it back.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub stuck: bool,
+    /// How many of the turn's runs in a row failed.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub failed_runs: u32,
+    /// Why the latest failed run failed, when the turn is stuck; otherwise `null`.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub stuck_reason: Option<String>,
+    /// How many runs the turn has had.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub runs: u32,
 }
 
 impl TurnDto {
-    /// The open `turn`, with the user who opened it if the caller knows them, and `opened_label` for when it opened.
-    pub fn new(turn: &Turn, opened_by: Option<UserRefDto>, opened_label: String) -> Self {
+    /// The open `turn`, with the user who opened it if the caller knows them, `opened_label` for when it opened, how
+    /// many `runs` it has had and, when it is stuck, why (`stuck_reason`).
+    pub fn new(
+        turn: &Turn,
+        opened_by: Option<UserRefDto>,
+        opened_label: String,
+        runs: u32,
+        stuck_reason: Option<String>,
+    ) -> Self {
         Self {
             reach: turn.reach.into(),
             goal: turn.goal.into(),
@@ -130,6 +154,10 @@ impl TurnDto {
             opened_at: turn.opened_at.as_millis(),
             opened_label,
             opened_by,
+            stuck: turn.is_stuck(),
+            failed_runs: turn.failed_runs,
+            stuck_reason: if turn.is_stuck() { stuck_reason } else { None },
+            runs,
         }
     }
 }

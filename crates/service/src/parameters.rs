@@ -251,6 +251,7 @@ impl Services {
                 entity_type: EntityType::Item,
                 entity_id: *item_id.as_uuid(),
                 diff: diff_switched_value(parameter_id, option_id, replaced_by),
+                run_id: None,
                 created_at: now,
             })
             .collect();
@@ -355,6 +356,7 @@ impl Services {
             entity_type: EntityType::Parameter,
             entity_id: *parameter.id.as_uuid(),
             diff,
+            run_id: None,
             created_at: now,
         }
     }

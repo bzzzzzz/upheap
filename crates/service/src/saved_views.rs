@@ -207,6 +207,7 @@ impl Services {
             entity_type: EntityType::SavedView,
             entity_id: *view.id.as_uuid(),
             diff,
+            run_id: None,
             created_at: now,
         }
     }
