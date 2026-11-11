@@ -1,5 +1,5 @@
 //! `upheap`, the command-line client of Upheap: add, show, edit, move and list a heap's items, list, add and edit its
-//! tags, add a heap, pick a default one, and sign in.
+//! tags, add a heap, pick a default one, sign in, and print a guide to all of it.
 //!
 //! It is a thin client of the HTTP API, like the web app: it never ranks, checks permissions or works out labels,
 //! and it reads and writes the API's own types from `api_types`.
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use reqwest::Url;
 
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
@@ -142,6 +142,9 @@ enum Command {
     /// Signing in and out
     #[command(subcommand)]
     Auth(AuthCommand),
+    /// How to use this tool, in one read
+    #[command(subcommand)]
+    Guide(GuideCommand),
 }
 
 #[derive(Subcommand)]
@@ -220,9 +223,16 @@ enum AuthCommand {
     Logout(commands::auth::logout::LogoutArgs),
 }
 
+#[derive(Subcommand)]
+enum GuideCommand {
+    /// Every command with its arguments and flags, and instructions for agents
+    Show(commands::guide::show::ShowArgs),
+}
+
 impl Command {
-    fn shared(&self) -> &SharedArgs {
-        match self {
+    /// The flags every command that talks to the server takes. `None` for one that doesn't.
+    fn shared(&self) -> Option<&SharedArgs> {
+        Some(match self {
             Self::Item(ItemCommand::Add(args)) => &args.shared,
             Self::Item(ItemCommand::List(args)) => &args.shared,
             Self::Item(ItemCommand::Show(args)) => &args.shared,
@@ -250,7 +260,8 @@ impl Command {
             Self::Heap(HeapCommand::Edit(args)) => &args.shared,
             Self::Auth(AuthCommand::Login(args)) => &args.shared,
             Self::Auth(AuthCommand::Logout(args)) => &args.shared,
-        }
+            Self::Guide(GuideCommand::Show(_)) => return None,
+        })
     }
 }
 
@@ -283,18 +294,21 @@ where
             return ExitCode::from(u8::try_from(err.exit_code()).unwrap_or(2));
         }
     };
-    let shared = cli.command.shared();
-    let mode = if shared.json {
-        Mode::Json
-    } else if shared.quiet {
-        Mode::Quiet
-    } else {
-        Mode::Human
+    let mode = match cli.command.shared() {
+        Some(shared) if shared.json => Mode::Json,
+        Some(shared) if shared.quiet => Mode::Quiet,
+        _ => Mode::Human,
     };
     let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
-    let result = match load_app(env, tokens, browser, stdin) {
-        Ok(app) => dispatch(cli.command, &app, &mut out).await,
-        Err(err) => Err(err.into()),
+    let result = match cli.command {
+        // Before the config file is read, so the guide can be read on a machine where nothing is set up yet.
+        Command::Guide(GuideCommand::Show(_)) => {
+            commands::guide::show::run(&Cli::command(), &mut out).map_err(CliError::from)
+        }
+        command => match load_app(env, tokens, browser, stdin) {
+            Ok(app) => dispatch(command, &app, &mut out).await,
+            Err(err) => Err(err.into()),
+        },
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -356,6 +370,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Heap(HeapCommand::Edit(args)) => commands::heap::edit::run(args, app, out).await,
         Command::Auth(AuthCommand::Login(args)) => commands::auth::login::run(args, app, out).await,
         Command::Auth(AuthCommand::Logout(args)) => commands::auth::logout::run(args, app, out).await,
+        Command::Guide(GuideCommand::Show(_)) => Ok(commands::guide::show::run(&Cli::command(), out)?),
     }
 }
 
