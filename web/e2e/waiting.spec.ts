@@ -1,9 +1,9 @@
 // Waiting for me (ux.md, Waiting for me): every open question across the person's heaps, answered in its row. Nothing
 // in the web app asks a question, so they are seeded through the API, as another member or an agent would. Server
 // build only.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
-import { expect, isPhone, itemPane, row, test } from "./fixtures";
+import { closeItem, expect, isPhone, itemPane, row, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -174,7 +174,15 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   await expect(regions.getByRole("link", { name: "Plan the launch", exact: true })).toBeVisible();
   await expect(regions).toContainText("Launch · Acme");
   const ca = rows(page).filter({ hasText: "Which CA do we use?" });
-  await expect(ca).toContainText(/Question · Rotate the certs · .+ · .+ · step “Pick the CA”/);
+  // A personal heap names no team, a shared one does; and a step shows by its title.
+  const head = (locator: Locator) => locator.locator("p", { has: page.getByRole("link") }).first();
+  await expect(head(ca)).toHaveText("Question · Rotate the certs · Personal · step “Pick the CA”");
+  await expect(head(regions)).toHaveText("Question · pick any · Plan the launch · Launch · Acme");
+  // The title is a 44 px target to a finger.
+  if (isPhone(page)) {
+    const link = await ca.getByRole("link", { name: "Rotate the certs", exact: true }).boundingBox();
+    expect(Math.round(link?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  }
   await expect(rows(page).filter({ hasText: "Put a token in the vault." })).toContainText("Request");
 
   // Details holds the details as written, and Context under it the item's and the heap's, fetched when opened.
@@ -202,6 +210,11 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   await ca.getByRole("link", { name: "Rotate the certs", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${heapPath}/items/${certs.key}$`));
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
+
+  // Closing it goes back to the Waiting page, not to the heap's list.
+  await closeItem(page);
+  await expect(page).toHaveURL(/\/waiting$/);
+  await expect(page.getByRole("heading", { name: /^Waiting for me/, level: 1 })).toBeVisible();
 });
 
 test("a request is answered with Done or Can't be done, and an answered-first row leaves with a note", async ({

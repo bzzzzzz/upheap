@@ -212,12 +212,20 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
   ]);
 }
 
+/** `/me` and what waits for the person, which counts the heaps they are in. */
+function invalidateMe(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    queryClient.invalidateQueries({ queryKey: waitingKey }),
+  ]);
+}
+
 /**
  * The heaps' open counts in `/me`, which the sidebar shows. Only adding an item or changing its state changes them,
  * so only those refetch `/me`, and nothing waits for it.
  */
 function invalidateOpenCounts(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+  void invalidateMe(queryClient);
 }
 
 /**
@@ -376,13 +384,16 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
           },
       );
     },
-    onError: () => queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) }),
+    // Not returned: the mutation would wait for the refetches, and with it the focus move and the live message of
+    // the row replied to.
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
+    },
     // The lists say which items wait for you, and Waiting for me what does.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: rankedKey(heap) }),
-        queryClient.invalidateQueries({ queryKey: waitingKey }),
-      ]),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
   });
 }
 
@@ -630,11 +641,7 @@ export function useUpdateMe() {
         }),
       ),
     // Teams list members by name.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
-        queryClient.invalidateQueries({ queryKey: ["team"] }),
-      ]),
+    onSettled: () => Promise.all([invalidateMe(queryClient), queryClient.invalidateQueries({ queryKey: ["team"] })]),
   });
 }
 
@@ -648,10 +655,7 @@ export function useTeam(team: string) {
 
 /** Team changes also change what `/me` lists: teams, roles and heaps. */
 function invalidateTeam(queryClient: QueryClient, team: string) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: teamKey(team) }),
-    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
-  ]);
+  return Promise.all([queryClient.invalidateQueries({ queryKey: teamKey(team) }), invalidateMe(queryClient)]);
 }
 
 /** Starts a team. Without a `slug`, the server makes one from the name. */
@@ -660,7 +664,7 @@ export function useCreateTeam() {
   return useMutation({
     mutationFn: async (body: { name: string; slug?: string }) => unwrap(await api.POST("/api/v1/teams", { body })),
     onSuccess: (team) => queryClient.setQueryData(teamKey(team.slug), team),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    onSettled: () => invalidateMe(queryClient),
   });
 }
 
@@ -772,7 +776,7 @@ export function useJoinByInvite(token: string) {
       return { team: unwrap(result), created: result.response.status === 201 };
     },
     // The new team shows in the shell. Awaited, so the landing finds it there.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    onSuccess: () => invalidateMe(queryClient),
     onError: (error) => refreshInvitationAfter(queryClient, token, error),
   });
 }
@@ -828,7 +832,7 @@ export function useLeaveTeam(team: Team) {
           queryClient.removeQueries({ queryKey: key });
         }
       }
-      await queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+      await invalidateMe(queryClient);
     },
   });
 }

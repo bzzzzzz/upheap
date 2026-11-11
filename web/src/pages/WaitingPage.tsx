@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
+import { titleTeam } from "../components/teamName";
 
 const rowKey = (row: WaitingRow) => `${row.item.id}:${row.question.number}`;
 const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: row.heap.slug });
@@ -23,7 +24,8 @@ export function WaitingPage() {
   const [refused, setRefused] = useState<{ text: string; comment: string | null }[]>([]);
   // The row just replied to and where it was: once it has left, the focus goes on to the row that took its place.
   const repliedTo = useRef<{ key: string; index: number } | null>(null);
-  const rows = waiting.data?.rows ?? [];
+  // Only questions for now; a kind this client doesn't know is left out. The heading keeps the server's count.
+  const rows = (waiting.data?.rows ?? []).filter((row) => row.kind === "question");
 
   useEffect(() => {
     const replied = repliedTo.current;
@@ -91,7 +93,7 @@ export function WaitingPage() {
                 heapRef={heapOf(row)}
                 item={row.item}
                 question={row.question}
-                line={<RowLine row={row} withTeam={manyTeams} />}
+                line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
                 context={<RowContext heapRef={heapOf(row)} itemKey={row.item.key} heapName={row.heap.name} />}
                 onReplied={(question: Question) => {
                   track(row);
@@ -122,7 +124,7 @@ export function WaitingPage() {
 }
 
 /** "Question · <item> · <heap> · <team> · step “…”": which item the question is on, and where. */
-function RowLine({ row, withTeam }: { row: WaitingRow; withTeam: boolean }) {
+function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
   return (
     <p className="text-xs break-words text-muted">
       {kindWord(row.question)}
@@ -130,12 +132,15 @@ function RowLine({ row, withTeam }: { row: WaitingRow; withTeam: boolean }) {
       <Link
         to="/teams/$team/heaps/$heap/items/$item"
         params={{ ...heapOf(row), item: row.item.key }}
-        className="font-medium text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
+        // Closing the item goes back here, not to the heap's list.
+        state={(prev) => ({ ...prev, closesBack: true })}
+        // A finger gets a 44 px target; the negative margin keeps the line as tall as it was.
+        className="font-medium text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:-my-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
       >
         {row.item.title}
       </Link>
       {` · ${row.heap.name}`}
-      {withTeam && ` · ${row.heap.team_name}`}
+      {team && ` · ${team}`}
       {row.step_title && ` · step “${row.step_title}”`}
     </p>
   );
@@ -147,7 +152,7 @@ function RowContext({ heapRef, itemKey, heapName }: { heapRef: HeapRef; itemKey:
   const heap = useHeap(heapRef);
   const part = (title: string, query: { isPending: boolean; error: Error | null }, text: string | null | undefined) => (
     <div className="flex flex-col gap-0.5">
-      <h4 className="text-xs font-medium text-ink-soft">{title}</h4>
+      <h2 className="text-xs font-medium text-ink-soft">{title}</h2>
       {query.isPending ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : query.error ? (
