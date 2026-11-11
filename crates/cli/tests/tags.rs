@@ -21,7 +21,7 @@ async fn tags(server: &TestServer, user: &TestUser) -> Result<Vec<Value>> {
 
 #[gtest]
 #[tokio::test]
-async fn tag_list_prints_each_tag_with_its_first_description_line_and_quiet_prints_names() -> Result<()> {
+async fn tag_list_prints_each_tag_with_its_whole_description_and_quiet_prints_names() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let (ada, _) = ada_with_items(&server).await?;
@@ -29,7 +29,7 @@ async fn tag_list_prints_each_tag_with_its_first_description_line_and_quiet_prin
     add_tag(
         &server,
         &ada,
-        json!({ "name": "Ops", "description": "Operations work\nand on-call" }),
+        json!({ "name": "Ops", "description": "Operations work\r\nand on-call,\tall of it, however long the line runs past the width a table would cut it at" }),
     )
     .await?;
 
@@ -39,7 +39,12 @@ async fn tag_list_prints_each_tag_with_its_first_description_line_and_quiet_prin
 
     // Assert
     expect_that!(human.exited(0), eq(true));
-    expect_that!(human.stdout, eq("Infra\nOps    Operations work\n"));
+    expect_that!(
+        human.stdout,
+        eq(
+            "Infra\nOps\n  Operations work\n  and on-call,    all of it, however long the line runs past the width a table would cut it at\n"
+        )
+    );
     expect_that!(quiet.stdout, eq("Infra\nOps\n"));
     Ok(())
 }
