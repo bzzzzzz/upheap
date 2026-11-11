@@ -382,12 +382,14 @@ function ReplyControls({
 }
 
 /**
- * The questions that don't wait in {@link WaitsForYou}, folded above History: the answered ones, and on a closed item
- * the open ones too, which can be replied to once the item is reopened. Read-only.
+ * The questions that don't wait in {@link WaitsForYou}, folded above History: the answered ones, the ones closing the
+ * item withdrew, and on a closed item any open ones left from before closing withdrew them. Read-only.
  */
 export function AnsweredQuestions({ item }: { item: Item }) {
   const closed = isClosed(item.state);
-  const listed = (item.questions ?? []).filter((question) => question.state === "answered" || closed);
+  const listed = (item.questions ?? []).filter(
+    (question) => question.state === "answered" || question.state === "withdrawn" || closed,
+  );
   if (listed.length === 0) return null;
   return (
     <details className="group">
@@ -414,10 +416,11 @@ export function AnsweredQuestions({ item }: { item: Item }) {
   );
 }
 
-/** What became of a listed question: the reply and who made it, or that it is still open. */
+/** What became of a listed question: the reply and who made it, that closing the item withdrew it, or that it is still open. */
 function Outcome({ question }: { question: Question }) {
   const by = useUserName(question.reply?.replied_by);
   const reply = question.reply;
+  if (question.state === "withdrawn") return <p className="text-sm text-muted">Withdrawn</p>;
   if (!reply) return <p className="text-sm text-muted">Open: reopen the item to reply.</p>;
   const labels = reply.picked.map((index) => question.choices[index]).join(", ");
   const who = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)}, ` : "";

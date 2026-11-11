@@ -255,7 +255,7 @@ test("someone else's reply meanwhile takes the row away with a note", async ({ p
   await expect(itemPane(page).getByText("meanwhile.")).toHaveCount(0);
 });
 
-test("the section is absent without open questions and on a closed item, whose open ones read in Questions", async ({
+test("the section is absent without open questions, and closing the item withdraws them, as Questions reads", async ({
   page,
   heapPath,
   localBuild,
@@ -269,7 +269,7 @@ test("the section is absent without open questions and on a closed item, whose o
   await expect(waits(page)).toBeVisible();
   await expect(answered(page)).toHaveCount(0);
 
-  // Closing the item takes the question out of Waits for you, and it reads, open, in Questions.
+  // Closing the item withdraws the question: it leaves Waits for you, and it reads, withdrawn, in Questions.
   await changeState(page, "Start");
   await changeState(page, "Done");
   await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Reopen");
@@ -278,13 +278,15 @@ test("the section is absent without open questions and on a closed item, whose o
   await expect(folded.locator("summary")).toHaveText("Questions 1");
   await folded.locator("summary").click();
   await expect(folded).toContainText("Which CA do we use?");
-  await expect(folded).toContainText("Open: reopen the item to reply.");
+  await expect(folded).toContainText("Withdrawn");
   await expect(folded.getByRole("button", { name: "Reply" })).toHaveCount(0);
 
-  // Reopening makes it wait again.
+  // Reopening doesn't bring it back: it stays withdrawn, and the item waits for nobody.
   await changeState(page, "Reopen");
-  await expect(waits(page)).toBeVisible();
-  await expect(answered(page)).toHaveCount(0);
+  await expect(waits(page)).toHaveCount(0);
+  await expect(answered(page).locator("summary")).toHaveText("Questions 1");
+  await answered(page).locator("summary").click();
+  await expect(answered(page)).toContainText("Withdrawn");
 });
 
 test("a failed reply keeps the row with its picks and comment, and says why", async ({
@@ -338,7 +340,7 @@ test("closing the item before a reply lands keeps a note with the comment", asyn
   const note = itemPane(page).getByRole("alert");
   await expect(note).toContainText("The item was closed before your reply to “Which CA do we use?” was sent.");
   await expect(note).toContainText("Your comment: Let's Encrypt");
-  expect((await questionsOf(page, item))[0].state).toBe("open");
+  expect((await questionsOf(page, item))[0].state).toBe("withdrawn");
 });
 
 test("in an archived heap a question shows its text and details, with no controls", async ({

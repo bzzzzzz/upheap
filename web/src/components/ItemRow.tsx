@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Ellipsis } from "lucide-react";
+import { Bot, Ellipsis } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
@@ -116,6 +116,8 @@ export function ItemRow({
             {item.waits_for_you && (
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
             )}
+            {/* The same slot says an agent has the item, with a mark: the two never show together. */}
+            {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-ink-soft sm:hidden" />}
             {/* The link covers the whole row, under the state circle. */}
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
@@ -137,6 +139,7 @@ export function ItemRow({
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
+                {item.with_agent && ", with an agent"}
               </span>
             </Link>
             <StageIcon stage={item.stage} />
@@ -167,6 +170,11 @@ export function ItemRow({
         {item.waits_for_you && (
           <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
             waits for you
+          </span>
+        )}
+        {item.with_agent && (
+          <span aria-hidden="true" className="hidden shrink-0 text-xs text-ink-soft sm:inline">
+            with an agent
           </span>
         )}
         {actions && <RowActions item={item} onChangeState={onChangeState} />}

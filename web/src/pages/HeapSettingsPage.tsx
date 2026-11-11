@@ -1,6 +1,7 @@
 import { Link, Outlet } from "@tanstack/react-router";
 import { localDatabase } from "#local-database";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Switch } from "react-aria-components";
 
 import { ApiProblem, type Heap, type HeapRef } from "../api/client";
 import { useHeap, useUpdateHeap } from "../api/queries";
@@ -154,6 +155,8 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
 
       {!localDatabase && <HeapContextCard team={heapRef.team} heap={data} canEdit={can("edit_context")} />}
 
+      {!localDatabase && <AgentsCard team={heapRef.team} heap={data} canSet={can("set_agents_prepare")} />}
+
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>
           <h2 id="heap-archive" className={cardTitleClass}>
@@ -178,6 +181,45 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Whether agents prepare the notes added to the heap (ux.md, Heap settings): a switch that saves as it is turned, for
+ * those who may set it, as `allowed_actions` says; everyone else, and everyone in an archived heap, reads the value.
+ * Its own mutation, so its error doesn't mix with the name forms'.
+ */
+function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: boolean }) {
+  const update = useUpdateHeap(team);
+  // The value being saved shows at once, and the saved one once the save is over.
+  const on = update.isPending ? (update.variables.patch.agents_prepare ?? heap.agents_prepare) : heap.agents_prepare;
+  return (
+    <section aria-labelledby="heap-agents" className={cardClass}>
+      <h2 id="heap-agents" className={cardTitleClass}>
+        Agents
+      </h2>
+      {canSet ? (
+        <Switch
+          isSelected={on}
+          onChange={(agentsPrepare) => update.mutate({ heap, patch: { agents_prepare: agentsPrepare } })}
+          className="group mt-3 flex min-h-9 items-center gap-3 text-sm font-medium outline-none pointer-coarse:min-h-11"
+        >
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-10 shrink-0 items-center rounded-full bg-line-strong px-0.5 transition-colors group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-offset-2 group-data-[focus-visible]:outline-accent group-data-[selected]:bg-accent motion-reduce:transition-none"
+          >
+            <span className="size-5 rounded-full bg-surface shadow-sm transition-transform group-data-[selected]:translate-x-4 motion-reduce:transition-none" />
+          </span>
+          Agents prepare new notes
+        </Switch>
+      ) : (
+        <p className="mt-3 text-sm font-medium">Agents prepare new notes: {on ? "on" : "off"}</p>
+      )}
+      <p className="mt-2 text-sm/normal text-ink-soft">
+        Each note added here is sent to an agent to fill in its context, then comes back to you.
+      </p>
+      <ProblemText error={update.error} className="mt-2 text-overdue-ink" />
+    </section>
   );
 }
 
