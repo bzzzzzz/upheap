@@ -133,7 +133,7 @@ impl utoipa::Modify for SessionCookieScheme {
 /// Routes that take `SessionUser`, the cookie only: the bearer scheme is not added to them. Beside the OAuth prefix,
 /// which is skipped the same way.
 #[cfg(feature = "accounts")]
-const SESSION_ONLY_PATHS: &[&str] = &["/api/v1/invites/{token}/join"];
+const SESSION_ONLY_PATHS: &[&str] = &["/api/v1/invites/{token}/join", "/api/v1/me/password"];
 
 /// Declares the bearer scheme, and offers it beside the session cookie wherever an operation takes the cookie,
 /// since [`extract::CurrentUser`] takes either. The OAuth operations are left as they say: approving an
@@ -178,7 +178,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(oauth::authorize_routes())
         .merge(users::routes())
         .merge(invites::routes())
-        .merge(me::sign_ins::routes());
+        .merge(me::sign_ins::routes())
+        .merge(me::password::routes());
     // Turns are for a build that has agents.
     #[cfg(feature = "agents")]
     let v1 = v1.merge(turns::routes());

@@ -153,6 +153,10 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
         }
+        ServiceError::WrongPassword => Classified {
+            field: Some(Field::CurrentPassword.as_str()),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "wrong_password", Category::Caller)
+        },
         ServiceError::TooManySignInAttempts { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }

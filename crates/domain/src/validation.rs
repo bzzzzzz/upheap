@@ -85,6 +85,8 @@ pub enum Field {
     /// What sign-in takes: an email address or a username.
     Login,
     Password,
+    /// The password a signed-in user gives to prove it is them, when they change it.
+    CurrentPassword,
     /// An item's kind.
     Kind,
     /// An item's stage.
@@ -132,6 +134,7 @@ impl Field {
             Self::Email => "email",
             Self::Login => "login",
             Self::Password => "password",
+            Self::CurrentPassword => "current_password",
             Self::Kind => "kind",
             Self::Stage => "stage",
             Self::Context => "context",

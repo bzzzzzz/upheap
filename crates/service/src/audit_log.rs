@@ -333,6 +333,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::OptionArchived, _) => ("archived an option of", true),
         (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
+        (AuditAction::PasswordChanged, _) => ("changed their password", false),
     }
 }
 
@@ -364,7 +365,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
-        | AuditAction::InviteLinkCreated => DiffShape::Created,
+        | AuditAction::InviteLinkCreated
+        | AuditAction::PasswordChanged => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated
@@ -386,7 +388,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 44] = [
+const FIELD_ORDER: [&str; 45] = [
     "step",
     "step_title",
     "step_context",
@@ -429,6 +431,7 @@ const FIELD_ORDER: [&str; 44] = [
     "options",
     "archived_options",
     "items_switched",
+    "ended_sign_ins",
     "list_view",
     "agents_prepare",
 ];
@@ -569,6 +572,7 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "options" => "Options",
         "archived_options" => "Archived options",
         "items_switched" => "Items switched",
+        "ended_sign_ins" => "Other sign-ins ended",
         "list_view" => "What it shows",
         other => other,
     }

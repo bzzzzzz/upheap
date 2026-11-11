@@ -1,6 +1,8 @@
 //! The signed-in user, their teams and heaps.
 
 #[cfg(feature = "accounts")]
+pub(crate) mod password;
+#[cfg(feature = "accounts")]
 pub(crate) mod sign_ins;
 
 use api_types::common::HeapSummaryDto;
@@ -37,6 +39,7 @@ fn to_me_dto(me: MeView, authentication: &Authentication) -> MeDto {
             MeActionDto::SignOut,
             MeActionDto::CreateTeam,
             MeActionDto::ManageSignIns,
+            MeActionDto::ChangePassword,
         ]
     };
     let team = |view: TeamView| TeamDto {

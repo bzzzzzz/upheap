@@ -70,6 +70,29 @@ pub enum MeActionDto {
     CreateTeam,
     /// List and end the sign-ins of command-line and other clients (`/me/sign-ins`).
     ManageSignIns,
+    /// Change the password (`POST /me/password`).
+    ChangePassword,
+}
+
+/// What the signed-in user gives to change their password.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ChangePasswordRequest)]
+pub struct ChangePasswordRequestDto {
+    /// The password now in use, to show it is the user and not someone at their open browser.
+    pub current_password: String,
+    /// The new password, named as in registration so a length problem points at the same field. At least 10
+    /// characters. May equal the current one.
+    pub password: String,
+}
+
+/// What a password change did.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = PasswordChanged)]
+pub struct PasswordChangedDto {
+    /// How many other sign-ins the change ended that were still live: other browsers, and clients such as the
+    /// command line. The browser it was made from stays signed in on a new session, and isn't counted.
+    pub ended_sign_ins: u32,
 }
 
 /// One live sign-in of a client such as the CLI: the tokens it holds can still be used.

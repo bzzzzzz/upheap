@@ -58,6 +58,9 @@ enum Target {
     ParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
+    /// An account of its own, signed in when the caller is, so a request that replaces the caller's session (a
+    /// password change) doesn't end the caller's shared one.
+    OwnAccount,
     /// The shared team, with its version for `If-Match`.
     Team,
     /// A new user, added to the shared team as a member, in `{username}`.
@@ -129,6 +132,8 @@ enum RequestBody {
     AddMember,
     Promote,
     DisplayName,
+    /// The password of the account from [`Target::OwnAccount`], as both the current and the new one.
+    ChangePassword,
     /// The CLI's authorization request.
     Authorization,
     /// A form exchanging the code from [`Target::AuthorizationCode`], as the CLI sends it, without cookie or CSRF
@@ -274,6 +279,14 @@ fn endpoints() -> Vec<Endpoint> {
             Target::SignIn,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/me/password",
+            SignedIn,
+            Target::OwnAccount,
+            RequestBody::ChangePassword,
+            StatusCode::OK,
         ),
         row(
             Method::GET,
@@ -1114,6 +1127,7 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::ChangePassword => Some(json!({ "current_password": PASSWORD, "password": PASSWORD })),
             RequestBody::Authorization => Some(common::cli_authorization()),
             // Sent as forms by `call`.
             RequestBody::TokenExchange | RequestBody::Revocation => None,
@@ -1243,6 +1257,12 @@ impl World {
                     .as_str()
                     .context("parameter has no option")?;
                 path = path.replace("{option_id}", id);
+            }
+            Target::OwnAccount => {
+                session = match account {
+                    Some(_) => Some(self.new_user().await?.0),
+                    None => None,
+                };
             }
             Target::FreshSession => {
                 session = match account {

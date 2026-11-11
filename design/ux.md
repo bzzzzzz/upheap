@@ -103,8 +103,9 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 **More** on a phone holds Settings (server build), Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
 rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards, which are Profile, Appearance, Command line (server build) and Your data (local build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb,
-so the Add button beside the heap name shows only from a tablet up.
+its cards, which are Profile, Password (server build), Appearance, Command line (server build) and Your data (local
+build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
+the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
 the team in the URL (a link to its page, shown on the heap's pages and the team's own, and not in the local build,
@@ -485,6 +486,27 @@ A new member lands on the team's heap when it has exactly one that isn't archive
 lists the heaps. Landing replaces the invite page in the history. The app's toast says "You joined Acme." (or "You're
 already in Acme."), belongs to the page they land on like any toast, and is shown once: the line is taken out of the
 history entry as it is shown, so a reload doesn't repeat it.
+
+## Password
+
+In the server build, Account's Password card sits between Profile and Appearance. Closed, it is the heading "Password"
+and a **Change password** button on one row (wrapping on a narrow phone). Pressing the button replaces it with a
+form: **Current password** (focused) and **New password** with the hint "At least 10 characters.", then **Change
+password** and **Cancel**, and under them "This signs you out of your other browsers and the command line." Enter in
+either input submits, and both buttons are disabled while it is pending. What was typed is sent as typed.
+
+Errors sit under their input, which is marked invalid and described by them, and focus moves to the first one: "Enter
+your current password.", "That isn't your current password.", "Enter a new password.", "Use at least 10 characters."
+and "That password is too long." Typed values stay, except Current password after a wrong one, which is cleared and
+focused for a password manager to fill again. Too many tries, or anything else, is the server's message above the
+buttons. Cancel and Escape close the form, clear it and give focus back to Change password.
+
+A success closes the form and shows a status line under the heading, "Password changed. 2 other sign-ins ended.",
+"… 1 other sign-in ended." or "… No other sign-ins were open.", until the form is opened again or the page is left.
+Focus goes to Change password, and the Command line card is read again, since the change ended its sign-ins. The
+browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user
+lands on sign-in at its next request. The card is there when the server's `change_password` action is, so never in
+the local build.
 
 ## Command line
 
