@@ -1,16 +1,15 @@
 # Work
 
-What's in flight, what's next, and ideas. Last reviewed 2026-11-09.
+What's in flight, what's next, and ideas. Last reviewed 2026-11-10.
 
 ## Tracks
 
 In flight. Each track's doc holds its progress.
 
-- [Getting in](getting-in.md): invite links, password change and reset.
 - [Work with agents](work-with-agents.md): notes, tasks and reminders with context and questions, worked on with
   AI agents through the CLI.
 - [Side tasks](side-tasks.md): backups, old OAuth rows, confirmations, Activity at phone width, and what holds an
-  item back. Small pieces beside the two tracks.
+  item back. Small pieces beside the track.
 - [Smaller changes](smaller-changes.md): refactors that take out the places where one fact is written several
   times, so a feature touches fewer files and none the compiler doesn't check.
 
@@ -41,7 +40,16 @@ Not commitments. [product.md](../product.md) holds the commitments.
   the phone item sheet, a back button on phone pages outside a heap, an optional link name when adding a heap.
 - **Onboarding** beyond the empty heap's one line: how ranking works, what the sizes and loose due times mean.
 - **Error pages:** a `404`, the local backend failing to open its storage, an offline banner, the `500` request ID.
-- **Hiding Create account when registration is closed,** and a countdown on a throttled sign-in.
+- **Hiding Create account when registration is closed,** or having the sign-in page say that an account needs an
+  invite link, and a countdown on a throttled sign-in.
+- **More invite links:** for one person or one use, and into a single heap.
+- **Operator pages:** listing accounts, deactivating one, and making reset links without a shell.
+- **The first account on a server whose registration starts closed.** Today the operator opens registration,
+  registers, and closes it.
+- **Consent or a notice for a direct add** to a team.
+- **A contact line the operator sets,** shown where the sign-in page says who resets passwords.
+- **The CLI saying a sign-in ended because the password changed,** not only that it must sign in again.
+- **Deleting old reset links,** as old OAuth rows are deleted.
 - **A searchable blocker picker,** bulk actions, and a link from "parameter in use" to the items holding a value.
 - **Notifications and due reminders.**
 - **Installable app:** a PWA for the local build, then store builds

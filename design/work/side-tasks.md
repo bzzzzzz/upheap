@@ -1,8 +1,8 @@
 # Side tasks
 
-Small pieces of work that can run beside the two tracks in flight, [Getting in](getting-in.md) and
-[Work with agents](work-with-agents.md), without touching what their next pieces change. Each is one pull
-request, and they don't depend on each other, so they can go in any order and at the same time.
+Small pieces of work that can run beside the track in flight, [Work with agents](work-with-agents.md), without
+touching what its next pieces change. Each is one pull request, and they don't depend on each other, so they can go
+in any order and at the same time.
 
 ## Progress
 

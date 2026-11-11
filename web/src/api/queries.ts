@@ -162,6 +162,22 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
 }
 
 /**
+ * The signed-in user's password changes and resets, newest first, a page at a time. Keyed under `"audit"` so that
+ * `main.tsx` refreshes it after any mutation, a password change included. `enabled` is false until the history is
+ * opened.
+ */
+export function useAccountHistory(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: ["audit", "account"],
+    enabled,
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.GET("/api/v1/me/history", { params: { query: { cursor: pageParam } } })),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
+}
+
+/**
  * One item of `heap`, by its key, for the item pane. Each change saves on its own, so there's no unsaved form for a
  * refetch to reset.
  */

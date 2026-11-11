@@ -395,6 +395,13 @@ a fixed time.
      the caller whoever they were, and clears the user's sign-in attempts, since the holder of the link has shown who
      they are. Not rate limited, because a 256-bit token can't be guessed. Making a link is audited with the user as
      its actor, since an entry needs an account and the operator has none; its diff says `made_by: operator`.
+   - A user's **account history** is the audit entries about them in their personal team, where their account entries
+     go: a password change, a reset link made for them (actor: the user, for the reason above) and a password set
+     with one. `GET /me/history` reads exactly those three actions for the caller, with no way to name another user or
+     team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
+     as one sentence with no actor ("Password changed. 2 other sign-ins ended.") from the entry's diff, and the
+     sentence is made on reading, so a wording fix reaches old entries. Cookie or bearer token may read it; it is
+     part of the `accounts` feature.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 
@@ -421,6 +428,10 @@ a fixed time.
 4. Finding users to add (`GET /users`) is for admins of a shared team (everyone is admin of their personal team,
    which doesn't count) and is built so it can't list addresses: a name matches by word prefix, an email only when
    typed in full, and a match shows the email only when the email matched.
+
+5. An invite link is the one thing opened by holding its token, signed in or not. That shows the team's name and the
+   maker's name, whatever the link's state, and nothing else of the team. Joining checks the link at that moment, under
+   the team lock, so a revocation that commits while a join waits for the lock wins.
 
 ### Archived heaps
 
@@ -497,8 +508,13 @@ the remaining admins.
    by closing its item (`QuestionWithdrawn`) and a turn (`TurnOpened`, with its reach, goal, line and source, and
    `TurnTakenBack`, with the goal and why: the person took it back, started the item, closed it, or archived the
    heap). Closing an item writes its take back, then a withdrawal for each open question, then its own update.
-7. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
-   parameter, heap and member, and the whole logs on the heap's and the team's Activity pages. Parameters and heaps
+7. Invite links are never deleted. Making and revoking one are team entries (`InviteLinkCreated`,
+   `InviteLinkRevoked`) shown to admins, and a join through one is a membership entry (`MemberJoined`) naming the
+   link, so a link's own History is its entries by `entity_id`. A link ending by time is not an act and has no entry.
+8. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
+   parameter, heap, member and invite link, and the whole logs on the heap's and the team's Activity pages. The
+   account's own history is under Account's Password card ([Authentication](#authentication-and-authorization)).
+   Parameters and heaps
    offer `view_history` only to those who may see their entries, so members aren't shown histories that are always
    empty.
 

@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 
 import { ApiProblem } from "../api/client";
 import { useChangePassword } from "../api/queries";
+import { AccountHistoryDisclosure } from "./AccountHistory";
 import { compactButtonClass } from "./buttons";
 import { problemMessage, ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";
@@ -152,6 +153,7 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
           <p className="-mt-2 text-xs text-muted">This signs you out of your other browsers and the command line.</p>
         </form>
       )}
+      <AccountHistoryDisclosure />
     </section>
   );
 }
