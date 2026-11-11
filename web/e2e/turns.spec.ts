@@ -171,7 +171,8 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
   await state.getByRole("button", { name: "Done", exact: true }).click();
   await expect(takeBackAsk(page)).toContainText("Closing it takes it back. Take it back and close it?");
   await takeBackAsk(page).getByRole("button", { name: "Take back and close", exact: true }).click();
-  await expect(state).toContainText("Done");
+  // A closed item offers only Reopen, at every width: "Done" would match the button still there before the close lands.
+  await expect(state.getByRole("button")).toHaveText(["Reopen"]);
 });
 
 test("marking an item an agent has done from its circle asks first, and closing takes it back", async ({
