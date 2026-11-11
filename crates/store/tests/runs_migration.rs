@@ -8,7 +8,7 @@ use store::{ConnectionTrait, DatabaseConnection};
 use uuid::Uuid;
 
 /// Migrations before the runs one.
-const BEFORE_RUNS: u32 = 21;
+const BEFORE_RUNS: u32 = 22;
 
 async fn run(db: &DatabaseConnection, sql: &str) -> Result<()> {
     db.execute_unprepared(sql).await.with_context(|| sql.to_owned())?;

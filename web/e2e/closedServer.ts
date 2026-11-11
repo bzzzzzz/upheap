@@ -1,14 +1,17 @@
-// A server whose registration is closed, with two accounts that already exist: how a real server gets to the state
-// the invite page is for (design/ux.md, Invite page). The suite's main server (playwright.config.ts) has
+// A server whose registration is closed, with three accounts that already exist: how a real server gets to the state
+// the invite page is for (design/ux.md, Invite page). The third is for the reset page's spec, which changes its
+// password; it can make reset links the way the operator does, with the server's own command (design/ux.md, Reset
+// page). The suite's main server (playwright.config.ts) has
 // registration open, and a golden path that must prove an invite link is the only way in needs one that doesn't.
 import { test as base } from "@playwright/test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { PASSWORD, uniqueUser } from "./fixtures";
 
@@ -22,6 +25,13 @@ export type ClosedServer = {
   admin: SeededUser;
   /** Sam Ortiz, who has an account and no team of Ana's. */
   member: SeededUser;
+  /** Mia Chen, whose password the reset spec changes, and puts back to `PASSWORD` when it is done. */
+  forgetful: SeededUser;
+  /**
+   * Makes a reset link for `login` (a username or an email address) by running the server's `user reset-link`
+   * command against its database, and returns the link. Fails unless the command exits 0.
+   */
+  resetLink: (login: string) => Promise<string>;
 };
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
@@ -41,20 +51,32 @@ function findFreePort(): Promise<number> {
   });
 }
 
-function start(baseURL: string, databaseUrl: string, allowRegistration: boolean): ChildProcess {
+function serverEnv(baseURL: string, databaseUrl: string, allowRegistration: boolean) {
   const url = new URL(baseURL);
+  return {
+    ...process.env,
+    ALLOW_REGISTRATION: String(allowRegistration),
+    DATABASE_URL: databaseUrl,
+    BIND_ADDR: `${url.hostname}:${url.port}`,
+    BASE_URL: baseURL,
+    LOG_FORMAT: "pretty",
+    RUST_LOG: "warn",
+  };
+}
+
+function start(baseURL: string, databaseUrl: string, allowRegistration: boolean): ChildProcess {
   return spawn(BINARY, [], {
     stdio: ["ignore", "ignore", "inherit"],
-    env: {
-      ...process.env,
-      ALLOW_REGISTRATION: String(allowRegistration),
-      DATABASE_URL: databaseUrl,
-      BIND_ADDR: `${url.hostname}:${url.port}`,
-      BASE_URL: baseURL,
-      LOG_FORMAT: "pretty",
-      RUST_LOG: "warn",
-    },
+    env: serverEnv(baseURL, databaseUrl, allowRegistration),
   });
+}
+
+/** The operator's command: the link is all it prints on stdout, and a non-zero exit rejects. */
+async function makeResetLink(baseURL: string, databaseUrl: string, login: string): Promise<string> {
+  const { stdout } = await promisify(execFile)(BINARY, ["user", "reset-link", login], {
+    env: serverEnv(baseURL, databaseUrl, false),
+  });
+  return stdout.trim();
 }
 
 async function waitUntilReady(baseURL: string, server: ChildProcess) {
@@ -96,8 +118,8 @@ async function register(baseURL: string, display_name: string): Promise<SeededUs
 /**
  * `closedServer`, one per worker, started the first time a test asks for it: the real binary on a free port the
  * OS picked and a SQLite file in the OS temp directory, deleted at the end. It starts with
- * registration open, registers Ana Ruiz and Sam Ortiz, stops, and starts again on the same file with registration
- * closed, as a production server got there.
+ * registration open, registers Ana Ruiz, Sam Ortiz and Mia Chen, stops, and starts again on the same file with
+ * registration closed, as a production server got there.
  *
  * The binary is the one the suite's web server built (`npm run e2e` builds the web app and embeds it, then builds the
  * server, before any worker starts); without it the fixture fails and says so. Tests on it go to absolute URLs, with a
@@ -120,11 +142,18 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
         await waitUntilReady(baseURL, server);
         const admin = await register(baseURL, "Ana Ruiz");
         const member = await register(baseURL, "Sam Ortiz");
+        const forgetful = await register(baseURL, "Mia Chen");
         await stop(server);
 
         server = start(baseURL, databaseUrl, false);
         await waitUntilReady(baseURL, server);
-        await use({ baseURL, admin, member });
+        await use({
+          baseURL,
+          admin,
+          member,
+          forgetful,
+          resetLink: (login) => makeResetLink(baseURL, databaseUrl, login),
+        });
       } finally {
         if (server) await stop(server);
         await rm(directory, { recursive: true, force: true });

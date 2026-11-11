@@ -17,6 +17,7 @@ pub mod parameter_options;
 pub mod parameter_tags;
 pub mod parameters;
 pub mod password_credentials;
+pub mod password_reset_links;
 pub mod saved_views;
 pub mod sessions;
 pub mod sign_in_attempts;

@@ -64,7 +64,7 @@ export function AppLayout() {
     // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
     // right-hand padding.
     <ToastProvider>
-      <JoinedLine />
+      <NoticeLine />
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
@@ -104,26 +104,27 @@ function keptHeap(me: Me): HeapRef | undefined {
 }
 
 /**
- * The line a new member lands with ("You joined Acme.", from the invite page; ux.md, Invite page), shown once as a toast
- * on the page they land on. The toast belongs to the page it's shown on, so it goes on the next navigation. It is taken
- * out of the history entry as it is shown, since the browser keeps that across a reload.
+ * The line a user lands with ("You joined Acme." from the invite page, "Password changed. You're signed in." from the
+ * reset page; ux.md, Invite page and Reset page), shown once as a toast on the page they land on. The toast belongs to
+ * the page it's shown on, so it goes on the next navigation. It is taken out of the history entry as it is shown,
+ * since the browser keeps that across a reload.
  */
-function JoinedLine() {
+function NoticeLine() {
   const router = useRouter();
   const show = useToast();
-  const joined = useRouterState({ select: (state) => state.location.state.joined });
+  const notice = useRouterState({ select: (state) => state.location.state.notice });
   useEffect(() => {
-    if (joined === undefined) return;
-    show({ message: joined });
+    if (notice === undefined) return;
+    show({ message: notice });
     void router.navigate({
       to: ".",
       params: true,
       search: true,
       hash: true,
       replace: true,
-      state: (previous) => ({ ...previous, joined: undefined }),
+      state: (previous) => ({ ...previous, notice: undefined }),
     });
-  }, [joined, show, router]);
+  }, [notice, show, router]);
   return null;
 }
 

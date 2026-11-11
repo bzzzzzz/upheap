@@ -47,6 +47,20 @@ pub async fn find_session_user(
     Ok(Some(UserId::from_uuid(read.uuid(&row.user_id)?)))
 }
 
+/// How many of the user's sessions are still live at `now`.
+pub async fn count_live_sessions(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let count = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(sessions::Column::ExpiresAt.gt(now.as_millis()))
+        .count(db)
+        .await?;
+    Ok(count)
+}
+
 /// How many of the user's sessions other than `keep_hash` are still live at `now`.
 pub async fn count_live_sessions_except(
     db: &impl ConnectionTrait,

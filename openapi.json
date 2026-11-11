@@ -1033,6 +1033,129 @@
         }
       }
     },
+    "/api/v1/password-resets/{token}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is\nfor. Anyone holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is\ncancelled when a newer one is made for the account, or when its password is changed while the link works.",
+        "operationId": "open_password_reset",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The reset link's secret: the last part of the link, `{origin}/reset/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link, in whatever state it is in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordReset"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sets a new password for the link's account, and signs this browser in as it. The link works for 60 minutes after\nthe operator made it, and once: it is used up by this call.",
+        "description": "Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its\nclients such as the command line, whose tokens stop working at once. Then this browser gets a new session, in the\ncookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal\nthe old one. The account's sign-in attempts start over.\n\nThe link is checked first, then the password: a link that doesn't work answers `409` whatever the password, and a\npassword that is refused leaves the link working. Not rate limited, as a token can't be guessed.",
+        "operationId": "reset_password",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The reset link's secret: the last part of the link, `{origin}/reset/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Set; the answer is the account, and it sets the session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`reset_link_used`, `reset_link_cancelled` or `reset_link_ended`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty`, `password_too_short` or `password_too_long` (`field` `password`). The link keeps working",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/teams": {
       "post": {
         "tags": [
@@ -6462,7 +6585,9 @@
           "option_archived",
           "invite_link_created",
           "invite_link_revoked",
-          "password_changed"
+          "password_changed",
+          "password_reset_link_made",
+          "password_reset"
         ]
       },
       "AuditChange": {
@@ -8850,6 +8975,55 @@
           }
         }
       },
+      "PasswordReset": {
+        "type": "object",
+        "description": "A password reset link, as whoever holds it sees it.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PasswordResetAccount",
+                "description": "The account the link is for, as it is now. Only while the link works: an old link found later in a chat\nmustn't keep naming the account."
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PasswordResetState"
+          }
+        }
+      },
+      "PasswordResetAccount": {
+        "type": "object",
+        "description": "The account a working reset link is for.",
+        "required": [
+          "display_name",
+          "username"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "PasswordResetState": {
+        "type": "string",
+        "description": "Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.",
+        "enum": [
+          "working",
+          "used",
+          "cancelled",
+          "ended"
+        ]
+      },
       "Problem": {
         "type": "object",
         "description": "An error response body (RFC 9457 problem details).",
@@ -9634,6 +9808,20 @@
           },
           "reach": {
             "$ref": "#/components/schemas/Reach"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetPasswordRequest": {
+        "type": "object",
+        "description": "What whoever holds a working reset link gives to set a new password.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "The new password, named as in registration so a length problem points at the same field. At least 10\ncharacters. May equal the current one."
           }
         },
         "additionalProperties": false

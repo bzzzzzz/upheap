@@ -80,6 +80,21 @@ gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
 gh variable set BASE_URL --body https://upheap-$PROJECT_NUMBER.us-west1.run.app
 ```
 
+## Resetting a password
+
+The server sends no email, so a user who forgot their password needs a reset link from whoever runs the server
+([README](../README.md#resetting-a-password)). Cloud Run has no shell, so run the image locally with the two
+variables the command needs, the secret's value and the production address:
+
+```sh
+docker run --rm -e DATABASE_URL="$(gcloud secrets versions access latest --secret=upheap-database-url)" \
+  -e BASE_URL=https://upheap-251561194444.us-west1.run.app \
+  us-west1-docker.pkg.dev/upheap/upheap/upheap-server:<commit> user reset-link <username or email>
+```
+
+It prints the link on stdout; give it to the person yourself. `BASE_URL` has to be the address people open, or the
+link points elsewhere.
+
 ## Rolling back
 
 Send traffic to an earlier revision:

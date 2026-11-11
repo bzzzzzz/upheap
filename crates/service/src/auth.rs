@@ -130,6 +130,35 @@ pub(crate) async fn hash_registration(valid: ValidRegistration) -> Result<NewAcc
     })
 }
 
+/// What a person typed to name an account: an email address, or a username.
+pub(crate) enum Login {
+    Email(Email),
+    Username(Handle),
+}
+
+impl Login {
+    /// An email address when `login` has an `@` (a username can't), and a username, lowercased, otherwise. `None` for
+    /// one that can't be either, which no account has.
+    pub(crate) fn parse(login: &str) -> Option<Self> {
+        if login.contains('@') {
+            Email::parse(login).ok().map(Self::Email)
+        } else {
+            Handle::parse(&login.to_ascii_lowercase(), Field::Login)
+                .ok()
+                .map(Self::Username)
+        }
+    }
+
+    /// What sign-in attempts at this name are counted under when no account has it: the address, or `@` and the
+    /// username, which no address can be.
+    fn unknown_key(&self) -> String {
+        match self {
+            Self::Email(email) => email.as_str().to_owned(),
+            Self::Username(username) => format!("@{}", username.as_str()),
+        }
+    }
+}
+
 /// Hash of a fixed password, verified against when an email is unknown so that both cases take as long.
 static DUMMY_HASH: LazyLock<Option<String>> = LazyLock::new(|| hash_password("dummy password for timing").ok());
 
@@ -205,21 +234,23 @@ impl Services {
     /// address or `@` and the username, which no address can be; one that can't be an address or username at all
     /// can't have an account, so it isn't.
     async fn find_sign_in_user(&self, login: &str) -> Result<(Option<User>, Option<String>), ServiceError> {
-        let (user, unknown_key) = if login.contains('@') {
-            let Ok(email) = Email::parse(login) else {
-                return Ok((None, None));
-            };
-            let user = store::users::find_user_by_email(&self.db, &email).await?;
-            (user, email.as_str().to_owned())
-        } else {
-            let Ok(username) = Handle::parse(&login.to_ascii_lowercase(), Field::Login) else {
-                return Ok((None, None));
-            };
-            let user = store::users::find_user_by_username(&self.db, &username).await?;
-            (user, format!("@{}", username.as_str()))
+        let Some(login) = Login::parse(login) else {
+            return Ok((None, None));
         };
-        let key = user.as_ref().map_or(unknown_key, |user| user.email.as_str().to_owned());
+        let user = self.find_user_by_login(&login).await?;
+        let key = user
+            .as_ref()
+            .map_or_else(|| login.unknown_key(), |user| user.email.as_str().to_owned());
         Ok((user, Some(sha256_hex(&key))))
+    }
+
+    /// The account `login` names, if there is one.
+    pub(crate) async fn find_user_by_login(&self, login: &Login) -> Result<Option<User>, ServiceError> {
+        let user = match login {
+            Login::Email(email) => store::users::find_user_by_email(&self.db, email).await?,
+            Login::Username(username) => store::users::find_user_by_username(&self.db, username).await?,
+        };
+        Ok(user)
     }
 
     /// Counts a sign-in attempt for the address with this key, and refuses it when the address has used up its
@@ -262,7 +293,8 @@ impl Services {
     ///
     /// `session` is the caller's own web session. It is replaced: every session of the user is deleted, that one
     /// included, and a new one is opened in the same transaction, so a copy of the old cookie stops working too.
-    /// Every token family of theirs is revoked, so nothing signed in with the old password keeps working. The new
+    /// Every token family of theirs is revoked, so nothing signed in with the old password keeps working. Their
+    /// working password reset link is cancelled, so a copy of it can't be used to undo the change. The new
     /// password may equal the current one: that ends the other sign-ins all the same.
     ///
     /// Empty or unacceptable input fails with [`ValidationError`] before anything is counted. Then the attempt is
@@ -311,16 +343,13 @@ impl Services {
         }
         let new = new.to_owned();
         let new_hash = run_blocking(move || hash_password(&new)).await?;
-        // The username is the slug of the personal team, the team `UserRegistered` is recorded in.
-        let personal_team = store::teams::find_team_by_slug(&self.db, &user.username)
-            .await?
-            .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;
+        let personal_team = self.load_personal_team(&user).await?;
 
         let now = self.now();
         let old_hash = session.to_hash();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         // The personal team first, as `update_display_name` takes team rows before the user's.
-        store::teams::lock_team(&txn, personal_team.id).await?;
+        store::teams::lock_team(&txn, personal_team).await?;
         // The caller's session may have ended while the password was being checked.
         if store::sessions::find_session_user(&txn, &old_hash, now)
             .await?
@@ -340,9 +369,10 @@ impl Services {
         store::sessions::delete_user_sessions(&txn, user.id).await?;
         let session = self.open_session(&txn, user.clone(), now).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
+        store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
             principal,
-            personal_team.id,
+            personal_team,
             AuditAction::PasswordChanged,
             EntityType::User,
             *user.id.as_uuid(),
@@ -439,7 +469,7 @@ pub(crate) fn sha256_hex(value: &str) -> String {
         .collect()
 }
 
-fn hash_password(password: &str) -> Result<String, ServiceError> {
+pub(crate) fn hash_password(password: &str) -> Result<String, ServiceError> {
     let mut salt_bytes = [0u8; 16];
     rand::rng().fill_bytes(&mut salt_bytes);
     let salt = SaltString::encode_b64(&salt_bytes).map_err(|e| ServiceError::PasswordHashing(e.to_string()))?;
@@ -456,7 +486,7 @@ fn verify_password(password: &str, stored: &str) -> bool {
 }
 
 /// Runs CPU-heavy work (argon2) off the async workers.
-async fn run_blocking<T: Send + 'static>(
+pub(crate) async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, ServiceError> + Send + 'static,
 ) -> Result<T, ServiceError> {
     tokio::task::spawn_blocking(work)

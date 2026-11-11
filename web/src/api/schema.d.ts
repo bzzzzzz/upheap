@@ -326,6 +326,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/password-resets/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is
+         *     for. Anyone holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is
+         *     cancelled when a newer one is made for the account, or when its password is changed while the link works.
+         */
+        get: operations["open_password_reset"];
+        put?: never;
+        /**
+         * Sets a new password for the link's account, and signs this browser in as it. The link works for 60 minutes after
+         *     the operator made it, and once: it is used up by this call.
+         * @description Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its
+         *     clients such as the command line, whose tokens stop working at once. Then this browser gets a new session, in the
+         *     cookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal
+         *     the old one. The account's sign-in attempts start over.
+         *
+         *     The link is checked first, then the password: a link that doesn't work answers `409` whatever the password, and a
+         *     password that is refused leaves the link working. Not rate limited, as a token can't be guessed.
+         */
+        post: operations["reset_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams": {
         parameters: {
             query?: never;
@@ -1229,7 +1261,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2157,6 +2189,21 @@ export interface components {
              */
             ended_sign_ins: number;
         };
+        /** @description A password reset link, as whoever holds it sees it. */
+        PasswordReset: {
+            account?: null | components["schemas"]["PasswordResetAccount"];
+            state: components["schemas"]["PasswordResetState"];
+        };
+        /** @description The account a working reset link is for. */
+        PasswordResetAccount: {
+            display_name: string;
+            username: string;
+        };
+        /**
+         * @description Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.
+         * @enum {string}
+         */
+        PasswordResetState: "working" | "used" | "cancelled" | "ended";
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
             /** @description Stable machine-readable error code, for example `version_conflict`. */
@@ -2505,6 +2552,14 @@ export interface components {
              */
             line?: string | null;
             reach: components["schemas"]["Reach"];
+        };
+        /** @description What whoever holds a working reset link gives to set a new password. */
+        SetPasswordRequest: {
+            /**
+             * @description The new password, named as in registration so a length problem points at the same field. At least 10
+             *     characters. May equal the current one.
+             */
+            password: string;
         };
         SignInRequest: {
             /** @description An email address, or a username. `email` is still accepted in its place. */
@@ -3608,6 +3663,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OAuthError"];
+                };
+            };
+        };
+    };
+    open_password_reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The reset link's secret: the last part of the link, `{origin}/reset/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link, in whatever state it is in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordReset"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The reset link's secret: the last part of the link, `{origin}/reset/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Set; the answer is the account, and it sets the session cookie */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `reset_link_used`, `reset_link_cancelled` or `reset_link_ended` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty`, `password_too_short` or `password_too_long` (`field` `password`). The link keeps working */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

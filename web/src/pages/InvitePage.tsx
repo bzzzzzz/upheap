@@ -1,5 +1,5 @@
-import { Link, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useRouter } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 
 import { ApiProblem, type Invitation, type Team } from "../api/client";
 import {
@@ -13,9 +13,7 @@ import {
 } from "../api/queries";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, AuthPage, authButtonClass, type RegisterRequest } from "./AuthPage";
-
-/** Whether the page has shown a state already, so a heading that mounts now replaces one and takes focus. */
-type MoveFocus = RefObject<boolean>;
+import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
 
 type Land = (team: Team, line: string) => void;
 
@@ -32,10 +30,10 @@ function landOn(router: ReturnType<typeof useRouter>, team: Team, line: string) 
       to: "/teams/$team/heaps/$heap",
       params: { team: team.slug, heap: heap.slug },
       replace: true,
-      state: { joined: line },
+      state: { notice: line },
     });
   } else {
-    void router.navigate({ to: "/teams/$team", params: { team: team.slug }, replace: true, state: { joined: line } });
+    void router.navigate({ to: "/teams/$team", params: { team: team.slug }, replace: true, state: { notice: line } });
   }
 }
 
@@ -47,13 +45,7 @@ function landOn(router: ReturnType<typeof useRouter>, team: Team, line: string) 
 export function InvitePage({ token }: { token: string }) {
   const router = useRouter();
   const invitation = useInvitation(token);
-  // Focus moves to the heading when the page changes state, not when it first loads. `moveFocus` turns on after the
-  // first state shows (a child's effect runs before this one), and a heading reads it as it mounts.
-  const moveFocus = useRef(false);
-  const loading = invitation.isPending;
-  useEffect(() => {
-    if (!loading) moveFocus.current = true;
-  }, [loading]);
+  const moveFocus = useMoveFocus(invitation.isPending);
   const land: Land = (team, line) => landOn(router, team, line);
 
   const { data, error } = invitation;
@@ -89,28 +81,6 @@ export function InvitePage({ token }: { token: string }) {
       moveFocus={moveFocus}
       onChanged={() => void invitation.refetch()}
     />
-  );
-}
-
-/** A read that failed: the problem where the content would be, and the way to try again. */
-function Retry({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
-  return (
-    <div className="flex flex-col gap-4">
-      <p role="alert" className="text-sm font-medium text-overdue-ink">
-        {error ? problemMessage(error) : "The link couldn't be read."}
-      </p>
-      <button type="button" onClick={onRetry} className={authButtonClass}>
-        Try again
-      </button>
-    </div>
-  );
-}
-
-function Checking() {
-  return (
-    <p role="status" className="py-6 text-center text-sm text-muted">
-      Checking the link…
-    </p>
   );
 }
 
@@ -159,33 +129,6 @@ function Opened({
         <Notice moveFocus={moveFocus} heading="This invite link can't be used." />
       )}
     </AuthCard>
-  );
-}
-
-/** A heading the page moves focus to as it replaces another state of the page. */
-function Heading({ children, moveFocus }: { children: ReactNode; moveFocus: MoveFocus }) {
-  const ref = useRef<HTMLHeadingElement>(null);
-  // Decided as the heading mounts: later renders of the same state leave focus where the user put it.
-  useEffect(() => {
-    if (moveFocus.current) ref.current?.focus();
-  }, [moveFocus]);
-  return (
-    <h2 ref={ref} tabIndex={-1} className="text-xl font-semibold outline-none sm:text-lg">
-      {children}
-    </h2>
-  );
-}
-
-/** A link that can't be used, in words and the way back: Open Upheap sends a signed-out visitor on to sign-in. */
-function Notice({ heading, moveFocus, children }: { heading: string; moveFocus: MoveFocus; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <Heading moveFocus={moveFocus}>{heading}</Heading>
-      {children}
-      <Link to="/" className={`${authButtonClass} mt-1 flex items-center justify-center`}>
-        Open Upheap
-      </Link>
-    </div>
   );
 }
 

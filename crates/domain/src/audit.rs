@@ -39,11 +39,13 @@ pub enum AuditAction {
     InviteLinkCreated,
     InviteLinkRevoked,
     PasswordChanged,
+    PasswordResetLinkMade,
+    PasswordReset,
 }
 
 impl AuditAction {
     /// Every action, in the order they are declared.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 39] = [
         Self::UserRegistered,
         Self::UserUpdated,
         Self::TeamCreated,
@@ -81,6 +83,8 @@ impl AuditAction {
         Self::InviteLinkCreated,
         Self::InviteLinkRevoked,
         Self::PasswordChanged,
+        Self::PasswordResetLinkMade,
+        Self::PasswordReset,
     ];
 
     /// The action stored as `code`, or `None` for a string no version of the application wrote.
@@ -127,6 +131,8 @@ impl AuditAction {
             Self::InviteLinkCreated => "invite_link_created",
             Self::InviteLinkRevoked => "invite_link_revoked",
             Self::PasswordChanged => "password_changed",
+            Self::PasswordResetLinkMade => "password_reset_link_made",
+            Self::PasswordReset => "password_reset",
         }
     }
 }

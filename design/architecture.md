@@ -413,7 +413,19 @@ a fixed time.
      block the owner's change; a wrong current password also adds one to the account's sign-in count. Then, in one
      transaction with the new hash and its audit entry, it deletes all the user's sessions and opens a new one for
      the caller, so a copy of the old cookie stops working too, revokes all their token families, and expires their
-     unused authorization codes.
+     unused authorization codes. It also cancels the user's working reset link.
+   - A forgotten password is reset with a **reset link**, because the server sends no email and the operator who runs
+     it is the only one who can vouch for a person. The operator makes it with `upheap-server user reset-link`
+     (`create_password_reset_link`), which opens the database and builds the use cases like the server but runs no
+     migration and listens on nothing. The link is `{BASE_URL}/reset/{token}`: a 256-bit random token whose SHA-256 is
+     stored (`password_reset_links`), shown once. It works once, for an hour, and one is working per user: making a
+     new one cancels the earlier one, and so does a password change, in the same transaction. Its state is derived
+     from `used_at`, `cancelled_at` and `expires_at` (`domain::password_reset`), and using it is a conditional update,
+     so of two requests racing for one link exactly one wins. Setting a password with it
+     (`POST /password-resets/{token}`, no sign-in) ends every sign-in of the user as a change does, opens a session for
+     the caller whoever they were, and clears the user's sign-in attempts, since the holder of the link has shown who
+     they are. Not rate limited, because a 256-bit token can't be guessed. Making a link is audited with the user as
+     its actor, since an entry needs an account and the operator has none; its diff says `made_by: operator`.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 

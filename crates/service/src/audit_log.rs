@@ -336,6 +336,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
         (AuditAction::PasswordChanged, _) => ("changed their password", false),
+        (AuditAction::PasswordResetLinkMade, _) => ("was given a reset link by whoever runs the server", false),
+        (AuditAction::PasswordReset, _) => ("set a new password with a reset link", false),
     }
 }
 
@@ -369,7 +371,9 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::SavedViewCreated
         | AuditAction::ParameterCreated
         | AuditAction::InviteLinkCreated
-        | AuditAction::PasswordChanged => DiffShape::Created,
+        | AuditAction::PasswordChanged
+        | AuditAction::PasswordResetLinkMade
+        | AuditAction::PasswordReset => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated

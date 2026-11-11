@@ -201,11 +201,25 @@ async fn signing_in_is_not_offered_to_the_local_user() -> Result<()> {
     let changed = app
         .send(Method::POST, "/api/v1/me/password", None, Some(password))
         .await?;
+    let token = "a".repeat(43);
+    let reset_opened = app
+        .send(Method::GET, &format!("/api/v1/password-resets/{token}"), None, None)
+        .await?;
+    let reset_used = app
+        .send(
+            Method::POST,
+            &format!("/api/v1/password-resets/{token}"),
+            None,
+            Some(json!({ "password": "another horse battery" })),
+        )
+        .await?;
 
     // Assert
     expect_that!(registered.status, eq(StatusCode::NOT_FOUND));
     expect_that!(signed_out.status, eq(StatusCode::NOT_FOUND));
     expect_that!(changed.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(reset_opened.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(reset_used.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
 

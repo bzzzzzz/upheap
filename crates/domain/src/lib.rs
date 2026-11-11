@@ -13,6 +13,7 @@ pub mod item;
 pub mod list_view;
 pub mod oauth;
 pub mod parameter;
+pub mod password_reset;
 pub mod permission;
 pub mod question;
 pub mod ranking;
