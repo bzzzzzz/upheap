@@ -193,8 +193,9 @@ async fn get_item(
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemPatchDto,
     responses(
         (status = 200, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task`", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`", body = Problem),
         (status = 422, description = "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]

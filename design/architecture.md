@@ -149,9 +149,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
-  stage to the goal, unless the person has taken it further meanwhile: it never moves back. A refusal of a write in a
-  run carries its own code (`run_wrong_item` with the run's item in `item_key`, `run_done_needs_review`,
-  `run_cost_recorded`) so the CLI's hint never has to read a message.
+  stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
+  has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
+  never has to read a message.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.

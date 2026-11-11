@@ -158,7 +158,7 @@ fn split_heaps(raw: &str) -> Vec<String> {
         (status = 201, description = "A run started", body = ClaimDto),
         (status = 200, description = "Nothing to claim: `run` is `null`", body = ClaimDto),
         (status = 400, description = "`invalid_body`", body = Problem),
-        (status = 403, description = "`forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done", body = Problem),
+        (status = 403, description = "`forbidden`, or from inside a run `run_forbidden`", body = Problem),
         (status = 404, description = "A heap outside the caller's teams", body = Problem),
         (status = 409, description = "`heap_archived`", body = Problem),
         (status = 422, description = "`invalid_fields` (`field` `heaps`)", body = Problem),

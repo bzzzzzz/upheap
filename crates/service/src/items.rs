@@ -600,6 +600,7 @@ impl Services {
                 steps,
                 questions,
                 open_turn,
+                locking: false,
             },
             self.now(),
         )
@@ -788,6 +789,9 @@ pub(crate) struct ItemChildren {
     pub questions: Vec<Question>,
     /// The item's open turn, if it has one.
     pub open_turn: Option<Turn>,
+    /// Whether these were read with locking reads after the heap lock, so the turn's runs are read the same way.
+    /// A plain read, such as `GET` of the item, takes no lock.
+    pub locking: bool,
 }
 
 impl ItemChildren {
@@ -798,6 +802,7 @@ impl ItemChildren {
             steps: store::steps::list_steps_locking(db, item_id).await?,
             questions: store::questions::list_questions_locking(db, item_id).await?,
             open_turn: store::turns::find_open_turn_locking(db, item_id).await?,
+            locking: true,
         })
     }
 }
@@ -816,10 +821,11 @@ pub(crate) async fn build_item_view(
         steps,
         questions,
         open_turn,
+        locking,
     } = children;
     // The turn reads with a lapsed run counted as failed, so everything below agrees on whether it is stuck.
     let turn = match open_turn {
-        Some(turn) => turn_views(db, vec![turn], now, true).await?.remove(&item.id),
+        Some(turn) => turn_views(db, vec![turn], now, locking).await?.remove(&item.id),
         None => None,
     };
     let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);

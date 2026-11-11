@@ -2392,6 +2392,16 @@
               }
             }
           },
+          "403": {
+            "description": "From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -2403,7 +2413,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task`",
+            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5960,7 +5970,7 @@
             }
           },
           "403": {
-            "description": "`forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done",
+            "description": "`forbidden`, or from inside a run `run_forbidden`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10600,7 +10610,7 @@
     },
     {
       "name": "work",
-      "description": "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps and ask questions, on the run's own item only, and every other write is refused with `run_forbidden`."
+      "description": "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps and ask questions, on the run's own item only. Every other write is refused, with a code that starts with `run_`."
     }
   ]
 }

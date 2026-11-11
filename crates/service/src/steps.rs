@@ -121,6 +121,7 @@ impl Services {
                 steps,
                 questions: store::questions::list_questions_locking(&txn, item.id).await?,
                 open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
+                locking: true,
             };
             let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
             // A write in a run that changes nothing still tells the run it was heard.

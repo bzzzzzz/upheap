@@ -4387,6 +4387,15 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            /** @description From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4395,7 +4404,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task` */
+            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6690,7 +6699,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `forbidden`, or from inside a run `run_forbidden`, or `run_done_needs_review` for closing a task as done */
+            /** @description `forbidden`, or from inside a run `run_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;
