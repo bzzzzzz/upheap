@@ -114,6 +114,7 @@ impl Services {
             let children = ItemChildren {
                 steps,
                 questions: store::questions::list_questions_locking(&txn, item.id).await?,
+                open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
             };
             return build_item_view(&txn, &access.heap, role, item, children, now).await;
         };

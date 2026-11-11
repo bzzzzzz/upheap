@@ -41,6 +41,7 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         slug: heap.slug.to_string(),
         name: heap.name.as_str().to_owned(),
         context: heap.context.as_ref().map(|context| context.as_str().to_owned()),
+        agents_prepare: heap.agents_prepare,
         archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
@@ -62,6 +63,7 @@ fn to_heap_patch(body: &HeapPatchDto) -> Result<HeapPatch, ServiceError> {
             Some(None) => Some(None),
             Some(Some(raw)) => Some(Context::parse(raw)?),
         },
+        agents_prepare: body.agents_prepare,
     })
 }
 
@@ -104,8 +106,8 @@ async fn get_heap(State(state): State<AppState>, path: HeapPath) -> Result<Json<
     Ok(Json(to_heap_dto(view)))
 }
 
-/// Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and
-/// slug need an admin, the context any member. A body that sets a field the caller may not change is refused whole
+/// Renames the heap, changes its slug, writes its context or sets whether agents prepare new notes; send the heap's
+/// `version` in `If-Match`. The name, slug and `agents_prepare` need an admin, the context any member. A body that sets a field the caller may not change is refused whole
 /// with 403, and saves nothing. A save that changes nothing succeeds and keeps the version.
 #[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}", tag = "heaps", security(("session" = [])),
     params(HeapParams, IfMatchHeader), request_body = HeapPatchDto,

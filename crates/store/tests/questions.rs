@@ -50,6 +50,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId, UserId)> 
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         context: None,
+        agents_prepare: false,
         archived_at: None,
         version: Version::INITIAL,
     };
@@ -304,5 +305,37 @@ async fn open_questions_are_counted_per_item() -> Result<()> {
     expect_that!(counts.get(&item_id), some(eq(&2)));
     expect_that!(counts.contains_key(&other), eq(false));
     expect_that!(none, is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_withdrawn_question_round_trips_and_is_no_longer_open() -> Result<()> {
+    // Arrange
+    let (db, item_id, asker) = item_in_new_database().await?;
+    let heap_id = store::items::find_item(&db, item_id).await?.context("item")?.heap_id;
+    let open = question(item_id, asker, 1, QuestionKind::Question, &[], false)?;
+    store::questions::insert_question(&db, &open).await?;
+    store::questions::insert_question(&db, &question(item_id, asker, 2, QuestionKind::Question, &[], false)?).await?;
+    let withdrawn = open.withdraw(asker, now()?);
+
+    // Act
+    let saved = store::questions::update_question(&db, &withdrawn, open.version)
+        .await?
+        .context("saved")?;
+    let listed = store::questions::list_questions(&db, item_id).await?;
+    let counts = store::questions::count_open_questions(&db, &[item_id]).await?;
+    let waiting = store::questions::list_open_questions_on_open_items(&db, &[heap_id]).await?;
+
+    // Assert
+    expect_that!(saved.version, eq(open.version.next()));
+    expect_that!(listed[0], eq(&saved));
+    expect_that!(listed[0].state(), eq(QuestionState::Withdrawn));
+    expect_that!(listed[0].reply, none());
+    expect_that!(counts.get(&item_id), some(eq(&1)));
+    expect_that!(
+        waiting.iter().map(|(_, q)| q.number.get()).collect::<Vec<_>>(),
+        elements_are![eq(&2)]
+    );
     Ok(())
 }

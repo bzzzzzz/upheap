@@ -174,6 +174,7 @@ async fn a_heap_shows_its_weights_and_only_admins_may_edit_them() -> Result<()> 
             "archive",
             "edit_context",
             "edit_weights",
+            "set_agents_prepare",
             "view_history"
         ]))
     );

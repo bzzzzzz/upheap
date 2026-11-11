@@ -1,0 +1,354 @@
+//! Turns: an item handed to an agent, and taken back (Work with agents, Concepts and Opening a turn).
+//!
+//! A turn is its own row, so sending an item or taking it back never conflicts with editing it (architecture.md,
+//! Data model). An item has at most one open turn. Turns are never deleted: a taken-back one keeps its row.
+
+use crate::heap::Heap;
+use crate::item::{Item, Kind, Stage};
+use crate::text::parse_optional;
+use crate::validation::Field;
+use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
+
+/// How far a turn is meant to go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Reach {
+    /// To the next stable state, then back to the person.
+    One,
+    /// On through the stable states until the work is done. Behaves as [`Reach::One`] until runs exist.
+    AllTheWay,
+}
+
+impl Reach {
+    pub const ALL: [Self; 2] = [Self::One, Self::AllTheWay];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::One => "one",
+            Self::AllTheWay => "all_the_way",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|reach| reach.code() == code)
+    }
+}
+
+/// The stable state a turn goes to, worked out from the item when the turn opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Goal {
+    WithContext,
+    Defined,
+    Done,
+}
+
+impl Goal {
+    pub const ALL: [Self; 3] = [Self::WithContext, Self::Defined, Self::Done];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::WithContext => "with_context",
+            Self::Defined => "defined",
+            Self::Done => "done",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|goal| goal.code() == code)
+    }
+}
+
+/// How a turn came to be opened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TurnSource {
+    /// The person sent the item.
+    GoAhead,
+    /// The heap is set so agents prepare every new note.
+    Prepare,
+}
+
+impl TurnSource {
+    pub const ALL: [Self; 2] = [Self::GoAhead, Self::Prepare];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::GoAhead => "go_ahead",
+            Self::Prepare => "prepare",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|source| source.code() == code)
+    }
+}
+
+/// How a turn ended. The end of a turn whose goal an agent reached is added with runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TurnEnd {
+    TakenBack,
+}
+
+impl TurnEnd {
+    pub const ALL: [Self; 1] = [Self::TakenBack];
+
+    /// Stable code used in storage. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::TakenBack => "taken_back",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|end| end.code() == code)
+    }
+}
+
+/// Why a turn was taken back, as its audit entry says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TakeBackWhy {
+    /// The person took it back.
+    TakeBack,
+    /// The person started the item.
+    Started,
+    /// The item was closed.
+    Closed,
+    /// The heap was archived.
+    HeapArchived,
+}
+
+impl TakeBackWhy {
+    /// Stable code used in audit diffs. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::TakeBack => "take_back",
+            Self::Started => "started",
+            Self::Closed => "closed",
+            Self::HeapArchived => "heap_archived",
+        }
+    }
+}
+
+/// The optional text the person sends an agent with: trimmed, blank means none, at most 2,000 characters. Line
+/// breaks are allowed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TurnLine(String);
+
+impl TurnLine {
+    pub const MAX_CHARS: usize = 2_000;
+
+    pub fn parse(raw: &str) -> Result<Option<Self>, ValidationError> {
+        parse_optional(raw, Field::Line, Self::MAX_CHARS).map(|text| text.map(Self))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// How and when a turn ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ended {
+    pub end: TurnEnd,
+    pub at: Timestamp,
+    /// `None` when it can't be traced.
+    pub by: Option<UserId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Turn {
+    pub id: TurnId,
+    pub item_id: ItemId,
+    pub reach: Reach,
+    /// The stable state it goes to, fixed when it opened: a note made a task meanwhile doesn't change it.
+    pub goal: Goal,
+    pub line: Option<TurnLine>,
+    /// `None` when it can't be traced.
+    pub opened_by: Option<UserId>,
+    pub source: TurnSource,
+    pub opened_at: Timestamp,
+    /// `None` while the turn is open.
+    pub ended: Option<Ended>,
+}
+
+/// A rule opening a turn broke.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum TurnError {
+    #[error("item {item_id} already has an open turn")]
+    AlreadyOpen { item_id: ItemId },
+}
+
+impl Turn {
+    /// A turn opened on `item` by `opened_by` at `now`, going to the goal [`goal_for`] says.
+    pub fn open(
+        id: TurnId,
+        item: &Item,
+        reach: Reach,
+        line: Option<TurnLine>,
+        source: TurnSource,
+        opened_by: UserId,
+        now: Timestamp,
+    ) -> Self {
+        Self {
+            id,
+            item_id: item.id,
+            reach,
+            goal: goal_for(item),
+            line,
+            opened_by: Some(opened_by),
+            source,
+            opened_at: now,
+            ended: None,
+        }
+    }
+
+    pub const fn is_open(&self) -> bool {
+        self.ended.is_none()
+    }
+
+    /// This turn taken back by `by` at `now`.
+    #[must_use]
+    pub fn take_back(&self, by: UserId, now: Timestamp) -> Self {
+        Self {
+            ended: Some(Ended {
+                end: TurnEnd::TakenBack,
+                at: now,
+                by: Some(by),
+            }),
+            ..self.clone()
+        }
+    }
+}
+
+/// The stable state a turn opened on `item` goes to: a note as written to with context, a note with context to
+/// defined (it goes on by becoming tasks), a task as written or with context to defined, and a defined task to done.
+pub const fn goal_for(item: &Item) -> Goal {
+    match (item.kind, item.stage) {
+        (Kind::Note, Stage::AsWritten) => Goal::WithContext,
+        (Kind::Note, _) | (Kind::Task, Stage::AsWritten | Stage::WithContext) => Goal::Defined,
+        (Kind::Task, Stage::Defined) => Goal::Done,
+    }
+}
+
+/// Whether an agent has `item`: it is open, its heap is active, it has an open turn, and it doesn't wait for the
+/// person. `open_questions` is how many open questions it has (see [`crate::question::waits_for_you`]).
+pub const fn with_agent(item: &Item, heap: &Heap, open_questions: usize, has_open_turn: bool) -> bool {
+    has_open_turn && !item.is_closed() && !heap.is_archived() && open_questions == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use googletest::prelude::*;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::HeapId;
+    use crate::Version;
+    use crate::handle::{Handle, ItemKey};
+    use crate::item::{ItemState, Need, NewItem, Title};
+    use crate::text::Name;
+
+    fn item(kind: Kind, stage: Stage) -> Item {
+        let fields = NewItem {
+            title: Title::parse("Rotate the certs").expect("valid"),
+            description: None,
+            need: Need::Expected,
+            effort: None,
+            impact: None,
+            due: None,
+            tags: BTreeSet::new(),
+            parameters: BTreeMap::new(),
+        };
+        let mut item = Item::new(
+            ItemId::from_uuid(Uuid::from_u128(3)),
+            HeapId::from_uuid(Uuid::from_u128(2)),
+            ItemKey::parse("k3x9a").expect("valid"),
+            fields,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+        item.kind = kind;
+        item.stage = stage;
+        item
+    }
+
+    fn heap(archived: bool) -> Heap {
+        Heap {
+            id: HeapId::from_uuid(Uuid::from_u128(2)),
+            team_id: crate::TeamId::from_uuid(Uuid::from_u128(1)),
+            slug: Handle::parse("ops", Field::Slug).expect("valid"),
+            name: Name::parse("Ops").expect("valid"),
+            policy: crate::heap::HeapPolicy::default(),
+            context: None,
+            agents_prepare: false,
+            archived_at: archived.then_some(Timestamp::EPOCH),
+            version: Version::INITIAL,
+        }
+    }
+
+    #[gtest]
+    fn the_goal_is_the_next_stable_state() {
+        expect_that!(goal_for(&item(Kind::Note, Stage::AsWritten)), eq(Goal::WithContext));
+        expect_that!(goal_for(&item(Kind::Note, Stage::WithContext)), eq(Goal::Defined));
+        expect_that!(goal_for(&item(Kind::Task, Stage::AsWritten)), eq(Goal::Defined));
+        expect_that!(goal_for(&item(Kind::Task, Stage::WithContext)), eq(Goal::Defined));
+        expect_that!(goal_for(&item(Kind::Task, Stage::Defined)), eq(Goal::Done));
+    }
+
+    #[gtest]
+    fn a_line_is_trimmed_blank_means_none_and_is_bounded() {
+        expect_that!(TurnLine::parse(" \n "), ok(none()));
+        expect_that!(
+            TurnLine::parse("  use the new CA\nplease ").map(|line| line.map(|line| line.as_str().to_owned())),
+            ok(some(eq("use the new CA\nplease")))
+        );
+        expect_that!(TurnLine::parse(&"x".repeat(2_000)), ok(some(anything())));
+        expect_that!(
+            TurnLine::parse(&"x".repeat(2_001)),
+            err(eq(&ValidationError::TooLong {
+                field: Field::Line,
+                max: 2_000
+            }))
+        );
+    }
+
+    #[gtest]
+    fn an_agent_has_an_open_item_with_a_turn_that_does_not_wait() {
+        let open = item(Kind::Note, Stage::AsWritten);
+        expect_that!(with_agent(&open, &heap(false), 0, true), eq(true));
+        expect_that!(with_agent(&open, &heap(false), 0, false), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 1, true), eq(false));
+        expect_that!(with_agent(&open, &heap(true), 0, true), eq(false));
+        let mut closed = open;
+        closed.state = ItemState::Done {
+            closed_at: Timestamp::EPOCH,
+            closed_by: None,
+        };
+        expect_that!(with_agent(&closed, &heap(false), 0, true), eq(false));
+    }
+
+    #[gtest]
+    fn taking_a_turn_back_ends_it() {
+        let note = item(Kind::Note, Stage::AsWritten);
+        let user = UserId::from_uuid(Uuid::from_u128(10));
+        let turn = Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            &note,
+            Reach::One,
+            None,
+            TurnSource::GoAhead,
+            user,
+            Timestamp::EPOCH,
+        );
+        expect_that!(turn.is_open(), eq(true));
+
+        let ended = turn.take_back(user, Timestamp::EPOCH);
+
+        expect_that!(ended.is_open(), eq(false));
+        expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::TakenBack)));
+        expect_that!(ended.goal, eq(Goal::WithContext));
+    }
+}

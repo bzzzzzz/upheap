@@ -64,6 +64,42 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+    let quiet_key = self::key(&items[1])?;
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{key}/turn"),
+            Some(json!({ "reach": "all_the_way", "line": "Use the new CA." })),
+        )
+        .await?;
+
+    // Act
+    let shown = cli.run(&["item", "show", key, "--history"]).await;
+    let without = cli.run(&["item", "show", quiet_key]).await;
+
+    // Assert
+    expect_that!(shown.exited(0), eq(true));
+    expect_that!(value_of(&shown.stdout, "State"), some(eq("open · with an agent")));
+    expect_that!(
+        shown.stdout,
+        contains_substring("\nTurn: to with context, all the way. \"Use the new CA.\".\n")
+    );
+    let (_, history) = shown.stdout.split_once("\nHistory\n").context("a History section")?;
+    expect_that!(history.lines().next(), some(contains_substring("Ada opened a turn on")));
+    expect_that!(value_of(&without.stdout, "State"), some(eq("open")));
+    expect_that!(without.stdout, not(contains_substring("Turn:")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_show_prints_crlf_and_tabs_in_a_description_as_text() -> Result<()> {
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;

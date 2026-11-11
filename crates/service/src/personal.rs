@@ -100,6 +100,7 @@ impl Services {
             name: Name::parse(FIRST_HEAP_NAME)?,
             policy: HeapPolicy::default(),
             context: None,
+            agents_prepare: false,
             archived_at: None,
             version: Version::INITIAL,
         };

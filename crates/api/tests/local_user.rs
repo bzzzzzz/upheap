@@ -57,6 +57,7 @@ async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
             "archive",
             "edit_context",
             "edit_weights",
+            "set_agents_prepare",
             "view_history"
         ]))
     );

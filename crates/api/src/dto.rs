@@ -7,10 +7,11 @@ use api_types::common::{
     ContributorDto, DueDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto,
     ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
+use api_types::turns::TurnDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, group_closed};
 use jiff::tz::TimeZone;
-use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry};
+use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
 use utoipa::IntoParams;
 
 fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
@@ -83,9 +84,15 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .collect()
         }),
         waits_for_you: view.waits_for_you,
+        turn: view.turn.map(to_turn_dto),
+        with_agent: view.with_agent,
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }
+}
+
+pub(crate) fn to_turn_dto(view: TurnView) -> TurnDto {
+    TurnDto::new(&view.turn, view.opened_by.as_ref().map(UserRefDto::from))
 }
 
 pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZone) -> QuestionDto {
@@ -110,6 +117,10 @@ pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZon
             replied_at: reply.replied_at.as_millis(),
             replied_label: describe_ago(reply.replied_at, as_of, tz),
         }),
+        withdrawn_at: question
+            .withdrawal
+            .map(|withdrawal| withdrawal.withdrawn_at.as_millis()),
+        withdrawn_by: view.withdrawn_by.as_ref().map(UserRefDto::from),
         version: question.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(Into::into).collect(),
     }

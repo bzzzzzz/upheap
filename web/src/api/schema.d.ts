@@ -383,8 +383,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Renames the heap, changes its slug or writes its context; send the heap's `version` in `If-Match`. The name and
-         *     slug need an admin, the context any member. A body that sets a field the caller may not change is refused whole
+         * Renames the heap, changes its slug, writes its context or sets whether agents prepare new notes; send the heap's
+         *     `version` in `If-Match`. The name, slug and `agents_prepare` need an admin, the context any member. A body that sets a field the caller may not change is refused whole
          *     with 403, and saves nothing. A save that changes nothing succeeds and keeps the version.
          */
         patch: operations["update_heap"];
@@ -580,6 +580,33 @@ export interface paths {
          *     in `If-Match`; the item's `version` doesn't change. A step can move from any state to any other.
          */
         patch: operations["update_step"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
+         *     item. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no
+         *     `If-Match`, and the item's `version` doesn't change. An item with an open question, or a blocked one, may be
+         *     sent: the turn opens, and the item waits or is blocked as before.
+         */
+        post: operations["send_to_agent"];
+        /**
+         * Takes an item back from the agent that has it and answers with the whole item. An item with no open turn is
+         *     answered unchanged and nothing is recorded, so two clients taking back at once both succeed. The item's
+         *     `version` doesn't change.
+         */
+        delete: operations["take_back"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
@@ -1041,7 +1068,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1249,7 +1276,15 @@ export interface components {
         };
         /** @enum {string} */
         Factor: "need" | "age" | "deadline" | "value" | "parameter" | "blocks";
+        /**
+         * @description The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
+         *     context and a task not yet defined go to `defined`, and a defined task goes to `done`.
+         * @enum {string}
+         */
+        Goal: "with_context" | "defined" | "done";
         Heap: {
+            /** @description Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap. */
+            agents_prepare: boolean;
             allowed_actions: components["schemas"]["HeapAction"][];
             /**
              * Format: int64
@@ -1286,7 +1321,7 @@ export interface components {
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive" | "edit_context" | "edit_weights" | "view_history";
+        HeapAction: "rename" | "archive" | "unarchive" | "edit_context" | "edit_weights" | "set_agents_prepare" | "view_history";
         /** @description A heap of one of the caller's teams, with how many items it has open. */
         HeapOverview: components["schemas"]["HeapSummary"] & {
             /**
@@ -1298,6 +1333,8 @@ export interface components {
         };
         /** @description A change to a heap. Leave a field out to keep it. */
         HeapPatchRequest: {
+            /** @description Whether agents prepare new notes. Needs an admin. */
+            agents_prepare?: boolean | null;
             /**
              * @description At most 20,000 characters, trimmed; blank or `null` clears it. Any member may change it; the name and slug
              *     need an admin.
@@ -1550,6 +1587,7 @@ export interface components {
             /** @description By name. */
             tags: components["schemas"]["ItemTag"][];
             title: string;
+            turn: null | components["schemas"]["Turn"];
             /**
              * Format: int32
              * @description Send back in `If-Match` when editing.
@@ -1561,12 +1599,18 @@ export interface components {
              *     and in an archived heap.
              */
             waits_for_you: boolean;
+            /**
+             * @description Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for
+             *     the caller. Who has an item never changes its place in the list. On every response, lists included; always
+             *     `false` on a closed item and in an archived heap.
+             */
+            with_agent: boolean;
         };
         /**
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question";
+        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back";
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -1964,6 +2008,12 @@ export interface components {
              * @description Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.
              */
             version: number;
+            /**
+             * Format: int64
+             * @description When closing the item withdrew the question, in UTC milliseconds; `null` unless the question is withdrawn.
+             */
+            withdrawn_at: number | null;
+            withdrawn_by: null | components["schemas"]["UserRef"];
         };
         /**
          * @description An action the caller can take on a question. Clients show controls only for these.
@@ -2011,7 +2061,7 @@ export interface components {
          * @description Whether a question still waits for a reply.
          * @enum {string}
          */
-        QuestionState: "open" | "answered";
+        QuestionState: "open" | "answered" | "withdrawn";
         RankedItem: {
             /** @description The biggest reasons for the position, largest first. */
             contributors: components["schemas"]["Contributor"][];
@@ -2114,6 +2164,14 @@ export interface components {
              */
             value?: number | null;
         };
+        /**
+         * @description How far a turn is meant to go.
+         *
+         *     - `one`: to the next stable state (`goal`), then back to the person.
+         *     - `all_the_way`: on through the stable states until the work is done. Until agents run turns it behaves as `one`.
+         * @enum {string}
+         */
+        Reach: "one" | "all_the_way";
         RegisterRequest: {
             display_name: string;
             email: string;
@@ -2172,6 +2230,15 @@ export interface components {
         SavedViewPatchRequest: {
             name?: string | null;
             view?: null | components["schemas"]["ListViewInput"];
+        };
+        /** @description Sends an item to an agent. */
+        SendToAgentRequest: {
+            /**
+             * @description Something to tell the agent: plain text, at most 2,000 characters, line breaks allowed; blank or `null` means
+             *     none.
+             */
+            line?: string | null;
+            reach: components["schemas"]["Reach"];
         };
         SignInRequest: {
             /** @description An email address, or a username. `email` is still accepted in its place. */
@@ -2355,6 +2422,28 @@ export interface components {
             /** @description The team's path is `/teams/{slug}`. */
             slug: string;
         };
+        /** @description An item's open turn: the item has been sent to an agent and not taken back. */
+        Turn: {
+            goal: components["schemas"]["Goal"];
+            /** @description What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing. */
+            line?: string | null;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            opened_at: number;
+            opened_by?: null | components["schemas"]["UserRef"];
+            reach: components["schemas"]["Reach"];
+            source: components["schemas"]["TurnSource"];
+        };
+        /**
+         * @description How a turn came to be opened.
+         *
+         *     - `go_ahead`: a person sent the item.
+         *     - `prepare`: the heap is set so agents prepare new notes, and this one was added.
+         * @enum {string}
+         */
+        TurnSource: "go_ahead" | "prepare";
         User: {
             display_name: string;
             email: string;
@@ -2423,6 +2512,9 @@ export interface components {
             kind: components["schemas"]["Kind"];
             stage?: null | components["schemas"]["Stage"];
             title: string;
+            turn: null | components["schemas"]["Turn"];
+            /** @description Whether an agent has the item: always `false` here, as a row's item waits for the caller. */
+            with_agent: boolean;
         };
         /** @description One thing that waits. */
         WaitingRow: {
@@ -4315,6 +4407,138 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    send_to_agent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendToAgentRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived`, `item_closed` or `turn_open` (an agent already has the item) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    take_back: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

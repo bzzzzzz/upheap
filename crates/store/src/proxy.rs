@@ -24,6 +24,7 @@ pub fn list_column_specs() -> Vec<ColumnSpec> {
     add_entity::<item_questions::Entity>(&mut specs);
     add_entity::<item_steps::Entity>(&mut specs);
     add_entity::<item_tags::Entity>(&mut specs);
+    add_entity::<item_turns::Entity>(&mut specs);
     add_entity::<items::Entity>(&mut specs);
     add_entity::<parameter_options::Entity>(&mut specs);
     add_entity::<parameter_tags::Entity>(&mut specs);

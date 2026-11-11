@@ -32,6 +32,7 @@ mod request_id;
 mod steps;
 mod tags;
 mod teams;
+mod turns;
 #[cfg(feature = "accounts")]
 mod users;
 mod views;
@@ -185,6 +186,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(steps::routes())
         .merge(tags::routes())
         .merge(teams::routes())
+        .merge(turns::routes())
         .merge(heaps::routes())
         .merge(views::routes())
         .merge(parameters::routes())

@@ -6,6 +6,7 @@ use domain::permission::Permission;
 use domain::question::QuestionError;
 use domain::step::StepError;
 use domain::team::TeamError;
+use domain::turn::TurnError;
 use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
@@ -50,6 +51,8 @@ pub enum ServiceError {
     Step(#[from] StepError),
     #[error(transparent)]
     Question(#[from] QuestionError),
+    #[error(transparent)]
+    Turn(#[from] TurnError),
     /// A tag ID in the request doesn't name a tag of the item's heap.
     #[error("tag {tag_id} is not a tag of this heap")]
     TagNotInHeap { tag_id: TagId },

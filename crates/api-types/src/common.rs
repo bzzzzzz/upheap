@@ -19,6 +19,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::turns::TurnDto;
+
 /// Effort or impact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
@@ -242,6 +244,11 @@ pub enum ItemActionDto {
     AddStep,
     /// Ask a question or make a request on the item. Offered for an open item the caller may edit.
     AskQuestion,
+    /// Send the item to an agent, on `POST …/turn`. Offered for an open item the caller may edit that no agent has.
+    SendToAgent,
+    /// Take the item back from the agent, on `DELETE …/turn`. Offered for an open item the caller may edit that has
+    /// an open turn.
+    TakeBack,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -253,6 +260,8 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::MakeTask => Self::MakeTask,
             ItemAction::AddStep => Self::AddStep,
             ItemAction::AskQuestion => Self::AskQuestion,
+            ItemAction::SendToAgent => Self::SendToAgent,
+            ItemAction::TakeBack => Self::TakeBack,
         }
     }
 }
@@ -395,6 +404,9 @@ impl TryFrom<QuestionKindDto> for QuestionKind {
 pub enum QuestionStateDto {
     Open,
     Answered,
+    /// Closing the item took the question back, unanswered. Reopening the item doesn't bring it back, and it takes
+    /// no reply.
+    Withdrawn,
     /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -406,6 +418,7 @@ impl From<QuestionState> for QuestionStateDto {
         match state {
             QuestionState::Open => Self::Open,
             QuestionState::Answered => Self::Answered,
+            QuestionState::Withdrawn => Self::Withdrawn,
         }
     }
 }
@@ -469,8 +482,19 @@ pub struct QuestionDto {
     pub asked_at: i64,
     /// When it was asked, ready to show: "today", "2 days ago".
     pub asked_label: String,
-    /// `null` while the question is open.
+    /// `null` unless the question is answered.
     pub reply: Option<QuestionReplyDto>,
+    /// When closing the item withdrew the question, in UTC milliseconds; `null` unless the question is withdrawn.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub withdrawn_at: Option<i64>,
+    /// Who closed the item and so withdrew the question. `null` unless the question is withdrawn, or when it can't be
+    /// traced.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub withdrawn_by: Option<UserRefDto>,
     /// Send back in `If-Match` when replying. A question has its own version; writing it never changes the item's.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -702,6 +726,17 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub waits_for_you: bool,
+    /// The open turn: the item was sent to an agent and not taken back. `null` when there is none, and on a closed
+    /// item. Taking the item back, starting it, closing it and archiving its heap end the turn.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub turn: Option<TurnDto>,
+    /// Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for
+    /// the caller. Who has an item never changes its place in the list. On every response, lists included; always
+    /// `false` on a closed item and in an archived heap.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub with_agent: bool,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]

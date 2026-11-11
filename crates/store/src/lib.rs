@@ -25,6 +25,7 @@ pub mod tags;
 pub mod teams;
 #[cfg(feature = "testing")]
 pub mod testing;
+pub mod turns;
 pub mod users;
 
 use std::time::Duration;

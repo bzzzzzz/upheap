@@ -633,7 +633,7 @@ async fn a_second_reply_is_refused_and_so_is_a_stale_version() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_closed_item_keeps_its_open_questions_read_only_until_it_is_reopened() -> Result<()> {
+async fn a_closed_item_takes_no_questions_and_reopening_does_not_bring_withdrawn_ones_back() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = note().await?;
     let asked = ask(
@@ -661,7 +661,7 @@ async fn a_closed_item_keeps_its_open_questions_read_only_until_it_is_reopened()
         &heap,
         &key,
         "1",
-        &json!(1),
+        &json!(2),
         json!({ "reply": { "comment": "x" } }),
     )
     .await?;
@@ -679,21 +679,100 @@ async fn a_closed_item_keeps_its_open_questions_read_only_until_it_is_reopened()
         &heap,
         &key,
         "1",
-        &json!(1),
+        &json!(2),
         json!({ "reply": { "comment": "x" } }),
     )
     .await?;
 
     // Assert
-    expect_that!(closed.body["questions"][0]["state"], eq(&json!("open")));
-    expect_that!(closed.body["questions"][0]["allowed_actions"], eq(&json!([])));
+    let withdrawn = &closed.body["questions"][0];
+    expect_that!(withdrawn["state"], eq(&json!("withdrawn")));
+    expect_that!(withdrawn["version"], eq(&json!(2)));
+    expect_that!(withdrawn["reply"], eq(&Value::Null));
+    expect_that!(withdrawn["withdrawn_by"]["display_name"], eq(&json!("Tester")));
+    expect_that!(withdrawn["withdrawn_at"].is_i64(), eq(true));
+    expect_that!(withdrawn["allowed_actions"], eq(&json!([])));
     expect_that!(actions(&closed.body), not(contains(eq(&"ask_question"))));
     expect_that!(asking.status, eq(StatusCode::CONFLICT));
     expect_that!(asking.body["code"], eq(&json!("item_closed")));
     expect_that!(replying.status, eq(StatusCode::CONFLICT));
     expect_that!(replying.body["code"], eq(&json!("item_closed")));
-    expect_that!(reopened.body["questions"][0]["allowed_actions"], eq(&json!(["reply"])));
-    expect_that!(replied_after.status, eq(StatusCode::OK));
+    expect_that!(reopened.body["questions"][0]["state"], eq(&json!("withdrawn")));
+    expect_that!(reopened.body["questions"][0]["allowed_actions"], eq(&json!([])));
+    expect_that!(reopened.body["waits_for_you"], eq(&json!(false)));
+    expect_that!(replied_after.status, eq(StatusCode::CONFLICT));
+    expect_that!(replied_after.body["code"], eq(&json!("question_withdrawn")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn closing_withdraws_the_open_questions_and_leaves_the_answered_one_alone() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    for text in ["First?", "Second?", "Third?"] {
+        ask(&app, &session, &heap, &key, json!({ "kind": "question", "text": text })).await?;
+    }
+    let answered = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "2",
+        &json!(1),
+        json!({ "reply": { "comment": "Yes" } }),
+    )
+    .await?;
+    let id = answered.body["id"].as_str().context("no id")?;
+    app.clock.advance(domain::Duration::from_millis(1));
+
+    // Act
+    let closed = close(&app, &session, &heap, &key, &answered.body["version"]).await?;
+    let waiting = app
+        .send(Method::GET, "/api/v1/me/waiting", Some(&session), None)
+        .await?;
+    let entries = app.audit_entries(id).await?;
+
+    // Assert
+    let states: Vec<&Value> = closed.body["questions"]
+        .as_array()
+        .context("no questions")?
+        .iter()
+        .map(|question| &question["state"])
+        .collect();
+    expect_that!(
+        states,
+        elements_are![
+            eq(&&json!("withdrawn")),
+            eq(&&json!("answered")),
+            eq(&&json!("withdrawn"))
+        ]
+    );
+    expect_that!(closed.body["questions"][1]["version"], eq(&json!(2)));
+    expect_that!(closed.body["waits_for_you"], eq(&json!(false)));
+    expect_that!(waiting.body["count"], eq(&json!(0)));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"question_asked"),
+            eq(&"question_asked"),
+            eq(&"question_asked"),
+            eq(&"question_answered"),
+            eq(&"question_withdrawn"),
+            eq(&"question_withdrawn"),
+            eq(&"item_updated"),
+        ]
+    );
+    expect_that!(
+        entries[5].1,
+        eq(&json!({ "number": 1, "text": "First?", "why": "closed" }))
+    );
+    expect_that!(
+        entries[6].1,
+        eq(&json!({ "number": 3, "text": "Third?", "why": "closed" }))
+    );
     Ok(())
 }
 

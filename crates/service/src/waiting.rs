@@ -7,10 +7,11 @@ use domain::item::{Item, Title};
 use domain::permission::{Permission, allowed_question_actions};
 use domain::step::StepNumber;
 use domain::team::{Role, Team};
+use domain::turn::with_agent;
 use domain::user::User;
 use domain::{HeapId, ItemId, UserId};
 
-use crate::items::{QuestionView, rank_open_items};
+use crate::items::{QuestionView, TurnView, rank_open_items, turn_views};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_waiting`] returns. A person waits on tens of questions, not thousands, so one
@@ -35,6 +36,11 @@ pub struct WaitingRow {
     /// The title of the step the question names, when it names one that exists.
     pub step_title: Option<Title>,
     pub question: QuestionView,
+    /// The item's open turn, if an agent was sent it and it hasn't been taken back. The item waits for the person,
+    /// so the agent doesn't have it ([`WaitingRow::with_agent`]).
+    pub turn: Option<TurnView>,
+    /// Whether an agent has the item: never, as a row's item waits for the person.
+    pub with_agent: bool,
 }
 
 /// A question that waits, before it is shown: where it ranks and the item it is on.
@@ -152,6 +158,18 @@ impl Services {
             store::steps::list_step_titles(&self.db, &step_item_ids).await?
         };
 
+        let item_ids: Vec<ItemId> = candidates
+            .iter()
+            .map(|candidate| candidate.item.id)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let open_turns = turn_views(
+            &self.db,
+            store::turns::list_open_turns(&self.db, &item_ids).await?.into_values(),
+        )
+        .await?;
+
         let rows = candidates
             .into_iter()
             .filter_map(|candidate| {
@@ -161,7 +179,11 @@ impl Services {
                 let step_title = question
                     .step
                     .and_then(|step| step_titles.get(&(candidate.item.id, step)).cloned());
+                let turn = open_turns.get(&candidate.item.id).cloned();
                 Some(WaitingRow {
+                    // The row's question is open, so its item waits for the person.
+                    with_agent: with_agent(&candidate.item, heap, 1, turn.is_some()),
+                    turn,
                     heap: heap.clone(),
                     team: team.clone(),
                     step_title,
@@ -169,6 +191,8 @@ impl Services {
                         allowed_actions: allowed_question_actions(&candidate.item, heap, role, question.state()),
                         asked_by: question.asked_by.and_then(|id| users.get(&id).cloned()),
                         replied_by: None,
+                        // An open question isn't withdrawn.
+                        withdrawn_by: None,
                         question,
                     },
                     item: candidate.item,
