@@ -57,6 +57,11 @@ When asked to write a "doc", write it as a Markdown file in `design/`, or in `de
 add it to `design/README.md`, and to the tracker when it's a track, not as an external document (Claude Docs,
 Notion, Google Docs).
 
+Never add what's next, an idea, or a follow-up to the tracker or another file in `design/work/`. Add it as a note
+to the Upheap heap `bzzzz/upheap-development-planning`, with `/upheap:add`, when this workspace can use Upheap: the
+`upheap` command is installed and `upheap heap list` shows that heap. When it can't, name the follow-up in your
+reply and in the pull request's description, so the owner can add it.
+
 ## Interface changes
 
 Before building a significant change to the web app's design, on wide screens or on a phone, make a mockup in
