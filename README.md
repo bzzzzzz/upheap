@@ -152,9 +152,9 @@ refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broke
 
 ### From Claude Code
 
-This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skill adds a note, a task
-or a reminder to a heap from a conversation, through the CLI, when you run `/upheap:add` or name Upheap in a
-request. It needs `upheap` installed and signed in.
+This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skill adds notes, tasks
+and reminders to a heap from a conversation, and a new heap when you ask for one, through the CLI. It runs when
+you type `/upheap:add` or name Upheap in a request, and needs `upheap` installed and signed in.
 
 ```
 /plugin marketplace add bzzzzzz/upheap

@@ -1,13 +1,14 @@
 ---
 name: add
-description: Adds a note, a task or a reminder to Upheap, the ranked todo list, through the `upheap` command-line tool. Use ONLY when the user runs /upheap:add or names Upheap in the request ("add this to Upheap", "put a reminder in upheap", "upheap note: ..."). Do not use for a todo, note or reminder request that doesn't name Upheap, and do not use to work on, rank, list or close items.
+description: Adds notes, tasks and reminders to Upheap, the ranked todo list, through the `upheap` command-line tool: one item or a set of them, into an existing heap, or into a new heap when the user asks for one. Use ONLY when the user runs /upheap:add or names Upheap in the request ("add this to Upheap", "put a reminder in upheap", "upheap note: ...", "make an Upheap heap for the launch"). Do not use for a todo, note or reminder request that doesn't name Upheap, and do not use to work on, rank, list or close items.
 ---
 
 # Add to Upheap
 
-Put what the person asked for into Upheap as a note, a task or a reminder, in the right heap, with the fields that
-are known. This skill only adds. It never starts an item, ticks a step, closes anything, or does the work the item
-describes.
+Put what the person asked for into Upheap as notes, tasks and reminders, in the right heap, with the fields that
+are known. It may be one item or a set of them. They go into a heap that exists, unless the person asked for a new
+heap. This skill only adds. It never starts an item, ticks a step, closes anything, or does the work the items
+describe.
 
 ## 1. Check the tool and the sign-in
 
@@ -26,12 +27,35 @@ so it isn't lost.
 
 ## 2. Pick the heap
 
+A set of items goes through this once for the set, and items that plainly belong elsewhere go to their own heap.
+However many items there are, and however much they look like a project, they go into a heap that exists: only
+the person's request makes a new one (below).
+
 1. One heap: use it.
 2. Several: match what the item is about against each heap's name, and its context from `upheap heap show <heap>`
    when the name isn't enough. A heap the person named wins. The default heap is not a reason by itself.
 3. Still unsure between two or more: ask before adding. This is the one question that comes before the item exists.
 
 Pass the heap with `--heap team/heap` on every command, and say in your reply which heap the item went to.
+
+### A new heap
+
+Make one only when the person asked for it in words: "a new heap for", "make a heap called", "start a heap".
+A big set of items, a new subject, or no heap that fits well is not a request: use the closest heap, or ask which.
+You may say a new heap could suit, and leave the choice to them.
+
+1. Name: the one they gave, or else a short one from what they said it's for. Check `upheap heap list` first: if a
+   heap with that name or purpose exists, say so and ask before making a second.
+2. Team: the one they named, with `--team`. Left out, it goes to their personal team. If they have several teams
+   and the heap is plainly for shared work, ask which.
+3. Run `upheap heap add "<name>"`, and use the team/heap it reports from then on.
+4. Context: if the person said what the heap is for, how work in it is done, or where its material lives, write
+   that to a file and set it with `upheap heap edit <heap> --context-file <file>`. Their words and what this
+   conversation established, as for a note. Nothing said: no context.
+5. Add the items they asked for, each as below. A new heap has no tags, and the rule on tags holds here too:
+   none are made unless the person asked for them.
+
+Don't make it the default heap with `upheap heap use` unless asked.
 
 ## 3. Decide what it is
 
@@ -46,6 +70,11 @@ Take the person's word when they say note, task or reminder. Otherwise:
 Unsure between a note and a task: a note. It can become a task later and keeps its key.
 
 ## 4. Add it
+
+For a set, treat each item by its own kind: one request can hold two tasks, a note and a reminder. Keep to the
+items the person listed or the conversation plainly holds. Don't split one into several or add ones they didn't
+ask for; if you see something missing, say so in your reply. Add them all, then ask your questions together.
+When one must be finished before another, and the person said so, say it in the later one's context.
 
 Add the item first and ask afterwards, for all three. What the person said is then safe, and questions are cheapest
 while the subject is fresh in their mind. Use `upheap item add ... -q` to get the item's key, and
@@ -125,4 +154,5 @@ it's between two. Leave it out only when there's nothing to judge by, such as an
 ## 6. Report
 
 One short reply: the item's key and title, the heap, what it is, and the fields you set (effort, due, tags, steps).
-Name anything you assumed and any question still open. Then stop: the work itself is not part of this skill.
+For a set, a line per item. For a new heap, its team/heap first, and whether it got a context. Name anything you
+assumed and any question still open. Then stop: the work itself is not part of this skill.
