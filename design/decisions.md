@@ -354,7 +354,7 @@ Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
 - **Static musl on Linux,** so one file runs on every distribution. The CLI uses rustls and a pure-Rust Secret Service
   client, so nothing needs a system library, and the build fails if the binary stops being static.
 - **Unsigned for now.** The cask clears the quarantine flag in its postflight, because Gatekeeper would refuse an
-  un-notarized binary, and macOS may ask once after each upgrade to let the new binary use its keychain entry.
+  un-notarized binary. The keychain entry is read through the system's `security` tool, so an upgrade doesn't ask.
   Notarizing later needs an Apple Developer ID and changes neither the cask's name nor the tap.
 - **Version-free asset names,** so `releases/latest/download/<name>` stays stable and the README's Linux commands
   never change. The version is in the tag and in the URL path the cask uses.

@@ -6,6 +6,9 @@ use std::sync::Mutex;
 use api_types::oauth::TokenResponseDto;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "macos")]
+use super::security_tool::SecurityTool;
+
 /// A sign-in to one server: the refresh token, and the access token last issued with its expiry, so most commands
 /// don't refresh. Refreshing spends the refresh token, so fewer refreshes also mean fewer chances to race one.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,42 +69,99 @@ pub trait TokenStore: Send + Sync {
 }
 
 /// The OS keychain: the macOS keychain, the Windows credential manager, or the Secret Service on Linux.
+///
+/// On macOS it's reached through the system's `security` tool, not from this process, so the entry doesn't belong
+/// to one build of `upheap` ([`super::security_tool`]).
 pub struct KeychainStore;
 
 const KEYCHAIN_SERVICE: &str = "upheap";
 
+#[cfg(not(target_os = "macos"))]
 impl KeychainStore {
     fn entry(server: &str) -> Result<keyring::Entry, TokenStoreError> {
         keyring::Entry::new(KEYCHAIN_SERVICE, server).map_err(unavailable)
     }
-}
 
-impl TokenStore for KeychainStore {
-    fn load(&self, server: &str) -> Result<Option<StoredTokens>, TokenStoreError> {
-        let text = match Self::entry(server)?.get_password() {
-            Ok(text) => text,
-            Err(keyring::Error::NoEntry) => return Ok(None),
-            Err(err) => return Err(unavailable(err)),
-        };
-        serde_json::from_str(&text)
-            .map(Some)
-            .map_err(|_| TokenStoreError::Corrupt {
-                server: server.to_owned(),
-            })
+    fn read(server: &str) -> Result<Option<String>, TokenStoreError> {
+        match Self::entry(server)?.get_password() {
+            Ok(text) => Ok(Some(text)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(err) => Err(unavailable(err)),
+        }
     }
 
-    fn save(&self, server: &str, tokens: &StoredTokens) -> Result<(), TokenStoreError> {
-        // Three strings and a number always serialize.
-        let text = serde_json::to_string(tokens).map_err(|err| unavailable(Box::new(err)))?;
-        Self::entry(server)?.set_password(&text).map_err(unavailable)
+    fn write(server: &str, text: &str) -> Result<(), TokenStoreError> {
+        Self::entry(server)?.set_password(text).map_err(unavailable)
     }
 
-    fn delete(&self, server: &str) -> Result<(), TokenStoreError> {
+    fn remove(server: &str) -> Result<(), TokenStoreError> {
         match Self::entry(server)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(err) => Err(unavailable(err)),
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+impl KeychainStore {
+    fn read(server: &str) -> Result<Option<String>, TokenStoreError> {
+        SecurityTool::system()
+            .find(KEYCHAIN_SERVICE, server)
+            .map_err(unavailable)
+    }
+
+    fn write(server: &str, text: &str) -> Result<(), TokenStoreError> {
+        SecurityTool::system()
+            .add(KEYCHAIN_SERVICE, server, text.as_bytes())
+            .map_err(unavailable)
+    }
+
+    fn remove(server: &str) -> Result<(), TokenStoreError> {
+        SecurityTool::system()
+            .delete(KEYCHAIN_SERVICE, server)
+            .map_err(unavailable)
+    }
+}
+
+impl TokenStore for KeychainStore {
+    fn load(&self, server: &str) -> Result<Option<StoredTokens>, TokenStoreError> {
+        let Some(text) = Self::read(server)? else {
+            return Ok(None);
+        };
+        parse_entry(&text).map(Some).ok_or_else(|| TokenStoreError::Corrupt {
+            server: server.to_owned(),
+        })
+    }
+
+    fn save(&self, server: &str, tokens: &StoredTokens) -> Result<(), TokenStoreError> {
+        // Three strings and a number always serialize.
+        let text = serde_json::to_string(tokens).map_err(|err| unavailable(Box::new(err)))?;
+        Self::write(server, &text)
+    }
+
+    fn delete(&self, server: &str) -> Result<(), TokenStoreError> {
+        Self::remove(server)
+    }
+}
+
+/// The sign-in a keychain entry holds: JSON, or JSON in hexadecimal, which is how macOS's `security` prints an
+/// entry that has anything but printable ASCII in it.
+fn parse_entry(text: &str) -> Option<StoredTokens> {
+    serde_json::from_str(text).ok().or_else(|| {
+        let bytes = unhex(text)?;
+        serde_json::from_slice(&bytes).ok()
+    })
+}
+
+/// The bytes `text` spells in hexadecimal, or `None` when it isn't hexadecimal.
+pub(super) fn unhex(text: &str) -> Option<Vec<u8>> {
+    if !text.len().is_multiple_of(2) || !text.is_ascii() {
+        return None;
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|at| u8::from_str_radix(&text[at..at + 2], 16).ok())
+        .collect()
 }
 
 fn unavailable(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> TokenStoreError {
@@ -142,6 +202,31 @@ mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn an_entry_is_read_as_json_or_as_json_in_hexadecimal() {
+        // Arrange
+        let json = r#"{"refresh_token":"r","access_token":"a","access_expires_at":42}"#;
+        let hex: String = json.bytes().map(|byte| format!("{byte:02x}")).collect();
+
+        // Act
+        let (plain, from_hex) = (parse_entry(json), parse_entry(&hex));
+
+        // Assert
+        expect_that!(plain.as_ref().map(|tokens| tokens.access_expires_at), some(eq(42)));
+        expect_that!(from_hex, eq(&plain));
+        expect_that!(parse_entry("not a sign-in"), none());
+        expect_that!(parse_entry("7b7d"), none());
+    }
+
+    #[gtest]
+    fn unhex_reads_hexadecimal_and_nothing_else() {
+        expect_that!(unhex("007bFF0a"), some(eq(&vec![0x00, 0x7b, 0xff, 0x0a])));
+        expect_that!(unhex(""), some(is_empty()));
+        expect_that!(unhex("7b2"), none());
+        expect_that!(unhex("zz"), none());
+        expect_that!(unhex("\u{e9}"), none());
+    }
 
     #[gtest]
     fn debug_never_shows_a_token() {
