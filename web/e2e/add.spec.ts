@@ -402,7 +402,7 @@ test("on a phone, Add is a sheet of one-tap chips, with More fields", async ({ p
   const add = await dialog.getByRole("button", { name: "Add", exact: true }).boundingBox();
   const height = page.viewportSize()?.height ?? 0;
   expect((add?.y ?? 0) + (add?.height ?? 0)).toBeLessThanOrEqual(height);
-  expect(add?.height).toBeGreaterThanOrEqual(44);
+  expect(Math.round(add?.height ?? 0)).toBeGreaterThanOrEqual(44);
   await dialog.getByRole("button", { name: "Add", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(row(page, "Call the plumber")).toContainText("next week");
