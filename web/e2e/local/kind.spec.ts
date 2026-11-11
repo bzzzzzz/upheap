@@ -1,5 +1,5 @@
 // Kind and stage in the local build (design/architecture.md, Local build): an item's kind shows, its stage never does.
-import { addItem, expect, goTo, isPhone, itemPane, openItem, test } from "../fixtures";
+import { addItem, closeItem, expect, goTo, isPhone, itemPane, openItem, test } from "../fixtures";
 
 test("an item shows its kind and no stage, and More has no Stage section", async ({ page }) => {
   await addItem(page, "Keep me");
@@ -25,6 +25,7 @@ test("an item has no Who has it block or Send to an agent, and Heap settings has
   await expect(itemPane(page).getByRole("button", { name: "Send to an agent" })).toHaveCount(0);
   await expect(page.getByText("with an agent")).toHaveCount(0);
 
+  await closeItem(page);
   await goTo(page, "Settings");
   await expect(page.getByLabel("Heap name")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Agents", exact: true })).toHaveCount(0);

@@ -940,12 +940,13 @@ mod tests {
     use super::*;
     use crate::audit::{AuditActionDto, AuditLogDto};
     use crate::me::{MeActionDto, MeDto};
+    use crate::turns::{GoalDto, ReachDto, TurnSourceDto};
 
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
     fn question_from_a_later_server() -> serde_json::Value {
         json!([{
             "number": 1, "kind": "review", "text": "Look", "details": null, "choices": [], "many": false,
-            "step": null, "state": "withdrawn", "asked_by": null, "asked_at": 0, "asked_label": "today",
+            "step": null, "state": "parked", "asked_by": null, "asked_at": 0, "asked_label": "today",
             "reply": null, "version": 1, "allowed_actions": ["reply", "withdraw"],
         }])
     }
@@ -966,7 +967,9 @@ mod tests {
                 "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
-                "closed_group": "last_month", "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
+                "closed_group": "last_month",
+                "turn": { "reach": "until_done", "goal": "reviewed", "line": null, "source": "schedule", "opened_at": 0, "opened_by": null },
+                "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
                 "steps": [{
                     "id": Uuid::nil(), "number": 1, "title": "Run in staging", "context": null, "state": "parked",
                     "version": 1, "allowed_actions": ["edit", "reorder"],
@@ -993,6 +996,10 @@ mod tests {
         expect_that!(ranked.item.closed_group, some(eq(ClosedGroupDto::Unknown)));
         expect_that!(ranked.item.kind, eq(KindDto::Unknown));
         expect_that!(ranked.item.stage, some(eq(StageDto::Unknown)));
+        let turn = ranked.item.turn.or_fail()?;
+        expect_that!(turn.reach, eq(ReachDto::Unknown));
+        expect_that!(turn.goal, eq(GoalDto::Unknown));
+        expect_that!(turn.source, eq(TurnSourceDto::Unknown));
         let steps = ranked.item.steps.or_fail()?;
         expect_that!(steps[0].state, eq(StepStateDto::Unknown));
         expect_that!(steps[0].allowed_actions, elements_are![eq(&StepActionDto::Edit)]);
