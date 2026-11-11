@@ -84,6 +84,7 @@ impl CliError {
                 LookupError::UnknownHeap { .. }
                 | LookupError::UnknownDueChoice { .. }
                 | LookupError::AmbiguousHeap { .. }
+                | LookupError::NoPersonalTeam
                 | LookupError::UnknownTag { .. }
                 | LookupError::UnknownView { .. }
                 | LookupError::AmbiguousView { .. }

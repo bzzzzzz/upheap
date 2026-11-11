@@ -27,9 +27,17 @@ test("a user changes their password and signs in with the new one", async ({ pag
   const card = page.getByRole("region", { name: "Password", exact: true });
   // Closed, the card is its heading and the button.
   await expect(card.getByLabel("Current password")).toHaveCount(0);
+  // History is there with the form closed, collapsed and with nothing yet loaded.
+  const history = card.getByText("History", { exact: true });
+  await expect(history).toBeVisible();
+  await history.click();
+  await expect(card.getByText("No password changes or resets yet.")).toBeVisible();
+  await history.click();
 
   await card.getByRole("button", { name: "Change password" }).click();
   await expect(card.getByLabel("Current password")).toBeFocused();
+  // And with it open.
+  await expect(history).toBeVisible();
   await expect(card.getByLabel("New password")).toHaveAccessibleDescription("At least 10 characters.");
   await expect(card).toContainText("This signs you out of your other browsers and the command line.");
   await card.getByLabel("Current password").fill(PASSWORD);
@@ -40,6 +48,12 @@ test("a user changes their password and signs in with the new one", async ({ pag
   await expect(card.getByRole("status")).toHaveText("Password changed. No other sign-ins were open.");
   await expect(card.getByLabel("Current password")).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Change password" })).toBeFocused();
+
+  // The change is in the history, with its time.
+  await history.click();
+  await expect(card.getByRole("listitem")).toHaveCount(1);
+  await expect(card.getByRole("listitem")).toContainText("Password changed. No other sign-ins were open.");
+  await expect(card.locator("time")).toBeVisible();
 
   await page.getByRole("main").getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);

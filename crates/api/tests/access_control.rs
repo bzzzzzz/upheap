@@ -313,6 +313,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
+            "/me/history",
+            SignedIn,
+            Target::OwnAccount,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
             "/password-resets/{token}",
             Public,
             Target::ResetLink,

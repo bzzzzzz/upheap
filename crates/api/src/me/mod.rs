@@ -1,6 +1,8 @@
 //! The signed-in user, their teams and heaps.
 
 #[cfg(feature = "accounts")]
+pub(crate) mod history;
+#[cfg(feature = "accounts")]
 pub(crate) mod password;
 #[cfg(feature = "accounts")]
 pub(crate) mod sign_ins;

@@ -1,7 +1,8 @@
 // A history from the audit log, as the server describes it. Entries and their changes come ready to show; this only
 // lays them out.
+import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { AuditEntry } from "../api/client";
 import { useAuditLog, useMe, type AuditScope } from "../api/queries";
@@ -19,36 +20,52 @@ export function AuditHistory({
   entityId?: string;
   showEntity?: boolean;
 }) {
-  const log = useAuditLog(scope, entityId);
+  return (
+    <PagedHistory
+      history={useAuditLog(scope, entityId)}
+      empty="No history you can see."
+      row={(entry) => <AuditEntryRow key={entry.id} entry={entry} showEntity={showEntity} />}
+    />
+  );
+}
 
-  if (log.isPending) {
+/**
+ * A history read a page at a time, newest first: its loading, error and empty states, its rows, and Load more. Every
+ * history uses it, so they all look and behave alike; `row` lays out one entry as an `<li>`.
+ */
+export function PagedHistory<Entry>({
+  history,
+  empty,
+  row,
+}: {
+  history: UseInfiniteQueryResult<InfiniteData<{ entries: Entry[] }>, Error>;
+  empty: string;
+  row: (entry: Entry) => ReactNode;
+}) {
+  if (history.isPending) {
     return <p className="py-4 text-sm text-muted">Loading history…</p>;
   }
-  if (log.isError) {
+  if (history.isError) {
     return (
       <p role="alert" className="py-4 text-sm text-overdue-ink">
-        {log.error.message}
+        {history.error.message}
       </p>
     );
   }
 
-  const entries = log.data.pages.flatMap((page) => page.entries);
+  const entries = history.data.pages.flatMap((page) => page.entries);
   return (
     <div>
       {entries.length === 0 ? (
-        <p className="py-4 text-sm text-muted">No history you can see.</p>
+        <p className="py-4 text-sm text-muted">{empty}</p>
       ) : (
-        <ol className="divide-y divide-line">
-          {entries.map((entry) => (
-            <AuditEntryRow key={entry.id} entry={entry} showEntity={showEntity} />
-          ))}
-        </ol>
+        <ol className="divide-y divide-line">{entries.map(row)}</ol>
       )}
-      {log.hasNextPage && (
+      {history.hasNextPage && (
         <button
           type="button"
-          onClick={() => void log.fetchNextPage()}
-          disabled={log.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
+          disabled={history.isFetchingNextPage}
           className="mt-2 min-h-9 text-sm text-muted hover:text-ink pointer-coarse:min-h-11"
         >
           Load more
@@ -98,6 +115,32 @@ function ChangeValues({ before, after }: { before?: string | null; after?: strin
   );
 }
 
+/** A collapsed section, with its chevron, that renders `children` only once it is opened. */
+export function Disclosure({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  /** Where it sits: its margins, or how much of a row it takes. */
+  className: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)} className={`group ${className}`}>
+      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+        />
+        {label}
+      </summary>
+      {open && <div className="mt-1 pl-3">{children}</div>}
+    </details>
+  );
+}
+
 /** A collapsed "History" section that loads the history only once it is opened. */
 export function HistoryDisclosure({
   scope,
@@ -111,21 +154,9 @@ export function HistoryDisclosure({
   /** Where it sits: its margins, or how much of a row it takes. */
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)} className={`group ${className}`}>
-      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden="true"
-          className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
-        />
-        {label}
-      </summary>
-      {open && (
-        <div className="mt-1 pl-3">
-          <AuditHistory scope={scope} entityId={entityId} />
-        </div>
-      )}
-    </details>
+    <Disclosure label={label} className={className}>
+      <AuditHistory scope={scope} entityId={entityId} />
+    </Disclosure>
   );
 }

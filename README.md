@@ -127,6 +127,7 @@ Or build it with `cargo build --release -p cli` (the binary is `target/release/u
 ```sh
 cargo run -p cli -- auth login --server http://localhost:8080   # opens the browser; the sign-in goes in the keychain
 cargo run -p cli -- heap list
+cargo run -p cli -- heap add "Roadmap"                           # in your personal team; or --team infra, --slug plan
 cargo run -p cli -- heap use personal                           # or team/heap
 cargo run -p cli -- heap show                                   # the heap's name and context
 cargo run -p cli -- heap edit --context-file context.md         # or - for stdin, or --no-context

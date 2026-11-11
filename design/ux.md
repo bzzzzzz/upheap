@@ -460,6 +460,8 @@ row's actions are in its ⋯ sheet. A copy the browser refuses shows the link in
 Every link has a **History** (made, revoked, each person who joined through it), a button on a wide row and an entry in
 a phone row's sheet. Links that ended or were revoked are under a collapsed **Past links (N)**, each saying who made
 it, when it ended or who revoked it and when, and how many joined; on a phone their History is a button on the row.
+The team's Activity, shown to admins like other membership lines, says "Ana made an invite link", "Ben revoked Ana's
+invite link" and "Sam joined through Ana's invite link".
 
 ## Sign in and create account
 
@@ -553,6 +555,14 @@ browser the change was made in stays signed in, on a new session cookie the serv
 lands on sign-in at its next request. A change also cancels the user's working reset link ([Reset page](#reset-page)),
 so a copy of it can't be used afterwards. The card is there when the server's `change_password` action is, so never in
 the local build.
+
+At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
+member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest
+first, each a sentence from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by
+whoever runs the server." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
+user's own account, and holds nothing else of the account (not sign-ups or profile changes). Empty, it says "No
+password changes or resets yet."; an error shows the server's message; **Load more** fetches the next page. A password
+change adds its entry to an open History at once, and to a closed one by the time it is opened.
 
 ## Command line
 

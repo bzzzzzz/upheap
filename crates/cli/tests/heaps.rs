@@ -1,4 +1,4 @@
-//! `upheap heap list`, `upheap heap use`, `upheap heap show` and `upheap heap edit`.
+//! `upheap heap add`, `upheap heap list`, `upheap heap use`, `upheap heap show` and `upheap heap edit`.
 
 mod common;
 
@@ -347,5 +347,71 @@ async fn heap_edit_does_nothing_without_a_flag_and_refuses_both_or_an_unreadable
     expect_that!(missing.stderr, contains_substring("/nonexistent/context.txt"));
     expect_that!(archived.exited(0), eq(false));
     expect_that!(archived.stderr, contains_substring("archived"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_add_makes_a_heap_in_the_personal_team_or_the_named_one() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let personal = cli.run(&["heap", "add", "Road Map"]).await;
+    let named = cli
+        .run(&["heap", "add", "Plans", "--team", "infra", "--slug", "plan", "-q"])
+        .await;
+    let json = cli.run(&["heap", "add", "Road Map", "--json"]).await;
+    let listed = cli.run(&["heap", "list", "-q"]).await;
+
+    // Assert
+    expect_that!(personal.stdout, eq("Added heap ada/road-map.\n"));
+    expect_that!(personal.exited(0), eq(true));
+    expect_that!(named.stdout, eq("infra/plan\n"));
+    let heap: serde_json::Value = serde_json::from_str(&json.stdout)?;
+    // The same name again gets the next free slug from the server.
+    expect_that!(heap["slug"].as_str(), some(eq("road-map-2")));
+    expect_that!(heap["name"].as_str(), some(eq("Road Map")));
+    for handle in ["ada/road-map\n", "ada/road-map-2\n", "infra/plan\n"] {
+        expect_that!(listed.stdout, contains_substring(handle));
+    }
+    expect_that!(cli.config_text(), eq(""));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_add_reports_what_the_server_refuses() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let grace = server.register("grace", "Grace").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let outsider = TestCli::signed_in(&server, &grace).await?;
+
+    // Act
+    let taken = cli
+        .run(&["heap", "add", "Ops again", "--team", "infra", "--slug", "ops"])
+        .await;
+    let malformed = cli.run(&["heap", "add", "Plans", "--slug", "Not A Slug"]).await;
+    let blank = cli.run(&["heap", "add", " "]).await;
+    let not_mine = outsider.run(&["heap", "add", "Plans", "--team", "infra"]).await;
+    let no_name = cli.run(&["heap", "add"]).await;
+
+    // Assert
+    expect_that!(taken.stderr, contains_substring("handle_taken"));
+    expect_that!(taken.exited(3), eq(true));
+    expect_that!(malformed.stderr, contains_substring("invalid_handle"));
+    expect_that!(malformed.exited(3), eq(true));
+    expect_that!(blank.exited(3), eq(true));
+    expect_that!(not_mine.exited(4), eq(true));
+    expect_that!(no_name.exited(2), eq(true));
+    let heaps = cli.run(&["heap", "list", "-q"]).await;
+    expect_that!(
+        heaps.stdout,
+        eq("ada/personal\nada/backlog\nada/old\ninfra/backlog\ninfra/ops\n")
+    );
     Ok(())
 }

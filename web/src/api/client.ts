@@ -64,6 +64,7 @@ export type WeightsPatch = Schemas["HeapWeightsPatchRequest"];
 export type RankingPreviewRequest = Schemas["RankingPreviewRequest"];
 export type RankingPreview = Schemas["RankingPreview"];
 export type AuditEntry = Schemas["AuditEntry"];
+export type AccountEvent = Schemas["AccountEvent"];
 export type AuditAction = Schemas["AuditAction"];
 export type AuditEntityType = Schemas["AuditEntityType"];
 export type DueInput = Schemas["DueInput"];

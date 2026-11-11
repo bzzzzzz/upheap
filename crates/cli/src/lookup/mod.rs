@@ -68,6 +68,8 @@ pub enum LookupError {
     UnknownDueChoice { typed: String, known: Vec<String> },
     #[error("you have no heap `{name}`; `upheap heap list` lists yours")]
     UnknownHeap { name: String },
+    #[error("you have no personal team: say which team with --team")]
+    NoPersonalTeam,
     #[error("more than one of your teams has a heap `{slug}`: say which with {}", candidates.join(" or "))]
     AmbiguousHeap { slug: String, candidates: Vec<String> },
     #[error("{heap} has no tag `{name}`{}", closest_tags(known, *total))]
@@ -291,6 +293,15 @@ pub fn resolve_heap(name: HeapName<'_>, me: &MeDto) -> Result<HeapHandle, Lookup
             candidates: found.iter().map(ToString::to_string).collect(),
         }),
     }
+}
+
+/// The slug of the caller's personal team, the team a new heap goes to when none is named.
+pub fn find_personal_team(me: &MeDto) -> Result<&str, LookupError> {
+    me.teams
+        .iter()
+        .find(|team| team.personal)
+        .map(|team| team.slug.as_str())
+        .ok_or(LookupError::NoPersonalTeam)
 }
 
 /// The IDs of the tags `names` names, each by name ignoring case, as the server compares them, or by ID.

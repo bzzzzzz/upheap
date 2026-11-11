@@ -1,5 +1,5 @@
 //! `upheap`, the command-line client of Upheap: add, show, edit, move and list a heap's items, list, add and edit its
-//! tags, pick a default heap, and sign in.
+//! tags, add a heap, pick a default one, and sign in.
 //!
 //! It is a thin client of the HTTP API, like the web app: it never ranks, checks permissions or works out labels,
 //! and it reads and writes the API's own types from `api_types`.
@@ -218,6 +218,8 @@ enum WorkCommand {
 
 #[derive(Subcommand)]
 enum HeapCommand {
+    /// Add a heap to a team
+    Add(commands::heap::add::AddArgs),
     /// Every heap you can use, by team
     List(commands::heap::list::ListArgs),
     /// Make a heap the default for commands that work in one
@@ -259,6 +261,7 @@ impl Command {
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
+            Self::Heap(HeapCommand::Add(args)) => &args.shared,
             Self::Work(WorkCommand::Next(args)) => &args.shared,
             Self::Work(WorkCommand::Claim(args)) => &args.shared,
             Self::Work(WorkCommand::Reached(args)) => &args.shared,
@@ -381,6 +384,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
+        Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
         Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
         Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,
         Command::Work(WorkCommand::Reached(args)) => commands::work::reached::run(args, app, out).await,
