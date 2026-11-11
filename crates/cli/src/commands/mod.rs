@@ -6,6 +6,7 @@ pub mod guide;
 pub mod heap;
 pub(crate) mod heap_api;
 pub mod item;
+pub mod parameter;
 pub mod question;
 pub mod step;
 pub mod tag;
@@ -52,6 +53,10 @@ pub enum UsageError {
     },
     #[error("--tag and --untag both name {name}")]
     TagAndUntag { name: String },
+    #[error("--parameter and --no-parameter both name {name}; give it once")]
+    ParameterAndNoParameter { name: String },
+    #[error("{flag} names {name} twice; give it once")]
+    ParameterTwice { flag: &'static str, name: String },
     #[error("can't read stdin as text for {flag} -")]
     UnreadableStdin {
         flag: &'static str,

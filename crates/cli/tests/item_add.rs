@@ -231,3 +231,51 @@ async fn item_add_needs_a_heap_and_refuses_json_with_quiet() -> Result<()> {
     expect_that!(both.exited(2), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn item_add_sets_a_parameter_by_name_ignoring_case() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .add_parameter(&ada, "Area", &["Backend", "Frontend"], &[])
+        .await?;
+
+    let added = cli
+        .run(&["item", "add", "Fix the API", "--parameter", "area=backend", "-q"])
+        .await;
+
+    expect_that!(added.exited(0), eq(true));
+    let item = server.read_item(&ada, common::HEAP, added.stdout.trim()).await?;
+    expect_that!(item["parameters"][0]["name"], eq("Area"));
+    expect_that!(item["parameters"][0]["option"]["label"], eq("Backend"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_with_an_unknown_option_lists_the_parameters_options_and_adds_nothing() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .add_parameter(&ada, "Area", &["Backend", "Frontend"], &[])
+        .await?;
+
+    let added = cli.run(&["item", "add", "Never", "--parameter", "Area=Mobile"]).await;
+    let malformed = cli.run(&["item", "add", "Never", "--parameter", "Area"]).await;
+
+    expect_that!(added.exited(3), eq(true));
+    expect_that!(
+        added.stderr,
+        eq("error: parameter `Area` in ada/personal has no option `Mobile`; it has Backend, Frontend\n")
+    );
+    expect_that!(malformed.exited(2), eq(true));
+    expect_that!(
+        malformed.stderr,
+        contains_substring("--parameter takes NAME=OPTION, such as --parameter Area=Backend; got `Area`")
+    );
+    expect_that!(item_count(&server, &ada).await?, eq(3));
+    Ok(())
+}

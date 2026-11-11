@@ -162,8 +162,9 @@ it's between two. Leave it out only when there's nothing to judge by, such as an
 
 - Run `upheap tag list --heap <heap>`. Put on every tag whose name or description matches the item. No match: no
   tag.
-- Parameters work the same way, if the guide shows a way to list and set them: use an existing parameter and option
-  that match. If the guide shows none, leave parameters alone.
+- Parameters work the same way: run `upheap parameter list --heap <heap>`, which shows each parameter's options and
+  the tags it is for. Where one fits the item, set it with `--parameter NAME=OPTION` on `upheap item add` or
+  `upheap item edit`, using one of its listed options. No fit: leave it.
 - Never create a tag, a parameter or an option, and never change one, unless the person asked for exactly that.
 
 ## 6. Report

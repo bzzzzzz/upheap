@@ -6,7 +6,7 @@ use api_types::tags::TagListDto;
 use clap::Args;
 use uuid::Uuid;
 
-use super::common::{dedupe, locate_item, resolve_due};
+use super::common::{ParameterSetting, dedupe, locate_item, parameter_values, parse_parameter_setting, resolve_due};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, read_context, read_description};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
@@ -49,6 +49,12 @@ pub struct EditArgs {
     /// Take off a tag, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub untag: Vec<String>,
+    /// Set a parameter of the heap to one of its options, as NAME=OPTION, each by name or ID. Repeat for more
+    #[arg(long, value_name = "NAME=OPTION", value_parser = parse_parameter_setting)]
+    pub parameter: Vec<ParameterSetting>,
+    /// Clear a parameter's value, by name or ID. Repeat for more
+    #[arg(long, value_name = "NAME")]
+    pub no_parameter: Vec<String>,
     /// Clear the due time
     #[arg(long)]
     pub no_due: bool,
@@ -80,6 +86,8 @@ impl EditArgs {
             || self.due.is_some()
             || !self.tag.is_empty()
             || !self.untag.is_empty()
+            || !self.parameter.is_empty()
+            || !self.no_parameter.is_empty()
             || self.no_due
             || self.no_effort
             || self.no_impact
@@ -127,6 +135,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         }
         Some(merge_tags(&item.value, added, &removed))
     };
+    let parameter_values = parameter_values(&args.parameter, &args.no_parameter, &api).await?;
     let due = match (&args.due, args.no_due) {
         (Some(raw), _) => Some(Some(resolve_due(raw, &client, &token).await?)),
         (None, true) => Some(None),
@@ -141,6 +150,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         impact: clearing(args.impact, args.no_impact),
         due,
         tag_ids,
+        parameter_values,
         ..ItemPatchDto::default()
     };
     let edited = api.patch_item(&at.key, item.value.version, &patch).await?;
