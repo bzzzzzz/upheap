@@ -8,7 +8,7 @@
     {
       "name": "upheap",
       "source": "./plugins/upheap",
-      "description": "Add notes, tasks and reminders to Upheap from a conversation, and a new heap when asked, through the upheap command-line tool."
+      "description": "Work with Upheap from a conversation, through the upheap command-line tool: add items, see where things stand, and do the next one."
     }
   ]
 }

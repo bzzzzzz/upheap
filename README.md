@@ -161,9 +161,17 @@ refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broke
 
 ### From Claude Code
 
-This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skill adds notes, tasks
-and reminders to a heap from a conversation, and a new heap when you ask for one, through the CLI. It runs when
-you type `/upheap:add` or name Upheap in a request, and needs `upheap` installed and signed in.
+This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skills work through the
+CLI, so they need `upheap` installed and signed in. Each runs when you type its command or name Upheap in a
+request.
+
+- `/upheap:add` adds notes, tasks and reminders to a heap from a conversation, and a new heap when you ask for
+  one.
+- `/upheap:status` says what's in progress, what waits for you, and what's next and why.
+- `/upheap:do-next` takes the next item: a note gets its context and becomes a task or stays a note; a task gets
+  done, or part of it, or you're told how to do it when an agent can't.
+
+`status` and `do-next` take a heap (`/upheap:status bzzzz/personal`) or `all`.
 
 ```
 /plugin marketplace add bzzzzzz/upheap
@@ -252,7 +260,7 @@ crates/cli        the upheap command-line client
 crates/server     the binary: config, startup, embedded web app
 crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
 web/              React app (TypeScript), generated API types only
-plugins/upheap    the Claude Code plugin: a skill that adds items through the CLI
+plugins/upheap    the Claude Code plugin: skills that add items, report status and do the next one, through the CLI
 ```
 
 ## License
