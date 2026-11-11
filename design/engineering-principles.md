@@ -318,6 +318,9 @@ and use cases. **Operations** are functions that do one job and return a result.
    `prefers-reduced-motion` honoured for every animation.
 6. **A comment that cites a design doc cites a permanent one, by section name,** so the citation survives a doc
    restructure. Never a doc in `design/work/`: it goes once the work is built.
+7. **Focus moves after a render, never on a timer.** After a dialog, sheet, menu or form closes, move focus with
+   `useFocusAfterRender` (or an effect keyed on the state that brings the target), not with `setTimeout` or a guessed
+   number of animation frames: those race React Aria's own focus restore, and lose on a slow machine.
 
 #### Tests
 

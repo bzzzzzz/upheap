@@ -1,8 +1,8 @@
 # End-to-end tests
 
 CI runs these without retries, on slower machines, at three widths (desktop, tablet, phone). A check that depends on
-timing fails someone's pull request later, and phone and tablet show it first. Keep `retries: 0` in the config, and
-don't add retries to hide a flake.
+timing fails someone's pull request later, and phone and tablet show it first. The configs set no `retries`, so it's
+Playwright's default of 0; don't add retries to hide a flake.
 
 ## Wait for what proves the save landed
 
@@ -27,7 +27,8 @@ what only the new state shows, such as the Reopen button.
   fractional pixels (43.99997). Keep the `?? 0`, so a missing box fails the check instead of throwing.
 - `toBeFocused()` is fine and retries. If one fails now and then, the app is probably moving focus on a timer or a
   guessed number of frames, racing React Aria's own focus restore after an overlay closes. Fix the app, not the test:
-  move focus after the render (`useFocusAfterRender` in `web/src/components/useFocusAfterRender.ts`), not on a timer.
+  move focus after the render (`useFocusAfterRender` in `web/src/components/useFocusAfterRender.ts`), not on a timer
+  ([engineering-principles.md](../../design/engineering-principles.md), TypeScript and React, Components).
 - Each test makes its own account and data, so tests run in parallel and share nothing
   ([engineering-principles.md](../../design/engineering-principles.md), TypeScript and React, Tests).
 
