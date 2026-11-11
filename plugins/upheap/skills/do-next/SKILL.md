@@ -1,6 +1,6 @@
 ---
 name: do-next
-description: Starts work on the next item in Upheap, the ranked todo list, through the `upheap` command-line tool, in an interactive session with the user. Picks the item in progress or the top-ranked one, in one heap or across all heaps. Gives a note its context and decides whether it stays a note or becomes a defined task. For a task, does the work or a part of it using the skills and project instructions available, or tells the user how to do it when an agent can't. Records progress and state in Upheap. Use ONLY when the user runs /upheap:do-next or names Upheap in the request ("do the next thing in Upheap", "work on the next upheap item", "continue the upheap task"). Do not use for a request to work on something that doesn't name Upheap, and do not use to only add items or only report status.
+description: Starts work on the next item in Upheap, the ranked todo list, through the `upheap` command-line tool, in an interactive session with the user. Takes the top-ranked item that isn't started and moves it to in progress, in one heap or across all heaps; continues an item already in progress only when asked. Gives a note its context and decides whether it stays a note or becomes a defined task. For a task, does the work or a part of it using the skills and project instructions available, or tells the user how to do it when an agent can't. Records progress and state in Upheap. Use ONLY when the user runs /upheap:do-next or names Upheap in the request ("do the next thing in Upheap", "work on the next upheap item", "continue the upheap task"). Do not use for a request to work on something that doesn't name Upheap, and do not use to only add items or only report status.
 argument-hint: "[team/heap | all]"
 ---
 
@@ -52,10 +52,14 @@ Pass the heap with `--heap team/heap` on every command.
 
 ## 3. Pick the item
 
-In one heap, read `upheap item list --heap <heap>` and take the first of these that exists:
+Take the top ranked item that isn't started yet. In one heap, that's the first open item in
+`upheap item list --heap <heap>`. Across all heaps, it's the first open item in the ranked list across heaps,
+which the guide shows the command for: one list, in one order, with each item's heap. If the guide has no such
+command, the tool is too old: say so, and ask which heap to work in.
 
-1. **An item in progress.** Finishing what's started comes before starting more. With several, the highest.
-2. **The top ranked item.**
+Items in progress are not picked by default: they may be someone's work under way, here or elsewhere. Pick one
+up only when the person asks ("continue", "carry on with what's started", or an item they name). Then take the
+one they mean, or the highest in progress, and read where it got to before doing anything.
 
 Pass over an item, and say so in a line, when:
 
@@ -66,19 +70,19 @@ Pass over an item, and say so in a line, when:
   leave it, unless the person says to do it here.
 - It's blocked.
 
-Across all heaps, look at each heap's in-progress items and its top ranked item. Take an in-progress one first.
-Otherwise compare the top items: the higher need wins, then the nearer due date, then the smaller effort. When two
-are close, name them and let the person choose.
-
 Don't use `upheap work claim`, `work reached` or `work finish`: they are for runs with no person present.
 
-Nothing to pick: say so, and stop.
+Nothing to pick: say so, and stop. If items are in progress, name them and say you can continue one.
 
 Then read it: `upheap heap show <heap>` for what the project is and how work is done in it, and
 `upheap item show <key> --heap <heap>` for the item's context, steps, and questions with their answers.
 
-Tell the person in a line or two what you picked and why, then start. Don't wait for a go-ahead, except where
-section 6 asks for one.
+Tell the person in a line or two what you picked and why. Move it to in progress with `upheap item start <key>`,
+a note as well as a task, so the list shows it's being worked on. Then start. Don't wait for a go-ahead, except
+where section 6 asks for one.
+
+When you stop with no work under way on it (a note that stays a note, a task handed to the person, a task defined
+but not begun), move it back to open with `upheap item reopen <key>`. In progress means work is under way.
 
 ## 4. A note
 
@@ -95,14 +99,14 @@ A note is a thought that hasn't been worked out. Work it out, then decide what i
      `upheap item to-task`, write "Done when" into the context, and add a step for each part that's known. If the
      work is really several results, say so and ask before adding the others.
    - **It stays a note** when it's an idea nobody has decided on, a question still open, or something to keep in
-     mind. It stays open, with its context.
+     mind. It goes back to open, with its context.
    - **It's closed** when collecting settled it: `upheap item done` if there's nothing left to do, `upheap item
      wontdo` if the person says it won't happen.
    If the choice is the person's, ask them.
 4. If the guide shows a way to set an item's stage, set it to match: with context, or defined.
 
 Stop there. Report what the note is now, and say you can go on with it if it became a task. Go on only if they
-say so.
+say so; otherwise it goes back to open.
 
 ## 5. A task
 
@@ -131,13 +135,13 @@ Telling the person how to do it is this session's result for that item.
 3. Record it, so it's there when they get to it: each step as a step of the task, with its details in the step's
    context (`upheap step add <key> "<title>" --context-file <file>`), or the whole of it in the item's context
    when it's one action.
-4. Leave the item open and not in progress. Open a request on it with `upheap question request`, saying what to
-   do in a line, so it shows as waiting for them.
+4. Move the item back to open. Open a request on it with `upheap question request`, saying what to do in a
+   line, so it shows as waiting for them.
 5. If they do it right now and tell you, tick the steps, and close the item with `upheap item done`.
 
 ### Doing it
 
-1. `upheap item start <key>`.
+1. It's in progress already, from when you picked it.
 2. **Find how this kind of work is done here,** before doing it your own way:
    - The heap's context, and the project's own instructions (CLAUDE.md, AGENTS.md, a contributing guide).
    - The skills available in this session: the project's, the person's own, and those from installed plugins.

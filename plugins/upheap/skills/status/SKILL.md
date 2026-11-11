@@ -48,7 +48,7 @@ Pass the heap with `--heap team/heap` on every command.
 
 ## 3. Read
 
-For each heap in scope:
+For one heap:
 
 1. `upheap item list --heap <heap>`. In-progress items are pinned at the top, the rest are in ranked order, and
    each row ends with the main reason for its place. The footer says how many are hidden as blocked.
@@ -56,8 +56,10 @@ For each heap in scope:
 3. `upheap item show` for the top one or two ranked items too, when the row alone doesn't say why it's next or
    whether it's ready to start.
 
-Across all heaps, skip step 3 and keep to the lists, unless there are three heaps or fewer. A heap with nothing
-open gets no calls beyond the list.
+Across all heaps, read the ranked list across heaps, which the guide shows the command for: one list, in one
+order, with each item's heap and the reason for its place. Open the in-progress items as in step 2, and the top
+one or two as in step 3. If the guide has no such command, the tool is too old: say so, and ask which heap to
+report on.
 
 If `upheap item list` can show what waits for the person, use that. Otherwise you'll see it only on the items you
 opened: say so in a line when you may have missed some.
@@ -75,10 +77,9 @@ what's next. Then, for one heap:
   small", "due Friday"). For the first one, add a line on what starting it takes, if you read it.
 - **Also:** one line for what's left: how many more are open, how many are blocked.
 
-For all heaps, the same lead sentence, then a short block per heap: its name, the counts in one line, what's in
-progress, what waits for them, and its top one or two. Then one line naming what you'd pick next across them and
-why: by need first, then the nearest due date, then the smaller effort. Heaps with nothing open go in one closing
-line.
+For all heaps, the same lead sentence and the same headings, over the one list: each item with its heap's name
+beside its key. Next is the top five across heaps. Close with a line per heap that has open items: its name and
+its counts.
 
 Keep it to a screen. Use the item's own title, don't rewrite it. Don't list everything, don't explain how ranking
 works, and don't offer a plan. End by saying `/upheap:do-next` starts the next one, in one line.
