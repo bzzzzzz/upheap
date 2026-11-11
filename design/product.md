@@ -272,6 +272,7 @@ The fastest path in the app.
 ### Edit item
 
 1. The user can change any field of an existing item, add or remove tags and parameters, and move it between states.
+   They can move an item to another heap of its team, and it keeps its context, steps, questions and history.
 
 ### Manage tags
 

@@ -51,6 +51,8 @@ Not commitments. [product.md](../product.md) holds the commitments.
 - **The CLI saying a sign-in ended because the password changed,** not only that it must sign in again.
 - **Deleting old reset links,** as old OAuth rows are deleted.
 - **A searchable blocker picker,** bulk actions, and a link from "parameter in use" to the items holding a value.
+- **Moving items,** what is left: a Move control in the web app (needs a mockup), moves across teams, redirects from an
+  item's old link, and moving several items at once.
 - **Notifications and due reminders.**
 - **Installable app:** a PWA for the local build, then store builds
   ([ux.md](../ux.md#later-an-installable-app)).

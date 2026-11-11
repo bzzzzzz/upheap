@@ -551,6 +551,40 @@ impl Item {
         Ok((edited != *self).then_some(edited))
     }
 
+    /// The item as it is after it moves to `heap_id` under `key`, carrying `tags` and `parameters` of that heap (see
+    /// [`crate::item_move::carry_over`]). Everything else stays, and so does the version, which the store bumps on
+    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it left.
+    pub fn moved_to(
+        &self,
+        heap_id: HeapId,
+        key: ItemKey,
+        tags: BTreeSet<TagId>,
+        parameters: BTreeMap<ParameterId, OptionId>,
+    ) -> Self {
+        let state = match self.state {
+            ItemState::Blocked { .. } => ItemState::Blocked { by: None },
+            other => other,
+        };
+        Self {
+            heap_id,
+            key,
+            tags,
+            parameters,
+            state,
+            ..self.clone()
+        }
+    }
+
+    /// The item with its blocker taken away: still blocked, waiting for nobody in particular. An item that isn't
+    /// blocked is returned as it is.
+    pub fn without_blocker(&self) -> Self {
+        let state = match self.state {
+            ItemState::Blocked { .. } => ItemState::Blocked { by: None },
+            other => other,
+        };
+        Self { state, ..self.clone() }
+    }
+
     /// The item's values with `changes` applied.
     fn with_values(&self, changes: &BTreeMap<ParameterId, Option<OptionId>>) -> BTreeMap<ParameterId, OptionId> {
         let mut values = self.parameters.clone();
