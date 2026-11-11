@@ -19,7 +19,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::turns::TurnDto;
+use crate::turns::{GoalDto, TurnDto};
 
 /// Effort or impact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -731,6 +731,11 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub turn: Option<TurnDto>,
+    /// The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item
+    /// is sent. `null` on a closed item and in a build that has no agents.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub next_goal: Option<GoalDto>,
     /// Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for
     /// the caller. Who has an item never changes its place in the list. On every response, lists included; always
     /// `false` on a closed item and in an archived heap.

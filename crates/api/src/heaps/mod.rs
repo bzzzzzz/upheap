@@ -9,6 +9,7 @@ use axum::extract::State;
 use domain::handle::Handle;
 use domain::heap::HeapPolicyPatch;
 use domain::parameter::Weight;
+use domain::permission::{HeapAction, Permission};
 use domain::text::{Context, Name};
 use domain::validation::Field;
 use domain::{ParameterId, Version};
@@ -46,7 +47,13 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
         version: heap.version.get(),
-        allowed_actions: view.allowed_actions.into_iter().map(HeapActionDto::from).collect(),
+        // Whether agents prepare new notes is set only in a build that has agents.
+        allowed_actions: view
+            .allowed_actions
+            .into_iter()
+            .filter(|action| cfg!(feature = "agents") || *action != HeapAction::SetAgentsPrepare)
+            .map(HeapActionDto::from)
+            .collect(),
     }
 }
 
@@ -125,6 +132,11 @@ async fn update_heap(
     IfMatch(expected): IfMatch,
     ApiJson(body): ApiJson<HeapPatchDto>,
 ) -> Result<Json<HeapDto>, ApiError> {
+    // A build without agents offers no such setting, so a body that sets it is refused like any field the caller may
+    // not change.
+    if !cfg!(feature = "agents") && body.agents_prepare.is_some() {
+        return Err(ServiceError::Forbidden(Permission::ConfigureHeap).into());
+    }
     let view = state
         .services
         .update_heap(path.principal, path.heap.heap_id, to_heap_patch(&body)?, expected)

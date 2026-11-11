@@ -9,7 +9,9 @@ use api_types::common::{
 };
 use api_types::turns::TurnDto;
 use domain::Timestamp;
-use domain::due::{describe_ago, describe_date, describe_due, group_closed};
+use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
+use domain::permission::ItemAction;
+use domain::turn::goal_for;
 use jiff::tz::TimeZone;
 use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
 use utoipa::IntoParams;
@@ -31,6 +33,8 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
     let closed_at = item.state.closed_at();
+    // What a turn opened now would go to: for an open item, in a build that has agents.
+    let next_goal = (cfg!(feature = "agents") && closed_at.is_none()).then(|| goal_for(&item).into());
     ItemDto {
         id: *item.id.as_uuid(),
         key: item.key.to_string(),
@@ -84,15 +88,28 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .collect()
         }),
         waits_for_you: view.waits_for_you,
-        turn: view.turn.map(to_turn_dto),
+        turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
+        next_goal,
         with_agent: view.with_agent,
         version: item.version.get(),
-        allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+        // Sending an item to an agent and taking it back are offered only in a build that has agents.
+        allowed_actions: view
+            .allowed_actions
+            .into_iter()
+            .filter(|action| {
+                cfg!(feature = "agents") || !matches!(action, ItemAction::SendToAgent | ItemAction::TakeBack)
+            })
+            .map(ItemActionDto::from)
+            .collect(),
     }
 }
 
-pub(crate) fn to_turn_dto(view: TurnView) -> TurnDto {
-    TurnDto::new(&view.turn, view.opened_by.as_ref().map(UserRefDto::from))
+pub(crate) fn to_turn_dto(view: TurnView, as_of: Timestamp, tz: &TimeZone) -> TurnDto {
+    TurnDto::new(
+        &view.turn,
+        view.opened_by.as_ref().map(UserRefDto::from),
+        describe_since(view.turn.opened_at, as_of, tz),
+    )
 }
 
 pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZone) -> QuestionDto {

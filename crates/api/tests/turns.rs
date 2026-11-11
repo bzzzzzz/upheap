@@ -138,6 +138,11 @@ async fn sending_opens_a_turn_and_leaves_the_items_version_alone() -> Result<()>
     expect_that!(turn["source"], eq(&json!("go_ahead")));
     expect_that!(turn["opened_by"]["display_name"], eq(&json!("Tester")));
     expect_that!(turn["opened_at"].is_i64(), eq(true));
+    expect_that!(
+        turn["opened_label"].as_str().is_some_and(|label| label.contains(':')),
+        eq(true)
+    );
+    expect_that!(before["next_goal"], eq(&json!("with_context")));
     expect_that!(sent.body["with_agent"], eq(&json!(true)));
     expect_that!(sent.body["version"], eq(&before["version"]));
     expect_that!(sent.body["waits_for_you"], eq(&json!(false)));

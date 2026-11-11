@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { ClosedGroup, Goal, Item, ItemState, Kind, Need, Size, Stage } from "../api/client";
+import type { ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
 
 export const SIZES: readonly Size[] = ["s", "m", "l", "xl"];
 
@@ -37,17 +37,6 @@ export const GOAL_LABELS: Record<Goal, string> = {
   defined: "defined",
   done: "done",
 };
-
-/**
- * Where a turn sent now would go: the next stable state of the item. The server works it out when the turn opens and
- * stores it (`turn.goal`); this only tells the Send form what that will be, by the same rule: a note as written goes
- * to with context, a note with context or a task not yet defined to defined, and a defined task to done.
- */
-export function nextGoal(item: Pick<Item, "kind" | "stage">): Goal {
-  if (item.kind === "task" && item.stage === "defined") return "done";
-  if (item.kind === "note" && item.stage !== "with_context" && item.stage !== "defined") return "with_context";
-  return "defined";
-}
 
 export const STATE_LABELS: Record<ItemState, string> = {
   open: "Open",

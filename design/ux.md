@@ -149,7 +149,7 @@ it; when only the heap's other settings changed, the message says so and Save ag
 Cancel give focus back to Edit. The local build has no Context card.
 
 The **Agents** card, under Context, has a switch, "Agents prepare new notes", with the line "Each note added here is
-sent to an agent to fill in its context, then comes back to you." It saves as it is turned. Only an admin sees the
+sent to an agent to fill in its context, then comes back to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
 switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
 "off". The local build has no Agents card.
 
@@ -338,7 +338,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     done"; "A line for the agent (optional)"; Send and Cancel. Send acts at once, closes the form, gives focus to
     Take back and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back without
     asking or a second toast. With an agent the block says "With an agent since 14:02" (the time today, else the
-    date, "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
+    date as the server words it: "yesterday", "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
     "Prepared on add" for a note the heap's setting sent. If the item waits for the person it reads "An agent is
     waiting for your answer, going to: …". **Take back** asks first, "Take this back from the agent? It stops, and
     what it changed stays.", inline on a wide screen and in a sheet on a phone, and gives focus to Send to an agent

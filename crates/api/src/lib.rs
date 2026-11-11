@@ -32,6 +32,7 @@ mod request_id;
 mod steps;
 mod tags;
 mod teams;
+#[cfg(feature = "agents")]
 mod turns;
 #[cfg(feature = "accounts")]
 mod users;
@@ -178,6 +179,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(users::routes())
         .merge(invites::routes())
         .merge(me::sign_ins::routes());
+    // Turns are for a build that has agents.
+    #[cfg(feature = "agents")]
+    let v1 = v1.merge(turns::routes());
     let v1 = v1
         .merge(me::routes())
         .merge(due_choices::routes())
@@ -186,7 +190,6 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(steps::routes())
         .merge(tags::routes())
         .merge(teams::routes())
-        .merge(turns::routes())
         .merge(heaps::routes())
         .merge(views::routes())
         .merge(parameters::routes())

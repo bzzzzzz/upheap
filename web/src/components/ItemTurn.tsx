@@ -1,13 +1,12 @@
-import { localDatabase } from "#local-database";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
-import type { HeapRef, Item, Reach, Turn } from "../api/client";
-import { useHeap, useSendToAgent, useTakeBack } from "../api/queries";
+import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
+import { useSendToAgent, useTakeBack } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
-import { GOAL_LABELS, isClosed, nextGoal } from "./labels";
+import { GOAL_LABELS } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import { Sheet } from "./Sheet";
@@ -24,23 +23,14 @@ const fieldClass =
 
 const TAKE_BACK_QUESTION = "Take this back from the agent? It stops, and what it changed stays.";
 
-/** When the turn opened: the time today, else the date, in the client's time zone. */
-function sinceLabel(openedAt: number, now = new Date()) {
-  const at = new Date(openedAt);
-  const sameDay = at.toDateString() === now.toDateString();
-  return new Intl.DateTimeFormat(
-    "en-GB",
-    sameDay ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short" },
-  ).format(at);
-}
-
 /**
  * Who has the item (ux.md, The item): the person, or an agent, and the person's way to hand it over or take it back.
- * Only on an open item in an active heap, and not in the local build, which has no agents.
+ * The server decides when there is one to show: an agent has the item, or the person may send it or take it back. A
+ * closed item, an archived heap, a reader and the local build, which has no agents, have none of these.
  */
 export function ItemTurn({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
-  const heap = useHeap(heapRef);
-  if (localDatabase || isClosed(item.state) || !heap.data || heap.data.archived_at !== null) return null;
+  const offered = item.allowed_actions.includes("send_to_agent") || item.allowed_actions.includes("take_back");
+  if (!item.turn && !offered) return null;
   return <WhoHasIt heapRef={heapRef} item={item} />;
 }
 
@@ -78,7 +68,7 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
         focusNext.current = "take-back";
         setForm(false);
         setToast({
-          message: `Sent to an agent, going to: ${GOAL_LABELS[saved.turn?.goal ?? nextGoal(item)]}.`,
+          message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
           // Undo is a take back, recorded in the item's history, with no second toast.
           undo: () => void takeBack.mutateAsync(saved).then(undefined, failed),
         });
@@ -186,7 +176,7 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
           )}
         </div>
       )}
-      {!turn && (
+      {!turn && item.next_goal && (
         <PopoverSheet
           title="Send to an agent"
           triggerRef={sendButton}
@@ -195,7 +185,7 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
           placement="bottom start"
         >
           <SendForm
-            item={item}
+            goal={item.next_goal}
             pending={send.isPending}
             onSend={(reach, line) => void sendNow(reach, line)}
             onCancel={() => setForm(false)}
@@ -219,7 +209,7 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
       <p className="text-sm">
         {item.waits_for_you
           ? `An agent is waiting for your answer, going to: ${goal}.`
-          : `With an agent since ${sinceLabel(turn.opened_at)}, going to: ${goal}${turn.reach === "all_the_way" ? ", all the way" : ""}`}
+          : `With an agent since ${turn.opened_label}, going to: ${goal}${turn.reach === "all_the_way" ? ", all the way" : ""}`}
       </p>
       {turn.line && <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">“{turn.line}”</p>}
       {turn.source === "prepare" && <p className="text-xs text-muted">Prepared on add</p>}
@@ -232,19 +222,18 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
  * the item leaves it alone, and closing the form throws it away. A defined task has one way to go, to done.
  */
 function SendForm({
-  item,
+  goal,
   pending,
   onSend,
   onCancel,
 }: {
-  item: Item;
+  goal: Goal;
   pending: boolean;
   onSend: (reach: Reach, line: string) => void;
   onCancel: () => void;
 }) {
   const [reach, setReach] = useState<Reach>("one");
   const [line, setLine] = useState("");
-  const goal = nextGoal(item);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSend(goal === "done" ? "one" : reach, line);

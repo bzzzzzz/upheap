@@ -201,6 +201,8 @@ function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: 
       {canSet ? (
         <Switch
           isSelected={on}
+          // Read-only while it saves, so a second turn can't send the old version; unlike disabled, it keeps focus.
+          isReadOnly={update.isPending}
           onChange={(agentsPrepare) => update.mutate({ heap, patch: { agents_prepare: agentsPrepare } })}
           className="group mt-3 flex min-h-9 items-center gap-3 text-sm font-medium outline-none pointer-coarse:min-h-11"
         >

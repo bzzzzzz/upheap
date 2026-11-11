@@ -1561,6 +1561,7 @@ export interface components {
             key: string;
             kind: components["schemas"]["Kind"];
             need: components["schemas"]["Need"];
+            next_goal: null | components["schemas"]["Goal"];
             /**
              * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
              *     by parameter name.
@@ -2433,6 +2434,11 @@ export interface components {
              */
             opened_at: number;
             opened_by?: null | components["schemas"]["UserRef"];
+            /**
+             * @description When the turn opened, in the client's time zone: the time today ("14:02"), else the date ("yesterday",
+             *     "3 Nov"). Computed for the response, like the labels beside other times.
+             */
+            opened_label: string;
             reach: components["schemas"]["Reach"];
             source: components["schemas"]["TurnSource"];
         };

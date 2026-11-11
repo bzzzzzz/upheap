@@ -642,13 +642,20 @@ impl Services {
         };
         // Starting or closing an item takes it back from the agent first, and closing withdraws its open questions;
         // each has its own entry, written before the item's so the history reads in the order things happened.
+        let mut turns_taken_back = 0_usize;
+        let mut questions_withdrawn = 0_usize;
         if edited.state.kind() == StateKind::InProgress && current.state.kind() != StateKind::InProgress {
-            self.take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Started, now)
-                .await?;
+            turns_taken_back = self
+                .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Started, now)
+                .await?
+                .into();
         } else if edited.is_closed() && !current.is_closed() {
-            self.take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Closed, now)
-                .await?;
-            self.withdraw_open_questions(&txn, &access.heap, principal, &current, now)
+            turns_taken_back = self
+                .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Closed, now)
+                .await?
+                .into();
+            questions_withdrawn = self
+                .withdraw_open_questions(&txn, &access.heap, principal, &current, now)
                 .await?;
         }
         let saved =
@@ -671,7 +678,7 @@ impl Services {
         let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), "item updated");
+        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, "item updated");
         Ok(view)
     }
 
@@ -711,7 +718,8 @@ impl Services {
     }
 
     /// Withdraws every open question of `item`, which is being closed: each gets its next version and a
-    /// `question_withdrawn` entry. Answered questions stay as they are. The caller holds the heap lock.
+    /// `question_withdrawn` entry. Answered questions stay as they are. Says how many it withdrew. The caller holds
+    /// the heap lock.
     async fn withdraw_open_questions(
         &self,
         txn: &store::DatabaseTransaction,
@@ -719,8 +727,9 @@ impl Services {
         principal: Principal,
         item: &Item,
         now: Timestamp,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<usize, ServiceError> {
         let questions = store::questions::list_questions_locking(txn, item.id).await?;
+        let mut withdrawn_count = 0;
         for question in questions.iter().filter(|q| q.state() == QuestionState::Open) {
             let withdrawn = question.withdraw(principal.user_id, now);
             store::questions::update_question(txn, &withdrawn, question.version)
@@ -738,8 +747,9 @@ impl Services {
                 now,
             );
             store::audit::insert_audit_entry(txn, &entry).await?;
+            withdrawn_count += 1;
         }
-        Ok(())
+        Ok(withdrawn_count)
     }
 }
 

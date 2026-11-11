@@ -105,9 +105,9 @@ pub(crate) fn describe_reply(question: &Question) -> Value {
 /// The question withdrawn when its item was closed, for its `question_withdrawn` entry.
 pub(crate) fn describe_withdrawal(question: &Question) -> Value {
     json!({
-        "number": question.number.get(),
-        "text": question.text.as_str(),
-        "why": "closed",
+        "question": question.number.get(),
+        "question_text": question.text.as_str(),
+        "why": TakeBackWhy::Closed.code(),
     })
 }
 

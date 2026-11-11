@@ -9,7 +9,9 @@
 //!
 //! `heaps.agents_prepare` is off for the heaps that exist; the default fills existing rows, and the store always
 //! writes the column. A question is withdrawn exactly when `withdrawn_at` is set; its `state` column says
-//! `withdrawn` then, so the queries for open questions need no new test.
+//! `withdrawn` then, so the queries for open questions need no new test. Closing an item now withdraws its open
+//! questions, so the ones left open on items already closed are withdrawn here, at the item's `closed_at` and by
+//! no one, and reopening such an item doesn't bring them back.
 //!
 //! As with `items.closed_by`, SQLite gets the foreign key on the added column itself, since it can't add a
 //! constraint to an existing table, and MySQL and Postgres get a named constraint.
@@ -167,6 +169,16 @@ impl MigrationTrait for Migration {
                 )
                 .await?;
         }
+        manager
+            .get_connection()
+            .execute_unprepared(
+                "UPDATE item_questions \
+                 SET state = 'withdrawn', \
+                     withdrawn_at = (SELECT items.closed_at FROM items WHERE items.id = item_questions.item_id) \
+                 WHERE state = 'open' AND item_id IN \
+                     (SELECT id FROM items WHERE state IN ('done', 'wont_do') AND closed_at IS NOT NULL)",
+            )
+            .await?;
         Ok(())
     }
 }

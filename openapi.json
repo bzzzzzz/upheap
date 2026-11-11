@@ -6953,6 +6953,7 @@
           "created_label",
           "waits_for_you",
           "turn",
+          "next_goal",
           "with_agent",
           "version",
           "allowed_actions"
@@ -7088,6 +7089,17 @@
           },
           "need": {
             "$ref": "#/components/schemas/Need"
+          },
+          "next_goal": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Goal",
+                "description": "The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item\nis sent. `null` on a closed item and in a build that has no agents."
+              }
+            ]
           },
           "parameters": {
             "type": "array",
@@ -9237,7 +9249,8 @@
           "reach",
           "goal",
           "source",
-          "opened_at"
+          "opened_at",
+          "opened_label"
         ],
         "properties": {
           "goal": {
@@ -9265,6 +9278,10 @@
                 "description": "Who sent the item, or added the note in a heap that prepares them. `null` when it can't be traced."
               }
             ]
+          },
+          "opened_label": {
+            "type": "string",
+            "description": "When the turn opened, in the client's time zone: the time today (\"14:02\"), else the date (\"yesterday\",\n\"3 Nov\"). Computed for the response, like the labels beside other times."
           },
           "reach": {
             "$ref": "#/components/schemas/Reach"

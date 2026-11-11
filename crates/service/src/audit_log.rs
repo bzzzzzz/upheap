@@ -13,7 +13,7 @@ use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
-use domain::turn::{Goal, Reach, TurnSource};
+use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
 use serde_json::{Map, Value};
@@ -386,7 +386,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 46] = [
+const FIELD_ORDER: [&str; 44] = [
     "step",
     "step_title",
     "step_context",
@@ -400,8 +400,6 @@ const FIELD_ORDER: [&str; 46] = [
     "question_step",
     "reply",
     "reply_comment",
-    "number",
-    "text",
     "reach",
     "goal",
     "line",
@@ -541,8 +539,6 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "question_step" => "Step",
         "reply" => "Reply",
         "reply_comment" => "Comment",
-        "number" => "Question",
-        "text" => "Question text",
         "reach" => "Reach",
         "goal" => "Goal",
         "line" => "Line",
@@ -591,11 +587,11 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "step" => value.get("title")?.as_str()?.to_owned(),
         "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
         // A question is named by its number, as `q2`, after its item's key.
-        "question" | "number" => format!("q{}", value.as_u64()?),
+        "question" => format!("q{}", value.as_u64()?),
         "reach" => describe_reach(Reach::from_code(value.as_str()?)?).to_owned(),
         "goal" => describe_goal(Goal::from_code(value.as_str()?)?).to_owned(),
         "source" => describe_turn_source(TurnSource::from_code(value.as_str()?)?).to_owned(),
-        "why" => describe_why(value.as_str()?)?.to_owned(),
+        "why" => describe_why(TakeBackWhy::from_code(value.as_str()?)?).to_owned(),
         "question_kind" => describe_question_kind(QuestionKind::from_code(value.as_str()?)?).to_owned(),
         "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
@@ -679,13 +675,12 @@ const fn describe_turn_source(source: TurnSource) -> &'static str {
 }
 
 /// Why a turn was taken back, or a question withdrawn, as the entry's `why` records it.
-fn describe_why(code: &str) -> Option<&'static str> {
-    match code {
-        "take_back" => Some("Taken back"),
-        "started" => Some("Started"),
-        "closed" => Some("Closed"),
-        "heap_archived" => Some("Heap archived"),
-        _ => None,
+const fn describe_why(why: TakeBackWhy) -> &'static str {
+    match why {
+        TakeBackWhy::TakeBack => "Taken back",
+        TakeBackWhy::Started => "Started",
+        TakeBackWhy::Closed => "Closed",
+        TakeBackWhy::HeapArchived => "Heap archived",
     }
 }
 

@@ -767,11 +767,11 @@ async fn closing_withdraws_the_open_questions_and_leaves_the_answered_one_alone(
     );
     expect_that!(
         entries[5].1,
-        eq(&json!({ "number": 1, "text": "First?", "why": "closed" }))
+        eq(&json!({ "question": 1, "question_text": "First?", "why": "closed" }))
     );
     expect_that!(
         entries[6].1,
-        eq(&json!({ "number": 3, "text": "Third?", "why": "closed" }))
+        eq(&json!({ "question": 3, "question_text": "Third?", "why": "closed" }))
     );
     Ok(())
 }

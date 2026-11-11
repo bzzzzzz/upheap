@@ -119,6 +119,8 @@ pub enum TakeBackWhy {
 }
 
 impl TakeBackWhy {
+    pub const ALL: [Self; 4] = [Self::TakeBack, Self::Started, Self::Closed, Self::HeapArchived];
+
     /// Stable code used in audit diffs. Never renamed.
     pub const fn code(self) -> &'static str {
         match self {
@@ -127,6 +129,10 @@ impl TakeBackWhy {
             Self::Closed => "closed",
             Self::HeapArchived => "heap_archived",
         }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|why| why.code() == code)
     }
 }
 

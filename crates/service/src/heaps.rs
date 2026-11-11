@@ -372,10 +372,15 @@ impl Services {
         };
         // Archiving takes back every open turn of the heap, one entry each: nothing is done in an archived heap, so
         // no agent keeps an item in it. Unarchiving opens nothing.
+        let mut turns_taken_back = 0_usize;
         if archived {
             for turn in store::turns::list_open_turns_in_heap_locking(&txn, heap_id).await? {
-                self.take_back_turn(&txn, &current, principal, &turn, TakeBackWhy::HeapArchived, now)
-                    .await?;
+                if self
+                    .take_back_turn(&txn, &current, principal, &turn, TakeBackWhy::HeapArchived, now)
+                    .await?
+                {
+                    turns_taken_back += 1;
+                }
             }
         }
         let action = if archived {
@@ -390,7 +395,7 @@ impl Services {
         let saved = self
             .save_heap(txn, principal, &changed, current.version, action, diff, now)
             .await?;
-        tracing::info!(%heap_id, user_id = %principal.user_id, archived, "heap archive state changed");
+        tracing::info!(%heap_id, user_id = %principal.user_id, archived, turns_taken_back, "heap archive state changed");
         Ok(to_heap_view(saved, role, open_count))
     }
 

@@ -12,8 +12,8 @@ default = ["accounts", "agents", "trace-and-timeout"]
 # Registration, sign-in, session cookies, OAuth and bearer tokens for the CLI, team management and user lookup.
 # Without it every request is the local build's one user.
 accounts = ["dep:form_urlencoded", "service/accounts"]
-# What only the server build has for agents (the stage of an item, and later turns, runs and questions). The local
-# build leaves it out.
+# What only the server build has for agents: the stage of an item, sending an item to an agent and taking it back (the
+# `/turn` routes and their actions), and the heap setting that agents prepare new notes. The local build leaves it out.
 agents = []
 # The request span and the request timeout, which need `Instant::now()` and tokio's timer. The browser has neither.
 trace-and-timeout = ["tower-http/trace", "tower-http/timeout"]

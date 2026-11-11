@@ -108,19 +108,27 @@ pub struct TurnDto {
     pub source: TurnSourceDto,
     /// UTC milliseconds.
     pub opened_at: i64,
+    /// When the turn opened, in the client's time zone: the time today ("14:02"), else the date ("yesterday",
+    /// "3 Nov"). Computed for the response, like the labels beside other times.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub opened_label: String,
     /// Who sent the item, or added the note in a heap that prepares them. `null` when it can't be traced.
     pub opened_by: Option<UserRefDto>,
 }
 
 impl TurnDto {
-    /// The open `turn`, with the user who opened it if the caller knows them.
-    pub fn new(turn: &Turn, opened_by: Option<UserRefDto>) -> Self {
+    /// The open `turn`, with the user who opened it if the caller knows them, and `opened_label` for when it opened.
+    pub fn new(turn: &Turn, opened_by: Option<UserRefDto>, opened_label: String) -> Self {
         Self {
             reach: turn.reach.into(),
             goal: turn.goal.into(),
             line: turn.line.as_ref().map(|line| line.as_str().to_owned()),
             source: turn.source.into(),
             opened_at: turn.opened_at.as_millis(),
+            opened_label,
             opened_by,
         }
     }

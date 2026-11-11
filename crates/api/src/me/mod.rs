@@ -107,7 +107,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             kind: item.kind.into(),
             // As on an item: the stage is shown only in a build that has agents.
             stage: cfg!(feature = "agents").then(|| item.stage.into()),
-            turn: row.turn.map(to_turn_dto),
+            turn: row.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
             with_agent: row.with_agent,
         },
         heap: WaitingHeapDto {
