@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
-use domain::item::{Item, Need, NewItem, Title};
+use domain::item::{Item, Kind, Need, NewItem, Title};
 use domain::step::{NewStep, Step, StepNumber, StepPatch, StepPlacement, StepProgress, StepState};
 use domain::team::Team;
 use domain::text::{Context as StepContext, Name};
@@ -55,6 +55,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId)> {
     };
     store::heaps::insert_heap(&db, &heap, now()?).await?;
     let fields = NewItem {
+        kind: Kind::Note,
         title: Title::parse("Rotate the certs")?,
         description: None,
         need: Need::Expected,

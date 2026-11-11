@@ -165,7 +165,7 @@ What it is not:
 2. An agent's turn takes one item from one stable state to the next and stops there. An item with an open question
    is in the middle of a turn, and the agent carries on once the person has answered.
 3. The person sends an item on by telling the agent to go one stable state further, or all the way to done.
-4. A heap can be set so agents prepare what's added without being asked: each new note is taken one stable state
+4. A heap can be set so agents prepare what's added without being asked: each new item is taken one stable state
    forward. Preparing never includes doing a defined task; that always needs the person's word.
 5. Outside those two cases an agent never picks an item up. At any moment an item is with the person or with an
    agent, and the list shows which.

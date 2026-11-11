@@ -1456,6 +1456,7 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
+            kind?: null | components["schemas"]["Kind"];
             /** @description Required: every item says how much it's needed. */
             need: components["schemas"]["Need"];
             /** @description An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use. */
@@ -4484,7 +4485,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
             422: {
                 headers: {
                     [name: string]: unknown;

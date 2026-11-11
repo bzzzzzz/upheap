@@ -117,14 +117,15 @@ while the subject is fresh in their mind. Use `upheap item add ... -q` to get th
 
 A person who asks for a task usually has a definition in mind. Get it written down.
 
-1. Add it with a title that names the result.
+1. Add it with `--task` and a title that names the result. If the guide shows no `--task` on `upheap item add`,
+   add it without and run `upheap item to-task <key>`.
 2. Collect its context from what the person said, this conversation, and the files or links at hand: what the
    problem is, what done looks like, what's already known or decided, and where the work lives. Write it to a file
    and attach it with `upheap item edit <key> --context-file <file>`. Facts and the person's decisions only; mark
    anything you inferred as an assumption.
 3. Ask what's missing to do the work: done-when, scope, constraints. Update the context with the answers.
-4. Add steps only when the parts are known, from the person or plainly from the context: `upheap item to-task`,
-   then `upheap step add` for each. Don't invent a breakdown to have one.
+4. Add steps only when the parts are known, from the person or plainly from the context: `upheap step add` for each.
+   Don't invent a breakdown to have one.
 
 ### Asking
 

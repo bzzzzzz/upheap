@@ -167,6 +167,37 @@ async fn item_add_quiet_is_the_key_and_json_is_the_created_item() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn item_add_task_adds_a_task_in_one_call() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let human = cli.run(&["item", "add", "Rotate certs", "--task"]).await;
+    let quiet = cli.run(&["item", "add", "Quiet task", "--task", "-q"]).await;
+    let json = cli.run(&["item", "add", "Json task", "--task", "--json"]).await;
+    let note = cli.run(&["item", "add", "Just a note"]).await;
+
+    // Assert
+    expect_that!(human.exited(0), eq(true));
+    expect_that!(human.stdout, starts_with("Added task \"Rotate certs\" ("));
+    let human_key = added_key(&human.stdout).context("a key in the output")?;
+    expect_that!(server.read_item(&ada, HEAP, human_key).await?["kind"], eq("task"));
+    let quiet_key = quiet.stdout.strip_suffix('\n').context("a line")?;
+    expect_that!(quiet_key.len(), eq(5));
+    expect_that!(server.read_item(&ada, HEAP, quiet_key).await?["kind"], eq("task"));
+    let created: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(created["kind"], eq("task"));
+    expect_that!(created["version"], eq(1));
+    expect_that!(note.stdout, starts_with("Added \"Just a note\" ("));
+    let note_key = added_key(&note.stdout).context("a key in the output")?;
+    expect_that!(server.read_item(&ada, HEAP, note_key).await?["kind"], eq("note"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_add_reads_a_description_from_stdin_without_its_last_newline() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

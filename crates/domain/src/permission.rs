@@ -643,6 +643,7 @@ mod tests {
         use std::collections::{BTreeMap, BTreeSet};
 
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: crate::item::Need::Expected,

@@ -1,7 +1,7 @@
 //! `upheap item add <title>`: add an item to a heap, and say where it landed.
 
-use api_types::common::{ItemDto, NeedDto, SizeDto};
-use api_types::items::{CreateItemDto, RankedListDto, RankedQuery};
+use api_types::common::{ItemDto, KindDto, NeedDto, SizeDto};
+use api_types::items::{CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery};
 use api_types::tags::TagListDto;
 use clap::Args;
 use uuid::Uuid;
@@ -37,6 +37,9 @@ pub struct AddArgs {
     /// A tag of the heap, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
+    /// Add it as a task, not a note
+    #[arg(long)]
+    pub task: bool,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -74,6 +77,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     let body = CreateItemDto {
         title: args.title,
         description,
+        kind: args.task.then_some(KindDto::Task),
         need: args.need.unwrap_or(NeedDto::NiceToHave),
         effort: args.effort,
         impact: args.impact,
@@ -81,7 +85,24 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         tag_ids,
         parameter_values: None,
     };
-    let added = api.post::<ItemDto>(&["items"], &body).await?;
+    let mut added = api.post::<ItemDto>(&["items"], &body).await?;
+    if needs_task_patch(args.task, &added.value) {
+        // A server from before `kind` on create ignored it and added a note.
+        let patch = ItemPatchDto {
+            kind: Some(KindDto::Task),
+            ..ItemPatchDto::default()
+        };
+        let key = added.value.key.clone();
+        added = match api.patch_item(&key, added.value.version, &patch).await {
+            Ok(task) => task,
+            Err(err) => {
+                out.note(&format!(
+                    "error: {key} was added as a note; make it a task with `upheap item to-task {key}`"
+                ))?;
+                return Err(err);
+            }
+        };
+    }
     match out.mode() {
         Mode::Json => out.json(&added.body)?,
         Mode::Quiet => out.line(&added.value.key)?,
@@ -99,6 +120,12 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         }
     }
     Ok(())
+}
+
+/// Whether the server added a note although `--task` asked for a task, which only a server older than `kind` on
+/// create does.
+fn needs_task_patch(task: bool, added: &ItemDto) -> bool {
+    task && added.kind != KindDto::Task
 }
 
 /// Where an item sits in the list: its place in a group of `of` items.
@@ -134,7 +161,8 @@ fn find_landing(list: &RankedListDto, id: Uuid) -> Option<Landing> {
 }
 
 fn added_line(item: &ItemDto, landing: Option<&Landing>) -> String {
-    let head = format!("Added \"{}\" ({})", item.title, item.key);
+    let what = if item.kind == KindDto::Task { "task " } else { "" };
+    let head = format!("Added {what}\"{}\" ({})", item.title, item.key);
     let Some(landing) = landing else {
         return format!("{head}.");
     };
@@ -164,15 +192,19 @@ mod tests {
 
     use super::*;
 
-    #[gtest]
-    fn the_line_says_where_the_item_landed_and_in_which_group() -> googletest::Result<()> {
-        let item: ItemDto = serde_json::from_value(serde_json::json!({
+    fn sample_item(kind: &str) -> googletest::Result<ItemDto> {
+        Ok(serde_json::from_value(serde_json::json!({
             "id": Uuid::new_v4(), "key": "k3x9a", "heap_id": Uuid::new_v4(), "title": "Rotate certs",
-            "description": null, "kind": "note", "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
+            "description": null, "kind": kind, "stage": "as_written", "stage_choices": [], "state": "open", "blocked_by": null, "need": "expected",
             "effort": null, "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0,
             "created_label": "today", "created_by": null, "closed_at": null, "closed_label": null,
             "closed_by": null, "closed_group": null, "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
-        }))?;
+        }))?)
+    }
+
+    #[gtest]
+    fn the_line_says_where_the_item_landed_and_in_which_group() -> googletest::Result<()> {
+        let item = sample_item("note")?;
         let at = |position, of, group| Landing { position, of, group };
 
         expect_that!(
@@ -188,6 +220,35 @@ mod tests {
             eq("Added \"Rotate certs\" (k3x9a), now 2nd of 2 blocked.")
         );
         expect_that!(added_line(&item, None), eq("Added \"Rotate certs\" (k3x9a)."));
+        Ok(())
+    }
+
+    #[gtest]
+    fn the_line_says_task_for_a_task() -> googletest::Result<()> {
+        let item = sample_item("task")?;
+
+        expect_that!(
+            added_line(
+                &item,
+                Some(&Landing {
+                    position: 4,
+                    of: 31,
+                    group: Group::Ranked
+                })
+            ),
+            eq("Added task \"Rotate certs\" (k3x9a), now 4th of 31.")
+        );
+        Ok(())
+    }
+
+    #[gtest]
+    fn a_note_is_patched_only_when_a_task_was_asked_for() -> googletest::Result<()> {
+        let note = sample_item("note")?;
+        let task = sample_item("task")?;
+
+        expect_that!(needs_task_patch(true, &note), eq(true));
+        expect_that!(needs_task_patch(true, &task), eq(false));
+        expect_that!(needs_task_patch(false, &note), eq(false));
         Ok(())
     }
 

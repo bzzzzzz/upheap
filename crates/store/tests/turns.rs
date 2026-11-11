@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
-use domain::item::{Item, Need, NewItem, Title};
+use domain::item::{Item, Kind, Need, NewItem, Title};
 use domain::team::Team;
 use domain::text::Name;
 use domain::turn::{Reach, Turn, TurnLine, TurnSource};
@@ -69,6 +69,7 @@ async fn world() -> Result<World> {
 
 async fn item(world: &World, key: &str) -> Result<Item> {
     let fields = NewItem {
+        kind: Kind::Note,
         title: Title::parse("Rotate the certs")?,
         description: None,
         need: Need::Expected,

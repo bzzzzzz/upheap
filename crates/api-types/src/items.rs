@@ -184,6 +184,9 @@ pub struct CreateItemDto {
     pub description: Option<String>,
     /// Required: every item says how much it's needed.
     pub need: NeedDto,
+    /// `"note"` when left out or `null`. A new item is always as written, so a task starts at that stage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<KindDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<SizeDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -210,6 +213,7 @@ impl CreateItemDto {
                 .transpose()?
                 .flatten(),
             need: self.need.into(),
+            kind: self.kind.map(Kind::try_from).transpose()?.unwrap_or(Kind::Note),
             effort: self.effort.map(Into::into),
             impact: self.impact.map(Into::into),
             due: self.due.as_ref().map(|due| due.to_due(tz)).transpose()?,
@@ -360,6 +364,7 @@ mod tests {
             title: "Rotate certs".to_owned(),
             description: None,
             need: NeedDto::NiceToHave,
+            kind: None,
             effort: Some(SizeDto::S),
             impact: None,
             due: Some(DueInputDto {
@@ -380,6 +385,40 @@ mod tests {
                 r#"{"title":"Rotate certs","need":"nice_to_have","effort":"s","due":{"date":"2027-03-12","firm":true}}"#
             )
         )
+    }
+
+    #[gtest]
+    fn create_item_writes_a_kind_only_when_it_is_set() -> googletest::Result<()> {
+        // Arrange
+        let task: CreateItemDto = serde_json::from_str(r#"{"title":"Rotate certs","need":"expected","kind":"task"}"#)?;
+
+        // Act
+        let written = serde_json::to_string(&task)?;
+
+        // Assert
+        verify_that!(
+            written,
+            eq(r#"{"title":"Rotate certs","need":"expected","kind":"task"}"#)
+        )
+    }
+
+    #[gtest]
+    fn a_new_item_is_a_note_unless_the_kind_says_task() -> googletest::Result<()> {
+        // Arrange
+        let read = |json: &str| serde_json::from_str::<CreateItemDto>(json);
+        let tz = TimeZone::UTC;
+
+        // Act
+        let task = read(r#"{"title":"A","need":"expected","kind":"task"}"#)?.to_new_item(&tz)?;
+        let unset = read(r#"{"title":"A","need":"expected"}"#)?.to_new_item(&tz)?;
+        let null = read(r#"{"title":"A","need":"expected","kind":null}"#)?.to_new_item(&tz)?;
+        let unknown = read(r#"{"title":"A","need":"expected","kind":"reminder"}"#)?.to_new_item(&tz);
+
+        // Assert
+        verify_that!(task.kind, eq(Kind::Task))?;
+        verify_that!(unset.kind, eq(Kind::Note))?;
+        verify_that!(null.kind, eq(Kind::Note))?;
+        verify_that!(unknown.is_err(), eq(true))
     }
 
     #[gtest]

@@ -35,15 +35,15 @@ The usual order of work
 2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
    with its context, steps, and questions with their answers.
 3. Write what you learn where the next reader will look: the item's context, not a comment in your reply.
-   Work with parts is a task: `upheap item to-task`, then a step for each part, ticked as each one is finished.
+   Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
+   then a step for each part, ticked as each one is finished.
 4. When a call is the person's to make, don't guess: ask with `upheap question ask`, with --choice for each answer
    when you can list them, or with `upheap question request` for something only they can do. The item then waits
    for them, and their answer reads back in `upheap item show`.
 
 Example
-  upheap item add "Rotate the staging certs" --need expected --effort s -q    # prints the key, say k3x9a
+  upheap item add "Rotate the staging certs" --need expected --effort s --task -q    # prints the key, say k3x9a
   upheap item edit k3x9a --context-file context.md
-  upheap item to-task k3x9a
   upheap step add k3x9a "Order the new certificate"
   upheap step add k3x9a "Install it in staging"
   upheap question ask k3x9a "Which CA do we use?" --choice "Internal" --choice "Let's Encrypt"

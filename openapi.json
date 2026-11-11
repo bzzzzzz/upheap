@@ -2324,7 +2324,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
+            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7124,6 +7124,17 @@
               },
               {
                 "$ref": "#/components/schemas/Size"
+              }
+            ]
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Kind",
+                "description": "`\"note\"` when left out or `null`. A new item is always as written, so a task starts at that stage."
               }
             ]
           },

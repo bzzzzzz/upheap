@@ -322,6 +322,7 @@ mod tests {
 
     fn item(kind: Kind, stage: Stage) -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,
@@ -438,6 +439,7 @@ mod run_tests {
 
     fn note() -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,

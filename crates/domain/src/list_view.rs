@@ -290,7 +290,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::item::{Due, Need, NewItem, Title};
+    use crate::item::{Due, Kind, Need, NewItem, Title};
     use crate::{HeapId, ItemId, Timestamp};
 
     fn tag(n: u128) -> TagId {
@@ -299,6 +299,7 @@ mod tests {
 
     fn item(n: u128) -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse(&format!("Item {n}")).expect("valid"),
             description: None,
             need: Need::Expected,

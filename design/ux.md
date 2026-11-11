@@ -340,7 +340,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Take back and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back without
     asking or a second toast. With an agent the block says "With an agent since 14:02" (the time today, else the
     date as the server words it: "yesterday", "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
-    "Prepared on add" for a note the heap's setting sent. If the item waits for the person it reads "An agent is
+    "Prepared on add" for an item the heap's setting sent. If the item waits for the person it reads "An agent is
     waiting for your answer, going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons:
     Retry and Take back are in Waits for you. After Retry it reads "With an agent since …" again and the focus goes
     to the item. **Take back** asks first, "Take this back from the agent? It stops, and
