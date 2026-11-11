@@ -6,7 +6,7 @@ import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
-import { focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
+import { ComingRow, focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
@@ -17,11 +17,11 @@ import { useToast } from "../components/UndoToast";
 import {
   DEFAULT_MODES,
   filterCount,
+  listQueryFor,
   matchesSearch,
   pinnedTitle,
   placeOf,
   SHOWN_STATES,
-  toListQuery,
   viewChanges,
   type ListSearch,
 } from "../components/listView";
@@ -42,8 +42,9 @@ export function HeapPage({
   view: ListSearch;
   onViewChange: (view: ListSearch) => void;
 }) {
-  const list = useRankedList(heapRef, toListQuery(view));
   const { search, setSearch } = useListSearch();
+  // While text is searched for, the reminders to come are asked for too, so the search finds them.
+  const list = useRankedList(heapRef, listQueryFor(view, search));
   const [panel, setPanel] = useState<Panel>(null);
   const changeState = useChangeState(heapRef, list.data);
   // A change to an item an agent has asks first: every way of changing a state in the list goes through it.
@@ -250,9 +251,9 @@ function ListPage({
   }
 
   const { heap, hidden_count, unfiltered_count } = list.data;
-  const { pinned, ranked, blocked } = shownSections(list.data, search);
+  const { pinned, ranked, blocked, coming } = shownSections(list.data, search);
   const listed = everyEntry(list.data).length;
-  const shown = pinned.length + ranked.length + blocked.length;
+  const shown = pinned.length + ranked.length + blocked.length + coming.length;
   const narrowed = search.trim() !== "" || filters > 0;
   const rows = (entries: RankedItem[], pinned?: boolean) => (
     <ItemList
@@ -310,6 +311,22 @@ function ListPage({
         {ranked.length > 0 && <Section title={pinned.length > 0 ? "Up next" : undefined}>{rows(ranked)}</Section>}
 
         {blocked.length > 0 && <Section title="Blocked">{rows(blocked)}</Section>}
+
+        {coming.length > 0 && (
+          <Section title="Reminders to come">
+            <ol className="flex flex-col">
+              {coming.map((item) => (
+                <ComingRow
+                  key={item.id}
+                  item={item}
+                  heapRef={heapRef}
+                  selected={item.key === itemKey}
+                  itemOpen={itemKey !== undefined}
+                />
+              ))}
+            </ol>
+          </Section>
+        )}
       </div>
 
       {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
@@ -317,10 +334,18 @@ function ListPage({
   );
 }
 
-/** The list's groups, narrowed by the search text. */
+/**
+ * The list's groups, narrowed by the search text. `coming` is the reminders to come the server sent: all of them when
+ * the view shows them, the ones searched for otherwise.
+ */
 function shownSections(list: RankedList, search: string) {
   const matching = (group: RankedItem[]) => group.filter((entry) => matchesSearch(entry, search));
-  return { pinned: matching(list.pinned), ranked: matching(list.ranked), blocked: matching(list.blocked) };
+  return {
+    pinned: matching(list.pinned),
+    ranked: matching(list.ranked),
+    blocked: matching(list.blocked),
+    coming: list.reminders.filter((item) => matchesSearch({ item }, search)),
+  };
 }
 
 const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => [
@@ -362,7 +387,7 @@ function HiddenNote({
 
 function Section({ title, children }: { title: string | undefined; children: ReactNode }) {
   return (
-    <section className="mt-6">
+    <section aria-label={title} className="mt-6">
       {title && <h2 className="mb-1 px-2 text-xs font-semibold tracking-wide text-muted uppercase">{title}</h2>}
       {children}
     </section>
