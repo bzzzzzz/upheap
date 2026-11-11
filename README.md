@@ -91,8 +91,8 @@ docker compose exec upheap upheap-server user reset-link sam
 
 It prints the link, `{BASE_URL}/reset/…`, alone on stdout, and on stderr whom it is for and when it ends (it works
 once, for 60 minutes). A newer link for the same user cancels the earlier one. It runs no migrations and starts no
-server. Exit codes: `0` made, `2` wrong arguments, `3` no such user, `5` the database can't be reached, `1` anything
-else.
+server, so run it once the server of the same version has started. Exit codes: `0` made, `2` wrong arguments, `3` no
+such user, `5` the database can't be reached, `1` anything else, a database a version behind included.
 
 ## The CLI
 

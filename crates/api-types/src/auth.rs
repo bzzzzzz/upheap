@@ -54,9 +54,16 @@ impl From<ResetLinkState> for PasswordResetStateDto {
 #[schema(as = PasswordReset)]
 pub struct PasswordResetDto {
     pub state: PasswordResetStateDto,
-    /// The display name of the account the link is for, as it is now, in every state.
+    /// The account the link is for, as it is now. Only while the link works: an old link found later in a chat
+    /// mustn't keep naming the account.
+    pub account: Option<PasswordResetAccountDto>,
+}
+
+/// The account a working reset link is for.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PasswordResetAccount)]
+pub struct PasswordResetAccountDto {
     pub display_name: String,
-    /// The username of that account.
     pub username: String,
 }
 

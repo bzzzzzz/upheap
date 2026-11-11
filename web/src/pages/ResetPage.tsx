@@ -1,7 +1,7 @@
 import { useRouter } from "@tanstack/react-router";
 import { useRef, useState, type FormEvent } from "react";
 
-import { ApiProblem, type PasswordReset } from "../api/client";
+import { ApiProblem, type PasswordReset, type PasswordResetAccount } from "../api/client";
 import { usePasswordReset, useResetPassword } from "../api/queries";
 import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
@@ -52,10 +52,13 @@ export function ResetPage({ token }: { token: string }) {
   }
   return (
     <AuthCard>
-      {data.state === "working" ? (
-        <SetPassword reset={data} token={token} />
-      ) : (
+      {data.state !== "working" ? (
         <NotWorking state={data.state} moveFocus={moveFocus} />
+      ) : data.account ? (
+        <SetPassword account={data.account} token={token} />
+      ) : (
+        // The server names the account of every working link; this is only for an answer that breaks that.
+        <Retry error={error} onRetry={() => void reset.refetch()} />
       )}
     </AuthCard>
   );
@@ -97,7 +100,7 @@ function isPasswordProblem(error: Error | null): error is ApiProblem {
  * The working link: the new password's input. Setting it signs the browser in as the link's user, replaces the reset
  * page in the history and lands on `/` with a toast.
  */
-function SetPassword({ reset, token }: { reset: PasswordReset; token: string }) {
+function SetPassword({ account, token }: { account: PasswordResetAccount; token: string }) {
   const router = useRouter();
   const set = useResetPassword(token);
   const [password, setPassword] = useState("");
@@ -133,7 +136,7 @@ function SetPassword({ reset, token }: { reset: PasswordReset; token: string }) 
       <div className="flex flex-col gap-1">
         <Heading moveFocus={KEEP_FOCUS}>Set a new password</Heading>
         <p className="text-sm text-ink-soft">
-          for {reset.display_name} (@{reset.username})
+          for {account.display_name} (@{account.username})
         </p>
       </div>
       <Field

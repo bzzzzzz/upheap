@@ -1,6 +1,7 @@
 //! `upheap-server user reset-link <username or email>`: makes a one-time password reset link for a user and prints
-//! it. It runs beside a server that has already migrated the database, so it doesn't migrate and doesn't listen. Only
-//! the link goes to stdout, so it can be piped; everything else, logs included, goes to stderr.
+//! it. It runs beside a server that has already migrated the database, so it doesn't migrate (it stops when the
+//! database is behind this version) and doesn't listen. Only the link goes to stdout, so it can be piped; everything
+//! else, logs included, goes to stderr.
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -58,6 +59,18 @@ pub async fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(EXIT_DATABASE_UNREACHABLE);
         }
     };
+    // The server migrates as it starts. Before it has, on this version, the tables this needs may not exist yet.
+    match store::pending_migrations(&db).await {
+        Ok(0) => {}
+        Ok(_) => {
+            eprintln!("The database isn't up to date for this version. Start the server on this version first.");
+            return ExitCode::from(EXIT_UNEXPECTED);
+        }
+        Err(error) => {
+            eprintln!("can't read the database's migrations: {error}");
+            return ExitCode::from(EXIT_DATABASE_UNREACHABLE);
+        }
+    }
     let services = crate::build_services(&config, db);
     let login = login.trim();
     match services.create_password_reset_link(login).await {

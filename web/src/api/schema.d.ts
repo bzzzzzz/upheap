@@ -334,9 +334,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Opens a reset link: whose account it is for and whether it works, was used, was cancelled or has ended. Anyone
-         *     holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is cancelled
-         *     when a newer one is made for the account, or when its password is changed while the link works.
+         * Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is
+         *     for. Anyone holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is
+         *     cancelled when a newer one is made for the account, or when its password is changed while the link works.
          */
         get: operations["open_password_reset"];
         put?: never;
@@ -2032,10 +2032,12 @@ export interface components {
         };
         /** @description A password reset link, as whoever holds it sees it. */
         PasswordReset: {
-            /** @description The display name of the account the link is for, as it is now, in every state. */
-            display_name: string;
+            account?: null | components["schemas"]["PasswordResetAccount"];
             state: components["schemas"]["PasswordResetState"];
-            /** @description The username of that account. */
+        };
+        /** @description The account a working reset link is for. */
+        PasswordResetAccount: {
+            display_name: string;
             username: string;
         };
         /**

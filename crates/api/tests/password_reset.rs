@@ -82,7 +82,7 @@ async fn a_working_link_names_the_account_and_a_stranger_gets_not_found() -> Res
     expect_that!(opened.status, eq(StatusCode::OK));
     expect_that!(
         opened.body,
-        eq(&json!({ "state": "working", "display_name": "Ada Lovelace", "username": "ada" }))
+        eq(&json!({ "state": "working", "account": { "display_name": "Ada Lovelace", "username": "ada" } }))
     );
     expect_that!(unknown.status, eq(StatusCode::NOT_FOUND));
     expect_that!(wrong_length.status, eq(StatusCode::NOT_FOUND));
@@ -184,7 +184,8 @@ async fn a_link_ends_after_sixty_minutes() -> Result<()> {
     // Assert
     expect_that!(state(&just_before), eq("working"));
     expect_that!(state(&opened), eq("ended"));
-    expect_that!(opened.body["display_name"], eq(&json!("Tester")));
+    expect_that!(just_before.body["account"]["display_name"], eq(&json!("Tester")));
+    expect_that!(opened.body["account"], eq(&json!(null)));
     expect_that!(used.status, eq(StatusCode::CONFLICT));
     expect_that!(problem_code(&used), eq("reset_link_ended"));
     expect_that!(old.status, eq(StatusCode::OK));
@@ -315,7 +316,7 @@ async fn a_browser_signed_in_as_someone_else_is_signed_in_as_the_links_user() ->
     let bob_still = me(&app, &bob_session).await?;
 
     // Assert
-    expect_that!(opened.body["username"], eq(&json!("ada")));
+    expect_that!(opened.body["account"]["username"], eq(&json!("ada")));
     expect_that!(done.status, eq(StatusCode::OK));
     expect_that!(cookie, not(eq(&bob_session)));
     expect_that!(own.body["user"]["username"], eq(&json!("ada")));

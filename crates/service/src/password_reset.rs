@@ -174,8 +174,9 @@ impl Services {
             .ok_or_else(|| corrupt_link(link.user_id, "link has no user"))?)
     }
 
-    /// The id of the user's personal team, the team their account entries are recorded in. Its slug is the username.
-    async fn load_personal_team(&self, user: &User) -> Result<domain::TeamId, ServiceError> {
+    /// The id of the user's personal team, the team their account entries are recorded in (as `UserRegistered` is).
+    /// Its slug is the username.
+    pub(crate) async fn load_personal_team(&self, user: &User) -> Result<domain::TeamId, ServiceError> {
         let team = store::teams::find_team_by_slug(&self.db, &user.username)
             .await?
             .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;

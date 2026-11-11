@@ -343,16 +343,13 @@ impl Services {
         }
         let new = new.to_owned();
         let new_hash = run_blocking(move || hash_password(&new)).await?;
-        // The username is the slug of the personal team, the team `UserRegistered` is recorded in.
-        let personal_team = store::teams::find_team_by_slug(&self.db, &user.username)
-            .await?
-            .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;
+        let personal_team = self.load_personal_team(&user).await?;
 
         let now = self.now();
         let old_hash = session.to_hash();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         // The personal team first, as `update_display_name` takes team rows before the user's.
-        store::teams::lock_team(&txn, personal_team.id).await?;
+        store::teams::lock_team(&txn, personal_team).await?;
         // The caller's session may have ended while the password was being checked.
         if store::sessions::find_session_user(&txn, &old_hash, now)
             .await?
@@ -375,7 +372,7 @@ impl Services {
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
             principal,
-            personal_team.id,
+            personal_team,
             AuditAction::PasswordChanged,
             EntityType::User,
             *user.id.as_uuid(),

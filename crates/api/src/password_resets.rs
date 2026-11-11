@@ -2,13 +2,13 @@
 //! with a server command (README, Resetting a password). The local build has no passwords, so it leaves these out
 //! (the `accounts` feature).
 
-use api_types::auth::{PasswordResetDto, PasswordResetStateDto, SetPasswordRequestDto};
+use api_types::auth::{PasswordResetAccountDto, PasswordResetDto, PasswordResetStateDto, SetPasswordRequestDto};
 use api_types::me::UserDto;
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
-use domain::password_reset::ResetToken;
+use domain::password_reset::{ResetLinkState, ResetToken};
 use serde::Deserialize;
 use service::ServiceError;
 use service::password_reset::ResetLinkView;
@@ -41,16 +41,19 @@ fn parse_token(params: ResetTokenParams) -> Result<ResetToken, ServiceError> {
 }
 
 fn to_password_reset_dto(view: ResetLinkView) -> PasswordResetDto {
-    PasswordResetDto {
-        state: PasswordResetStateDto::from(view.state),
+    let account = (view.state == ResetLinkState::Working).then(|| PasswordResetAccountDto {
         display_name: view.user.display_name.as_str().to_owned(),
         username: view.user.username.to_string(),
+    });
+    PasswordResetDto {
+        state: PasswordResetStateDto::from(view.state),
+        account,
     }
 }
 
-/// Opens a reset link: whose account it is for and whether it works, was used, was cancelled or has ended. Anyone
-/// holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is cancelled
-/// when a newer one is made for the account, or when its password is changed while the link works.
+/// Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is
+/// for. Anyone holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is
+/// cancelled when a newer one is made for the account, or when its password is changed while the link works.
 #[utoipa::path(get, path = "/password-resets/{token}", tag = "auth",
     params(ResetTokenParams),
     responses(

@@ -1038,7 +1038,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Opens a reset link: whose account it is for and whether it works, was used, was cancelled or has ended. Anyone\nholding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is cancelled\nwhen a newer one is made for the account, or when its password is changed while the link works.",
+        "summary": "Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is\nfor. Anyone holding the token may; no sign-in is needed, and a session cookie or bearer token is ignored. A link is\ncancelled when a newer one is made for the account, or when its password is changed while the link works.",
         "operationId": "open_password_reset",
         "parameters": [
           {
@@ -8385,21 +8385,38 @@
         "type": "object",
         "description": "A password reset link, as whoever holds it sees it.",
         "required": [
-          "state",
+          "state"
+        ],
+        "properties": {
+          "account": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PasswordResetAccount",
+                "description": "The account the link is for, as it is now. Only while the link works: an old link found later in a chat\nmustn't keep naming the account."
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PasswordResetState"
+          }
+        }
+      },
+      "PasswordResetAccount": {
+        "type": "object",
+        "description": "The account a working reset link is for.",
+        "required": [
           "display_name",
           "username"
         ],
         "properties": {
           "display_name": {
-            "type": "string",
-            "description": "The display name of the account the link is for, as it is now, in every state."
-          },
-          "state": {
-            "$ref": "#/components/schemas/PasswordResetState"
+            "type": "string"
           },
           "username": {
-            "type": "string",
-            "description": "The username of that account."
+            "type": "string"
           }
         }
       },
