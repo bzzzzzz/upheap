@@ -19,6 +19,7 @@ import { compactButtonClass } from "./buttons";
 import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
 import { changeLabel, STAGE_LABELS } from "./labels";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
  * What the ⋯ beside the item's state buttons holds, each only when the server allows it (ux.md, The item §6): Won't
@@ -47,13 +48,13 @@ export function ItemMore({
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [confirming, setConfirming] = useState(false);
+  const focusAfterRender = useFocusAfterRender();
   const entries = moreEntries(item);
   if (!entries) return null;
 
   const closeConfirm = () => {
     setConfirming(false);
-    // After the dialog has gone, which would otherwise put the focus back where the menu's own entry was.
-    window.setTimeout(() => triggerRef.current?.focus());
+    focusAfterRender(() => triggerRef.current);
   };
   const changeStage = (keys: Selection) => {
     const [picked] = keys === "all" ? [] : [...keys];

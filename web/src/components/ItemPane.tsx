@@ -34,6 +34,7 @@ import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { Sheet, SheetChoice } from "./Sheet";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 import { TagPicker } from "./TagPicker";
 import { useUserName } from "./userName";
 
@@ -259,14 +260,14 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const impactId = useId();
   const dueId = useId();
   const [openSheet, setOpenSheet] = useState<string | null>(null);
+  const focusAfterRender = useFocusAfterRender();
   // Set when the Due sheet was opened from "Held back by", whose row goes away once the due date is set.
   const dueFromHeldBack = useRef(false);
   const setSheet = (field: string | null) => {
     setOpenSheet(field);
     if (field === null && dueFromHeldBack.current) {
       dueFromHeldBack.current = false;
-      // After the sheet's own focus restore, which would land on the row that is gone: two frames on.
-      requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(dueId)?.focus()));
+      focusAfterRender(() => document.getElementById(dueId));
     }
   };
 
@@ -289,8 +290,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   };
   const cancelAsking = () => {
     setAskState(null);
-    // After the confirm has gone, which had the focus.
-    window.setTimeout(() => asker.current?.focus());
+    focusAfterRender(() => asker.current);
   };
   const confirmAsking = askState !== null && (
     <TakeBackAndChange
