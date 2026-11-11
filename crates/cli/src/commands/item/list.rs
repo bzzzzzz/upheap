@@ -1,11 +1,15 @@
-//! `upheap item list [<text>]`: the heap's ranked list as the web app shows it, or its closed items with `--closed`.
+//! `upheap item list [<text>]`: the heap's ranked list as the web app shows it, its closed items with `--closed`, or
+//! every heap's items in one ranked list with `--all-heaps`.
 
 use api_types::common::{ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto};
-use api_types::items::{ClosedItemsDto, ClosedQuery, RankedListDto, RankedQuery};
+use api_types::items::{
+    AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery, ClosedItemsDto, ClosedQuery, RankedListDto, RankedQuery,
+};
 use api_types::list_view::{BlockedLayoutDto, ListViewDto, SortDto, StateModeDto};
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
 use api_types::views::SavedViewListDto;
+use api_types::waiting::WaitingHeapDto;
 use clap::Args;
 
 use crate::client::NO_QUERY;
@@ -26,6 +30,9 @@ pub struct ListArgs {
     /// server's list as it came
     #[arg(value_name = "TEXT", conflicts_with = "json")]
     pub text: Option<String>,
+    /// Every open item of every heap you can use, in one ranked list, each with its heap. In place of one heap's list
+    #[arg(long, conflicts_with_all = ["name", "view", "tag", "closed", "sort", "sort_parameter"])]
+    pub all_heaps: bool,
     /// Closed items, most recently closed first, in place of the ranked list
     #[arg(long, conflicts_with_all = [
         "view", "tag", "need", "effort", "impact", "sort", "sort_parameter", "open", "in_progress", "blocked",
@@ -72,6 +79,9 @@ pub struct ListArgs {
 }
 
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
+    if args.all_heaps {
+        return list_across_heaps(&args, app, out).await;
+    }
     if let (Some(sort), Some(_)) = (args.sort, &args.sort_parameter)
         && sort != SortDto::Parameter
     {
@@ -112,6 +122,39 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
             }
         }
         Mode::Human => render_ranked(&list.value, &query, args.text.as_deref(), out)?,
+    }
+    Ok(())
+}
+
+/// `--all-heaps`: `GET /me/items` with the view flags given. `--quiet` prints `team/heap/key`, which every item
+/// command accepts.
+async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
+    let client = app.client(app.server(&args.shared)?)?;
+    let token = app.access_token(&client).await?;
+    let query = AcrossHeapsQuery {
+        as_of: None,
+        open: args.open,
+        in_progress: args.in_progress,
+        blocked: args.blocked,
+        blocked_layout: args.blocked_layout,
+        effort: args.effort.clone(),
+        impact: args.impact.clone(),
+        need: args.need.clone(),
+    };
+    let list = client
+        .get::<AcrossHeapsListDto>(&["me", "items"], &query, &token)
+        .await?;
+    let text = args.text.as_deref();
+    match out.mode() {
+        Mode::Json => out.json(&list.body)?,
+        Mode::Quiet => {
+            for row in across_groups(&list.value).into_iter().flat_map(|(_, rows)| rows) {
+                if keeps(&row.entry.item, text) {
+                    out.line(&format!("{}/{}", heap_label(&row.heap), row.entry.item.key))?;
+                }
+            }
+        }
+        Mode::Human => render_across_heaps(&list.value, &query, text, out)?,
     }
     Ok(())
 }
@@ -185,8 +228,29 @@ fn groups(list: &RankedListDto) -> [(&'static str, &[RankedItemDto]); 3] {
     ]
 }
 
+/// The groups of the list across heaps in the order they're shown, with their headings.
+fn across_groups(list: &AcrossHeapsListDto) -> [(&'static str, &[AcrossHeapsItemDto]); 3] {
+    [
+        ("Pinned", &list.pinned),
+        ("Ranked", &list.ranked),
+        ("Blocked", &list.blocked),
+    ]
+}
+
+/// `team/heap`, the name every item command takes for a heap.
+fn heap_label(heap: &WaitingHeapDto) -> String {
+    format!("{}/{}", heap.team_slug, heap.slug)
+}
+
 fn keeps(item: &ItemDto, text: Option<&str>) -> bool {
     text.is_none_or(|text| matches_text(item, text))
+}
+
+/// A row to print: its position in the list shown, the entry, and the heap's `team/heap` when the list spans heaps.
+struct ShownRow<'a> {
+    position: u32,
+    entry: &'a RankedItemDto,
+    heap: Option<String>,
 }
 
 fn render_ranked(
@@ -195,71 +259,130 @@ fn render_ranked(
     text: Option<&str>,
     out: &mut Output,
 ) -> std::io::Result<()> {
-    let shown: Vec<(&str, Vec<&RankedItemDto>)> = groups(list)
+    let shown = groups(list)
         .into_iter()
         .map(|(heading, entries)| {
-            (
-                heading,
-                entries.iter().filter(|e| keeps(&e.item, text)).collect::<Vec<_>>(),
-            )
+            let rows = entries.iter().filter(|e| keeps(&e.item, text)).map(|entry| ShownRow {
+                position: entry.position,
+                entry,
+                heap: None,
+            });
+            (heading, rows.collect::<Vec<_>>())
         })
-        .filter(|(_, entries)| !entries.is_empty())
         .collect();
+    let empty = match text {
+        Some(text) => format!("No items in {} match \"{text}\".", list.heap.name),
+        None => format!("No items in {}.", list.heap.name),
+    };
+    let view = query.to_view().ok().map(|view| ListViewDto::from(&view));
+    let footers: Vec<String> = hidden_footer(list.hidden_count, view).into_iter().collect();
+    render_groups(shown, &empty, &footers, out)
+}
+
+fn render_across_heaps(
+    list: &AcrossHeapsListDto,
+    query: &AcrossHeapsQuery,
+    text: Option<&str>,
+    out: &mut Output,
+) -> std::io::Result<()> {
+    let mut returned = 0;
+    let shown = across_groups(list)
+        .into_iter()
+        .map(|(heading, rows)| {
+            returned += rows.len();
+            let rows = rows
+                .iter()
+                .filter(|row| keeps(&row.entry.item, text))
+                .map(|row| ShownRow {
+                    position: row.position,
+                    entry: &row.entry,
+                    heap: Some(heap_label(&row.heap)),
+                });
+            (heading, rows.collect::<Vec<_>>())
+        })
+        .collect();
+    let empty = match text {
+        Some(text) => format!("No items in your heaps match \"{text}\"."),
+        None => "No items in your heaps.".to_owned(),
+    };
+    let view = query.to_view().ok().map(|view| ListViewDto::from(&view));
+    let mut footers: Vec<String> = hidden_footer(list.hidden_count, view).into_iter().collect();
+    if usize::try_from(list.count).is_ok_and(|count| count > returned) {
+        footers.push(format!(
+            "Showing the first {returned} of {}; narrow it with --need, --effort or --impact.",
+            list.count
+        ));
+    }
+    render_groups(shown, &empty, &footers, out)
+}
+
+/// The table of `shown` groups under their headings, or `empty` when no group has a row, then the footers.
+fn render_groups(
+    shown: Vec<(&'static str, Vec<ShownRow<'_>>)>,
+    empty: &str,
+    footers: &[String],
+    out: &mut Output,
+) -> std::io::Result<()> {
+    let shown: Vec<_> = shown.into_iter().filter(|(_, rows)| !rows.is_empty()).collect();
     if shown.is_empty() {
-        out.line(&match text {
-            Some(text) => format!("No items in {} match \"{text}\".", list.heap.name),
-            None => format!("No items in {}.", list.heap.name),
-        })?;
+        out.line(empty)?;
     }
     let mut rows = Vec::new();
-    for (_, entries) in &shown {
-        rows.extend(entries.iter().map(|entry| ranked_row(entry)));
+    for (_, group) in &shown {
+        rows.extend(group.iter().map(ranked_row));
     }
     let mut lines = out.render_table(&rows).into_iter();
     // Headings only when there's more than the ranked group to tell apart.
     let headed = shown.len() > 1 || shown.first().is_some_and(|(heading, _)| *heading != "Ranked");
-    for (heading, entries) in &shown {
+    for (heading, group) in &shown {
         if headed {
             out.line_toned(heading, Tone::Strong)?;
         }
-        for line in lines.by_ref().take(entries.len()) {
+        for line in lines.by_ref().take(group.len()) {
             out.table_line("", &line)?;
         }
     }
-    if let Some(footer) = hidden_footer(list.hidden_count, query) {
+    if !footers.is_empty() {
         out.line("")?;
-        out.line_toned(&footer, Tone::Dim)?;
+        for footer in footers {
+            out.line_toned(footer, Tone::Dim)?;
+        }
     }
     Ok(())
 }
 
-fn ranked_row(entry: &RankedItemDto) -> Vec<Cell> {
+fn ranked_row(row: &ShownRow<'_>) -> Vec<Cell> {
+    let entry = row.entry;
     let item = &entry.item;
     let reason = entry
         .contributors
         .first()
         .map(|top| format!("{} ({}%)", top.label, top.share_percent))
         .unwrap_or_default();
-    vec![
-        Cell::toned(entry.position.to_string(), Tone::Dim),
+    let mut cells = vec![
+        Cell::toned(row.position.to_string(), Tone::Dim),
         Cell::toned(item.key.clone(), Tone::Strong),
+    ];
+    cells.extend(row.heap.clone().map(Cell::new));
+    cells.extend([
         Cell::new(shorten(&item.title, TITLE_WIDTH)),
         Cell::new(state_text(item.state)),
         Cell::new(sizes_text(item.effort, item.impact)),
         due_cell(item),
         Cell::new(tags_text(item)),
         Cell::toned(reason, Tone::Dim),
-    ]
+    ]);
+    cells
 }
 
 /// "3 items hidden by their state (blocked); show them with --blocked shown", when the view hides any.
-fn hidden_footer(hidden: u32, query: &RankedQuery) -> Option<String> {
+fn hidden_footer(hidden: u32, view: Option<ListViewDto>) -> Option<String> {
     if hidden == 0 {
         return None;
     }
     let noun = if hidden == 1 { "item" } else { "items" };
-    // The view the server used: the query with the API's defaults for what it left out.
-    let Ok(view) = query.to_view().map(|view| ListViewDto::from(&view)) else {
+    // `view` is the one the server used: the query with the API's defaults for what it left out.
+    let Some(view) = view else {
         return Some(format!("{hidden} {noun} hidden by their state."));
     };
     let hidden_states: Vec<(&str, &str)> = [
@@ -362,21 +485,21 @@ mod tests {
 
     #[gtest]
     fn the_footer_names_the_hidden_states_and_the_flags_that_show_them() {
-        let default = RankedQuery::default();
-        let open_hidden = RankedQuery {
+        let view = |query: RankedQuery| query.to_view().ok().map(|view| ListViewDto::from(&view));
+        let open_hidden = view(RankedQuery {
             open: Some(StateModeDto::Hidden),
             ..RankedQuery::default()
-        };
+        });
 
-        expect_that!(hidden_footer(0, &default), none());
+        expect_that!(hidden_footer(0, view(RankedQuery::default())), none());
         expect_that!(
-            hidden_footer(1, &default),
+            hidden_footer(1, view(RankedQuery::default())),
             some(eq(
                 "1 item hidden by their state (blocked); show them with --blocked shown."
             ))
         );
         expect_that!(
-            hidden_footer(3, &open_hidden),
+            hidden_footer(3, open_hidden),
             some(eq(
                 "3 items hidden by their state (open, blocked); show them with --open shown --blocked shown."
             ))

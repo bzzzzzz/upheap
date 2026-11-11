@@ -17,6 +17,7 @@ use crate::common::{
     double_option, never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
+use crate::waiting::WaitingHeapDto;
 
 /// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
 /// pinned, open items shown, blocked items hidden, by priority.
@@ -104,6 +105,108 @@ impl RankedQuery {
         }
         .to_view()
     }
+}
+
+/// The view of the list across all heaps (`GET /me/items`). Every parameter is optional; leaving them all out gives
+/// the default view: in-progress items pinned, open items shown, blocked items hidden, by priority. The list has no
+/// single heap, so it takes no `tag`, `param`, `sort` or `sort_parameter`, and refuses any parameter it doesn't know.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+#[serde(deny_unknown_fields)]
+pub struct AcrossHeapsQuery {
+    /// The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time.
+    pub as_of: Option<i64>,
+    /// Where open items go. Defaults to `shown`.
+    pub open: Option<StateModeDto>,
+    /// Where in-progress items go. Defaults to `pinned`.
+    pub in_progress: Option<StateModeDto>,
+    /// Where blocked items go. Defaults to `hidden`.
+    pub blocked: Option<StateModeDto>,
+    /// Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.
+    pub blocked_layout: Option<BlockedLayoutDto>,
+    /// Keep items with any of these efforts, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub effort: Vec<SizeDto>,
+    /// Keep items with any of these impacts, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<SizeDto>>, style = Form, explode = false)]
+    pub impact: Vec<SizeDto>,
+    /// Keep items with any of these needs, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<NeedDto>>, style = Form, explode = false)]
+    pub need: Vec<NeedDto>,
+}
+
+impl AcrossHeapsQuery {
+    /// The view the query asks for, with defaults for what it leaves out: sorted by priority, with no tag or
+    /// parameter filter.
+    pub fn to_view(&self) -> Result<ListView, ValidationError> {
+        ListViewInputDto {
+            open: self.open,
+            in_progress: self.in_progress,
+            blocked: self.blocked,
+            blocked_layout: self.blocked_layout,
+            sort: None,
+            sort_parameter: None,
+            tag: Vec::new(),
+            effort: self.effort.clone(),
+            impact: self.impact.clone(),
+            need: self.need.clone(),
+            param: Vec::new(),
+        }
+        .to_view()
+    }
+}
+
+/// The non-closed items of all the caller's heaps in one ranked list, grouped as the view says.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsList)]
+pub struct AcrossHeapsListDto {
+    /// The time every heap was ranked at (UTC milliseconds). Send it back as `as_of` to keep the order stable.
+    pub as_of: i64,
+    /// How many rows the view lists in all groups, whether or not they all fit under the cap of 500 rows.
+    pub count: u32,
+    /// Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in
+    /// its own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same
+    /// for now.
+    pub pinned: Vec<AcrossHeapsItemDto>,
+    /// Items in shown states, including blocked items when they're mixed in.
+    pub ranked: Vec<AcrossHeapsItemDto>,
+    /// Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden.
+    pub blocked: Vec<AcrossHeapsItemDto>,
+    /// How many items the filters keep but are left out because their state is hidden, over all heaps.
+    pub hidden_count: u32,
+    /// How many items are in progress, over all heaps, whatever the view and its filters leave out.
+    pub in_progress_count: u32,
+}
+
+/// A row of the list across heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsItem)]
+pub struct AcrossHeapsItemDto {
+    /// 1-based position within its group across all heaps.
+    pub position: u32,
+    /// The heap the item is in, and its team.
+    pub heap: WaitingHeapDto,
+    /// The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`
+    /// names what holds it back in that heap.
+    pub entry: RankedItemDto,
 }
 
 /// A comma-separated query value, such as `tag=a,b`. An empty value is an empty list.

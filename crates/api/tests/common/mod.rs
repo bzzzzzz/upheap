@@ -164,6 +164,20 @@ impl TestApp {
         Ok((waiting.count, waiting.rows.len()))
     }
 
+    /// How many items the list across all heaps counts for the user with `user_id` (default view), and how many rows
+    /// it holds when it is capped at `max_rows`, which the cap's real size makes too many items to make in a test.
+    pub async fn across_heaps_capped(&self, user_id: &str, max_rows: usize) -> Result<(u32, usize)> {
+        let principal = service::Principal {
+            user_id: UserId::from_uuid(user_id.parse()?),
+            run: None,
+        };
+        let list = self
+            .services
+            .list_ranked_across_heaps_capped(principal, None, &domain::list_view::ListView::default(), max_rows)
+            .await?;
+        Ok((list.count, list.pinned.len() + list.ranked.len() + list.blocked.len()))
+    }
+
     /// Sends a request as the app does: with the CSRF and timezone headers.
     pub async fn send(
         &self,

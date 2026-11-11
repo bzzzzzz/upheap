@@ -25,6 +25,7 @@ async fn guide_show_prints_the_commands_and_the_instructions_with_nobody_signed_
         contains_substring("\nitem: Items in a heap\n  upheap item add <TITLE> [heap]: Add an item\n")
     );
     expect_that!(shown.stdout, contains_substring("\nFor agents\n"));
+    expect_that!(shown.stdout, contains_substring("--all-heaps"));
     expect_that!(shown.stdout, ends_with("  upheap item done k3x9a\n"));
     Ok(())
 }

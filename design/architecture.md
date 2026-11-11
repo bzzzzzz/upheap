@@ -107,7 +107,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   position and the question number; heap weights, when they come, multiply the score. It returns at most 500 rows,
   with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
-  `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+  `details` and `reply_comment` are `MEDIUMTEXT` on MySQL. **`GET /me/items`** is the same for the ranked list: one
+  ranking per active heap that has any non-closed item, under the request's view, each heap grouped as its own list
+  groups it, then each group merged across heaps by the same score and tie-break (heap weights, when they come,
+  multiply the score). It returns at most 500 rows, pinned first, with `count` the true total.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
   person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
