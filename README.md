@@ -40,8 +40,8 @@ The design docs are indexed in [design/README.md](design/README.md).
   sign-ins by machine and ends them.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
-  items with the web app's filters and saved views, add, show, edit and move items between states, and list, add and edit
-  tags.
+  items with the web app's filters and saved views, add, show, edit and move items between states, list, add and edit
+  tags, and play the agent: ask for the next item, claim it, and end the run (`work`).
 
 Not yet: OIDC sign-in and invitations.
 
@@ -125,12 +125,19 @@ cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
+cargo run -p cli -- work next                                    # what an agent would work on next, without taking it
+cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
+UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  # with a run, writes are the run's
+UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
+UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
 cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- auth logout
 ```
 
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
-`UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. Exit codes: 0 done, 2 bad command line, 3
+`UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. With `UPHEAP_RUN` set to a run's ID, every
+request is made inside that run: it may write the item's context, steps and questions, make a note a task and start
+it, on the run's own item only, and is refused anything else with exit 3. Exit codes: 0 done, 2 bad command line, 3
 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1 anything else.
 
 ## Develop
