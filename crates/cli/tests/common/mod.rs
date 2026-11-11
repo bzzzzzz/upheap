@@ -215,6 +215,24 @@ impl TestServer {
             .await
     }
 
+    /// Adds a parameter to `ada/personal` as `user`: its name, options in priority order and the IDs of the tags it
+    /// is for. Returns it as the API has it.
+    pub async fn add_parameter(
+        &self,
+        user: &TestUser,
+        name: &str,
+        options: &[&str],
+        tag_ids: &[&Value],
+    ) -> Result<Value> {
+        self.send(
+            user,
+            "POST",
+            "/teams/ada/heaps/personal/parameters",
+            Some(json!({ "name": name, "options": options, "tag_ids": tag_ids })),
+        )
+        .await
+    }
+
     /// The item with `key` in `heap` (`team/heap`), as `user` reads it.
     pub async fn read_item(&self, user: &TestUser, heap: &str, key: &str) -> Result<Value> {
         let (team, heap) = heap.split_once('/').context("heap is team/heap")?;

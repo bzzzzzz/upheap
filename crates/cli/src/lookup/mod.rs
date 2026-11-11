@@ -4,7 +4,7 @@
 use api_types::common::{DueInputDto, ItemDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
-use api_types::parameters::ParameterListDto;
+use api_types::parameters::{OptionDto, ParameterDto, ParameterListDto};
 use api_types::tags::{TagDto, TagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
 use domain::step::StepNumber;
@@ -98,6 +98,13 @@ pub enum LookupError {
     #[error("{heap} has no parameter `{name}`{}", known_list(known))]
     UnknownParameter {
         name: String,
+        heap: String,
+        known: Vec<String>,
+    },
+    #[error("parameter `{parameter}` in {heap} has no option `{name}`{}", known_list(known))]
+    UnknownOption {
+        name: String,
+        parameter: String,
         heap: String,
         known: Vec<String>,
     },
@@ -410,15 +417,41 @@ pub fn find_view<'v>(
 
 /// The ID of the parameter in use that `name` names, by name ignoring case, or by ID.
 pub fn resolve_parameter(name: &str, parameters: &ParameterListDto, heap: &HeapHandle) -> Result<Uuid, LookupError> {
+    find_parameter(name, parameters, heap).map(|parameter| parameter.id)
+}
+
+/// The parameter in use that `name` names, by name ignoring case, or by ID.
+pub fn find_parameter<'p>(
+    name: &str,
+    parameters: &'p ParameterListDto,
+    heap: &HeapHandle,
+) -> Result<&'p ParameterDto, LookupError> {
     parameters
         .parameters
         .iter()
         .find(|parameter| is_named(name, &parameter.name, parameter.id))
-        .map(|parameter| parameter.id)
         .ok_or_else(|| LookupError::UnknownParameter {
             name: name.to_owned(),
             heap: heap.to_string(),
             known: parameters.parameters.iter().map(|p| p.name.clone()).collect(),
+        })
+}
+
+/// The option in use of `parameter` that `name` names, by label ignoring case, or by ID.
+pub fn find_option<'p>(
+    name: &str,
+    parameter: &'p ParameterDto,
+    heap: &HeapHandle,
+) -> Result<&'p OptionDto, LookupError> {
+    parameter
+        .options
+        .iter()
+        .find(|option| is_named(name, &option.label, option.id))
+        .ok_or_else(|| LookupError::UnknownOption {
+            name: name.to_owned(),
+            parameter: parameter.name.clone(),
+            heap: heap.to_string(),
+            known: parameter.options.iter().map(|o| o.label.clone()).collect(),
         })
 }
 

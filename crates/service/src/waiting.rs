@@ -65,6 +65,13 @@ pub struct StuckView {
     pub allowed_actions: Vec<ItemAction>,
 }
 
+/// An active heap the caller may view, with its team and the caller's role in it.
+pub(crate) struct ViewableHeap {
+    pub heap: Heap,
+    pub team: Team,
+    pub role: Role,
+}
+
 /// What a candidate is about, before it is shown.
 enum CandidateSubject {
     Question(domain::question::Question),
@@ -91,6 +98,27 @@ impl Candidate {
 }
 
 impl Services {
+    /// The active heaps of the caller's teams where their role may view the heap, with the team and role, in the
+    /// store's heap order (by name, then ID): the tie-break between heaps of the lists that merge several.
+    pub(crate) async fn list_viewable_heaps(&self, principal: Principal) -> Result<Vec<ViewableHeap>, ServiceError> {
+        let teams = store::teams::list_teams_for_user(&self.db, principal.user_id).await?;
+        let team_ids: Vec<_> = teams.iter().map(|(team, _)| team.id).collect();
+        let team_by_id: HashMap<_, (&Team, Role)> = teams.iter().map(|(team, role)| (team.id, (team, *role))).collect();
+        Ok(store::heaps::list_heaps_for_teams(&self.db, &team_ids)
+            .await?
+            .into_iter()
+            .filter(|heap| !heap.is_archived())
+            .filter_map(|heap| {
+                let (team, role) = *team_by_id.get(&heap.team_id)?;
+                Permission::ViewHeap.is_granted_to(role).then(|| ViewableHeap {
+                    team: team.clone(),
+                    role,
+                    heap,
+                })
+            })
+            .collect())
+    }
+
     /// The open questions on open items, and the items whose agent turn is stuck, in the active heaps of the caller's
     /// teams, ordered by the score of their item in its own heap, highest first (every heap weighs the same for now),
     /// then by heap (by name), the item's position in its heap, a stuck row before the item's questions, and the
@@ -109,19 +137,11 @@ impl Services {
         principal: Principal,
         max_rows: usize,
     ) -> Result<WaitingView, ServiceError> {
-        let teams = store::teams::list_teams_for_user(&self.db, principal.user_id).await?;
-        let team_ids: Vec<_> = teams.iter().map(|(team, _)| team.id).collect();
-        let team_by_id: HashMap<_, (&Team, Role)> = teams.iter().map(|(team, role)| (team.id, (team, *role))).collect();
-        // The store lists heaps by name, then ID, and the order of `heaps` is the tie-break between heaps below.
-        let heaps: Vec<Heap> = store::heaps::list_heaps_for_teams(&self.db, &team_ids)
-            .await?
-            .into_iter()
-            .filter(|heap| {
-                !heap.is_archived()
-                    && team_by_id
-                        .get(&heap.team_id)
-                        .is_some_and(|(_, role)| Permission::ViewHeap.is_granted_to(*role))
-            })
+        let viewable = self.list_viewable_heaps(principal).await?;
+        let heaps: Vec<Heap> = viewable.iter().map(|viewable| viewable.heap.clone()).collect();
+        let team_by_id: HashMap<_, (&Team, Role)> = viewable
+            .iter()
+            .map(|viewable| (viewable.heap.team_id, (&viewable.team, viewable.role)))
             .collect();
         let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
         let mut waiting = store::questions::list_open_questions_on_open_items(&self.db, &heap_ids).await?;

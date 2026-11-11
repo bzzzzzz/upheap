@@ -55,7 +55,7 @@ fn every_command_is_listed_with_its_inputs_and_its_own_flags() {
     expect_that!(
         guide,
         contains_substring(
-            "  upheap item add <TITLE> [heap]: Add an item\n      <TITLE>               What needs doing\n"
+            "  upheap item add <TITLE> [heap]: Add an item\n      <TITLE>                    What needs doing\n"
         )
     );
     expect_that!(
@@ -65,7 +65,7 @@ fn every_command_is_listed_with_its_inputs_and_its_own_flags() {
     expect_that!(
         guide,
         contains_substring(
-            "      --no-description       Clear the item's context (its description) (also --no-context)\n"
+            "      --no-description           Clear the item's context (its description) (also --no-context)\n"
         )
     );
     expect_that!(guide, contains_substring("      --many                 Allow picking"));

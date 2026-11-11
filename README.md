@@ -41,8 +41,8 @@ The design docs are indexed in [design/README.md](design/README.md).
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
   items with the web app's filters and saved views, add, show, edit and move items between states, list, add and edit
-  tags, play the agent: ask for the next item, claim it, and end the run (`work`), and print a guide to every command
-  for an agent to read first.
+  tags, list a heap's parameters and set them on items, play the agent: ask for the next item, claim it, and end
+  the run (`work`), and print a guide to every command for an agent to read first.
 
 Not yet: OIDC sign-in and invitations.
 
@@ -133,6 +133,7 @@ cargo run -p cli -- heap use personal                           # or team/heap
 cargo run -p cli -- heap show                                   # the heap's name and context
 cargo run -p cli -- heap edit --context-file context.md         # or - for stdin, or --no-context
 cargo run -p cli -- item list --effort s,m --tag infra
+cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
@@ -150,6 +151,8 @@ UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  #
 UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
 UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
 cargo run -p cli -- tag add infra --description "Servers and the network"
+cargo run -p cli -- parameter list                              # a heap's parameters and their options
+cargo run -p cli -- item edit k3x9a --parameter Area=Backend    # set one; --no-parameter Area clears it
 cargo run -p cli -- guide show                                  # every command and its flags in one read, with instructions for agents
 cargo run -p cli -- auth logout
 ```

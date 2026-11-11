@@ -88,7 +88,8 @@ impl CliError {
                 | LookupError::UnknownTag { .. }
                 | LookupError::UnknownView { .. }
                 | LookupError::AmbiguousView { .. }
-                | LookupError::UnknownParameter { .. },
+                | LookupError::UnknownParameter { .. }
+                | LookupError::UnknownOption { .. },
             ) => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,

@@ -4,13 +4,15 @@
 use api_types::common::DueInputDto;
 use api_types::common::{ItemDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
+use api_types::parameters::ParameterListDto;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::UsageError;
 use crate::commands::heap_api::{HeapApi, is_not_found, named_heap, resolve_heap_handle};
-use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, match_due_choice};
+use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, find_option, find_parameter, match_due_choice};
 use crate::output::{Cell, Tone};
 use crate::{App, CliError};
 
@@ -163,6 +165,88 @@ pub(super) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
     seen
 }
 
+/// A `--parameter NAME=OPTION` as typed: the parameter and the option, trimmed, each a name or an ID.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParameterSetting {
+    pub parameter: String,
+    pub option: String,
+}
+
+/// Reads `NAME=OPTION`, split at the first `=` so an option may hold one. Both sides are trimmed, as the server
+/// trims names and labels, and neither may be empty.
+pub fn parse_parameter_setting(raw: &str) -> Result<ParameterSetting, String> {
+    let bad = || format!("--parameter takes NAME=OPTION, such as --parameter Area=Backend; got `{raw}`");
+    let (parameter, option) = raw.split_once('=').ok_or_else(bad)?;
+    let (parameter, option) = (parameter.trim(), option.trim());
+    if parameter.is_empty() || option.is_empty() {
+        return Err(bad());
+    }
+    Ok(ParameterSetting {
+        parameter: parameter.to_owned(),
+        option: option.to_owned(),
+    })
+}
+
+/// The patch map for the `--parameter` and `--no-parameter` flags: each parameter's ID to its new option, or to
+/// `None` to clear it. A parameter named twice with different values, or both set and cleared, is a usage error.
+pub(super) fn resolve_parameter_values(
+    set: &[ParameterSetting],
+    clear: &[String],
+    parameters: &ParameterListDto,
+    heap: &HeapHandle,
+) -> Result<BTreeMap<Uuid, Option<Uuid>>, CliError> {
+    let mut values = BTreeMap::new();
+    for setting in set {
+        let parameter = find_parameter(&setting.parameter, parameters, heap)?;
+        let option = find_option(&setting.option, parameter, heap)?;
+        // The same option given twice is kept once, as a repeated --tag is.
+        if values
+            .insert(parameter.id, Some(option.id))
+            .is_some_and(|before| before != Some(option.id))
+        {
+            return Err(UsageError::ParameterTwice {
+                flag: "--parameter",
+                name: parameter.name.clone(),
+            }
+            .into());
+        }
+    }
+    for typed in clear {
+        let parameter = find_parameter(typed.trim(), parameters, heap)?;
+        match values.insert(parameter.id, None) {
+            None => {}
+            Some(Some(_)) => {
+                return Err(UsageError::ParameterAndNoParameter {
+                    name: parameter.name.clone(),
+                }
+                .into());
+            }
+            Some(None) => {
+                return Err(UsageError::ParameterTwice {
+                    flag: "--no-parameter",
+                    name: parameter.name.clone(),
+                }
+                .into());
+            }
+        }
+    }
+    Ok(values)
+}
+
+/// The patch map for the parameter flags, from one read of the heap's parameters; `None` without a flag, so
+/// nothing is read.
+pub(super) async fn parameter_values(
+    set: &[ParameterSetting],
+    clear: &[String],
+    api: &HeapApi<'_>,
+) -> Result<Option<BTreeMap<Uuid, Option<Uuid>>>, CliError> {
+    if set.is_empty() && clear.is_empty() {
+        return Ok(None);
+    }
+    let parameters = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
+    resolve_parameter_values(set, clear, &parameters.value, api.heap).map(Some)
+}
+
 pub(super) fn state_text(state: StateDto) -> &'static str {
     match state {
         StateDto::Open => "open",
@@ -236,6 +320,120 @@ mod tests {
             eq(true)
         );
         expect_that!(is_other_heap(&heap, HeapName::Bare("backlog")), eq(true));
+    }
+
+    #[gtest]
+    fn a_parameter_setting_splits_at_the_first_equals_and_trims() {
+        expect_that!(
+            parse_parameter_setting("Area=Backend"),
+            ok(eq(&setting("Area", "Backend")))
+        );
+        expect_that!(
+            parse_parameter_setting("Area = Back end"),
+            ok(eq(&setting("Area", "Back end")))
+        );
+        expect_that!(
+            parse_parameter_setting("Area=Front=End"),
+            ok(eq(&setting("Area", "Front=End")))
+        );
+    }
+
+    #[gtest]
+    fn a_parameter_setting_needs_both_sides() {
+        for raw in ["Area", "=X", "Area=", " = ", ""] {
+            expect_that!(
+                parse_parameter_setting(raw),
+                err(eq(&format!(
+                    "--parameter takes NAME=OPTION, such as --parameter Area=Backend; got `{raw}`"
+                )))
+            );
+        }
+    }
+
+    fn parameters() -> googletest::Result<ParameterListDto> {
+        let option = |id: u128, label: &str| serde_json::json!({ "id": Uuid::from_u128(id), "label": label });
+        Ok(serde_json::from_value(serde_json::json!({
+            "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },
+            "parameters": [{
+                "id": Uuid::from_u128(1), "heap_id": Uuid::new_v4(), "name": "Area", "weight": 10,
+                "options": [option(11, "Backend"), option(12, "Frontend")], "archived_options": [],
+                "tag_ids": [], "archived_at": null, "version": 1, "allowed_actions": [],
+            }, {
+                "id": Uuid::from_u128(2), "heap_id": Uuid::new_v4(), "name": "Customer", "weight": 10,
+                "options": [option(21, "Acme")], "archived_options": [],
+                "tag_ids": [], "archived_at": null, "version": 1, "allowed_actions": [],
+            }],
+            "archived": [], "allowed_actions": [],
+        }))?)
+    }
+
+    fn personal() -> HeapHandle {
+        HeapHandle {
+            team: "ada".to_owned(),
+            heap: "personal".to_owned(),
+        }
+    }
+
+    fn setting(parameter: &str, option: &str) -> ParameterSetting {
+        ParameterSetting {
+            parameter: parameter.to_owned(),
+            option: option.to_owned(),
+        }
+    }
+
+    #[gtest]
+    fn parameter_flags_become_a_map_of_options_and_cleared_values() -> googletest::Result<()> {
+        let values = resolve_parameter_values(
+            &[setting("area", "frontend")],
+            &["Customer".to_owned()],
+            &parameters()?,
+            &personal(),
+        )?;
+
+        verify_that!(
+            values,
+            unordered_elements_are![
+                (eq(&Uuid::from_u128(1)), some(eq(&Uuid::from_u128(12)))),
+                (eq(&Uuid::from_u128(2)), none())
+            ]
+        )
+    }
+
+    #[gtest]
+    fn a_parameter_named_twice_is_a_usage_error() -> googletest::Result<()> {
+        let parameters = parameters()?;
+        let same_twice = resolve_parameter_values(
+            &[setting("Area", "Backend"), setting("area", "backend")],
+            &[],
+            &parameters,
+            &personal(),
+        );
+        let twice = resolve_parameter_values(
+            &[
+                setting("Area", "Backend"),
+                setting(&Uuid::from_u128(1).to_string(), "Frontend"),
+            ],
+            &[],
+            &parameters,
+            &personal(),
+        );
+        let both = resolve_parameter_values(
+            &[setting("Area", "Backend")],
+            &["area".to_owned()],
+            &parameters,
+            &personal(),
+        );
+
+        expect_that!(same_twice.map(|values| values.len()), ok(eq(&1)));
+        expect_that!(
+            twice.map_err(|e| e.to_string()),
+            err(eq("--parameter names Area twice; give it once"))
+        );
+        expect_that!(
+            both.map_err(|e| e.to_string()),
+            err(eq("--parameter and --no-parameter both name Area; give it once"))
+        );
+        Ok(())
     }
 
     #[gtest]

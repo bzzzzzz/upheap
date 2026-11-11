@@ -266,6 +266,16 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
 A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and returns the top of
 the default view's ranked group with each item's position under both. It stores nothing.
 
+### Across heaps
+
+`GET /me/items` is the ranked list across every active heap the caller may view. Each heap that has any non-closed
+item is ranked and grouped under the request's view by the same code as its own list, so a row is what that list
+would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap,
+highest first, then heap name, then the item's position in its heap, the same rule `GET /me/waiting` orders by.
+Since a heap's group is already in score order, the merge keeps every heap's own order. Heap weights, when they
+come, multiply the score. The view takes no tag, parameter or sort, which belong to one heap. It returns at most
+500 rows, pinned first, with `count` the true total: the size assumption that lets it skip paging.
+
 ### Session-stable order
 
 The score is a deterministic function of item data and time, so a stable session needs no server-side state, only
