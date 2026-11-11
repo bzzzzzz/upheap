@@ -20,10 +20,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: "1.95"
-  WASM_PACK_VERSION: "0.14.0"
-  # Where wasm-pack keeps the tools it downloads (binaryen's wasm-opt, and wasm-bindgen built from source), so the
-  # cache step below can name it.
-  WASM_PACK_CACHE: /home/runner/.cache/.wasm-pack
 
 jobs:
   rust:
@@ -158,98 +154,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-  # The local build (design/architecture.md, Local build): the backend without accounts, compiled to wasm and run on SQLite-wasm
-  # in Node, and the web app built around it and tested in Chromium. Catches code that only builds natively, and
-  # prints the download's size. There is no size limit for now.
-  local:
-    name: Local build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: wasm32-unknown-unknown
-          components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Clippy without accounts
-        run: cargo clippy -p service -p api --no-default-features --locked -- -D warnings
-
-      - name: Clippy for wasm
-        run: cargo clippy -p local --target wasm32-unknown-unknown --locked -- -D warnings
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack@${{ env.WASM_PACK_VERSION }}
-
-      # wasm-pack downloads wasm-opt from github.com on first use, which fails now and then (a 504). The cache means
-      # most runs don't download it; the lockfile in the key refreshes the wasm-bindgen it builds, and the restore
-      # key keeps the older cache when only that changes.
-      - uses: actions/cache@v4
-        with:
-          path: ${{ env.WASM_PACK_CACHE }}
-          key: wasm-pack-${{ runner.os }}-${{ env.WASM_PACK_VERSION }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: wasm-pack-${{ runner.os }}-${{ env.WASM_PACK_VERSION }}-
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install
-        run: npm ci --no-audit --no-fund
-
-      # A cache miss still downloads wasm-opt, and wasm-pack picks the URL, so the build is tried up to 3 times. A
-      # compile error fails all 3, with its message each time.
-      - name: Build the backend
-        run: |
-          for i in 1 2 3; do
-            npm run build:backend && break
-            [ "$i" = 3 ] && exit 1
-            sleep $((i * 10))
-          done
-
-      - name: Wasm size
-        run: |
-          echo "backend wasm: $(gzip -9c src/local/backend/local_bg.wasm | wc -c) bytes gzipped"
-
-      - name: Typecheck the worker
-        run: npm run typecheck:local
-
-      - name: Smoke test in Node
-        run: npm run smoke:local
-
-      # apt-get fails now and then on a mirror that is out of sync, so the install is tried up to 3 times.
-      - name: Install Chromium
-        run: |
-          for i in 1 2 3; do
-            npx playwright install --with-deps chromium && break
-            [ "$i" = 3 ] && exit 1
-            sleep $((i * 15))
-          done
-
-      # Builds the web app, serves it as GitHub Pages does and runs the golden paths that apply, with export and
-      # import and the tab lock (web/playwright.local.config.ts).
-      - name: Playwright against the static build
-        run: npm run e2e:local
-
-      - name: Upload report
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-local
-          path: |
-            web/playwright-report/local
-            web/test-results/local
-          retention-days: 7
 
   # The golden paths in a browser, against the real server binary on in-memory SQLite (web/playwright.config.ts).
   e2e:

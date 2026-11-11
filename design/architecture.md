@@ -38,7 +38,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
-| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the local build on GitHub Pages; the CLI as static binaries on GitHub Releases, with a Homebrew cask in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli)) |
+| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI as static binaries on GitHub Releases, with a Homebrew cask in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli)) |
 
 ## Workspace
 
@@ -589,12 +589,12 @@ the remaining admins.
    needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
-7. **Local build:** a static site with no configuration, published to GitHub Pages. One user and one team, which
+7. **Local build:** a static site with no configuration. One user and one team, which
    holds every heap, with the data in the browser ([Local build](#local-build)).
 
 ## Local build
 
-A second way to ship Upheap: a static site on GitHub Pages that runs the whole app in one browser for one person
+A second way to ship Upheap: a static site that runs the whole app in one browser for one person
 and keeps the data there. Nothing to install, no server, no account. The self-hosted server stays the product for
 teams; the local build is for trying Upheap out and for people who only need a personal heap. It doesn't sync
 between devices or share with anyone, has no sign-in, and implements nothing a second time: ranking, validation,
@@ -679,16 +679,14 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 3. **The last download is kept per browser** in `localStorage`. It is a fact about this browser that no server ever
    sees, so the web app words it itself, the one exception to thin clients (Thin clients §2 of the principles).
 
-### Build and publish
+### Build
 
 `wasm-pack` builds `crates/local` into `web/src/local/backend`, and `vite build --mode local-build` picks the worker
 `fetch` and takes the Pages base path from `UPHEAP_BASE`. The build writes a copy of `index.html` as `404.html`,
 which Pages serves for any path without a file, so deep links and reloads work although Pages can't rewrite paths.
-CI lints `service` and `api` without their features and `local` for wasm, builds the backend and prints its
-gzipped size, with no limit for now, runs it in Node on SQLite-wasm, and runs the Playwright golden paths against
-the static build served as Pages serves it; the Pages workflow publishes the same build from `main`. The OpenAPI
-document is about 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes twice. The
-commands are in [README.md](../README.md#develop).
+It isn't published, and CI doesn't build or test
+it. The OpenAPI document is about 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes
+twice. The commands are in [README.md](../README.md#develop).
 
 ## CLI
 

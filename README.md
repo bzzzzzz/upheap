@@ -231,7 +231,7 @@ docker stop upheap-test-postgres
 
 The local build ([design/architecture.md](design/architecture.md#local-build)) runs the backend in a worker in the page, on
 SQLite-wasm with its data in the browser. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14.
-Build the backend into the web app, then run it with Vite or check it as CI does:
+Build the backend into the web app, then run it with Vite or check it:
 
 ```sh
 (cd web && npm run build:backend)   # after every change to the Rust code
@@ -239,13 +239,8 @@ Build the backend into the web app, then run it with Vite or check it as CI does
 cargo clippy -p service -p api --no-default-features -- -D warnings
 cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
 (cd web && npm run typecheck:local && npm run smoke:local)
-(cd web && npm run e2e:local)       # Playwright against the static build, served as GitHub Pages does
+(cd web && npm run e2e:local)       # Playwright against the static build
 ```
-
-The Pages workflow (`.github/workflows/pages.yml`) publishes it from `main` to
-`https://<owner>.github.io/<repo>/`, once the repository's Pages source is set to GitHub Actions. Pull requests
-that auto-merge start it only when the `AUTO_MERGE_TOKEN` secret holds a personal access token (see
-`.github/workflows/auto-merge.yml`); a merge made with the workflow's own token starts no workflows.
 
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
 

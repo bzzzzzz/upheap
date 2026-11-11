@@ -3,7 +3,7 @@
 #
 # It runs with the AUTO_MERGE_TOKEN secret, a fine-grained personal access token for this repository only (Contents and
 # Pull requests: read and write). GitHub then merges as the owner, and the push to main triggers the workflows that
-# run on it, Pages among them; a merge made with the workflow's own token would trigger none. Without the secret it
+# run on it, CI and then Deploy; a merge made with the workflow's own token would trigger none. Without the secret it
 # falls back to that token: pull requests still merge, but nothing runs after. The token can't merge a pull request
 # that changes a workflow; merge those by hand.
 #
