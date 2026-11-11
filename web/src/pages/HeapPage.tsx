@@ -160,12 +160,17 @@ function useCloseItem(heapRef: HeapRef, itemKey: string | undefined) {
   const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
   const close = useCallback(() => {
     if (itemKey === undefined) return;
+    // Focus the row once the page it goes back to has rendered: before then, the row found may be this heap list's, on
+    // its way out when the item was opened from another page, such as Waiting for me.
+    const unsubscribe = router.subscribe("onRendered", () => {
+      unsubscribe();
+      window.setTimeout(() => focusRowOf(itemKey));
+    });
     if (closesBack) {
       router.history.back();
     } else {
       void navigate({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true });
     }
-    window.setTimeout(() => focusRowOf(itemKey));
   }, [router, navigate, closesBack, heapRef, itemKey]);
   return itemKey === undefined ? undefined : close;
 }
