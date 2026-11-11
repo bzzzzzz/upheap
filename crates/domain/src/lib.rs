@@ -10,6 +10,7 @@ pub mod heap;
 pub mod ids;
 pub mod invite_link;
 pub mod item;
+pub mod item_move;
 pub mod list_view;
 pub mod oauth;
 pub mod parameter;

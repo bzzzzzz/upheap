@@ -20,6 +20,7 @@ pub mod handles;
 pub mod heaps;
 pub mod items;
 pub mod me;
+mod moves;
 #[cfg(feature = "accounts")]
 pub mod oauth;
 pub mod parameters;

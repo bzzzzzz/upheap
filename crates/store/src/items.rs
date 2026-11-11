@@ -137,6 +137,30 @@ pub async fn find_item_summary_locking(
         .transpose()
 }
 
+/// The items of `heap_id` that wait for `blocker`, with locking reads (`FOR SHARE` on MySQL and Postgres) like
+/// [`find_item_locking`], oldest first. A write that takes `blocker` out of the heap calls it after
+/// [`crate::heaps::lock_heap`].
+pub async fn list_items_blocked_by_locking(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    blocker: ItemId,
+) -> Result<Vec<Item>, StoreError> {
+    let mut items = items::Entity::find()
+        .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(items::Column::BlockedByItemId.eq(id_to_db(blocker.as_uuid())))
+        .order_by_asc(items::Column::CreatedAt)
+        .order_by_asc(items::Column::Id)
+        .lock_shared()
+        .all(db)
+        .await?
+        .into_iter()
+        .map(to_item)
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
+    Ok(items)
+}
+
 /// Every item of `heap_id` in one of `states`, oldest first.
 pub async fn list_items_in_states(
     db: &impl ConnectionTrait,

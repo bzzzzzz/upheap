@@ -1232,7 +1232,7 @@ fn select_tags(heap_tags: &[Tag], ids: &BTreeSet<TagId>) -> Vec<Tag> {
 /// A random key no item of `heap_id` has. The caller holds the heap lock, so no other insert can take it first.
 ///
 /// With 5,000 items in a heap about one draw in 5,000 is taken, so a second draw is rare.
-async fn new_item_key(
+pub(crate) async fn new_item_key(
     db: &impl ConnectionTrait,
     random: &dyn RandomSource,
     heap_id: HeapId,

@@ -403,6 +403,15 @@ mod tests {
     }
 }
 
+/// Where to move an item.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemMoveRequest)]
+pub struct ItemMoveDto {
+    /// The heap to move the item to: another heap of the item's team.
+    pub heap_id: Uuid,
+}
+
 /// Weights to rank the heap with, without saving them. Leave a weight out to keep its stored value.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

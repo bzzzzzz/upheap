@@ -67,6 +67,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::HeapUnarchived => Permission::ManageHeaps,
         AuditAction::ItemCreated
         | AuditAction::ItemUpdated
+        | AuditAction::ItemMoved
         | AuditAction::HeapContextUpdated
         | AuditAction::StepAdded
         | AuditAction::StepUpdated
@@ -102,6 +103,8 @@ pub fn visible_audit_actions(role: Role) -> Vec<AuditAction> {
 pub enum ItemAction {
     /// Change the title, description, need, effort, impact, due time or tags.
     Edit,
+    /// Move to another heap of the item's team.
+    Move,
     /// Move between non-closed states, or close.
     ChangeState,
     /// Move a closed item back to open.
@@ -134,7 +137,7 @@ pub fn allowed_item_actions(
         return Vec::new();
     }
     if !item.is_closed() {
-        let mut actions = vec![ItemAction::Edit, ItemAction::ChangeState];
+        let mut actions = vec![ItemAction::Edit, ItemAction::Move, ItemAction::ChangeState];
         match item.kind {
             Kind::Note => actions.push(ItemAction::MakeTask),
             Kind::Task => actions.push(ItemAction::AddStep),
@@ -668,6 +671,19 @@ mod tests {
             };
         }
         item
+    }
+
+    #[gtest]
+    fn an_open_item_can_be_moved_by_someone_who_can_edit_in_an_active_heap() {
+        let now = Timestamp::EPOCH;
+        let has_move = |item: &Item, heap: &Heap, role| {
+            allowed_item_actions(item, heap, role, false, false, now).contains(&ItemAction::Move)
+        };
+
+        expect_that!(has_move(&item(Kind::Note, false), &heap(false), Role::Member), eq(true));
+        expect_that!(has_move(&item(Kind::Task, false), &heap(false), Role::Member), eq(true));
+        expect_that!(has_move(&item(Kind::Note, true), &heap(false), Role::Member), eq(false));
+        expect_that!(has_move(&item(Kind::Note, false), &heap(true), Role::Member), eq(false));
     }
 
     #[gtest]

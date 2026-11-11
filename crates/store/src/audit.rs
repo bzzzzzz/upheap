@@ -93,6 +93,10 @@ pub enum AuditScope {
     /// What is recorded about the team itself, its members, and its heaps as wholes (created, renamed, archived,
     /// context changed), but not what happens inside the heaps, which [`AuditScope::Heap`] reads.
     Team(TeamId),
+    /// Everything recorded about one entity in any heap of the team, so an item's history follows it when it moves
+    /// to another heap of the team (architecture.md, Data model, Audit log). Entries recorded outside the heaps, such
+    /// as a membership's, are left out, as they are from [`AuditScope::Heap`].
+    Entity { team_id: TeamId, entity_id: Uuid },
 }
 
 /// Position after which a page of audit entries starts: the last entry of the previous page.
@@ -134,6 +138,10 @@ pub async fn list_audit_entries(
                     .add(audit_log::Column::HeapId.is_null())
                     .add(audit_log::Column::EntityType.eq(EntityType::Heap.as_str())),
             ),
+        AuditScope::Entity { team_id, entity_id } => select
+            .filter(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+            .filter(audit_log::Column::HeapId.is_not_null())
+            .filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id))),
     };
     if let Some(entity_id) = query.entity_id {
         select = select.filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id)));

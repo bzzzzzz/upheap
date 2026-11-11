@@ -96,10 +96,65 @@ impl Services {
     ) -> Result<AuditPage, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let actions = visible_audit_actions(access.membership.role);
-        let (entries, next) = self.read_page(AuditScope::Heap(heap_id), &actions, request).await?;
+        // An entity's history follows it between the heaps of the team (an item that moved), so it is read from all of
+        // them; the heap's own history is the heap's.
+        let scope = match request.entity_id {
+            Some(entity_id) => AuditScope::Entity {
+                team_id: access.heap.team_id,
+                entity_id,
+            },
+            None => AuditScope::Heap(heap_id),
+        };
+        let (entries, next) = self.read_page(scope, &actions, request).await?;
 
         let mut names = Names::default();
         names.insert(*access.heap.id.as_uuid(), access.heap.name.as_str());
+        // The heaps whose tags and parameters the entries may name: this one, and in an entity's history the others its
+        // entries were recorded in. A move's entry names the heaps it went between, and a blocker may have moved since.
+        let mut heaps = vec![heap_id];
+        let mut other_team_heaps = Vec::new();
+        if request.entity_id.is_some() {
+            for heap in store::heaps::list_heaps_for_teams(&self.db, &[access.heap.team_id]).await? {
+                names.insert(*heap.id.as_uuid(), heap.name.as_str());
+                if heap.id != heap_id {
+                    other_team_heaps.push(heap.id);
+                }
+            }
+            for other in entries.iter().filter_map(|entry| entry.heap_id) {
+                if !heaps.contains(&other) {
+                    heaps.push(other);
+                }
+            }
+        }
+        for heap in heaps {
+            self.insert_heap_vocabulary(&mut names, heap).await?;
+        }
+        // The items the entries name, looked for in this heap and then in the team's others until all are found.
+        let mut missing: Vec<ItemId> = collect_referenced_items(&entries)
+            .into_iter()
+            .map(ItemId::from_uuid)
+            .collect();
+        for heap in std::iter::once(heap_id).chain(other_team_heaps) {
+            if missing.is_empty() {
+                break;
+            }
+            for item in store::items::list_item_summaries(&self.db, heap, missing.iter().copied()).await? {
+                names.insert(*item.id.as_uuid(), item.title.as_str());
+            }
+            missing.retain(|item| names.get(*item.as_uuid()).is_none());
+        }
+        let views: Vec<SavedViewId> = collect_entity_ids(&entries, EntityType::SavedView)
+            .map(SavedViewId::from_uuid)
+            .collect();
+        for view in store::saved_views::list_saved_views_by_ids(&self.db, heap_id, &views).await? {
+            names.insert(*view.id.as_uuid(), view.name.as_str());
+        }
+        self.insert_user_names(&mut names, &entries).await?;
+        Ok(present_page(entries, next, &names, tz))
+    }
+
+    /// Adds the names of the tags, parameters and options of `heap_id`.
+    async fn insert_heap_vocabulary(&self, names: &mut Names, heap_id: HeapId) -> Result<(), ServiceError> {
         for tag in store::tags::list_tags(&self.db, heap_id).await? {
             names.insert(*tag.id.as_uuid(), tag.name.as_str());
         }
@@ -112,18 +167,7 @@ impl Services {
                 names.insert(*option.id.as_uuid(), option.label.as_str());
             }
         }
-        let items = collect_referenced_items(&entries).into_iter().map(ItemId::from_uuid);
-        for item in store::items::list_item_summaries(&self.db, heap_id, items).await? {
-            names.insert(*item.id.as_uuid(), item.title.as_str());
-        }
-        let views: Vec<SavedViewId> = collect_entity_ids(&entries, EntityType::SavedView)
-            .map(SavedViewId::from_uuid)
-            .collect();
-        for view in store::saved_views::list_saved_views_by_ids(&self.db, heap_id, &views).await? {
-            names.insert(*view.id.as_uuid(), view.name.as_str());
-        }
-        self.insert_user_names(&mut names, &entries).await?;
-        Ok(present_page(entries, next, &names, tz))
+        Ok(())
     }
 
     /// What happened to `team_id` itself that the caller may see: its name and members, display names, and its
@@ -315,6 +359,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::HeapUnarchived, _) => ("unarchived heap", true),
         (AuditAction::ItemCreated, _) => ("added item", true),
         (AuditAction::ItemUpdated, _) => ("edited item", true),
+        (AuditAction::ItemMoved, _) => ("moved item", true),
         (AuditAction::StepAdded, _) => ("added a step to", true),
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
@@ -383,6 +428,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
         | AuditAction::ItemUpdated
+        | AuditAction::ItemMoved
         | AuditAction::TurnReached
         | AuditAction::StepUpdated
         | AuditAction::TagUpdated
@@ -396,7 +442,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 45] = [
+const FIELD_ORDER: [&str; 47] = [
     "step",
     "step_title",
     "step_context",
@@ -416,6 +462,8 @@ const FIELD_ORDER: [&str; 45] = [
     "source",
     "why",
     "title",
+    "heap",
+    "key",
     "kind",
     "stage",
     "name",
@@ -557,6 +605,8 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "why" => "Why",
         "agents_prepare" => "Agents prepare new notes",
         "title" => "Title",
+        "heap" => "Heap",
+        "key" => "Key",
         "kind" => "Kind",
         "stage" => "Stage",
         "name" => "Name",
@@ -611,6 +661,7 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
         "due" => describe_recorded_due(value, tz)?,
         "blocked_by" => names.of_value(value, "Unknown item"),
+        "heap" => names.of_value(value, "Unknown heap"),
         "tags" => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
         "options" | "archived_options" => join(
             value

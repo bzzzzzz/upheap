@@ -48,6 +48,8 @@ enum Target {
     FreshHeap,
     OpenItem,
     ClosedItem,
+    /// An open item in the shared heap, and a second heap of the team to move it to, in the request's body.
+    ItemAndSecondHeap,
     /// A task with one step, in `{item}` and `{step}`, with the step's version for `If-Match`.
     TaskWithStep,
     /// An item with one open question, in `{item}` and `{question}`, with the question's version for `If-Match`.
@@ -110,6 +112,8 @@ enum RequestBody {
     SignIn,
     NewItem,
     Rename,
+    /// The second heap of [`Target::ItemAndSecondHeap`], to move the item to.
+    MoveItem,
     /// A step to add.
     NewStep,
     /// A step ticked.
@@ -688,6 +692,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/move",
+            edit,
+            Target::ItemAndSecondHeap,
+            RequestBody::MoveItem,
+            StatusCode::OK,
+        ),
+        row(
             Method::GET,
             "/teams/{team}/heaps/{heap}/tags",
             view,
@@ -1234,6 +1246,12 @@ impl World {
 
     /// A new heap in the shared team, created by its admin. Returns its slug.
     async fn new_heap(&self) -> Result<String> {
+        let created = self.create_heap().await?;
+        Ok(created["slug"].as_str().context("heap has no slug")?.to_owned())
+    }
+
+    /// Makes a heap in the shared team as the admin and returns its body.
+    async fn create_heap(&self) -> Result<Value> {
         let created = self
             .app
             .send(
@@ -1243,7 +1261,12 @@ impl World {
                 Some(json!({ "name": "Fresh" })),
             )
             .await?;
-        Ok(created.body["slug"].as_str().context("heap has no slug")?.to_owned())
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create heap failed: {}",
+            created.body
+        );
+        Ok(created.body)
     }
 
     fn unique_name(&self, prefix: &str) -> String {
@@ -1276,6 +1299,7 @@ impl World {
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
+            RequestBody::MoveItem => Some(json!({ "heap_id": parameter["id"] })),
             RequestBody::NewStep => Some(json!({ "title": "A step" })),
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
             RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
@@ -1421,6 +1445,13 @@ impl World {
                 let (key, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item}", &key);
                 if_match = Some(version);
+            }
+            Target::ItemAndSecondHeap => {
+                let (key, version) = self.create_item(false).await?;
+                path = path.replace("{item}", &key);
+                if_match = Some(version);
+                // The body reads the heap's ID from here, as it reads a parameter's.
+                parameter = self.create_heap().await?;
             }
             Target::TaskWithStep => {
                 let (key, version) = self.create_task_with_step().await?;
