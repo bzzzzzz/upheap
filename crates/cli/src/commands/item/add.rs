@@ -6,7 +6,9 @@ use api_types::tags::TagListDto;
 use clap::Args;
 use uuid::Uuid;
 
-use super::common::{ParameterSetting, dedupe, parameter_values, parse_parameter_setting, resolve_due};
+use super::common::{
+    ParameterSetting, dedupe, describe_due_flag, parameter_values, parse_parameter_setting, resolve_due,
+};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, parse_api_value};
@@ -31,8 +33,7 @@ pub struct AddArgs {
     /// How much it matters: s, m, l, xl
     #[arg(long, value_name = "SIZE", value_parser = parse_api_value::<SizeDto>)]
     pub impact: Option<SizeDto>,
-    /// When: a date, YYYY-MM-DD, or a rough choice such as next-week
-    #[arg(long, value_name = "WHEN")]
+    #[arg(long, value_name = "WHEN", help = describe_due_flag())]
     pub due: Option<String>,
     /// A tag of the heap, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]

@@ -131,6 +131,16 @@ pub(super) async fn resolve_due(raw: &str, client: &ApiClient, token: &str) -> R
     }
 }
 
+/// The help for `--due`, naming every rough choice the way it's typed, `next-week`, so an agent reading the guide
+/// needn't guess one. The labels are the shared rule's, not a copy.
+pub(super) fn describe_due_flag() -> String {
+    let choices: Vec<String> = domain::due::list_due_choice_labels()
+        .into_iter()
+        .map(|label| label.replace(' ', "-"))
+        .collect();
+    format!("When: a date, YYYY-MM-DD, or a rough choice: {}", choices.join(", "))
+}
+
 /// `ids` without repeats, in the order they first appear.
 pub(super) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
     let mut seen = Vec::with_capacity(ids.len());
