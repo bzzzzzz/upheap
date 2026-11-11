@@ -1,0 +1,52 @@
+For agents
+
+Naming
+- An item is named by its key (k3x9a), by team/heap/key, or by a link to it. A key names the same item for good;
+  a position in the list doesn't, so never keep one.
+- A step is its item's key and its number: k3x9a.3. A question is k3x9a.q2.
+- A heap is team/heap. A command marked [heap] works in the heap --heap names, or else UPHEAP_HEAP, or else the
+  default set with `upheap heap use`. With none of them it fails and says how to set one.
+
+Output
+- Results go to stdout, errors to stderr. Without a flag the output is text for people.
+- --json prints the server's response body unchanged, and a refusal's problem body on stderr.
+- -q prints only what the next command needs: `upheap item add -q` the new item's key, `upheap step add -q` the
+  step (k3x9a.3), `upheap question ask -q` the question (k3x9a.q1), `upheap item list -q` the keys in ranked order.
+
+Exit codes
+  0  done, or nothing to do
+  1  unexpected: a bug in the tool or the server
+  2  the command line was wrong; nothing was sent
+  3  the server refused the request, or a name on the command line matched nothing
+  4  not signed in, not allowed, or not found
+  5  the server couldn't be reached
+  6  the setup on this machine is broken: the config file or the keychain
+- On 4 with a message about signing in, stop and tell the person: `upheap auth login` needs their browser.
+- On 3 with a conflict, someone changed the item since you read it: read it again before writing.
+
+Long text
+- Anything longer than a line goes in from a file: write the file, then pass it with --context-file (an item's,
+  a step's or a heap's context) or --details-file (a question's long version). `-` in place of the file reads stdin.
+- `upheap item add` takes a title and a short --description only: add the item, then give it its context with
+  `upheap item edit` and --context-file.
+
+The usual order of work
+1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
+2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
+   with its context, steps, and questions with their answers.
+3. Write what you learn where the next reader will look: the item's context, not a comment in your reply.
+   Work with parts is a task: `upheap item to-task`, then a step for each part, ticked as each one is finished.
+4. When a call is the person's to make, don't guess: ask with `upheap question ask`, with --choice for each answer
+   when you can list them, or with `upheap question request` for something only they can do. The item then waits
+   for them, and their answer reads back in `upheap item show`.
+
+Example
+  upheap item add "Rotate the staging certs" --need expected --effort s -q    # prints the key, say k3x9a
+  upheap item edit k3x9a --context-file context.md
+  upheap item to-task k3x9a
+  upheap step add k3x9a "Order the new certificate"
+  upheap step add k3x9a "Install it in staging"
+  upheap question ask k3x9a "Which CA do we use?" --choice "Internal" --choice "Let's Encrypt"
+  upheap item start k3x9a
+  upheap step tick k3x9a.1
+  upheap item done k3x9a

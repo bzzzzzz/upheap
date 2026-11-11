@@ -40,8 +40,8 @@ The design docs are indexed in [design/README.md](design/README.md).
   sign-ins by machine and ends them.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
-  items with the web app's filters and saved views, add, show, edit and move items between states, and list, add and edit
-  tags.
+  items with the web app's filters and saved views, add, show, edit and move items between states, list, add and edit
+  tags, and print a guide to every command for an agent to read first.
 
 Not yet: OIDC sign-in and invitations.
 
@@ -143,6 +143,7 @@ cargo run -p cli -- step tick k3x9a.1                            # a step is its
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
 cargo run -p cli -- tag add infra --description "Servers and the network"
+cargo run -p cli -- guide show                                  # every command and its flags in one read, with instructions for agents
 cargo run -p cli -- auth logout
 ```
 
