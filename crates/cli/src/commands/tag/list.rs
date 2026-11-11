@@ -4,13 +4,10 @@ use api_types::tags::TagListDto;
 use clap::Args;
 
 use crate::client::NO_QUERY;
-use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
+use crate::commands::heap_api::{HeapApi, indented_context, named_heap, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs};
-use crate::output::{Cell, Mode, Output, Tone, shorten};
+use crate::output::{Mode, Output, Tone};
 use crate::{App, CliError};
-
-/// Descriptions longer than this are cut short in the table.
-const DESCRIPTION_WIDTH: usize = 60;
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
@@ -20,8 +17,8 @@ pub struct ListArgs {
     pub shared: SharedArgs,
 }
 
-/// Lists the tags with the first line of each description. `--quiet` prints the names one per line and `--json` the
-/// server's body.
+/// Lists the tags, each name followed by its whole description, indented, so a reader can tell what each tag is for
+/// without `--json`. `--quiet` prints the names one per line and `--json` the server's body.
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let name = named_heap(args.heap.name.as_deref(), app)?;
     let client = app.client(app.server(&args.shared)?)?;
@@ -45,41 +42,13 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
             out.line(&format!("No tags in {heap} yet; add one with `upheap tag add <name>`."))?;
         }
         Mode::Human => {
-            let rows: Vec<Vec<Cell>> = tags
-                .iter()
-                .map(|tag| {
-                    let description = tag.description.as_deref().map(first_line).unwrap_or_default();
-                    vec![
-                        Cell::new(tag.name.clone()),
-                        Cell::toned(shorten(description, DESCRIPTION_WIDTH), Tone::Dim),
-                    ]
-                })
-                .collect();
-            for line in out.render_table(&rows) {
-                out.table_line("", &line)?;
+            for tag in tags {
+                out.line_toned(&tag.name, Tone::Strong)?;
+                for line in indented_context(tag.description.as_deref().unwrap_or_default()) {
+                    out.line(&line)?;
+                }
             }
         }
     }
     Ok(())
-}
-
-/// The text up to its first newline, less a `\r` before it.
-fn first_line(text: &str) -> &str {
-    let line = text.split('\n').next().unwrap_or_default();
-    line.strip_suffix('\r').unwrap_or(line)
-}
-
-#[cfg(test)]
-mod tests {
-    use googletest::prelude::*;
-
-    use super::*;
-
-    #[gtest]
-    fn only_the_first_line_of_a_description_is_shown() {
-        expect_that!(first_line("Servers\r\nand the network"), eq("Servers"));
-        expect_that!(first_line("One line"), eq("One line"));
-        expect_that!(first_line(""), eq(""));
-        expect_that!(first_line("\nSecond"), eq(""));
-    }
 }
