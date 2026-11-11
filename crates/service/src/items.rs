@@ -544,8 +544,9 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        // A heap set so agents prepare gives every new note a turn of one state, whoever added it (Work with agents,
-        // Opening a turn). It acts only here, on create, so it never opens a second turn on an item.
+        // A heap set so agents prepare gives every new item a turn of one state, whoever added it (Work with agents,
+        // Opening a turn). A new task's turn goes to defined, never to done. It acts only here, on create, so it never
+        // opens a second turn on an item.
         let opened = if access.heap.agents_prepare {
             let turn = Turn::open(
                 TurnId::from_uuid(self.new_id(now)),

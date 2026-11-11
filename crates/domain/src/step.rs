@@ -231,6 +231,7 @@ mod tests {
 
     fn sample_item(kind: Kind, closed: bool) -> Item {
         let fields = NewItem {
+            kind,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: Need::Expected,
@@ -248,7 +249,6 @@ mod tests {
             UserId::from_uuid(Uuid::from_u128(10)),
             Timestamp::EPOCH,
         );
-        item.kind = kind;
         if closed {
             item.state = ItemState::Done {
                 closed_at: Timestamp::EPOCH,

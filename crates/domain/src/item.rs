@@ -341,6 +341,8 @@ pub enum ItemError {
 pub struct NewItem {
     pub title: Title,
     pub description: Option<Description>,
+    /// A note or a task; a new item is always as written.
+    pub kind: Kind,
     pub need: Need,
     pub effort: Option<Size>,
     pub impact: Option<Size>,
@@ -451,7 +453,7 @@ impl Item {
             title: fields.title,
             description: fields.description,
             state: ItemState::Open,
-            kind: Kind::Note,
+            kind: fields.kind,
             stage: Stage::AsWritten,
             need: fields.need,
             effort: fields.effort,
@@ -607,6 +609,7 @@ mod tests {
 
     fn sample_item() -> Item {
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Write tests").expect("valid"),
             description: None,
             need: Need::Expected,

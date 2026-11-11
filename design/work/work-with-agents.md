@@ -45,7 +45,7 @@ order.
    Waiting §1.
 - [x] 7. **Turns.** The go-ahead with its reach and line, the heap's prepare setting, who has an item, take back,
    and what the person's own changes do to a turn. In the web item and on list rows.
-   Done: an item can be sent on and taken back, a new note in a heap that prepares gets a turn, and nothing
+   Done: an item can be sent on and taken back, a new note or task in a heap that prepares gets a turn, and nothing
    else does. Covers Stable states §1 to §4, Handing work §2, §3, §4, §7. Closing an item also withdraws its open
    questions here. What is left for piece 8: withdrawing the agent's own questions on a take back, since no
    question can be an agent's until runs exist.

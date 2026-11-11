@@ -525,8 +525,9 @@ change it makes carries the run it was made in.
 **Opening a turn**
 
 1. The person's go-ahead opens a turn on an open note or task, with a reach of one state or all the way.
-2. In a heap with prepare on, a note the person adds gets a turn of one state at once. Items an agent makes,
-   reminders, tasks, and notes that were there before prepare was turned on get none.
+2. In a heap with prepare on, a note or task the person adds gets a turn of one state at once: a task goes to
+   defined, never to done. Items an agent makes, reminders, and items that were there before prepare was turned on
+   get none.
 3. Prepare never opens a second turn on the same item.
 4. No turn opens on a closed item, a reminder before its date, or an item in an archived heap.
 
@@ -707,7 +708,7 @@ joining the queue; and need being settled for everything made from a note.
    blockers change the ranking's inheritance.
 8. **Reached is checked against the table,** not taken from the agent. A rule decides whether a turn ended.
 9. **Agents never set need or close as won't do.** Both say what matters, which is the person's.
-10. **Prepare covers notes the person adds, once,** not everything in the heap. An agent's own output never
+10. **Prepare covers what the person adds, once,** not everything in the heap. An agent's own output never
     feeds itself work.
 11. **A reminder's age starts at its date,** not at creation. Otherwise a reminder set a year ahead arrives as a
     year-old item.

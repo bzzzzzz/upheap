@@ -782,3 +782,23 @@ async fn a_context_change_is_visible_to_members_and_described_as_context() -> Re
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_task_created_directly_says_so_in_its_creation_entry() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = app
+        .new_item(&session, &heap, json!({ "title": "Rotate keys", "kind": "task" }))
+        .await?;
+    let id = item["id"].as_str().context("no id")?;
+
+    // Act
+    let entries = app.audit_entries(id).await?;
+
+    // Assert
+    expect_that!(entries[0].0, eq("item_created"));
+    expect_that!(entries[0].1["kind"], eq(&json!("task")));
+    Ok(())
+}

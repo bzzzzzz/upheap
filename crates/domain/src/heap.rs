@@ -90,7 +90,7 @@ pub struct Heap {
     pub policy: HeapPolicy,
     /// What the project is and where its work lives, as written; `None` when nobody has written one.
     pub context: Option<Context>,
-    /// Whether every note added here is sent to an agent to fill in its context (Work with agents, Opening a turn).
+    /// Whether every item added here is sent to an agent to take it one stable state forward (Work with agents, Opening a turn).
     pub agents_prepare: bool,
     /// `None` while the heap is active.
     pub archived_at: Option<Timestamp>,

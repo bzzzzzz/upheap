@@ -441,7 +441,7 @@ pub enum HeapAction {
     EditContext,
     /// Change the heap's ranking weights, and its parameters' weights, together. Not offered while it is archived.
     EditWeights,
-    /// Set whether agents prepare the notes added to the heap. Not offered while it is archived.
+    /// Set whether agents prepare the items added to the heap. Not offered while it is archived.
     SetAgentsPrepare,
     /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
     /// [`audit_permission`]).
@@ -643,6 +643,7 @@ mod tests {
         use std::collections::{BTreeMap, BTreeSet};
 
         let fields = NewItem {
+            kind: Kind::Note,
             title: Title::parse("Rotate the certs").expect("valid"),
             description: None,
             need: crate::item::Need::Expected,
