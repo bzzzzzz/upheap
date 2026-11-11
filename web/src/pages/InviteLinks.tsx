@@ -115,6 +115,8 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
   const revoke = useRevokeInviteLink(team.slug);
   const { copied, copy } = useCopyText();
   const [asking, setAsking] = useState<string | null>(null);
+  // The link last revoked here, which keeps focus on its way to the heading until the row leaves the list.
+  const [revokedId, setRevokedId] = useState<string | null>(null);
   // The link whose address is shown to copy by hand, after a copy that failed.
   const [manual, setManual] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -122,9 +124,11 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
   const working = (links.data ?? []).filter((link) => link.state === "working");
   const past = (links.data ?? []).filter((link) => link.state !== "working");
 
-  // A confirm for a link that is no longer listed (revoked, here or by another admin, or ended) goes with its row. Focus
-  // moves to the heading only if it was lost with the row, which leaves it on the page's body.
-  const gone = asking !== null && !working.some((link) => link.id === asking);
+  // A link revoked here, or a confirm for one that is no longer listed (revoked by another admin, or ended), goes with its
+  // row once the list is fetched again. A phone's sheet stays open until then and leaves the rest of the page inert, so
+  // the heading can't take focus before. Focus moves to it only if it was lost with the row, onto the page's body.
+  const leaving = asking ?? revokedId;
+  const gone = leaving !== null && !working.some((link) => link.id === leaving);
   useEffect(() => {
     if (gone && (!document.activeElement || document.activeElement === document.body)) heading.current?.focus();
   }, [gone]);
@@ -133,17 +137,16 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
 
   const ask = (id: string) => {
     revoke.reset();
+    setRevokedId(null);
     setAsking(id);
   };
   const cancel = () => {
     revoke.reset();
     setAsking(null);
   };
-  // The button that asked is gone with its row, so focus goes to the heading. A phone's sheet gives focus back to its
-  // trigger as it closes, which is gone too, so that is let to finish first.
-  const revoked = () => {
+  const revoked = (id: string) => {
     cancel();
-    requestAnimationFrame(() => heading.current?.focus());
+    setRevokedId(id);
   };
   const copyLink = async (link: InviteLink) => {
     if (link.token === null || link.token === undefined) return false;
@@ -173,7 +176,7 @@ export function InviteLinks({ team, making, phone }: { team: Team; making: MakeI
               revoke,
               onAsk: () => ask(link.id),
               onCancel: cancel,
-              onRevoked: revoked,
+              onRevoked: () => revoked(link.id),
               onCopy: () => copyLink(link),
               onCloseManual: () => setManual(null),
             };

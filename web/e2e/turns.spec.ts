@@ -220,8 +220,11 @@ test("an admin turns on Agents prepare new notes, and a note added from Add show
     page.getByText("Each note added here is sent to an agent to fill in its context, then comes back to you."),
   ).toBeVisible();
   await expect(prepare).not.toBeChecked();
+  // The switch shows the new value while it saves, so the save is waited for before the heap is read.
+  const saved = page.waitForResponse((response) => response.request().method() === "PATCH" && response.ok());
   await page.locator("label").filter({ hasText: "Agents prepare new notes" }).click();
   await expect(prepare).toBeChecked();
+  await saved;
   const heap = await (await page.request.get(`/api/v1${heapPath}`)).json();
   expect(heap.agents_prepare).toBe(true);
   // The setting is the admin's, and the history of the heap keeps it.
