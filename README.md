@@ -139,6 +139,7 @@ cargo run -p cli -- item show k3x9a --history                    # name an item 
 cargo run -p cli -- item edit k3x9a --context-file context.md    # the item's context; or - for stdin, or --no-context
 cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
+cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
