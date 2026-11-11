@@ -218,7 +218,7 @@ the local build leaves out.
 **Instead of.** A second implementation in JavaScript, or a runtime "local mode" flag in one build.
 
 **Consequences.** Ranking, validation, permissions and the API are one codebase, and the native tests cover the
-local user too. Nothing left out can reach the wasm, which keeps it inside its size budget. A feature added to the
+local user too. Nothing left out can reach the wasm, which keeps it smaller. A feature added to the
 server must be placed behind `accounts` when the local build can't offer it.
 
 ## 18. SQLite in the browser through SeaORM's proxy connection, on `opfs-sahpool`
