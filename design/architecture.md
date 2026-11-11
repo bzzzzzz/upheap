@@ -90,11 +90,13 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
-  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`). An item has at most 100,
+  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), and one withdrawn when its
+  item was closed stays, withdrawn (`withdrawn_at`, `withdrawn_by`). An item has at most 100,
   so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
   the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
-  whole item. A closed item takes neither, and its open questions come back replyable, unchanged, when it is
-  reopened. An item waits for the person while it is open, in an active heap, and has an open question; that is
+  whole item. A closed item takes neither, and closing an item withdraws its open questions in the same transaction,
+  one `question_withdrawn` entry each, so reopening doesn't bring them back and nothing waits for the person on a
+  question no one can answer. An item waits for the person while it is open, in an active heap, and has an open question; that is
   derived, not stored: `waits_for_you` on every item response comes from the questions a single-item response already
   carries, and for list rows from one grouped count of open questions per listed item, as step progress is.
   **`GET /me/waiting`** lists the open questions of open items in the active heaps of the caller's teams, one row per
@@ -105,6 +107,19 @@ The tables and columns are in the migrations. These are the conventions they fol
   with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+- **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
+  all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
+  person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
+  prepare setting did, then when and by whom it ended and how (taken back; reaching the goal is added with runs).
+  Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
+  with someone editing it, and sending and taking back need no `If-Match`. An item has at most one open turn
+  (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
+  so no constraint is needed. A turn is taken back by the person's own request, and implied by starting or closing the
+  item (in the same transaction as the change, with its own `turn_taken_back` entry first) and by archiving the heap
+  (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
+  an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
+  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new note, whoever added it. Neither
+  changes ranking.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -459,7 +474,10 @@ the remaining admins.
    read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
    by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A question's are
    recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
-   question's number and text and, once answered, the labels picked and the comment.
+   question's number and text and, once answered, the labels picked and the comment. So are a question withdrawn
+   by closing its item (`QuestionWithdrawn`) and a turn (`TurnOpened`, with its reach, goal, line and source, and
+   `TurnTakenBack`, with the goal and why: the person took it back, started the item, closed it, or archived the
+   heap). Closing an item writes its take back, then a withdrawal for each open question, then its own update.
 7. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
    parameter, heap and member, and the whole logs on the heap's and the team's Activity pages. Parameters and heaps
    offer `view_history` only to those who may see their entries, so members aren't shown histories that are always
