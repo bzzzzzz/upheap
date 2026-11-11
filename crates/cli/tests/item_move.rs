@@ -188,6 +188,45 @@ async fn a_heap_of_another_team_is_refused_with_the_servers_message() -> Result<
 
 #[gtest]
 #[tokio::test]
+async fn a_bare_slug_is_looked_for_in_the_items_team_first() -> Result<()> {
+    // Arrange: another team has a heap with the same slug as one in Ada's team.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Backlog").await?;
+    let team = server
+        .send(&ada, "POST", "/teams", Some(json!({ "name": "Shared" })))
+        .await?;
+    let slug = team["slug"].as_str().unwrap_or_default().to_owned();
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/{slug}/heaps"),
+            Some(json!({ "name": "Backlog" })),
+        )
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+
+    // Act
+    let moved = cli.run(&["item", "move", key, "backlog"]).await;
+
+    // Assert
+    expect_that!(moved.stderr, eq(""));
+    expect_that!(
+        moved.stdout,
+        starts_with(format!("Moved {key}: Rotate the staging certs to ada/backlog.\n"))
+    );
+    expect_that!(moved.exited(0), eq(true));
+    expect_that!(
+        server.read_item(&ada, "ada/backlog", key).await?["version"],
+        eq(&json!(2))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn json_prints_the_item_as_the_server_sent_it() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

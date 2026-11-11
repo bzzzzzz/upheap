@@ -9,13 +9,15 @@ use std::collections::HashSet;
 use api_types::common::ItemDto;
 use api_types::heaps::HeapDto;
 use api_types::items::ItemMoveDto;
+use api_types::me::MeDto;
 use clap::Args;
 
 use super::common::locate_item;
+use crate::client::ApiClient;
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs};
-use crate::lookup::{HeapName, ItemName};
+use crate::lookup::{HeapHandle, HeapName, ItemName, resolve_heap};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -41,7 +43,7 @@ pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliE
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
     let heap = at.heap.resolve(&client, &token).await?;
-    let target = resolve_heap_handle(target_name, &client, &token).await?;
+    let target = resolve_target(target_name, &heap, &client, &token).await?;
     let api = HeapApi {
         client: &client,
         token: &token,
@@ -77,6 +79,28 @@ pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliE
         }
     }
     Ok(())
+}
+
+/// The heap to move to. A bare slug is looked for in the item's team first, the only team that can be a target; when
+/// that team has no such heap it is resolved among all the user's teams as usual, so the server's `heap_not_in_team`
+/// message still comes back for another team's heap.
+async fn resolve_target(
+    name: HeapName<'_>,
+    item_heap: &HeapHandle,
+    client: &ApiClient,
+    token: &str,
+) -> Result<HeapHandle, CliError> {
+    if let HeapName::Bare(slug) = name {
+        let me = client.get::<MeDto>(&["me"], NO_QUERY, token).await?;
+        let in_team = HeapName::Full {
+            team: &item_heap.team,
+            heap: slug,
+        };
+        if let Ok(handle) = resolve_heap(in_team, &me.value) {
+            return Ok(handle);
+        }
+    }
+    resolve_heap_handle(name, client, token).await
 }
 
 /// What the move did, line by line: that it moved, a key that changed, and the tags and values left behind.
