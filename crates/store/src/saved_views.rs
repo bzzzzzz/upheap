@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use domain::item::{Need, Size};
-use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
+use domain::list_view::{BlockedLayout, ListFilter, ListView, RemindersMode, SortKey, StateMode};
 use domain::saved_view::SavedView;
 use domain::text::Name;
 use domain::{HeapId, OptionId, ParameterId, SavedViewId, TagId, Timestamp, UserId, Version};
@@ -149,6 +149,9 @@ struct StoredListView {
     in_progress: String,
     blocked: String,
     blocked_layout: String,
+    /// Views stored before reminders read as `hidden`, the default.
+    #[serde(default = "hidden_reminders")]
+    reminders: String,
     sort: String,
     /// Set exactly when `sort` is `parameter`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -166,6 +169,10 @@ struct StoredListView {
     options: Vec<Uuid>,
 }
 
+fn hidden_reminders() -> String {
+    RemindersMode::Hidden.code().to_owned()
+}
+
 impl From<&ListView> for StoredListView {
     fn from(view: &ListView) -> Self {
         let sizes = |sizes: &BTreeSet<Size>| sizes.iter().map(|s| s.code().to_owned()).collect();
@@ -174,6 +181,7 @@ impl From<&ListView> for StoredListView {
             in_progress: view.in_progress.code().to_owned(),
             blocked: view.blocked.code().to_owned(),
             blocked_layout: view.blocked_layout.code().to_owned(),
+            reminders: view.reminders.code().to_owned(),
             sort: view.sort.code().to_owned(),
             sort_parameter: view.sort.parameter().map(|id| *id.as_uuid()),
             tags: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
@@ -198,6 +206,7 @@ impl StoredListView {
             in_progress: parse_code(&self.in_progress, StateMode::from_code)?,
             blocked: parse_code(&self.blocked, StateMode::from_code)?,
             blocked_layout: parse_code(&self.blocked_layout, BlockedLayout::from_code)?,
+            reminders: parse_code(&self.reminders, RemindersMode::from_code)?,
             sort: SortKey::from_parts(&self.sort, self.sort_parameter.map(ParameterId::from_uuid))
                 .ok_or_else(|| format!("unknown sort {:?} with parameter {:?}", self.sort, self.sort_parameter))?,
             filter: ListFilter {
@@ -232,6 +241,7 @@ mod tests {
             in_progress: StateMode::Hidden,
             blocked: StateMode::Shown,
             blocked_layout: BlockedLayout::Mixed,
+            reminders: RemindersMode::Shown,
             sort: SortKey::Parameter(ParameterId::from_uuid(Uuid::from_u128(9))),
             filter: ListFilter {
                 tags: BTreeSet::from([TagId::from_uuid(Uuid::from_u128(7))]),

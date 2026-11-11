@@ -37,6 +37,8 @@ The usual order of work
 1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
 2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
    with its context, steps, and questions with their answers.
+   A reminder, added with `upheap item add "<title>" --reminder <date>`, stays out of the list until that date;
+   `upheap item list --reminders shown` lists those still to come.
 3. Write what you learn where the next reader will look: the item's context, not a comment in your reply.
    Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
    then a step for each part, ticked as each one is finished.

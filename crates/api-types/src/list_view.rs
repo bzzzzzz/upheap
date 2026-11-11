@@ -3,7 +3,7 @@
 //! list query field by field.
 
 use domain::item::{Need, Size};
-use domain::list_view::{BlockedLayout, ListFilter, ListView, SortKey, StateMode};
+use domain::list_view::{BlockedLayout, ListFilter, ListView, RemindersMode, SortKey, StateMode};
 use domain::{OptionId, ParameterId, TagId, ValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -68,6 +68,33 @@ impl From<BlockedLayout> for BlockedLayoutDto {
     }
 }
 
+/// Whether the list has a group of the heap's reminders to come, which are out of the ranking until their date.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = RemindersMode)]
+pub enum RemindersModeDto {
+    Hidden,
+    Shown,
+}
+
+impl From<RemindersModeDto> for RemindersMode {
+    fn from(mode: RemindersModeDto) -> Self {
+        match mode {
+            RemindersModeDto::Hidden => Self::Hidden,
+            RemindersModeDto::Shown => Self::Shown,
+        }
+    }
+}
+
+impl From<RemindersMode> for RemindersModeDto {
+    fn from(mode: RemindersMode) -> Self {
+        match mode {
+            RemindersMode::Hidden => Self::Hidden,
+            RemindersMode::Shown => Self::Shown,
+        }
+    }
+}
+
 /// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
 /// `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
 /// Items without the value come last.
@@ -117,6 +144,7 @@ pub struct ListViewDto {
     pub in_progress: StateModeDto,
     pub blocked: StateModeDto,
     pub blocked_layout: BlockedLayoutDto,
+    pub reminders: RemindersModeDto,
     pub sort: SortDto,
     /// The parameter the list is sorted by, when `sort` is `parameter`.
     pub sort_parameter: Option<Uuid>,
@@ -141,6 +169,7 @@ impl From<&ListView> for ListViewDto {
             in_progress: view.in_progress.into(),
             blocked: view.blocked.into(),
             blocked_layout: view.blocked_layout.into(),
+            reminders: view.reminders.into(),
             sort: view.sort.into(),
             sort_parameter: view.sort.parameter().map(|id| *id.as_uuid()),
             tag: view.filter.tags.iter().map(|id| *id.as_uuid()).collect(),
@@ -153,7 +182,7 @@ impl From<&ListView> for ListViewDto {
 }
 
 /// A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
-/// items hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
+/// items hidden and grouped, reminders to come hidden, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
 #[derive(Clone, Debug, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ListViewInput)]
@@ -162,6 +191,7 @@ pub struct ListViewInputDto {
     pub in_progress: Option<StateModeDto>,
     pub blocked: Option<StateModeDto>,
     pub blocked_layout: Option<BlockedLayoutDto>,
+    pub reminders: Option<RemindersModeDto>,
     pub sort: Option<SortDto>,
     /// A parameter of the same heap, when `sort` is `parameter`.
     pub sort_parameter: Option<Uuid>,
@@ -190,6 +220,7 @@ impl ListViewInputDto {
             in_progress: self.in_progress.map_or(default.in_progress, Into::into),
             blocked: self.blocked.map_or(default.blocked, Into::into),
             blocked_layout: self.blocked_layout.map_or(default.blocked_layout, Into::into),
+            reminders: self.reminders.map_or(default.reminders, Into::into),
             sort,
             filter: ListFilter {
                 // Not capped: every tag and option must belong to the heap, which the service checks in memory.

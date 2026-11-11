@@ -23,7 +23,7 @@ export const NEED_HINTS: Record<Need, string> = {
   critical: "It has to happen. Skipping it does real damage.",
 };
 
-export const KIND_LABELS: Record<Kind, string> = { note: "Note", task: "Task" };
+export const KIND_LABELS: Record<Kind, string> = { note: "Note", task: "Task", reminder: "Reminder" };
 
 export const STAGE_LABELS: Record<Stage, string> = {
   as_written: "As written",

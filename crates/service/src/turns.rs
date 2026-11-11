@@ -7,7 +7,7 @@
 
 use domain::audit::AuditAction;
 use domain::heap::Heap;
-use domain::item::ItemError;
+use domain::item::{ItemError, Kind};
 use domain::permission::Permission;
 use domain::run::{Run, RunEnd};
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
@@ -23,7 +23,8 @@ impl Services {
     /// Sends an item to an agent: opens a turn of `reach` with an optional `line` from the person, going to the
     /// next stable state. Any member may.
     ///
-    /// Fails with [`ItemError::Closed`] on a closed item, [`ServiceError::HeapArchived`] in an archived heap, and
+    /// Fails with [`ItemError::Closed`] on a closed item, [`TurnError::NeedsNoteOrTask`] on a reminder, to come or
+    /// not (it must become a task first), [`ServiceError::HeapArchived`] in an archived heap, and
     /// [`TurnError::AlreadyOpen`] when an agent already has the item. An item with an open question or blocked may
     /// be sent: the turn opens, and the item waits or is blocked as before.
     pub async fn send_to_agent(
@@ -45,6 +46,9 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         if item.is_closed() {
             return Err(ItemError::Closed { item_id: item.id }.into());
+        }
+        if item.kind == Kind::Reminder {
+            return Err(TurnError::NeedsNoteOrTask { item_id: item.id }.into());
         }
         if store::turns::find_open_turn_locking(&txn, item.id).await?.is_some() {
             return Err(TurnError::AlreadyOpen { item_id: item.id }.into());

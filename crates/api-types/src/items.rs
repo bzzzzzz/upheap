@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use domain::item::{Description, ItemPatch, Kind, NewItem, Stage, StateKind, Title};
+use domain::item::{Description, Due, ItemPatch, Kind, NewItem, Stage, StateKind, Title};
 use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -16,7 +16,7 @@ use crate::common::{
     DueInputDto, HeapSummaryDto, ItemDto, ItemRefDto, KindDto, NeedDto, RankedItemDto, SizeDto, StageDto, StateDto,
     double_option, never_null, non_null,
 };
-use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
+use crate::list_view::{BlockedLayoutDto, ListViewInputDto, RemindersModeDto, SortDto, StateModeDto};
 use crate::waiting::ItemHeapDto;
 
 /// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
@@ -34,6 +34,8 @@ pub struct RankedQuery {
     pub blocked: Option<StateModeDto>,
     /// Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.
     pub blocked_layout: Option<BlockedLayoutDto>,
+    /// Whether the response lists the heap's reminders to come in `reminders`. Defaults to `hidden`.
+    pub reminders: Option<RemindersModeDto>,
     /// What each group is sorted by. Ties keep priority order. Defaults to `priority`.
     pub sort: Option<SortDto>,
     /// The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`.
@@ -95,6 +97,7 @@ impl RankedQuery {
             in_progress: self.in_progress,
             blocked: self.blocked,
             blocked_layout: self.blocked_layout,
+            reminders: self.reminders,
             sort: self.sort,
             sort_parameter: self.sort_parameter,
             tag: self.tag.clone(),
@@ -162,6 +165,7 @@ impl AcrossHeapsQuery {
             in_progress: self.in_progress,
             blocked: self.blocked,
             blocked_layout: self.blocked_layout,
+            reminders: None,
             sort: None,
             sort_parameter: None,
             tag: Vec::new(),
@@ -251,10 +255,18 @@ pub struct RankedListDto {
     pub ranked: Vec<RankedItemDto>,
     /// Shown blocked items, when they're grouped. Empty by default, because blocked items are hidden.
     pub blocked: Vec<RankedItemDto>,
+    /// The heap's reminders to come that the filters keep, soonest first, when `reminders` is `shown`; empty
+    /// otherwise. A reminder to come has no position and no explanation: it is out of the ranking until its date
+    /// (`arrives_at`), and out of every count.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub reminders: Vec<ItemDto>,
     /// How many items the filters keep but are left out because their state is hidden.
     pub hidden_count: u32,
     /// How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the "14" in
-    /// "6 of 14". Hidden states still leave theirs out.
+    /// "6 of 14". Hidden states still leave theirs out, and reminders to come aren't counted.
     pub unfiltered_count: u32,
     /// How many of the heap's items are in progress, whatever the view and its filters leave out.
     pub in_progress_count: u32,
@@ -287,7 +299,8 @@ pub struct CreateItemDto {
     pub description: Option<String>,
     /// Required: every item says how much it's needed.
     pub need: NeedDto,
-    /// `"note"` when left out or `null`. A new item is always as written, so a task starts at that stage.
+    /// `"note"` when left out or `null`. A new item is always as written, so a task starts at that stage. A
+    /// `"reminder"` needs `due` with a `date`: that date is when it joins the list, and its due is made firm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<KindDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,8 +318,19 @@ pub struct CreateItemDto {
 }
 
 impl CreateItemDto {
-    /// The new item's fields, with due dates read in `tz`. Fails on the first invalid field.
+    /// The new item's fields, with due dates read in `tz`. Fails on the first invalid field, and with
+    /// `ReminderNeedsDate` for a reminder without a due.
     pub fn to_new_item(&self, tz: &TimeZone) -> Result<NewItem, ValidationError> {
+        let kind = self.kind.map(Kind::try_from).transpose()?.unwrap_or(Kind::Note);
+        let due = self.due.as_ref().map(|due| due.to_due(tz)).transpose()?;
+        // A reminder's date is its exact deadline, and the start of the date is when it joins the list.
+        let (due, arrives_at) = match (kind, &self.due, due) {
+            (Kind::Reminder, Some(input), Some(due)) => {
+                (Some(Due { firm: true, ..due }), Some(input.to_start_of_day(tz)?))
+            }
+            (Kind::Reminder, _, _) => return Err(ValidationError::ReminderNeedsDate),
+            (_, _, due) => (due, None),
+        };
         Ok(NewItem {
             title: Title::parse(&self.title)?,
             description: self
@@ -316,10 +340,11 @@ impl CreateItemDto {
                 .transpose()?
                 .flatten(),
             need: self.need.into(),
-            kind: self.kind.map(Kind::try_from).transpose()?.unwrap_or(Kind::Note),
+            kind,
             effort: self.effort.map(Into::into),
             impact: self.impact.map(Into::into),
-            due: self.due.as_ref().map(|due| due.to_due(tz)).transpose()?,
+            due,
+            arrives_at,
             tags: to_tag_set(self.tag_ids.as_deref().unwrap_or_default())?,
             parameters: self
                 .parameter_values
@@ -344,7 +369,8 @@ pub struct ItemPatchDto {
     #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = NeedDto, required = false)]
     pub need: Option<NeedDto>,
-    /// A note can become a task; `"note"` on a task is refused. Applied before `stage`. `null` is refused.
+    /// A note or a reminder can become a task; any other change is refused (`kind_change_not_allowed`). Applied
+    /// before `stage`. A reminder made a task starts as written. `null` is refused.
     #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = KindDto, required = false)]
     pub kind: Option<KindDto>,
@@ -399,6 +425,10 @@ impl ItemPatchDto {
                 None => None,
                 Some(None) => Some(None),
                 Some(Some(due)) => Some(Some(due.to_due(tz)?)),
+            },
+            due_starts_at: match &self.due {
+                Some(Some(due)) => Some(due.to_start_of_day(tz)?),
+                _ => None,
             },
             tags: self.tag_ids.as_deref().map(to_tag_set).transpose()?,
             parameters: self

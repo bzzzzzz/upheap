@@ -12,7 +12,7 @@ use domain::turn::{Goal, Turn, with_agent};
 use domain::user::User;
 use domain::{HeapId, ItemId, TurnId, UserId};
 
-use crate::items::{QuestionView, TurnView, rank_open_items, turn_views};
+use crate::items::{OpenRanking, QuestionView, TurnView, rank_open_items, turn_views};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_waiting`] returns. A person waits on tens of questions, not thousands, so one
@@ -175,7 +175,7 @@ impl Services {
             if mine.is_empty() && mine_stuck.is_empty() {
                 continue;
             }
-            let (items, _, ranking) = rank_open_items(&self.db, heap, as_of).await?;
+            let OpenRanking { items, ranking, .. } = rank_open_items(&self.db, heap, as_of).await?;
             let ranks: HashMap<ItemId, (f64, u32)> = ranking
                 .iter()
                 .map(|ranked| (ranked.item_id, (ranked.score, ranked.position)))

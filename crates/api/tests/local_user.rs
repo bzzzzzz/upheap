@@ -67,6 +67,45 @@ async fn the_local_user_is_offered_only_what_one_user_can_do() -> Result<()> {
     Ok(())
 }
 
+#[gtest]
+#[tokio::test]
+async fn the_local_user_can_add_a_reminder_and_see_it_arrive() -> Result<()> {
+    // Arrange
+    let app = TestApp::start_local().await?;
+    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
+    let heap = me.body["teams"][0]["heaps"][0]["id"]
+        .as_str()
+        .context("heap")?
+        .to_owned();
+    let items = format!("{}/items", app.heap_url(&heap).await?);
+
+    // Act
+    let created = app
+        .send(
+            Method::POST,
+            &items,
+            None,
+            Some(json!({
+                "need": "expected", "title": "Water the plants", "kind": "reminder",
+                "due": { "date": "2027-01-05", "firm": true },
+            })),
+        )
+        .await?;
+    let before = app
+        .send(Method::GET, &format!("{items}?reminders=shown"), None, None)
+        .await?;
+    app.clock.advance(domain::Duration::from_hours(4 * 24));
+    let after = app.send(Method::GET, &items, None, None).await?;
+
+    // Assert
+    expect_that!(created.status, eq(StatusCode::CREATED));
+    expect_that!(created.body["kind"], eq(&json!("reminder")));
+    expect_that!(before.body["ranked"], eq(&json!([])));
+    expect_that!(before.body["reminders"][0]["key"], eq(&created.body["key"]));
+    expect_that!(after.body["ranked"][0]["item"]["key"], eq(&created.body["key"]));
+    Ok(())
+}
+
 #[cfg(not(feature = "agents"))]
 #[gtest]
 #[tokio::test]

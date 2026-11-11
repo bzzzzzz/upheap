@@ -65,6 +65,10 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **Handles** name things in URLs, API paths and the CLI ([Handles](#handles)): usernames, team slugs, heap slugs
   (unique per team) and item keys (unique per heap). They are extra columns with unique indexes, and every foreign
   key still points at the UUID, so a handle can change without touching references.
+- **A reminder's arrival** is its own column, `items.arrives_at`: the first millisecond of its date in the time zone
+  of the request that set it, not worked out from the due's end of day (a day that changes the clocks is not 24
+  hours long). It is `NULL` for an item that was never a reminder, and kept when the reminder becomes a task, so the
+  task's age still counts from it. A reminder's due is firm and ends the same day.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -242,7 +246,8 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    most a few thousand open items, so this is cheap. A per-heap cache invalidated on write can be added if
    measurements call for it.
 2. Each factor (need, age, deadline proximity, value per effort, each custom parameter) produces a weighted
-   component, and the score combines them. The formula is a named version (`FormulaVersion::V2`) behind one
+   component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
+   `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item, and the score combines them. The formula is a named version (`FormulaVersion::V2`) behind one
    function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
    explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
    `domain::ranking` explains the current formula.
@@ -301,10 +306,15 @@ a fixed time.
    can say "6 of 14" or offer the next item without a second request. The view's defaults (in progress pinned,
    blocked hidden) are the server's, so every client starts from the same list. Archived parameters and options are
    accepted in filters and sorts, so a saved view keeps working after an option is archived.
-4. The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text, which
+4. **Reminders to come** are not ranked: `rank_open_items` splits them off (`Item::is_to_come`), so no list, queue or
+   Waiting for me sees them, and every open count leaves them out (`count_items_by_heap` takes the time to compare
+   with). They are not hidden from search: the list's `reminders` setting adds them to the response as a group of
+   their own, soonest first and filtered like the rest, and a client that searches asks for it. The client still
+   searches the text itself.
+5. The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text, which
    is a momentary narrowing. Saved views store the same settings under the query parameters' names, so a client
    turns one into a list query field by field.
-5. If heaps grow beyond this size, search moves to the server with per-database full-text indexes behind a `q=`
+6. If heaps grow beyond this size, search moves to the server with per-database full-text indexes behind a `q=`
    parameter.
 
 ### Time and timezones

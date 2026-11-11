@@ -92,22 +92,25 @@ impl Need {
     }
 }
 
-/// What an item is. A note is kept so it isn't forgotten; a task is something to get done. A note becomes a task in
-/// place, keeping its key, age and history, and a task never goes back.
+/// What an item is. A note is kept so it isn't forgotten; a task is something to get done; a reminder has a date
+/// and joins the ranked list when it comes. A note or a reminder becomes a task in place, keeping its key, age and
+/// history, and a task never goes back. No other kind changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Note,
     Task,
+    Reminder,
 }
 
 impl Kind {
-    pub const ALL: [Self; 2] = [Self::Note, Self::Task];
+    pub const ALL: [Self; 3] = [Self::Note, Self::Task, Self::Reminder];
 
     /// Stable code used in storage, audit diffs and the API. Never renamed.
     pub const fn code(self) -> &'static str {
         match self {
             Self::Note => "note",
             Self::Task => "task",
+            Self::Reminder => "reminder",
         }
     }
 
@@ -119,7 +122,7 @@ impl Kind {
     pub const fn allows(self, stage: Stage) -> bool {
         match self {
             Self::Task => true,
-            Self::Note => !matches!(stage, Stage::Defined),
+            Self::Note | Self::Reminder => !matches!(stage, Stage::Defined),
         }
     }
 }
@@ -334,6 +337,9 @@ pub enum ItemError {
     /// Only a task can be defined.
     #[error("item {item_id} is a note, so it can't be defined; make it a task first")]
     StageNeedsTask { item_id: ItemId },
+    /// A reminder's due is its date, so it can't be cleared.
+    #[error("item {item_id} is a reminder, so it needs a date")]
+    ReminderNeedsDate { item_id: ItemId },
 }
 
 /// The fields of a new item. Everything except the title and the need is optional.
@@ -341,12 +347,15 @@ pub enum ItemError {
 pub struct NewItem {
     pub title: Title,
     pub description: Option<Description>,
-    /// A note or a task; a new item is always as written.
+    /// A new item is always as written.
     pub kind: Kind,
     pub need: Need,
     pub effort: Option<Size>,
     pub impact: Option<Size>,
+    /// A reminder has one, firm: its date. The caller makes it firm.
     pub due: Option<Due>,
+    /// The first millisecond of a reminder's date in the request's time zone; `None` for the other kinds.
+    pub arrives_at: Option<Timestamp>,
     /// Tags of the item's heap. The service checks they belong to it.
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. The service checks they are in use in the heap.
@@ -360,12 +369,15 @@ pub struct ItemPatch {
     pub description: Option<Option<Description>>,
     /// Need can be changed but never cleared, so it has no inner `Option`.
     pub need: Option<Need>,
-    /// A note can become a task; the reverse is refused. Applied before `stage`.
+    /// A note or a reminder can become a task; every other change is refused. Applied before `stage`.
     pub kind: Option<Kind>,
     pub stage: Option<Stage>,
     pub effort: Option<Option<Size>>,
     pub impact: Option<Option<Size>>,
     pub due: Option<Option<Due>>,
+    /// The first millisecond of the new due's date in the request's time zone, sent with `due`. A reminder takes it
+    /// as the time it joins the list; other kinds ignore it.
+    pub due_starts_at: Option<Timestamp>,
     /// Replaces the whole set of tags.
     pub tags: Option<BTreeSet<TagId>>,
     /// Sets (`Some`) or clears (`None`) the value of each listed custom parameter; others keep theirs.
@@ -431,6 +443,10 @@ pub struct Item {
     /// `None` when unset, which ranks as the smallest impact.
     pub impact: Option<Size>,
     pub due: Option<Due>,
+    /// The first millisecond of the reminder's date in the time zone of the request that set it; the item joins the
+    /// list from then. `None` for an item that was never a reminder. Kept when the reminder becomes a task, so its
+    /// age doesn't go back to its creation.
+    pub arrives_at: Option<Timestamp>,
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. Unset parameters are left out, and rank as their
     /// lowest-priority option. A closed item may keep an option or a parameter that was archived since; reopening it
@@ -459,6 +475,7 @@ impl Item {
             effort: fields.effort,
             impact: fields.impact,
             due: fields.due,
+            arrives_at: fields.arrives_at,
             tags: fields.tags,
             parameters: fields.parameters,
             created_at: now,
@@ -476,6 +493,12 @@ impl Item {
         self.state
             .closed_at()
             .is_some_and(|closed_at| now.since(closed_at) <= REOPEN_WINDOW)
+    }
+
+    /// Whether this is a reminder whose date hasn't come at `as_of`. Such an item is out of the ranked list, the
+    /// agents' queue and the counts; from its date on it is an ordinary open item.
+    pub fn is_to_come(&self, as_of: Timestamp) -> bool {
+        self.kind == Kind::Reminder && self.arrives_at.is_some_and(|arrives_at| arrives_at > as_of)
     }
 
     /// The stages that can be set on the item now, least prepared first. None when it is closed; a note can't be
@@ -519,20 +542,32 @@ impl Item {
         }
 
         let kind = match (self.kind, patch.kind) {
-            (_, None) => self.kind,
-            (Kind::Task, Some(Kind::Note)) => {
+            (current, None) => current,
+            (current, Some(target)) if current == target => current,
+            (Kind::Note | Kind::Reminder, Some(Kind::Task)) => Kind::Task,
+            (from @ (Kind::Note | Kind::Task | Kind::Reminder), Some(to)) => {
                 return Err(ItemError::KindChangeNotAllowed {
                     item_id: self.id,
-                    from: Kind::Task,
-                    to: Kind::Note,
+                    from,
+                    to,
                 });
             }
-            (_, Some(target)) => target,
         };
-        let stage = patch.stage.unwrap_or(self.stage);
+        // A reminder turned into a task starts as written (Rules, Kinds and moves).
+        let stage = match (self.kind, kind) {
+            (Kind::Reminder, Kind::Task) => patch.stage.unwrap_or(Stage::AsWritten),
+            _ => patch.stage.unwrap_or(self.stage),
+        };
         if !kind.allows(stage) {
             return Err(ItemError::StageNeedsTask { item_id: self.id });
         }
+        let (due, arrives_at) = match (kind, patch.due) {
+            (Kind::Reminder, Some(None)) => return Err(ItemError::ReminderNeedsDate { item_id: self.id }),
+            (Kind::Reminder, Some(Some(due))) => {
+                (Some(Due { firm: true, ..due }), patch.due_starts_at.or(self.arrives_at))
+            }
+            (_, due) => (due.unwrap_or(self.due), self.arrives_at),
+        };
 
         let edited = Self {
             kind,
@@ -542,7 +577,8 @@ impl Item {
             need: patch.need.unwrap_or(self.need),
             effort: patch.effort.unwrap_or(self.effort),
             impact: patch.impact.unwrap_or(self.impact),
-            due: patch.due.unwrap_or(self.due),
+            due,
+            arrives_at,
             tags: patch.tags.clone().unwrap_or_else(|| self.tags.clone()),
             parameters: self.with_values(&patch.parameters),
             state,
@@ -616,6 +652,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
         };
@@ -1175,5 +1212,146 @@ mod tests {
         );
         expect_that!(sample_task().stage_choices(), eq(&Stage::ALL.to_vec()));
         expect_that!(closed.stage_choices(), is_empty());
+    }
+
+    /// A reminder for day 10, which joins the list at the start of that day (day 9's end is `at(10)` minus 1 ms
+    /// in these tests, which don't need real zones).
+    fn sample_reminder() -> Item {
+        let mut reminder = sample_item();
+        reminder.kind = Kind::Reminder;
+        reminder.due = Some(Due { at: at(11), firm: true });
+        reminder.arrives_at = Some(at(10));
+        reminder
+    }
+
+    #[gtest]
+    fn a_reminder_is_to_come_until_its_date() {
+        let reminder = sample_reminder();
+
+        expect_that!(reminder.is_to_come(at(9)), eq(true));
+        expect_that!(reminder.is_to_come(at(10)), eq(false));
+        expect_that!(reminder.is_to_come(at(11)), eq(false));
+        expect_that!(sample_item().is_to_come(at(0)), eq(false));
+    }
+
+    #[gtest]
+    fn a_task_that_was_a_reminder_is_never_to_come() {
+        let task = sample_reminder()
+            .apply_patch(&make_task_patch(), actor(), at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(task.is_to_come(at(1)), eq(false));
+    }
+
+    #[gtest]
+    fn every_kind_move_is_allowed_or_refused() {
+        let allowed = [(Kind::Note, Kind::Task), (Kind::Reminder, Kind::Task)];
+        for from in Kind::ALL {
+            for to in Kind::ALL {
+                let mut item = sample_reminder();
+                item.kind = from;
+                let patch = ItemPatch {
+                    kind: Some(to),
+                    ..ItemPatch::default()
+                };
+
+                let result = item.apply_patch(&patch, actor(), at(1));
+
+                if from == to {
+                    expect_that!(result, ok(none()), "{from:?} to {to:?}");
+                } else if allowed.contains(&(from, to)) {
+                    expect_that!(result, ok(some(anything())), "{from:?} to {to:?}");
+                } else {
+                    expect_that!(
+                        result,
+                        err(eq(&ItemError::KindChangeNotAllowed {
+                            item_id: item.id,
+                            from,
+                            to
+                        })),
+                        "{from:?} to {to:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[gtest]
+    fn a_reminder_becomes_a_task_in_place_as_written_keeping_its_due_and_arrival() {
+        let mut reminder = sample_reminder();
+        reminder.stage = Stage::WithContext;
+
+        let task = reminder
+            .apply_patch(&make_task_patch(), actor(), at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(task.kind, eq(Kind::Task));
+        expect_that!(task.stage, eq(Stage::AsWritten));
+        expect_that!(task.key, eq(reminder.key));
+        expect_that!(task.due, eq(reminder.due));
+        expect_that!(task.arrives_at, eq(reminder.arrives_at));
+    }
+
+    #[gtest]
+    fn a_reminder_allows_the_stages_a_note_does() {
+        expect_that!(Kind::Reminder.allows(Stage::AsWritten), eq(true));
+        expect_that!(Kind::Reminder.allows(Stage::WithContext), eq(true));
+        expect_that!(Kind::Reminder.allows(Stage::Defined), eq(false));
+    }
+
+    #[gtest]
+    fn a_new_date_makes_a_reminders_due_firm_and_moves_its_arrival() {
+        let patch = ItemPatch {
+            due: Some(Some(Due {
+                at: at(21),
+                firm: false,
+            })),
+            due_starts_at: Some(at(20)),
+            ..ItemPatch::default()
+        };
+
+        let moved = sample_reminder()
+            .apply_patch(&patch, actor(), at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(moved.due, some(eq(Due { at: at(21), firm: true })));
+        expect_that!(moved.arrives_at, some(eq(at(20))));
+    }
+
+    #[gtest]
+    fn a_reminders_date_cant_be_cleared() {
+        let patch = ItemPatch {
+            due: Some(None),
+            ..ItemPatch::default()
+        };
+        let reminder = sample_reminder();
+
+        expect_that!(
+            reminder.apply_patch(&patch, actor(), at(1)),
+            err(eq(&ItemError::ReminderNeedsDate { item_id: reminder.id }))
+        );
+    }
+
+    #[gtest]
+    fn a_due_date_on_a_note_doesnt_set_an_arrival() {
+        let patch = ItemPatch {
+            due: Some(Some(Due {
+                at: at(21),
+                firm: false,
+            })),
+            due_starts_at: Some(at(20)),
+            ..ItemPatch::default()
+        };
+
+        let note = sample_item()
+            .apply_patch(&patch, actor(), at(1))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(note.arrives_at, none());
+        expect_that!(note.due.map(|due| due.firm), some(eq(false)));
     }
 }

@@ -6,7 +6,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
 use domain::item::{Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
-use domain::list_view::{Group, ListView};
+use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
     ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
@@ -160,9 +160,13 @@ pub struct RankedList {
     pub ranked: Vec<RankedEntry>,
     /// Shown blocked items, when they're grouped.
     pub blocked: Vec<RankedEntry>,
+    /// The heap's reminders to come that the filters keep, soonest first, when the view shows them. They have no
+    /// position: they are not ranked until their date.
+    pub reminders: Vec<ItemView>,
     /// Items the filters keep but whose state is hidden.
     pub hidden_count: u32,
-    /// Items the view would list without its filters: those in pinned and shown states.
+    /// Items the view would list without its filters: those in pinned and shown states. Reminders to come aren't
+    /// counted.
     pub unfiltered_count: u32,
     /// Items of the heap in progress, whatever the view and its filters leave out.
     pub in_progress_count: u32,
@@ -226,7 +230,7 @@ pub struct ClosedPage {
 }
 
 impl Services {
-    /// Ranks every non-closed item of the heap, then shows them as `view` says.
+    /// Ranks every non-closed item of the heap except its reminders to come, then shows them as `view` says.
     ///
     /// `requested_as_of` freezes the time input so the order stays stable within a session. It's ignored when
     /// it's in the future or more than [`MAX_AS_OF_AGE`] old, and the current time is used instead. Every tag and
@@ -265,15 +269,65 @@ impl Services {
         view: &ListView,
     ) -> Result<RankedList, ServiceError> {
         let heap_id = heap.id;
-        let (mut items, parameters, ranking) = rank_open_items(&self.db, &heap, as_of).await?;
+        let OpenRanking {
+            mut items,
+            parameters,
+            ranking,
+            to_come,
+        } = rank_open_items(&self.db, &heap, as_of).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
         let item_count = items.len();
         let unfiltered_count = count_items(&items, |item| view.lists(item.state.kind()));
         let in_progress_count = count_items(&items, |item| item.state.kind() == StateKind::InProgress);
-        let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
-        let users = load_item_users(&self.db, &items).await?;
+        // Reminders to come are listed only when the view shows them, by date, and the filters apply to them.
+        let mut to_come: Vec<Item> = if view.reminders == RemindersMode::Shown {
+            to_come
+                .into_iter()
+                .filter(|item| view.filter.matches(item, &parameters))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        to_come.sort_by(|a, b| {
+            (a.arrives_at, a.created_at, a.key.as_str()).cmp(&(b.arrives_at, b.created_at, b.key.as_str()))
+        });
+        let mut blockers = blocker_summaries(&self.db, heap_id, &items).await?;
+        blockers.extend(blocker_summaries(&self.db, heap_id, &to_come).await?);
+        let mut users = load_item_users(&self.db, &items).await?;
+        users.extend(load_item_users(&self.db, &to_come).await?);
+
+        // A list item's view, before the counts below are set on it.
+        let make_view = |item: Item| {
+            let stage_choices = allowed_stage_choices(&item, &heap, role);
+            let step_actions = allowed_step_actions(&item, &heap, role);
+            let tags = select_tags(&heap_tags, &item.tags);
+            let values = describe_values(&item, &parameters);
+            let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
+            let created_by = pick_user(&users, item.created_by);
+            ItemView {
+                item,
+                tags,
+                parameters: values,
+                blocked_by,
+                created_by,
+                // Listed items aren't closed, so they have no closer.
+                closed_by: None,
+                // Set below, once the open turns of the entries that are listed are known.
+                allowed_actions: Vec::new(),
+                stage_choices,
+                // Lists carry the progress only, counted below for the entries that are listed.
+                steps: None,
+                step_progress: None,
+                step_actions,
+                questions: None,
+                // Set below, from one count for the entries that are listed.
+                waits_for_you: false,
+                turn: None,
+                with_agent: false,
+            }
+        };
 
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
         let mut hidden_count = 0_u32;
@@ -294,34 +348,8 @@ impl Services {
                     continue;
                 }
             };
-            let stage_choices = allowed_stage_choices(&item, &heap, role);
-            let step_actions = allowed_step_actions(&item, &heap, role);
-            let tags = select_tags(&heap_tags, &item.tags);
-            let values = describe_values(&item, &parameters);
-            let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
-            let created_by = pick_user(&users, item.created_by);
             group.push(RankedEntry {
-                view: ItemView {
-                    item,
-                    tags,
-                    parameters: values,
-                    blocked_by,
-                    created_by,
-                    // Ranked items aren't closed, so they have no closer.
-                    closed_by: None,
-                    // Set below, once the open turns of the entries that are listed are known.
-                    allowed_actions: Vec::new(),
-                    stage_choices,
-                    // Lists carry the progress only, counted below for the entries that are listed.
-                    steps: None,
-                    step_progress: None,
-                    step_actions,
-                    questions: None,
-                    // Set below, from one count for the entries that are listed.
-                    waits_for_you: false,
-                    turn: None,
-                    with_agent: false,
-                },
+                view: make_view(item),
                 score: entry.score,
                 position: 0,
                 contributors: entry.contributors,
@@ -350,10 +378,12 @@ impl Services {
             }
         }
 
+        let mut reminders: Vec<ItemView> = to_come.into_iter().map(make_view).collect();
         let listed: Vec<ItemId> = [&pinned, &ranked, &blocked]
             .into_iter()
             .flatten()
             .map(|entry| entry.view.item.id)
+            .chain(reminders.iter().map(|view| view.item.id))
             .collect();
         let mut step_progress = store::steps::count_step_progress(&self.db, &listed).await?;
         // Nothing waits, and no agent has anything, in an archived heap, so its items need no count.
@@ -366,17 +396,22 @@ impl Services {
                 turn_views(&self.db, turns.into_values(), now, false).await?,
             )
         };
-        for entry in pinned.iter_mut().chain(&mut ranked).chain(&mut blocked) {
-            let id = entry.view.item.id;
+        let views = pinned
+            .iter_mut()
+            .chain(&mut ranked)
+            .chain(&mut blocked)
+            .map(|entry| &mut entry.view)
+            .chain(&mut reminders);
+        for view in views {
+            let id = view.item.id;
             let open_questions = open_questions.get(&id).copied().unwrap_or(0) as usize;
             let turn = open_turns.remove(&id);
-            entry.view.step_progress = step_progress.remove(&id);
+            view.step_progress = step_progress.remove(&id);
             let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-            entry.view.waits_for_you = waits_for_you(&entry.view.item, &heap, open_questions, stuck);
-            entry.view.with_agent = with_agent(&entry.view.item, &heap, open_questions, turn.is_some(), stuck);
-            entry.view.allowed_actions =
-                allowed_item_actions(&entry.view.item, &heap, role, turn.is_some(), stuck, now);
-            entry.view.turn = turn;
+            view.waits_for_you = waits_for_you(&view.item, &heap, open_questions, stuck);
+            view.with_agent = with_agent(&view.item, &heap, open_questions, turn.is_some(), stuck);
+            view.allowed_actions = allowed_item_actions(&view.item, &heap, role, turn.is_some(), stuck, now);
+            view.turn = turn;
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
@@ -387,6 +422,7 @@ impl Services {
             pinned,
             ranked,
             blocked,
+            reminders,
             hidden_count,
             unfiltered_count,
             in_progress_count,
@@ -408,7 +444,7 @@ impl Services {
     ) -> Result<RankingPreview, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let as_of = self.now();
-        let (items, stored_parameters) = load_open_items(&self.db, heap_id).await?;
+        let (items, stored_parameters) = load_ranked_items(&self.db, heap_id, as_of).await?;
         let drafted_parameters = apply_parameter_draft(&stored_parameters, &draft.parameters)?;
         let drafted_policy = draft.heap.apply(&access.heap.policy);
 
@@ -547,7 +583,8 @@ impl Services {
         // A heap set so agents prepare gives every new item a turn of one state, whoever added it (Work with agents,
         // Opening a turn). A new task's turn goes to defined, never to done. It acts only here, on create, so it never
         // opens a second turn on an item.
-        let opened = if access.heap.agents_prepare {
+        // A reminder gets none: no turn opens on one.
+        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder {
             let turn = Turn::open(
                 TurnId::from_uuid(self.new_id(now)),
                 &item,
@@ -995,29 +1032,60 @@ async fn build_question_views(
         .collect())
 }
 
-/// The open items of the heap (open, in progress, blocked) and its parameters in use, which is what ranking reads.
+/// The open items of the heap (open, in progress, blocked) split into those that rank at `as_of` and its reminders
+/// to come, and its parameters in use. This is where reminders to come leave the ranking: every list, the agents'
+/// queue and Waiting for me read the heap's open items through it.
 async fn load_open_items(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
-) -> Result<(Vec<Item>, Vec<Parameter>), StoreError> {
-    let items = store::items::list_items_in_states(db, heap_id, &StateKind::OPEN).await?;
+    as_of: Timestamp,
+) -> Result<(Vec<Item>, Vec<Item>, Vec<Parameter>), StoreError> {
+    let (to_come, items) = store::items::list_items_in_states(db, heap_id, &StateKind::OPEN)
+        .await?
+        .into_iter()
+        .partition(|item| item.is_to_come(as_of));
     let parameters = store::parameters::list_parameters(db, heap_id).await?;
+    Ok((items, to_come, parameters))
+}
+
+/// [`load_open_items`] without the reminders to come.
+async fn load_ranked_items(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    as_of: Timestamp,
+) -> Result<(Vec<Item>, Vec<Parameter>), StoreError> {
+    let (items, _, parameters) = load_open_items(db, heap_id, as_of).await?;
     Ok((items, parameters))
 }
 
-/// Ranks every open item of the heap under its stored weights, as its list does, and returns the items and
-/// parameters with the ranking. Every item is ranked, because a blocker inherits from what it blocks even when that
-/// is left out of what a caller shows. The one place that says how a heap's current order is made, so no list
-/// drifts from another.
+/// A heap's open items, ranked.
+pub(crate) struct OpenRanking {
+    /// The items that rank, which is every open item but the reminders to come.
+    pub items: Vec<Item>,
+    pub parameters: Vec<Parameter>,
+    pub ranking: Vec<RankedItem>,
+    /// The heap's reminders to come: out of the ranking until their date, in no particular order.
+    pub to_come: Vec<Item>,
+}
+
+/// Ranks every open item of the heap that isn't a reminder to come at `as_of` under its stored weights, as its list
+/// does, and returns the items and parameters with the ranking, and the reminders left out. Every ranked item is
+/// ranked, because a blocker inherits from what it blocks even when that is left out of what a caller shows. The one
+/// place that says how a heap's current order is made, so no list drifts from another.
 pub(crate) async fn rank_open_items(
     db: &impl ConnectionTrait,
     heap: &Heap,
     as_of: Timestamp,
-) -> Result<(Vec<Item>, Vec<Parameter>, Vec<RankedItem>), StoreError> {
-    let (items, parameters) = load_open_items(db, heap.id).await?;
+) -> Result<OpenRanking, StoreError> {
+    let (items, to_come, parameters) = load_open_items(db, heap.id, as_of).await?;
     let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
     let ranking = rank(CURRENT_FORMULA, &heap.policy, &parameters, &inputs, as_of);
-    Ok((items, parameters, ranking))
+    Ok(OpenRanking {
+        items,
+        parameters,
+        ranking,
+        to_come,
+    })
 }
 
 /// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker
@@ -1109,13 +1177,15 @@ async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<I
     Ok(store::items::list_item_summaries(db, item.heap_id, [id]).await?.pop())
 }
 
-/// How many open items each of `heap_ids` has, in one query: those its list shows by default, before filters (the
-/// `unfiltered_count` of [`ListView::default`]). Heaps with none are left out.
+/// How many open items each of `heap_ids` has at `now`, in one query: those its list shows by default, before
+/// filters (the `unfiltered_count` of [`ListView::default`]), so without reminders to come. Heaps with none are left
+/// out.
 pub(crate) async fn count_open_items(
     db: &impl ConnectionTrait,
     heap_ids: &[HeapId],
+    now: Timestamp,
 ) -> Result<HashMap<HeapId, u32>, StoreError> {
-    store::items::count_items_by_heap(db, heap_ids, &ListView::default().listed_states()).await
+    store::items::count_items_by_heap(db, heap_ids, &ListView::default().listed_states(), now).await
 }
 
 /// How many of `items` `keep` is true for.
@@ -1280,7 +1350,8 @@ const fn forbidden() -> ServiceError {
     ServiceError::Run(RunError::Forbidden(RunForbidden::Person))
 }
 
-/// Refuses a patch made in a run unless it only sets the context, makes a note a task, or starts the item (design,
+/// Refuses a patch made in a run unless it only sets the context, makes a note or a reminder a task, or starts the
+/// item (design,
 /// Queue and Runs). Any other field, or any other state, refuses the whole patch.
 fn check_run_patch(patch: &ItemPatch) -> Result<(), ServiceError> {
     match patch.state {

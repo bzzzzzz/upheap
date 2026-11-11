@@ -98,10 +98,12 @@ while the subject is fresh in their mind. Use `upheap item add ... -q` to get th
 ### A reminder
 
 - Title: what to be reminded of, in the person's words, made concise. Don't reword it into something else.
-- Due: always. A day they named becomes a date (`--due YYYY-MM-DD`, worked out from today's date); a rough time
-  ("next week", "in a few weeks") becomes the matching rough choice.
+- Date: always. A day they named becomes a date (`--reminder YYYY-MM-DD`, worked out from today's date); a rough
+  time ("next week", "in a few weeks") becomes the matching rough choice (`--reminder next-week`). The reminder
+  stays out of the list until that date. Don't also pass `--due`.
 - Description: only what they said that doesn't fit the title. Often nothing.
-- If the guide lists a reminder kind or command, use it. If it doesn't, a reminder is an item with a due date.
+- Use `upheap item add "<title>" --reminder <date>` when the guide shows `--reminder`. If it doesn't (an older
+  tool), a reminder is an item with a due date (`--due`), which is ranked at once.
 - If the time or what it's about is unclear, add it with your best reading, then ask, then correct the item.
 
 ### A note
@@ -157,7 +159,7 @@ it's between two. Leave it out only when there's nothing to judge by, such as an
   has decided it's wanted. `nice_to_have`: wanted, nobody is waiting. `expected`: someone is counting on it.
   `critical`: skipping it does real damage. Otherwise leave it to the default.
 - Impact (`--impact`): only when the person says how much it matters.
-- Due (`--due`): when the person gives a time. Always for a reminder.
+- Due (`--due`): when the person gives a time. A reminder has its date in `--reminder` instead (or `--due` with an older tool).
 
 ### Tags and parameters
 

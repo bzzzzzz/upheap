@@ -57,6 +57,14 @@ impl Timestamp {
         Self::from_millis(next_midnight.timestamp().as_millisecond() - 1)
     }
 
+    /// The first millisecond of `date` in `tz`: when a reminder for that date joins the list.
+    ///
+    /// Returns `None` when the date is outside the supported range.
+    pub fn at_start_of_day(date: Date, tz: &TimeZone) -> Option<Self> {
+        let midnight = date.to_zoned(tz.clone()).ok()?;
+        Self::from_millis(midnight.timestamp().as_millisecond())
+    }
+
     pub fn to_jiff(self) -> jiff::Timestamp {
         #[allow(clippy::expect_used)]
         // Proven invariant: the constructor only accepts values jiff can represent.
@@ -130,6 +138,31 @@ mod tests {
         let stored = Timestamp::at_end_of_day(date, &tz).expect("in range");
 
         expect_that!(stored.to_jiff().to_string(), eq("2027-03-12T22:59:59.999Z"));
+    }
+
+    #[gtest]
+    fn start_of_day_in_berlin_is_stored_as_utc() {
+        let tz = TimeZone::get("Europe/Berlin").expect("bundled tzdb has Berlin");
+        let date = jiff::civil::date(2027, 3, 12);
+
+        let stored = Timestamp::at_start_of_day(date, &tz).expect("in range");
+
+        expect_that!(stored.to_jiff().to_string(), eq("2027-03-11T23:00:00Z"));
+    }
+
+    #[gtest]
+    fn a_day_spans_from_its_start_to_its_end_even_when_the_clocks_change() {
+        let tz = TimeZone::get("Europe/Berlin").expect("bundled tzdb has Berlin");
+        // The day the clocks go forward is 23 hours long.
+        let date = jiff::civil::date(2027, 3, 28);
+
+        let start = Timestamp::at_start_of_day(date, &tz).expect("in range");
+        let end = Timestamp::at_end_of_day(date, &tz).expect("in range");
+
+        expect_that!(
+            end.since(start).as_millis(),
+            eq(Duration::from_hours(23).as_millis() - 1)
+        );
     }
 
     #[gtest]
