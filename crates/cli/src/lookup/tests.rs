@@ -393,3 +393,55 @@ fn an_unknown_due_time_lists_the_choices_in_the_servers_order() -> googletest::R
         err(matches_pattern!(LookupError::UnknownDueChoice { .. }))
     )
 }
+
+fn parameters() -> googletest::Result<ParameterListDto> {
+    let option = |id: u128, label: &str| json!({ "id": Uuid::from_u128(id), "label": label });
+    Ok(serde_json::from_value(json!({
+        "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },
+        "parameters": [{
+            "id": Uuid::from_u128(1), "heap_id": Uuid::new_v4(), "name": "Area", "weight": 10,
+            "options": [option(11, "Backend"), option(12, "Front end")],
+            "archived_options": [{ "id": Uuid::from_u128(13), "label": "Legacy", "archived_at": 0, "replaced_by_option_id": Uuid::from_u128(11) }],
+            "tag_ids": [], "archived_at": null, "version": 1, "allowed_actions": [],
+        }, {
+            "id": Uuid::from_u128(2), "heap_id": Uuid::new_v4(), "name": "Empty", "weight": 10,
+            "options": [], "archived_options": [], "tag_ids": [], "archived_at": null, "version": 1, "allowed_actions": [],
+        }],
+        "archived": [], "allowed_actions": [],
+    }))?)
+}
+
+#[gtest]
+fn an_option_is_found_by_label_ignoring_case_or_by_id() -> googletest::Result<()> {
+    let parameters = parameters()?;
+    let area = find_parameter("area", &parameters, &handle())?;
+
+    verify_that!(
+        find_option("FRONT END", area, &handle()).map(|option| option.id).ok(),
+        some(eq(Uuid::from_u128(12)))
+    )?;
+    verify_that!(
+        find_option(&Uuid::from_u128(11).to_string(), area, &handle())
+            .map(|option| option.label.as_str())
+            .ok(),
+        some(eq("Backend"))
+    )
+}
+
+#[gtest]
+fn an_archived_or_unknown_option_lists_the_options_in_use() -> googletest::Result<()> {
+    let parameters = parameters()?;
+    let area = find_parameter("Area", &parameters, &handle())?;
+    let empty = find_parameter("Empty", &parameters, &handle())?;
+
+    verify_that!(
+        find_option("Legacy", area, &handle()),
+        err(displays_as(eq(
+            "parameter `Area` in ada/personal has no option `Legacy`; it has Backend, Front end"
+        )))
+    )?;
+    verify_that!(
+        find_option("X", empty, &handle()),
+        err(displays_as(eq("parameter `Empty` in ada/personal has no option `X`")))
+    )
+}

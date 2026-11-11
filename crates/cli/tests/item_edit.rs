@@ -288,3 +288,79 @@ async fn item_edit_sets_the_stage_and_a_note_cannot_be_defined() -> Result<()> {
     expect_that!(unknown.stderr, contains_substring("unknown stage `reviewed`"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn item_edit_sets_and_clears_a_parameter_and_setting_the_same_value_is_no_change() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+    server
+        .add_parameter(&ada, "Area", &["Backend", "Frontend"], &[])
+        .await?;
+
+    // Act
+    let set = cli.run(&["item", "edit", key, "--parameter", "Area=Frontend"]).await;
+    let after_set = server.read_item(&ada, HEAP, key).await?["parameters"][0]["option"].clone();
+    let again = cli.run(&["item", "edit", key, "--parameter", "area=frontend"]).await;
+    let cleared = cli.run(&["item", "edit", key, "--no-parameter", "area"]).await;
+    let after_clear = server.read_item(&ada, HEAP, key).await?["parameters"][0]["option"].clone();
+    let cleared_again = cli.run(&["item", "edit", key, "--no-parameter", "area"]).await;
+
+    // Assert
+    expect_that!(set.exited(0), eq(true));
+    expect_that!(set.stdout, starts_with(format!("Updated {key}: ")));
+    expect_that!(after_set["label"], eq("Frontend"));
+    expect_that!(again.stdout, eq(&format!("No change to {key}.\n")));
+    expect_that!(cleared.exited(0), eq(true));
+    expect_that!(after_clear, eq(&Value::Null));
+    expect_that!(cleared_again.stdout, eq(&format!("No change to {key}.\n")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_edit_refuses_a_parameter_named_twice_or_unknown_and_writes_nothing() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+    server.add_parameter(&ada, "Area", &["Backend", "X"], &[]).await?;
+    let version = server.read_item(&ada, HEAP, key).await?["version"].clone();
+
+    // Act
+    let both = cli
+        .run(&["item", "edit", key, "--parameter", "Area=X", "--no-parameter", "Area"])
+        .await;
+    let twice = cli
+        .run(&[
+            "item",
+            "edit",
+            key,
+            "--parameter",
+            "Area=X",
+            "--parameter",
+            "area=Backend",
+        ])
+        .await;
+    let unknown = cli.run(&["item", "edit", key, "--parameter", "Nope=X"]).await;
+
+    // Assert
+    expect_that!(both.exited(2), eq(true));
+    expect_that!(
+        both.stderr,
+        eq("error: --parameter and --no-parameter both name Area; give it once\n")
+    );
+    expect_that!(twice.exited(2), eq(true));
+    expect_that!(twice.stderr, eq("error: --parameter names Area twice; give it once\n"));
+    expect_that!(unknown.exited(3), eq(true));
+    expect_that!(
+        unknown.stderr,
+        eq("error: ada/personal has no parameter `Nope`; it has Area\n")
+    );
+    expect_that!(server.read_item(&ada, HEAP, key).await?["version"], eq(&version));
+    Ok(())
+}
