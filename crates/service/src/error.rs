@@ -2,6 +2,7 @@ use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
 use domain::parameter::ParameterError;
+use domain::password_reset::ResetLinkError;
 use domain::permission::Permission;
 use domain::question::QuestionError;
 use domain::step::StepError;
@@ -72,6 +73,9 @@ pub enum ServiceError {
     /// An invite link that can't be used to join its team.
     #[error(transparent)]
     InviteLink(#[from] InviteLinkError),
+    /// A password reset link that can't be used to set a password.
+    #[error(transparent)]
+    ResetLink(#[from] ResetLinkError),
     /// The user to add to a team doesn't exist.
     #[error("there is no user {user_id}")]
     UserNotFound { user_id: UserId },

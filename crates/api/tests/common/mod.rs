@@ -539,6 +539,13 @@ impl TestApp {
         Ok(row.try_get("", "n")?)
     }
 
+    /// A new password reset link for the account `login` names, as the operator's command makes it, and returns its
+    /// token: the last part of the link.
+    pub async fn make_reset_link(&self, login: &str) -> Result<String> {
+        let made = self.services.create_password_reset_link(login).await?;
+        Ok(made.token.expose().to_owned())
+    }
+
     /// Archives or unarchives a heap straight in the database, without the version change or audit entry of the
     /// endpoints, so the access-control test can wrap any call in it.
     pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {

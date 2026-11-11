@@ -12,6 +12,7 @@ use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
+use domain::password_reset::ResetLinkError;
 use domain::question::QuestionError;
 use domain::step::StepError;
 use domain::team::TeamError;
@@ -250,6 +251,15 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::InviteLink(InviteLinkError::RemovedSinceMade { .. }) => {
             simple(StatusCode::FORBIDDEN, "removed_from_team", Category::Permission)
+        }
+        ServiceError::ResetLink(ResetLinkError::Used) => {
+            simple(StatusCode::CONFLICT, "reset_link_used", Category::Conflict)
+        }
+        ServiceError::ResetLink(ResetLinkError::Cancelled) => {
+            simple(StatusCode::CONFLICT, "reset_link_cancelled", Category::Conflict)
+        }
+        ServiceError::ResetLink(ResetLinkError::Ended) => {
+            simple(StatusCode::CONFLICT, "reset_link_ended", Category::Conflict)
         }
         ServiceError::UserNotFound { .. } => Classified {
             field: Some("user_id"),

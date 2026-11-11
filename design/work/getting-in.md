@@ -48,7 +48,7 @@ usable. Each pull request ticks its piece here.
 - [x] 1. **Past links and each link's history** on the Team page (the rest of Interface 1).
 - [x] 2. **Password change** in Account, ending the user's other sign-ins (Interface 8 without History; Product
    Accounts §5; Kept 9; rules 13 to 15; scenario 7).
-- [ ] 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
+- [x] 3. **Password reset:** the operator's command, the reset page, and the forgot-password line on the sign-in page
    (Interface 6, 7 and 9; Product Accounts §6; Kept 10 and 11; rules 16 to 18; scenarios 8 to 10); a password
    change cancels the user's working reset link.
 - [ ] 4. **Account history** under the Password card (the rest of Interface 8; Product Accounts §7; Kept 12; rules 21

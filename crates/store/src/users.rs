@@ -209,6 +209,26 @@ pub async fn update_password(
     Ok(result.rows_affected == 1)
 }
 
+/// Sets the argon2 PHC string of `user_id` to `password_hash`, whatever it was, and inserts it for a user who has
+/// none. For a password reset, which doesn't know the old one ([`update_password`] does).
+pub async fn set_password(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    password_hash: &str,
+    now: Timestamp,
+) -> Result<(), StoreError> {
+    let result = password_credentials::Entity::update_many()
+        .col_expr(password_credentials::Column::PasswordHash, password_hash.into())
+        .col_expr(password_credentials::Column::UpdatedAt, now.as_millis().into())
+        .filter(password_credentials::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .exec(db)
+        .await?;
+    if result.rows_affected == 0 {
+        insert_password(db, user_id, password_hash, now).await?;
+    }
+    Ok(())
+}
+
 /// The users of `rows`, in the same order, with their usernames from their personal teams.
 async fn to_users(db: &impl ConnectionTrait, rows: Vec<users::Model>) -> Result<Vec<User>, StoreError> {
     if rows.is_empty() {

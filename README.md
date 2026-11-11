@@ -78,6 +78,22 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `SESSION_TTL_DAYS` | `30` | How long a sign-in lasts |
 | `LOG_FORMAT` | `json` | `json` or `pretty`; levels via `RUST_LOG` |
 
+### Resetting a password
+
+The server sends no email, so whoever runs it makes a one-time reset link for a user, who opens it, sets a new
+password and is signed in. The command takes the same environment variables as the server (at least `DATABASE_URL`
+and `BASE_URL`):
+
+```sh
+upheap-server user reset-link sam          # a username or an email address
+docker compose exec upheap upheap-server user reset-link sam
+```
+
+It prints the link, `{BASE_URL}/reset/…`, alone on stdout, and on stderr whom it is for and when it ends (it works
+once, for 60 minutes). A newer link for the same user cancels the earlier one. It runs no migrations and starts no
+server, so run it once the server of the same version has started. Exit codes: `0` made, `2` wrong arguments, `3` no
+such user, `5` the database can't be reached, `1` anything else, a database a version behind included.
+
 ## The CLI
 
 `upheap` talks to a running server over its API.

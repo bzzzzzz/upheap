@@ -1,10 +1,13 @@
 //! The upheap server: one binary serving the API and the web app on one port.
 //!
 //! `upheap-server` runs the server. `upheap-server openapi` prints the OpenAPI document and exits.
+//! `upheap-server user reset-link <username or email>` makes a password reset link ([`user_command`]).
 
 mod assets;
 mod config;
+mod user_command;
 
+use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
@@ -14,6 +17,7 @@ use config::{Config, LogFormat};
 use service::{Services, Settings, SystemClock};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::writer::BoxMakeWriter;
 
 /// mimalloc instead of the system allocator. The Docker image links against musl, whose allocator serialises
 /// threads on a lock and makes a busy multi-threaded server markedly slower.
@@ -21,19 +25,37 @@ use tracing_subscriber::EnvFilter;
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    if std::env::args().nth(1).as_deref() == Some("openapi") {
-        println!("{}", serde_json::to_string_pretty(&api::openapi())?);
-        return Ok(());
+async fn main() -> anyhow::Result<ExitCode> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("openapi") => {
+            println!("{}", serde_json::to_string_pretty(&api::openapi())?);
+            return Ok(ExitCode::SUCCESS);
+        }
+        Some("user") => return Ok(user_command::run(&args[1..]).await),
+        _ => {}
     }
 
     let config = Config::from_env().context("invalid configuration")?;
-    init_tracing(config.log_format);
+    init_tracing(config.log_format, "info", BoxMakeWriter::new(std::io::stdout));
     if let Err(err) = run(config).await {
         tracing::error!(error = format!("{err:#}"), "server stopped");
         return Err(err);
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
+}
+
+/// The use cases with the deployment settings from `config`, on `db`.
+fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
+    Services::new(
+        db,
+        Arc::new(SystemClock),
+        Settings {
+            allow_registration: config.allow_registration,
+            session_ttl: domain::Duration::from_days(i64::from(config.session_ttl_days)),
+            sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
+        },
+    )
 }
 
 async fn run(config: Config) -> anyhow::Result<()> {
@@ -42,16 +64,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
         .context("can't connect to the database")?;
     store::run_migrations(&db).await.context("migrations failed")?;
 
-    let session_ttl = domain::Duration::from_days(i64::from(config.session_ttl_days));
-    let services = Services::new(
-        db,
-        Arc::new(SystemClock),
-        Settings {
-            allow_registration: config.allow_registration,
-            session_ttl,
-            sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
-        },
-    );
+    let services = build_services(&config, db);
     let cookies = CookieSettings {
         secure: config.cookies_secure(),
         max_age: StdDuration::from_secs(u64::from(config.session_ttl_days) * 24 * 60 * 60),
@@ -74,9 +87,10 @@ async fn run(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn init_tracing(format: LogFormat) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+/// Starts logging to `writer` at `RUST_LOG`, or at `default_level` when it isn't set.
+fn init_tracing(format: LogFormat, default_level: &str, writer: BoxMakeWriter) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+    let builder = tracing_subscriber::fmt().with_env_filter(filter).with_writer(writer);
     match format {
         LogFormat::Json => builder.json().flatten_event(true).with_current_span(true).init(),
         LogFormat::Pretty => builder.init(),

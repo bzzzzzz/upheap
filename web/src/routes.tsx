@@ -30,6 +30,7 @@ import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPag
 import { InvitePage } from "./pages/InvitePage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
+import { ResetPage } from "./pages/ResetPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TeamsPage } from "./pages/TeamsPage";
@@ -66,11 +67,14 @@ export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: str
 }
 
 /**
- * Whether `pathname` is an invite link's page, which handles its own sign-in: signed out is one of its states, so a
- * `401` there doesn't send the user to sign-in.
+ * Whether `pathname` is a page a link opens, an invite link's or a password reset link's, which handles its own
+ * sign-in: signed out is one of the invite page's states, and the reset page signs the visitor in as the link's user
+ * whoever they are, so a `401` there doesn't send the user to sign-in.
  */
-export function isInvitePath(router: ReturnType<typeof useRouter>, pathname: string): boolean {
-  return router.matchRoutes(pathname, {}).some((match) => match.routeId === inviteRoute.id);
+export function handlesOwnSignIn(router: ReturnType<typeof useRouter>, pathname: string): boolean {
+  return router
+    .matchRoutes(pathname, {})
+    .some((match) => match.routeId === inviteRoute.id || match.routeId === resetRoute.id);
 }
 
 /**
@@ -161,6 +165,18 @@ const inviteRoute = createRoute({
 });
 
 /**
+ * The page a password reset link opens (ux.md, Reset page), outside the app's shell like sign-in. It has no guard:
+ * holding the link is the permission, whether signed in or not.
+ */
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset/$token",
+  component: function ResetRoute() {
+    return <ResetPage token={resetRoute.useParams().token} />;
+  },
+});
+
+/**
  * Connecting a client such as the CLI to the user's account (OAuth's consent page), outside the app's shell like
  * sign-in. A signed-out visit signs in first and comes back.
  */
@@ -213,12 +229,17 @@ const appRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  beforeLoad: async ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     const me = await context.queryClient.ensureQueryData(meQuery);
     for (const team of me.teams) {
       const heap = team.heaps.find((h) => !h.archived);
       if (heap) {
-        throw redirect({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
+        // The state goes along, so the line the reset page lands with (`notice`) reaches the heap.
+        throw redirect({
+          to: "/teams/$team/heaps/$heap",
+          params: { team: team.slug, heap: heap.slug },
+          state: location.state,
+        });
       }
     }
   },
@@ -441,6 +462,7 @@ const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/accou
 const routeTree = rootRoute.addChildren([
   loginRoute,
   inviteRoute,
+  resetRoute,
   authorizeRoute,
   shortTeamRoute,
   shortHeapRoute,
@@ -481,7 +503,10 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** Set on the way into an item from a page of the app, so closing the item goes back there. */
     closesBack?: boolean;
-    /** Set on the way to where a new member lands, holding the line the shell shows once: "You joined Acme." */
-    joined?: string;
+    /**
+     * Set on the way to where the user lands after the invite or reset page, holding the line the shell shows once:
+     * "You joined Acme." or "Password changed. You're signed in."
+     */
+    notice?: string;
   }
 }

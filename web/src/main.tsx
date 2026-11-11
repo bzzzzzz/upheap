@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import { ApiProblem, isUnauthenticated } from "./api/client";
 import { LocalDatabaseGate } from "./components/LocalDatabase";
 import { followThemeAcrossTabs } from "./components/theme";
-import { createAppRouter, isInvitePath, isSignInPath, pageHref, signInSearch } from "./routes";
+import { createAppRouter, handlesOwnSignIn, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
 
 /**
@@ -20,12 +20,13 @@ import "./index.css";
  * page that fails after the first has moved to sign-in mustn't replace its `redirect` with one to sign-in.
  *
  * An invite link's page handles its own sign-in, so a `401` there (the session ended while its confirm was open)
- * leaves the user on it and the cache as it is: the page reads the invitation again and shows it signed out.
+ * leaves the user on it and the cache as it is: the page reads the invitation again and shows it signed out. A reset
+ * link's page does too: holding the link is the permission, and setting the password signs the visitor in.
  */
 function onUnauthenticated(error: Error) {
   if (!isUnauthenticated(error)) return;
   const { location } = router.state;
-  if (isInvitePath(router, location.pathname)) return;
+  if (handlesOwnSignIn(router, location.pathname)) return;
   queryClient.removeQueries();
   if (isSignInPath(router, location.pathname)) return;
   void router.navigate({ to: "/login", search: signInSearch(pageHref(location.href)), replace: true });

@@ -14,6 +14,7 @@ pub mod items;
 mod migration;
 pub mod oauth;
 pub mod parameters;
+pub mod password_resets;
 #[cfg(feature = "proxy")]
 pub mod proxy;
 pub mod questions;
@@ -115,6 +116,12 @@ where
     migration::Migrator::up(db, None).await?;
     tracing::info!(applied = pending, "migrations applied");
     Ok(pending)
+}
+
+/// How many migrations the database hasn't had yet. For a command that runs beside the server, which migrates, and
+/// must not work on a schema older than its own.
+pub async fn pending_migrations(db: &DatabaseConnection) -> Result<usize, StoreError> {
+    Ok(migration::Migrator::get_pending_migrations(db).await?.len())
 }
 
 /// Checks that the database answers.

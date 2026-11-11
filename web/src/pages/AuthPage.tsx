@@ -303,6 +303,7 @@ function AuthForm({
         enterKeyHint="go"
         required
       />
+      {mode === "sign_in" && <ForgotPassword />}
       {error && !errorField && (
         <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
           {problemMessage(error)}
@@ -313,5 +314,26 @@ function AuthForm({
       </button>
       {mode === "register" && note && <p className="text-center text-xs text-muted">{note}</p>}
     </form>
+  );
+}
+
+/**
+ * "Forgot your password?" under Sign in's password (ux.md, Sign in and create account): a disclosure that says how a
+ * reset is done. There is no form and no request, since the server sends no email; whoever runs it makes the link.
+ */
+function ForgotPassword() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="-mt-2 flex flex-col items-start gap-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="rounded-lg px-1 py-1.5 text-sm font-semibold text-accent-ink underline pointer-coarse:min-h-11"
+      >
+        Forgot your password?
+      </button>
+      {open && <p className="text-sm text-ink-soft">Whoever runs this Upheap server can send you a reset link.</p>}
+    </div>
   );
 }
