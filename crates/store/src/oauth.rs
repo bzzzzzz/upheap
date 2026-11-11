@@ -443,6 +443,24 @@ pub async fn use_auth_code(
     Ok(result.rows_affected == 1)
 }
 
+/// Ends the user's authorization codes that are unused and not yet expired, by setting their expiry to `now`, and
+/// returns how many it ended. An exchange then refuses them as expired. They aren't marked used: a used code needs
+/// a token family, and presenting one again revokes that family.
+pub async fn expire_user_auth_codes(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let result = oauth_auth_codes::Entity::update_many()
+        .col_expr(oauth_auth_codes::Column::ExpiresAt, now.as_millis().into())
+        .filter(oauth_auth_codes::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(oauth_auth_codes::Column::UsedAt.is_null())
+        .filter(oauth_auth_codes::Column::ExpiresAt.gt(now.as_millis()))
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected)
+}
+
 /// Deletes up to `batch` authorization codes that expired by `cutoff`, used or not, and returns how many.
 ///
 /// The codes are found with a plain read and then deleted by key, as for ended sign-in windows, so the delete takes

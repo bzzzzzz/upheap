@@ -103,8 +103,9 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 **More** on a phone holds Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
 rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards, which are Profile, Password (server build), Appearance, Command line (server build) and Your data (local build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb,
-so the Add button beside the heap name shows only from a tablet up.
+its cards, which are Profile, Password (server build), Appearance, Command line (server build) and Your data (local
+build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
+the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
 the team in the URL (a link to its page, shown on the heap's pages and the team's own, and not in the local build,

@@ -553,7 +553,7 @@
           "me"
         ],
         "summary": "Changes the caller's password. Takes the session cookie only, never a bearer token: it is the person's decision\nin their browser, and a client holding a token must not be able to lock the person out of the rest.",
-        "description": "The session it is made from stays. Every other session of the user ends, and so does every sign-in by a client\nsuch as the command line: their tokens stop working at once. `ended_sign_ins` counts the ones that were still\nlive. The new password may equal the current one, which ends the others without picking a new password.\n\nThe attempt is counted with the account's sign-in attempts, so wrong tries here and at sign-in add up. Past the\nlimit it answers `429` before the password is checked, and a success starts the count over.",
+        "description": "The session it is made from stays. Every other session of the user ends, and so does every sign-in by a client\nsuch as the command line: their tokens stop working at once. `ended_sign_ins` counts the ones that were still\nlive. The new password may equal the current one, which ends the others without picking a new password.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count\ndoesn't block a change. A success starts both counts over.",
         "operationId": "change_password",
         "requestBody": {
           "content": {
@@ -614,7 +614,7 @@
                   "type": "integer",
                   "format": "int64"
                 },
-                "description": "Seconds until the account may try again"
+                "description": "Seconds until the session may try again"
               }
             },
             "content": {

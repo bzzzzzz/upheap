@@ -27,8 +27,8 @@ const themes: readonly { id: Theme; label: string }[] = [
 ];
 
 /**
- * The signed-in user's display name, which teammates see, their password (server build), this browser's theme, where the CLI is signed in as them (server
- * build), and in the local build their data.
+ * The signed-in user's display name, which teammates see, their password (server build), this browser's theme,
+ * where the CLI is signed in as them (server build), and in the local build their data.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
 export function AccountPage() {

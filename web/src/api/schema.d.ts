@@ -182,8 +182,9 @@ export interface paths {
          *     such as the command line: their tokens stop working at once. `ended_sign_ins` counts the ones that were still
          *     live. The new password may equal the current one, which ends the others without picking a new password.
          *
-         *     The attempt is counted with the account's sign-in attempts, so wrong tries here and at sign-in add up. Past the
-         *     limit it answers `429` before the password is checked, and a success starts the count over.
+         *     Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
+         *     is checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count
+         *     doesn't block a change. A success starts both counts over.
          */
         post: operations["change_password"];
         delete?: never;
@@ -2861,7 +2862,7 @@ export interface operations {
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {
-                    /** @description Seconds until the account may try again */
+                    /** @description Seconds until the session may try again */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

@@ -23,8 +23,9 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 /// such as the command line: their tokens stop working at once. `ended_sign_ins` counts the ones that were still
 /// live. The new password may equal the current one, which ends the others without picking a new password.
 ///
-/// The attempt is counted with the account's sign-in attempts, so wrong tries here and at sign-in add up. Past the
-/// limit it answers `429` before the password is checked, and a success starts the count over.
+/// Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
+/// is checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count
+/// doesn't block a change. A success starts both counts over.
 #[utoipa::path(post, path = "/me/password", tag = "me", security(("session" = [])),
     request_body = ChangePasswordRequestDto,
     responses(
@@ -33,7 +34,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         (status = 403, description = "`csrf_header_missing`", body = Problem),
         (status = 422, description = "`wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `password`), `password_too_short` or `password_too_long` (`field` `password`). Not counted as an attempt, except `wrong_password`", body = Problem),
         (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
-            headers(("Retry-After" = i64, description = "Seconds until the account may try again"))),
+            headers(("Retry-After" = i64, description = "Seconds until the session may try again"))),
     ))]
 async fn change_password(
     State(state): State<AppState>,

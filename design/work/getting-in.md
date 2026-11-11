@@ -363,7 +363,9 @@ One per step that asks something new of the product. Steps that use what's built
 **Passwords**
 
 13. Changing a password needs a browser session and the current password. A command-line sign-in can't change it.
-14. A wrong current password counts as a failed sign-in attempt for the account, under the same limit.
+14. A wrong current password counts as a failed sign-in attempt for the account. A change itself is limited per
+    session, to the same five per window, so someone else using up the account's attempts can't stop the owner
+    changing it.
 15. A change ends every other sign-in of the user in the same act, leaves the session it was made from, and
     cancels the user's working reset link.
 16. The operator's command makes a reset link for one existing user, named by username or by email address. It
@@ -403,8 +405,9 @@ Each is walked through the rules by hand, and kept as a test case.
 6. **An admin opens their own team's link.** Rule 7: they're taken to the team, stay an admin, nothing is recorded.
 7. **Someone else has a session.** A thief holds a session on Sam's account without knowing the password. Sam
    changes the password: rule 15 ends the thief's session. The thief tries first: rule 13 asks for the current
-   password, and after five wrong tries rule 14 refuses more for the window. Sam's own session keeps working
-   through it, though a new sign-in by Sam waits out the same window.
+   password, and after five wrong tries rule 14 refuses more from that session for the window. Those tries use up
+   the account's sign-in attempts, so a new sign-in by Sam waits out the window, but Sam's change from Sam's own
+   session still goes through.
 8. **Two reset links.** The operator makes one at 10:00 and, Sam having lost it, another at 10:20. Rule 16: the
    first is cancelled. Sam opens the first and is told so (rule 18), then the second at 11:15, which works.
 9. **Password remembered after all.** Sam asks for a reset, then signs in and changes the password in Account.

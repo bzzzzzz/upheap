@@ -64,7 +64,8 @@ pub async fn count_live_sessions_except(
 }
 
 /// Ends every session of the user except `keep_hash`, expired ones included, and returns how many rows it deleted.
-/// Scans the user's sessions: neither SQLite nor Postgres indexes `sessions.user_id`, and a user has few.
+/// Without an index on `sessions.user_id` (SQLite and Postgres have none) this scans the whole sessions table, not
+/// just the user's sessions; a password change is rare enough for that.
 pub async fn delete_sessions_except(
     db: &impl ConnectionTrait,
     user_id: UserId,

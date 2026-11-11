@@ -167,46 +167,84 @@ async fn a_wrong_current_password_is_refused_and_changes_nothing() -> Result<()>
 
 #[gtest]
 #[tokio::test]
-async fn attempts_are_counted_with_sign_in_before_the_password_is_checked() -> Result<()> {
+async fn a_change_is_limited_per_session_and_the_limit_ends_with_its_window() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, _) = app.register(EMAIL).await?;
+    let other = second_session(&app).await?;
     for _ in 0..5 {
         change(&app, &session, "not the password", NEW_PASSWORD).await?;
     }
 
     // Act
     let refused = change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
-    let signed_in = sign_in(&app, EMAIL, PASSWORD).await?;
     let own = me(&app, &session).await?;
-    app.clock.advance(Duration::from_minutes(15));
-    let old_after_window = sign_in(&app, EMAIL, PASSWORD).await?;
+    let from_other = change(&app, &other, PASSWORD, NEW_PASSWORD).await?;
 
     // Assert
     expect_that!(refused.status, eq(StatusCode::TOO_MANY_REQUESTS));
     expect_that!(problem_code(&refused), eq("too_many_attempts"));
     expect_that!(refused.retry_after, some(anything()));
-    expect_that!(signed_in.status, eq(StatusCode::TOO_MANY_REQUESTS));
     expect_that!(own.status, eq(StatusCode::OK));
-    expect_that!(old_after_window.status, eq(StatusCode::OK));
+    expect_that!(from_other.status, eq(StatusCode::OK));
     Ok(())
 }
 
 #[gtest]
 #[tokio::test]
-async fn wrong_sign_ins_count_against_a_change_too() -> Result<()> {
+async fn used_up_sign_in_attempts_do_not_stop_the_owner_changing_the_password() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (session, _) = app.register(EMAIL).await?;
-    for _ in 0..5 {
-        sign_in(&app, EMAIL, "not the password").await?;
+    let mut sign_ins = Vec::new();
+    for _ in 0..6 {
+        sign_ins.push(sign_in(&app, EMAIL, "not the password").await?.status);
     }
 
     // Act
-    let refused = change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
+    let changed = change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
 
     // Assert
-    expect_that!(refused.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(sign_ins.last(), some(eq(&StatusCode::TOO_MANY_REQUESTS)));
+    expect_that!(changed.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn wrong_current_passwords_use_up_the_accounts_sign_in_attempts() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+    let mut wrong = Vec::new();
+    for _ in 0..5 {
+        wrong.push(change(&app, &session, "not the password", NEW_PASSWORD).await?.status);
+    }
+
+    // Act
+    let signed_in = sign_in(&app, EMAIL, PASSWORD).await?;
+
+    // Assert
+    expect_that!(wrong, each(eq(&StatusCode::UNPROCESSABLE_ENTITY)));
+    expect_that!(signed_in.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_authorization_approved_before_the_change_cannot_be_exchanged_after_it() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+    let code = app.approve_cli(&session).await?;
+    change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
+
+    // Act
+    let exchanged = app.exchange_code(&code).await?;
+
+    // Assert
+    expect_that!(exchanged.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(exchanged.body["error"].as_str(), some(eq("invalid_grant")));
     Ok(())
 }
 

@@ -242,6 +242,20 @@ impl Services {
         })
     }
 
+    /// Adds one to the address's sign-in count without refusing, for a wrong password that wasn't a sign-in.
+    async fn add_to_sign_in_count(&self, key: &str) -> Result<(), ServiceError> {
+        let now = self.now();
+        let window_end = self
+            .settings
+            .sign_in_limit
+            .window_end(now)
+            .ok_or(ServiceError::Invalid(domain::ValidationError::TimestampOutOfRange))?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        store::sign_in_attempts::count_sign_in_attempt(&txn, key, now, window_end).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        Ok(())
+    }
+
     /// Changes the caller's password, ends their other sign-ins and records it, in one transaction.
     ///
     /// `session` is the caller's own web session, which stays. Every other session of the user is deleted and every
@@ -249,9 +263,11 @@ impl Services {
     /// may equal the current one: that ends the other sign-ins all the same.
     ///
     /// Empty or unacceptable input fails with [`ValidationError`] before anything is counted. Then the attempt is
-    /// counted under the account's sign-in key (`domain::sign_in`), so wrong tries here and at sign-in add up, and
-    /// one past the limit fails with [`ServiceError::TooManySignInAttempts`] before the password is checked. A
-    /// wrong `current` fails with [`ServiceError::WrongPassword`] and changes nothing. A success clears the count.
+    /// counted per session (`domain::sign_in`, the same limit as sign-in), and one past the limit fails with
+    /// [`ServiceError::TooManySignInAttempts`] before the password is checked. The account's own sign-in count is
+    /// not checked, so someone else using up the account's attempts can't stop the owner changing it. A wrong
+    /// `current` fails with [`ServiceError::WrongPassword`], changes nothing, and adds one to the account's sign-in
+    /// count, so guessing through stolen sessions still uses up its sign-in attempts. A success clears both counts.
     ///
     /// The change is recorded in the user's personal team, whose one member is the user, with the number of
     /// sign-ins it ended and nothing about either password.
@@ -276,14 +292,17 @@ impl Services {
         let user = store::users::find_user(&self.db, principal.user_id)
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        let attempts_key = sha256_hex(user.email.as_str());
-        self.count_sign_in_attempt(&attempts_key).await?;
+        let account_key = sha256_hex(user.email.as_str());
+        let session_key = sha256_hex(&format!("session:{}", session.to_hash()));
+        self.count_sign_in_attempt(&session_key).await?;
 
         let stored_hash = store::users::find_password_hash(&self.db, user.id)
             .await?
             .ok_or(ServiceError::WrongPassword)?;
         let current = current.to_owned();
-        if !run_blocking(move || Ok(verify_password(&current, &stored_hash))).await? {
+        let verified_hash = stored_hash.clone();
+        if !run_blocking(move || Ok(verify_password(&current, &verified_hash))).await? {
+            self.add_to_sign_in_count(&account_key).await?;
             tracing::info!(user_id = %user.id, "password change rejected");
             return Err(ServiceError::WrongPassword);
         }
@@ -299,12 +318,19 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         // The personal team first, as `update_display_name` takes team rows before the user's.
         store::teams::lock_team(&txn, personal_team.id).await?;
+        // The caller's session may have ended while the password was being checked.
+        if store::sessions::find_session_user(&txn, &keep, now).await?.is_none() {
+            return Err(ServiceError::Unauthenticated);
+        }
         let live_sessions = store::sessions::count_live_sessions_except(&txn, user.id, &keep, now).await?;
         let live_clients = store::oauth::list_live_token_families(&txn, user.id, now).await?.len();
         let ended_sign_ins = u32::try_from(live_sessions.saturating_add(live_clients as u64)).unwrap_or(u32::MAX);
-        if !store::users::update_password(&txn, user.id, &new_hash, now).await? {
+        // Only while the stored hash is the one `current` was verified against. If another change got in first,
+        // the password the caller gave is no longer the current one, which is what `WrongPassword` says.
+        if !store::users::update_password(&txn, user.id, &stored_hash, &new_hash, now).await? {
             return Err(ServiceError::WrongPassword);
         }
+        store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
         store::sessions::delete_sessions_except(&txn, user.id, &keep).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
@@ -319,9 +345,11 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        // The password is changed by now, so failing to clear the count mustn't fail the request.
-        if let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, &attempts_key).await {
-            tracing::warn!(?error, "can't clear sign-in attempts");
+        // The password is changed by now, so failing to clear the counts mustn't fail the request.
+        for key in [&session_key, &account_key] {
+            if let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, key).await {
+                tracing::warn!(?error, "can't clear sign-in attempts");
+            }
         }
         tracing::info!(user_id = %user.id, ended_sign_ins, "password changed");
         Ok(PasswordChanged { ended_sign_ins })
