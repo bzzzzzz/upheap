@@ -69,6 +69,40 @@ async fn read_steps(db: &impl ConnectionTrait, item_id: ItemId, lock: bool) -> R
     rows.into_iter().map(to_step).collect()
 }
 
+/// The title of each step of `item_ids`, by item and step number, in one query per [`IN_LIST_CHUNK`] items. Only the
+/// titles are read, since a step's context can be long.
+pub async fn list_step_titles(
+    db: &impl ConnectionTrait,
+    item_ids: &[ItemId],
+) -> Result<HashMap<(ItemId, StepNumber), Title>, StoreError> {
+    let ids: Vec<String> = item_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut titles = HashMap::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_steps::Entity::find()
+            .select_only()
+            .columns([
+                item_steps::Column::Id,
+                item_steps::Column::ItemId,
+                item_steps::Column::Number,
+                item_steps::Column::Title,
+            ])
+            .filter(item_steps::Column::ItemId.is_in(chunk.iter().map(String::as_str)))
+            .into_tuple::<(String, String, i32, String)>()
+            .all(db)
+            .await?;
+        for (id, item_id, number, title) in rows {
+            let read = RowReader { table: TABLE, id: &id };
+            let number = u32::try_from(number)
+                .ok()
+                .and_then(StepNumber::new)
+                .ok_or_else(|| read.corrupt(format!("number {number} is not positive")))?;
+            let title = Title::parse(&title).map_err(|e| read.corrupt(e.to_string()))?;
+            titles.insert((ItemId::from_uuid(read.uuid(&item_id)?), number), title);
+        }
+    }
+    Ok(titles)
+}
+
 /// The progress of each of `item_ids`, counted in one grouped query per [`IN_LIST_CHUNK`] items, without loading
 /// the steps. Items with no open or ticked step are left out.
 pub async fn count_step_progress(

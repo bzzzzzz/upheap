@@ -232,3 +232,77 @@ async fn twenty_thousand_four_byte_characters_fit_in_details_and_a_comment() -> 
     );
     Ok(())
 }
+
+/// Closes the item and returns the stored one.
+async fn close(db: &DatabaseConnection, item_id: ItemId, by: UserId) -> Result<()> {
+    let item = store::items::find_item(db, item_id).await?.context("item")?;
+    let closed = Item {
+        state: domain::item::ItemState::Done {
+            closed_at: now()?,
+            closed_by: Some(by),
+        },
+        ..item.clone()
+    };
+    store::items::update_item(db, &closed, item.version, now()?)
+        .await?
+        .context("saved")?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_open_questions_query_skips_answered_questions_and_closed_items() -> Result<()> {
+    // Arrange
+    let (db, item_id, asker) = item_in_new_database().await?;
+    let heap_id = store::items::find_item(&db, item_id).await?.context("item")?.heap_id;
+    let answered = question(item_id, asker, 1, QuestionKind::Question, &[], false)?;
+    store::questions::insert_question(&db, &answered).await?;
+    let reply = answered.reply(&[], Context::parse_as("Yes", Field::Comment)?, asker, now()?)?;
+    store::questions::update_question(&db, &reply, answered.version)
+        .await?
+        .context("saved")?;
+    store::questions::insert_question(&db, &question(item_id, asker, 2, QuestionKind::Request, &[], false)?).await?;
+    store::questions::insert_question(&db, &question(item_id, asker, 3, QuestionKind::Question, &[], false)?).await?;
+
+    // Act
+    let open = store::questions::list_open_questions_on_open_items(&db, &[heap_id]).await?;
+    let elsewhere =
+        store::questions::list_open_questions_on_open_items(&db, &[HeapId::from_uuid(Uuid::now_v7())]).await?;
+    close(&db, item_id, asker).await?;
+    let closed = store::questions::list_open_questions_on_open_items(&db, &[heap_id]).await?;
+
+    // Assert
+    expect_that!(
+        open.iter().map(|(heap, q)| (*heap, q.number.get())).collect::<Vec<_>>(),
+        elements_are![eq(&(heap_id, 2)), eq(&(heap_id, 3))]
+    );
+    expect_that!(elsewhere, is_empty());
+    expect_that!(closed, is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn open_questions_are_counted_per_item() -> Result<()> {
+    // Arrange
+    let (db, item_id, asker) = item_in_new_database().await?;
+    let answered = question(item_id, asker, 1, QuestionKind::Question, &[], false)?;
+    store::questions::insert_question(&db, &answered).await?;
+    let reply = answered.reply(&[], Context::parse_as("Yes", Field::Comment)?, asker, now()?)?;
+    store::questions::update_question(&db, &reply, answered.version)
+        .await?
+        .context("saved")?;
+    store::questions::insert_question(&db, &question(item_id, asker, 2, QuestionKind::Request, &[], false)?).await?;
+    store::questions::insert_question(&db, &question(item_id, asker, 3, QuestionKind::Question, &[], false)?).await?;
+    let other = ItemId::from_uuid(Uuid::now_v7());
+
+    // Act
+    let counts = store::questions::count_open_questions(&db, &[item_id, other]).await?;
+    let none = store::questions::count_open_questions(&db, &[]).await?;
+
+    // Assert
+    expect_that!(counts.get(&item_id), some(eq(&2)));
+    expect_that!(counts.contains_key(&other), eq(false));
+    expect_that!(none, is_empty());
+    Ok(())
+}

@@ -8,6 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { localDatabase } from "#local-database";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
@@ -43,6 +44,7 @@ import {
   type TagPatch,
   type Team,
   type User,
+  type Waiting,
   type WeightsPatch,
 } from "./client";
 
@@ -76,6 +78,7 @@ const teamKey = (team: string) => ["team", team] as const;
 /** Under the team's key, so invalidating the team refreshes its links too. */
 const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
+const waitingKey = ["waiting"] as const;
 const usersKey = (query: string) => ["users", query] as const;
 
 /**
@@ -172,6 +175,20 @@ export function useItem(heap: HeapRef, key: string) {
 }
 
 /**
+ * What waits for the person across their heaps (ux.md, Waiting for me): its count is in the navigation, so it's fetched
+ * for every page, once signed in, and not at all in the local build, where nothing can ask a question. Kept fresh for
+ * 30 s and fetched again on window focus and after writes (no polling).
+ */
+export function useWaiting() {
+  return useQuery({
+    queryKey: waitingKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/waiting")),
+    staleTime: 30_000,
+    enabled: !localDatabase,
+  });
+}
+
+/**
  * The rough due times a due picker offers, from the server, so a picked choice reads back with the label it was
  * picked by. Their dates move with the day, so they're fetched again after a while.
  */
@@ -190,6 +207,16 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: ["item"] }),
+    // An item's state or order changes what waits for the person, and in what order.
+    queryClient.invalidateQueries({ queryKey: waitingKey }),
+  ]);
+}
+
+/** `/me` and what waits for the person, which counts the heaps they are in. */
+function invalidateMe(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    queryClient.invalidateQueries({ queryKey: waitingKey }),
   ]);
 }
 
@@ -198,7 +225,7 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
  * so only those refetch `/me`, and nothing waits for it.
  */
 function invalidateOpenCounts(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+  void invalidateMe(queryClient);
 }
 
 /**
@@ -345,8 +372,28 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
         }),
       );
     },
-    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
-    onError: () => queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) }),
+    onSuccess: (saved, { question }) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      // The Waiting page's row leaves and its count drops at once; the refetch below confirms them.
+      queryClient.setQueryData<Waiting>(
+        waitingKey,
+        (waiting) =>
+          waiting && {
+            count: Math.max(0, waiting.count - 1),
+            rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question.number === question.number)),
+          },
+      );
+    },
+    // Not returned: the mutation would wait for the refetches, and with it the focus move and the live message of
+    // the row replied to.
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
+    },
+    // The lists say which items wait for you, and Waiting for me what does.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
   });
 }
 
@@ -594,11 +641,7 @@ export function useUpdateMe() {
         }),
       ),
     // Teams list members by name.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
-        queryClient.invalidateQueries({ queryKey: ["team"] }),
-      ]),
+    onSettled: () => Promise.all([invalidateMe(queryClient), queryClient.invalidateQueries({ queryKey: ["team"] })]),
   });
 }
 
@@ -612,10 +655,7 @@ export function useTeam(team: string) {
 
 /** Team changes also change what `/me` lists: teams, roles and heaps. */
 function invalidateTeam(queryClient: QueryClient, team: string) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: teamKey(team) }),
-    queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
-  ]);
+  return Promise.all([queryClient.invalidateQueries({ queryKey: teamKey(team) }), invalidateMe(queryClient)]);
 }
 
 /** Starts a team. Without a `slug`, the server makes one from the name. */
@@ -624,7 +664,7 @@ export function useCreateTeam() {
   return useMutation({
     mutationFn: async (body: { name: string; slug?: string }) => unwrap(await api.POST("/api/v1/teams", { body })),
     onSuccess: (team) => queryClient.setQueryData(teamKey(team.slug), team),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    onSettled: () => invalidateMe(queryClient),
   });
 }
 
@@ -736,7 +776,7 @@ export function useJoinByInvite(token: string) {
       return { team: unwrap(result), created: result.response.status === 201 };
     },
     // The new team shows in the shell. Awaited, so the landing finds it there.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meQuery.queryKey }),
+    onSuccess: () => invalidateMe(queryClient),
     onError: (error) => refreshInvitationAfter(queryClient, token, error),
   });
 }
@@ -792,7 +832,7 @@ export function useLeaveTeam(team: Team) {
           queryClient.removeQueries({ queryKey: key });
         }
       }
-      await queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+      await invalidateMe(queryClient);
     },
   });
 }
