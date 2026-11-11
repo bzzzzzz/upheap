@@ -101,14 +101,25 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The installs download, and fail now and then, so each is tried up to 3 times (a shell loop: no cache and no
+      # third-party retry action, per the header).
       - name: Install Rust
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "$TARGET"
+          for i in 1 2 3; do
+            rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "$TARGET" && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 15))
+          done
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Install musl-tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: |
+          for i in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y musl-tools && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 15))
+          done
 
       - name: Build
         run: cargo build --release --locked -p cli --target "$TARGET"
