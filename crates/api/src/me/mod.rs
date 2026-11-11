@@ -11,9 +11,7 @@ use api_types::common::HeapSummaryDto;
 use api_types::common::ItemActionDto;
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
-use api_types::waiting::{
-    WaitingDto, WaitingHeapDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
-};
+use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto};
 use axum::Json;
 use axum::extract::State;
 use domain::heap::Heap;
@@ -109,8 +107,8 @@ async fn update_me(
     Ok(Json(UserDto::from(&user)))
 }
 
-fn to_waiting_heap_dto(heap: &Heap, team: &Team) -> WaitingHeapDto {
-    WaitingHeapDto {
+fn to_item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
+    ItemHeapDto {
         id: *heap.id.as_uuid(),
         slug: heap.slug.to_string(),
         name: heap.name.as_str().to_owned(),
@@ -150,7 +148,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             turn: row.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
             with_agent: row.with_agent,
         },
-        heap: to_waiting_heap_dto(&row.heap, &row.team),
+        heap: to_item_heap_dto(&row.heap, &row.team),
         question,
         stuck,
         step_title: row.step_title.map(|title| title.as_str().to_owned()),
@@ -213,7 +211,7 @@ async fn get_items(
             .into_iter()
             .map(|row| AcrossHeapsItemDto {
                 position: row.position,
-                heap: to_waiting_heap_dto(&row.heap, &row.team),
+                heap: to_item_heap_dto(&row.heap, &row.team),
                 entry: to_ranked_dto(row.entry, as_of, &tz),
             })
             .collect()

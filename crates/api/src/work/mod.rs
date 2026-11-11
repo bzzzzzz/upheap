@@ -3,7 +3,7 @@
 //! These routes are for a build that has agents. An agent writes to its item with the `Upheap-Run` header, which the
 //! extractor reads (`extract.rs`).
 
-use api_types::waiting::WaitingHeapDto;
+use api_types::waiting::ItemHeapDto;
 use api_types::work::{
     ClaimDto, ClaimRequestDto, FinishRequestDto, ReachedRequestDto, RunDto, WorkItemDto, WorkNextDto,
 };
@@ -77,7 +77,7 @@ fn work_item_dto(work: &WorkItem) -> WorkItemDto {
         title: work.item.title.as_str().to_owned(),
         kind: work.item.kind.into(),
         stage: work.item.stage.into(),
-        heap: WaitingHeapDto {
+        heap: ItemHeapDto {
             id: *work.heap.id.as_uuid(),
             slug: work.heap.slug.to_string(),
             name: work.heap.name.as_str().to_owned(),

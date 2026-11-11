@@ -17,7 +17,7 @@ use crate::common::{
     double_option, never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, SortDto, StateModeDto};
-use crate::waiting::WaitingHeapDto;
+use crate::waiting::ItemHeapDto;
 
 /// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
 /// pinned, open items shown, blocked items hidden, by priority.
@@ -203,7 +203,7 @@ pub struct AcrossHeapsItemDto {
     /// 1-based position within its group across all heaps.
     pub position: u32,
     /// The heap the item is in, and its team.
-    pub heap: WaitingHeapDto,
+    pub heap: ItemHeapDto,
     /// The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`
     /// names what holds it back in that heap.
     pub entry: RankedItemDto,

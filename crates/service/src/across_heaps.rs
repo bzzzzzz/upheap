@@ -1,5 +1,5 @@
 //! One ranked list across all heaps: the items of every active heap the caller may view, merged into the groups of
-//! one list view. The mechanism is in architecture.md, Items (`GET /me/items`).
+//! one list view. The mechanism is in architecture.md, Ranking, Across heaps.
 
 use domain::Timestamp;
 use domain::heap::Heap;

@@ -6691,7 +6691,7 @@
             "description": "The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`\nnames what holds it back in that heap."
           },
           "heap": {
-            "$ref": "#/components/schemas/WaitingHeap",
+            "$ref": "#/components/schemas/ItemHeap",
             "description": "The heap the item is in, and its team."
           },
           "position": {
@@ -8417,6 +8417,36 @@
           "take_back",
           "retry"
         ]
+      },
+      "ItemHeap": {
+        "type": "object",
+        "description": "The heap a row's item is in, and its team.",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "team_slug",
+          "team_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "team_name": {
+            "type": "string",
+            "description": "The team's name as `GET /me` shows it."
+          },
+          "team_slug": {
+            "type": "string"
+          }
+        }
       },
       "ItemOption": {
         "type": "object",
@@ -10849,36 +10879,6 @@
           }
         }
       },
-      "WaitingHeap": {
-        "type": "object",
-        "description": "The heap a row's item is in, and its team.",
-        "required": [
-          "id",
-          "slug",
-          "name",
-          "team_slug",
-          "team_name"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "team_name": {
-            "type": "string",
-            "description": "The team's name as `GET /me` shows it."
-          },
-          "team_slug": {
-            "type": "string"
-          }
-        }
-      },
       "WaitingItem": {
         "type": "object",
         "description": "The item a row is on.",
@@ -10946,7 +10946,7 @@
         ],
         "properties": {
           "heap": {
-            "$ref": "#/components/schemas/WaitingHeap"
+            "$ref": "#/components/schemas/ItemHeap"
           },
           "item": {
             "$ref": "#/components/schemas/WaitingItem"
@@ -11055,7 +11055,7 @@
             "description": "The stable state the turn goes to."
           },
           "heap": {
-            "$ref": "#/components/schemas/WaitingHeap"
+            "$ref": "#/components/schemas/ItemHeap"
           },
           "id": {
             "type": "string",

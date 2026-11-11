@@ -9,7 +9,7 @@ use api_types::list_view::{BlockedLayoutDto, ListViewDto, SortDto, StateModeDto}
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
 use api_types::views::SavedViewListDto;
-use api_types::waiting::WaitingHeapDto;
+use api_types::waiting::ItemHeapDto;
 use clap::Args;
 
 use crate::client::NO_QUERY;
@@ -238,7 +238,7 @@ fn across_groups(list: &AcrossHeapsListDto) -> [(&'static str, &[AcrossHeapsItem
 }
 
 /// `team/heap`, the name every item command takes for a heap.
-fn heap_label(heap: &WaitingHeapDto) -> String {
+fn heap_label(heap: &ItemHeapDto) -> String {
     format!("{}/{}", heap.team_slug, heap.slug)
 }
 

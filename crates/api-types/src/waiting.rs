@@ -40,7 +40,7 @@ pub enum WaitingRowKindDto {
 pub struct WaitingRowDto {
     pub kind: WaitingRowKindDto,
     pub item: WaitingItemDto,
-    pub heap: WaitingHeapDto,
+    pub heap: ItemHeapDto,
     /// The open question, as the item carries it. Set on a `question` row.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
     // says required.
@@ -97,8 +97,8 @@ pub struct WaitingItemDto {
 
 /// The heap a row's item is in, and its team.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[schema(as = WaitingHeap)]
-pub struct WaitingHeapDto {
+#[schema(as = ItemHeap)]
+pub struct ItemHeapDto {
     pub id: Uuid,
     pub slug: String,
     pub name: String,

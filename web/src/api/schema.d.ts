@@ -1262,7 +1262,7 @@ export interface components {
              */
             entry: components["schemas"]["RankedItem"];
             /** @description The heap the item is in, and its team. */
-            heap: components["schemas"]["WaitingHeap"];
+            heap: components["schemas"]["ItemHeap"];
             /**
              * Format: int32
              * @description 1-based position within its group across all heaps.
@@ -1961,6 +1961,16 @@ export interface components {
          * @enum {string}
          */
         ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back" | "retry";
+        /** @description The heap a row's item is in, and its team. */
+        ItemHeap: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            slug: string;
+            /** @description The team's name as `GET /me` shows it. */
+            team_name: string;
+            team_slug: string;
+        };
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -2955,16 +2965,6 @@ export interface components {
              */
             rows: components["schemas"]["WaitingRow"][];
         };
-        /** @description The heap a row's item is in, and its team. */
-        WaitingHeap: {
-            /** Format: uuid */
-            id: string;
-            name: string;
-            slug: string;
-            /** @description The team's name as `GET /me` shows it. */
-            team_name: string;
-            team_slug: string;
-        };
         /** @description The item a row is on. */
         WaitingItem: {
             /** Format: uuid */
@@ -2983,7 +2983,7 @@ export interface components {
         };
         /** @description One thing that waits. */
         WaitingRow: {
-            heap: components["schemas"]["WaitingHeap"];
+            heap: components["schemas"]["ItemHeap"];
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
             question: null | components["schemas"]["Question"];
@@ -3022,7 +3022,7 @@ export interface components {
             failed_runs: number;
             /** @description The stable state the turn goes to. */
             goal: components["schemas"]["Goal"];
-            heap: components["schemas"]["WaitingHeap"];
+            heap: components["schemas"]["ItemHeap"];
             /** Format: uuid */
             id: string;
             /**
