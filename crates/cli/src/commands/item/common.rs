@@ -165,7 +165,7 @@ pub fn parse_parameter_setting(raw: &str) -> Result<ParameterSetting, String> {
 }
 
 /// The patch map for the `--parameter` and `--no-parameter` flags: each parameter's ID to its new option, or to
-/// `None` to clear it. A parameter named twice, whichever flags name it, is a usage error.
+/// `None` to clear it. A parameter named twice with different values, or both set and cleared, is a usage error.
 pub(super) fn resolve_parameter_values(
     set: &[ParameterSetting],
     clear: &[String],
@@ -176,7 +176,11 @@ pub(super) fn resolve_parameter_values(
     for setting in set {
         let parameter = find_parameter(&setting.parameter, parameters, heap)?;
         let option = find_option(&setting.option, parameter, heap)?;
-        if values.insert(parameter.id, Some(option.id)).is_some() {
+        // The same option given twice is kept once, as a repeated --tag is.
+        if values
+            .insert(parameter.id, Some(option.id))
+            .is_some_and(|before| before != Some(option.id))
+        {
             return Err(UsageError::ParameterTwice {
                 flag: "--parameter",
                 name: parameter.name.clone(),
@@ -297,11 +301,6 @@ mod tests {
 
     #[gtest]
     fn a_parameter_setting_splits_at_the_first_equals_and_trims() {
-        let setting = |parameter: &str, option: &str| ParameterSetting {
-            parameter: parameter.to_owned(),
-            option: option.to_owned(),
-        };
-
         expect_that!(
             parse_parameter_setting("Area=Backend"),
             ok(eq(&setting("Area", "Backend")))
@@ -380,6 +379,12 @@ mod tests {
     #[gtest]
     fn a_parameter_named_twice_is_a_usage_error() -> googletest::Result<()> {
         let parameters = parameters()?;
+        let same_twice = resolve_parameter_values(
+            &[setting("Area", "Backend"), setting("area", "backend")],
+            &[],
+            &parameters,
+            &personal(),
+        );
         let twice = resolve_parameter_values(
             &[
                 setting("Area", "Backend"),
@@ -396,6 +401,7 @@ mod tests {
             &personal(),
         );
 
+        expect_that!(same_twice.map(|values| values.len()), ok(eq(&1)));
         expect_that!(
             twice.map_err(|e| e.to_string()),
             err(eq("--parameter names Area twice; give it once"))
