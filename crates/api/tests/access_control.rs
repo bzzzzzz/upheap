@@ -289,6 +289,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
+            "/me/items",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
             "/me/sign-ins",
             SignedIn,
             Target::Nothing,

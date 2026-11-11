@@ -139,6 +139,9 @@ enum Command {
     /// Tags in a heap
     #[command(subcommand)]
     Tag(TagCommand),
+    /// Parameters in a heap
+    #[command(subcommand)]
+    Parameter(ParameterCommand),
     /// What agents work on: the queue, and a run's end
     #[command(subcommand)]
     Work(WorkCommand),
@@ -208,6 +211,12 @@ enum TagCommand {
 }
 
 #[derive(Subcommand)]
+enum ParameterCommand {
+    /// The heap's parameters and their options
+    List(commands::parameter::list::ListArgs),
+}
+
+#[derive(Subcommand)]
 enum WorkCommand {
     /// The item an agent would work on next, without taking it
     Next(commands::work::next::NextArgs),
@@ -271,6 +280,7 @@ impl Command {
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Add(args)) => &args.shared,
             Self::Work(WorkCommand::Next(args)) => &args.shared,
             Self::Work(WorkCommand::Claim(args)) => &args.shared,
@@ -398,6 +408,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::List(args)) => commands::parameter::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
         Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
         Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,

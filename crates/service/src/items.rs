@@ -138,6 +138,9 @@ pub struct OptionValue {
 #[derive(Debug)]
 pub struct RankedEntry {
     pub view: ItemView,
+    /// The item's ranking score in its own heap, blocker inheritance included. Scores of different heaps compare
+    /// as they are while every heap weighs the same ([`Services::list_ranked_across_heaps`]).
+    pub score: f64,
     /// 1-based position within its group, in the order the group is listed.
     pub position: u32,
     pub contributors: Vec<Contributor>,
@@ -238,10 +241,31 @@ impl Services {
     ) -> Result<RankedList, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let now = self.now();
-        let as_of = requested_as_of
+        let as_of = self.effective_as_of(requested_as_of, now);
+        self.rank_heap_list(access.heap, access.membership.role, as_of, now, view)
+            .await
+    }
+
+    /// The time a list ranks at: `requested_as_of` unless it's in the future or more than [`MAX_AS_OF_AGE`] old, then
+    /// `now`.
+    pub(crate) fn effective_as_of(&self, requested_as_of: Option<Timestamp>, now: Timestamp) -> Timestamp {
+        requested_as_of
             .filter(|t| *t <= now && now.since(*t) <= MAX_AS_OF_AGE)
-            .unwrap_or(now);
-        let (mut items, parameters, ranking) = rank_open_items(&self.db, &access.heap, as_of).await?;
+            .unwrap_or(now)
+    }
+
+    /// [`list_ranked`](Self::list_ranked) after the caller's right to view `heap` is settled: `role` is their role in
+    /// its team, `as_of` the time to rank at and `now` the time their labels and actions are worked out at.
+    pub(crate) async fn rank_heap_list(
+        &self,
+        heap: Heap,
+        role: Role,
+        as_of: Timestamp,
+        now: Timestamp,
+        view: &ListView,
+    ) -> Result<RankedList, ServiceError> {
+        let heap_id = heap.id;
+        let (mut items, parameters, ranking) = rank_open_items(&self.db, &heap, as_of).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
@@ -251,7 +275,6 @@ impl Services {
         let blockers = blocker_summaries(&self.db, heap_id, &items).await?;
         let users = load_item_users(&self.db, &items).await?;
 
-        let role = access.membership.role;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
         let mut hidden_count = 0_u32;
         for entry in ranking {
@@ -271,8 +294,8 @@ impl Services {
                     continue;
                 }
             };
-            let stage_choices = allowed_stage_choices(&item, &access.heap, role);
-            let step_actions = allowed_step_actions(&item, &access.heap, role);
+            let stage_choices = allowed_stage_choices(&item, &heap, role);
+            let step_actions = allowed_step_actions(&item, &heap, role);
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
@@ -299,6 +322,7 @@ impl Services {
                     turn: None,
                     with_agent: false,
                 },
+                score: entry.score,
                 position: 0,
                 contributors: entry.contributors,
                 held_back_by: entry.held_back_by,
@@ -333,7 +357,7 @@ impl Services {
             .collect();
         let mut step_progress = store::steps::count_step_progress(&self.db, &listed).await?;
         // Nothing waits, and no agent has anything, in an archived heap, so its items need no count.
-        let (open_questions, mut open_turns) = if access.heap.is_archived() {
+        let (open_questions, mut open_turns) = if heap.is_archived() {
             (HashMap::new(), HashMap::new())
         } else {
             let turns = store::turns::list_open_turns(&self.db, &listed).await?;
@@ -348,16 +372,16 @@ impl Services {
             let turn = open_turns.remove(&id);
             entry.view.step_progress = step_progress.remove(&id);
             let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-            entry.view.waits_for_you = waits_for_you(&entry.view.item, &access.heap, open_questions, stuck);
-            entry.view.with_agent = with_agent(&entry.view.item, &access.heap, open_questions, turn.is_some(), stuck);
+            entry.view.waits_for_you = waits_for_you(&entry.view.item, &heap, open_questions, stuck);
+            entry.view.with_agent = with_agent(&entry.view.item, &heap, open_questions, turn.is_some(), stuck);
             entry.view.allowed_actions =
-                allowed_item_actions(&entry.view.item, &access.heap, role, turn.is_some(), stuck, now);
+                allowed_item_actions(&entry.view.item, &heap, role, turn.is_some(), stuck, now);
             entry.view.turn = turn;
         }
 
         tracing::debug!(%heap_id, items = item_count, as_of = as_of.as_millis(), "ranked heap");
         Ok(RankedList {
-            heap: access.heap,
+            heap,
             role,
             as_of,
             pinned,

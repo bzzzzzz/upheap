@@ -6,7 +6,7 @@ use api_types::tags::TagListDto;
 use clap::Args;
 use uuid::Uuid;
 
-use super::common::{dedupe, resolve_due};
+use super::common::{ParameterSetting, dedupe, parameter_values, parse_parameter_setting, resolve_due};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, parse_api_value};
@@ -37,6 +37,9 @@ pub struct AddArgs {
     /// A tag of the heap, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
+    /// Set a parameter of the heap to one of its options, as NAME=OPTION, each by name or ID. Repeat for more
+    #[arg(long, value_name = "NAME=OPTION", value_parser = parse_parameter_setting)]
+    pub parameter: Vec<ParameterSetting>,
     /// Add it as a task, not a note
     #[arg(long)]
     pub task: bool,
@@ -70,6 +73,12 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
             resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?,
         ))
     };
+    let parameter_values = parameter_values(&args.parameter, &[], &api).await?.map(|values| {
+        values
+            .into_iter()
+            .filter_map(|(id, option)| Some((id, option?)))
+            .collect()
+    });
     let due = match &args.due {
         Some(raw) => Some(resolve_due(raw, &client, &token).await?),
         None => None,
@@ -83,7 +92,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         impact: args.impact,
         due,
         tag_ids,
-        parameter_values: None,
+        parameter_values,
     };
     let mut added = api.post::<ItemDto>(&["items"], &body).await?;
     if needs_task_patch(args.task, &added.value) {
