@@ -2,6 +2,7 @@
 //! that makes the calls and writes the output.
 
 pub mod auth;
+pub mod guide;
 pub mod heap;
 pub(crate) mod heap_api;
 pub mod item;

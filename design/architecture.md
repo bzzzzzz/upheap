@@ -701,7 +701,12 @@ section is how it maps onto this API.
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
    keyed by the server's URL: the refresh token, and the last access token with its expiry, as JSON. `keyring` uses
-   the Secret Service over zbus on Linux, which is pure Rust, so a static build needs no libdbus.
+   the Secret Service over zbus on Linux, which is pure Rust, so a static build needs no libdbus. On macOS the CLI
+   runs `/usr/bin/security` instead, with the secret on its standard input. A keychain entry lets the program that
+   made it read it without asking, and macOS tells programs apart by code signature, so an entry `upheap` made
+   itself was closed to its next build: a dialog after every upgrade and every rebuild, which a command run by a
+   script or an agent waits on for ever. An entry `security` made stays open to `security`. The cost: any program
+   running as the user can read it the same way, without a dialog.
 7. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
