@@ -296,6 +296,18 @@ test("a note is made a task and its stage is set from the item", async ({ page, 
   else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
   const confirm = page.getByRole("alertdialog", { name: "Make “Rotate the certs” a task?" });
   await expect(confirm).toContainText("A task can't go back to a note.");
+  // Cancel keeps the note and gives focus back to the ⋯.
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await expect(pane.getByText("Note · As written", { exact: true })).toBeVisible();
+  await more.click();
+  if (phone)
+    await page
+      .getByRole("dialog", { name: "More", exact: true })
+      .getByRole("button", { name: "Make it a task…" })
+      .click();
+  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
   await confirm.getByRole("button", { name: "Make it a task" }).click();
   await expect(pane.getByText("Task · As written", { exact: true })).toBeVisible();
 

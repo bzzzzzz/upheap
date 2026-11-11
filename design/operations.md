@@ -15,9 +15,15 @@ Set up by hand on 2026-11-08:
 | Google Cloud project | `upheap`, region `us-west1` (Oregon) |
 | Neon | Postgres 17 in AWS `us-west-2` (Oregon), so queries stay in one region |
 | Image repository | Artifact Registry `us-west1-docker.pkg.dev/upheap/upheap`, image `upheap-server`, tagged with the commit |
+| Image cleanup | Keeps the 10 most recent images and deletes the rest once they're 2 days old; set 2026-11-11 |
 | Cloud Run service | `upheap`, public, 1 CPU and 512 MiB, 80 requests per instance, at most 3 instances, startup probe on `/readyz`, startup CPU boost |
 | Configuration | `DATABASE_URL` from the Secret Manager secret `upheap-database-url` (Neon's pooled URL, `sslmode=require`), `BASE_URL=https://upheap-251561194444.us-west1.run.app`, `DATABASE_MAX_CONNECTIONS=3`, `ALLOW_REGISTRATION=false` |
 | Runtime identity | The default compute service account, with `secretmanager.secretAccessor` on the secret |
+
+Every deploy pushes an image, so without cleanup the repository grows with each merge, and Artifact Registry's free
+tier holds 0.5 GB. The cleanup is tight because this is still a test deployment: the 10 newest images bound how
+far back a rollback can go. Once real data goes in, loosen it, for example to keep 10 and delete after 30 days.
+Google applies the policy in the background, about once a day.
 
 Cloud Run's URL terminates TLS, so there is no reverse proxy; a mapped domain would change `BASE_URL`. Each instance
 keeps a small pool through Neon's pooled endpoint (PgBouncer), because several instances may run at once. The
@@ -59,6 +65,15 @@ gcloud run services add-iam-policy-binding upheap --region=us-west1 \
   --member=serviceAccount:$DEPLOY_SA --role=roles/run.developer
 gcloud artifacts repositories add-iam-policy-binding upheap --location=us-west1 \
   --member=serviceAccount:$DEPLOY_SA --role=roles/artifactregistry.writer
+# Image cleanup. Dry run is a setting saved on the repository, and leaving the flag out keeps the old value, so
+# --no-dry-run is needed for deletion to happen.
+cat > /tmp/cleanup.json <<'EOF'
+[
+  {"name": "keep-recent", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 10}},
+  {"name": "delete-old", "action": {"type": "Delete"}, "condition": {"olderThan": "2d"}}
+]
+EOF
+gcloud artifacts repositories set-cleanup-policies upheap --location=us-west1 --policy=/tmp/cleanup.json --no-dry-run
 # Lets the deploy start revisions that run as the runtime service account.
 gcloud iam service-accounts add-iam-policy-binding $PROJECT_NUMBER-compute@developer.gserviceaccount.com \
   --member=serviceAccount:$DEPLOY_SA --role=roles/iam.serviceAccountUser
@@ -102,6 +117,9 @@ Send traffic to an earlier revision:
 ```sh
 gcloud run services update-traffic upheap --region us-west1 --to-revisions=<revision>=100
 ```
+
+Only revisions whose image is still in the repository can start, so a rollback reaches back at most 10 deploys
+(see the image cleanup under [Production setup](#production-setup)).
 
 ## Releasing the CLI
 

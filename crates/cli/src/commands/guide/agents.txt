@@ -39,6 +39,8 @@ The usual order of work
    with its context, steps, and questions with their answers.
 3. Write what you learn where the next reader will look: the item's context, not a comment in your reply.
    Work with parts is a task: `upheap item to-task`, then a step for each part, ticked as each one is finished.
+   Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
+   open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead.
 4. When a call is the person's to make, don't guess: ask with `upheap question ask`, with --choice for each answer
    when you can list them, or with `upheap question request` for something only they can do. The item then waits
    for them, and their answer reads back in `upheap item show`.

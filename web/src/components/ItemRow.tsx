@@ -38,7 +38,12 @@ export function focusFirstRow() {
 
 /** Focuses the row of the item with `key`, for when its item closes. */
 export function focusRowOf(key: string) {
-  document.querySelector<HTMLElement>(`[${ROW_LINK}="${CSS.escape(key)}"]`)?.focus();
+  rowOf(key)?.focus();
+}
+
+/** The link of the row of the item with `key`, if it is in the list. */
+export function rowOf(key: string) {
+  return document.querySelector<HTMLElement>(`[${ROW_LINK}="${CSS.escape(key)}"]`);
 }
 
 /**

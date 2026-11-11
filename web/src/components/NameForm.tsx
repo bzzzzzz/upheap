@@ -39,17 +39,10 @@ export function NameForm({
   const [name, setName] = useState(value);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (!autoFocus) return;
-    // Opened from a menu or a sheet, which gives focus back to what opened it a frame after it closes; this comes
-    // after that.
-    let second = 0;
-    const first = window.requestAnimationFrame(() => {
-      second = window.requestAnimationFrame(() => input.current?.focus());
-    });
-    return () => {
-      window.cancelAnimationFrame(first);
-      window.cancelAnimationFrame(second);
-    };
+    // The form mounts in the render that closes the menu or sheet it was opened from. A passive effect runs after
+    // that overlay has lifted the page's inert and before its focus restore, which then leaves the input focused
+    // (useFocusAfterRender explains why).
+    if (autoFocus) input.current?.focus();
   }, [autoFocus]);
   // Reseeded when the saved value changes, not on every new version, so saving another field beside this one, which
   // bumps the record's version, doesn't drop a name being typed here.
