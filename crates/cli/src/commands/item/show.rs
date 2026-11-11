@@ -83,6 +83,13 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     }
     if let Some(turn) = &item.turn {
         out.line(&turn_text(turn))?;
+        if let Some(reason) = turn
+            .stuck_reason
+            .as_deref()
+            .filter(|reason| turn.stuck && !reason.is_empty())
+        {
+            out.line(&format!("  {}", reason.replace('\n', " ")))?;
+        }
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
@@ -304,6 +311,12 @@ fn turn_text(turn: &TurnDto) -> String {
     }
     if turn.source == TurnSourceDto::Prepare {
         text.push_str(" Prepared on add.");
+    }
+    if turn.runs > 0 {
+        text.push_str(&format!(" Runs: {}.", turn.runs));
+    }
+    if turn.stuck {
+        text.push_str(&format!(" Stuck: {} runs in a row failed.", turn.failed_runs));
     }
     text
 }
