@@ -159,6 +159,19 @@ request is made inside that run: it may write the item's context, steps and ques
 it, on the run's own item only, and is refused anything else with exit 3. Exit codes: 0 done, 2 bad command line, 3
 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1 anything else.
 
+### From Claude Code
+
+This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skill adds notes, tasks
+and reminders to a heap from a conversation, and a new heap when you ask for one, through the CLI. It runs when
+you type `/upheap:add` or name Upheap in a request, and needs `upheap` installed and signed in.
+
+```
+/plugin marketplace add bzzzzzz/upheap
+/plugin install upheap@upheap
+```
+
+The plugin is in [plugins/upheap](plugins/upheap).
+
 ## Develop
 
 ```sh
@@ -239,6 +252,7 @@ crates/cli        the upheap command-line client
 crates/server     the binary: config, startup, embedded web app
 crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
 web/              React app (TypeScript), generated API types only
+plugins/upheap    the Claude Code plugin: a skill that adds items through the CLI
 ```
 
 ## License
