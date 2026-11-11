@@ -2,7 +2,7 @@
 // one. The server words each line; this only lays them out (design/ux.md, Password).
 import type { AccountEvent } from "../api/client";
 import { useAccountHistory } from "../api/queries";
-import { Disclosure } from "./AuditHistory";
+import { Disclosure, PagedHistory } from "./AuditHistory";
 
 /** A collapsed "History" section that loads the account's history only once it is opened. */
 export function AccountHistoryDisclosure() {
@@ -14,42 +14,12 @@ export function AccountHistoryDisclosure() {
 }
 
 function AccountHistory() {
-  const history = useAccountHistory(true);
-
-  if (history.isPending) {
-    return <p className="py-4 text-sm text-muted">Loading history…</p>;
-  }
-  if (history.isError) {
-    return (
-      <p role="alert" className="py-4 text-sm text-overdue-ink">
-        {history.error.message}
-      </p>
-    );
-  }
-
-  const events = history.data.pages.flatMap((page) => page.entries);
   return (
-    <div>
-      {events.length === 0 ? (
-        <p className="py-4 text-sm text-muted">No password changes or resets yet.</p>
-      ) : (
-        <ol className="divide-y divide-line">
-          {events.map((event) => (
-            <AccountEventRow key={event.id} event={event} />
-          ))}
-        </ol>
-      )}
-      {history.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => void history.fetchNextPage()}
-          disabled={history.isFetchingNextPage}
-          className="mt-2 min-h-9 text-sm text-muted hover:text-ink pointer-coarse:min-h-11"
-        >
-          Load more
-        </button>
-      )}
-    </div>
+    <PagedHistory
+      history={useAccountHistory()}
+      empty="No password changes or resets yet."
+      row={(event) => <AccountEventRow key={event.id} event={event} />}
+    />
   );
 }
 

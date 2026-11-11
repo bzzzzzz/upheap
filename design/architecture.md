@@ -514,9 +514,8 @@ the remaining admins.
 8. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
    parameter, heap, member and invite link, and the whole logs on the heap's and the team's Activity pages. The
    account's own history is under Account's Password card ([Authentication](#authentication-and-authorization)).
-   Parameters and heaps
-   offer `view_history` only to those who may see their entries, so members aren't shown histories that are always
-   empty.
+   Parameters and heaps offer `view_history` only to those who may see their entries, so members aren't shown
+   histories that are always empty.
 
 ## Configuration and deployment
 

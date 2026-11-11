@@ -16,11 +16,15 @@ use crate::audit_log::{AuditCursor, AuditRequest};
 use crate::{Principal, ServiceError, Services};
 
 /// The audit actions an account history holds.
-const ACCOUNT_ACTIONS: [AuditAction; 3] = [
-    AuditAction::PasswordChanged,
-    AuditAction::PasswordResetLinkMade,
-    AuditAction::PasswordReset,
-];
+const ACCOUNT_ACTIONS: [AuditAction; AccountEventKind::ALL.len()] = {
+    let mut actions = [AuditAction::PasswordChanged; AccountEventKind::ALL.len()];
+    let mut i = 0;
+    while i < actions.len() {
+        actions[i] = AccountEventKind::ALL[i].action();
+        i += 1;
+    }
+    actions
+};
 
 /// What happened to the account.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,14 +35,21 @@ pub enum AccountEventKind {
 }
 
 impl AccountEventKind {
+    /// Every kind. The actions the history reads are derived from it, so a new kind is read as soon as it's listed.
+    pub const ALL: [Self; 3] = [Self::PasswordChanged, Self::PasswordResetLinkMade, Self::PasswordReset];
+
+    /// The audit action a kind is recorded as.
+    pub const fn action(self) -> AuditAction {
+        match self {
+            Self::PasswordChanged => AuditAction::PasswordChanged,
+            Self::PasswordResetLinkMade => AuditAction::PasswordResetLinkMade,
+            Self::PasswordReset => AuditAction::PasswordReset,
+        }
+    }
+
     /// The kind an audit action is, or `None` for an action the account history doesn't hold.
     fn of(action: AuditAction) -> Option<Self> {
-        match action {
-            AuditAction::PasswordChanged => Some(Self::PasswordChanged),
-            AuditAction::PasswordResetLinkMade => Some(Self::PasswordResetLinkMade),
-            AuditAction::PasswordReset => Some(Self::PasswordReset),
-            _ => None,
-        }
+        Self::ALL.into_iter().find(|kind| kind.action() == action)
     }
 }
 

@@ -163,13 +163,12 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
 
 /**
  * The signed-in user's password changes and resets, newest first, a page at a time. Keyed under `"audit"` so that
- * `main.tsx` refreshes it after any mutation, a password change included. `enabled` is false until the history is
- * opened.
+ * `main.tsx` refreshes it after any mutation, a password change included. It loads once mounted, which the History
+ * disclosure does only when it is opened.
  */
-export function useAccountHistory(enabled: boolean) {
+export function useAccountHistory() {
   return useInfiniteQuery({
     queryKey: ["audit", "account"],
-    enabled,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) =>
       unwrap(await api.GET("/api/v1/me/history", { params: { query: { cursor: pageParam } } })),

@@ -1,5 +1,6 @@
 // A history from the audit log, as the server describes it. Entries and their changes come ready to show; this only
 // lays them out.
+import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -19,36 +20,52 @@ export function AuditHistory({
   entityId?: string;
   showEntity?: boolean;
 }) {
-  const log = useAuditLog(scope, entityId);
+  return (
+    <PagedHistory
+      history={useAuditLog(scope, entityId)}
+      empty="No history you can see."
+      row={(entry) => <AuditEntryRow key={entry.id} entry={entry} showEntity={showEntity} />}
+    />
+  );
+}
 
-  if (log.isPending) {
+/**
+ * A history read a page at a time, newest first: its loading, error and empty states, its rows, and Load more. Every
+ * history uses it, so they all look and behave alike; `row` lays out one entry as an `<li>`.
+ */
+export function PagedHistory<Entry>({
+  history,
+  empty,
+  row,
+}: {
+  history: UseInfiniteQueryResult<InfiniteData<{ entries: Entry[] }>, Error>;
+  empty: string;
+  row: (entry: Entry) => ReactNode;
+}) {
+  if (history.isPending) {
     return <p className="py-4 text-sm text-muted">Loading history…</p>;
   }
-  if (log.isError) {
+  if (history.isError) {
     return (
       <p role="alert" className="py-4 text-sm text-overdue-ink">
-        {log.error.message}
+        {history.error.message}
       </p>
     );
   }
 
-  const entries = log.data.pages.flatMap((page) => page.entries);
+  const entries = history.data.pages.flatMap((page) => page.entries);
   return (
     <div>
       {entries.length === 0 ? (
-        <p className="py-4 text-sm text-muted">No history you can see.</p>
+        <p className="py-4 text-sm text-muted">{empty}</p>
       ) : (
-        <ol className="divide-y divide-line">
-          {entries.map((entry) => (
-            <AuditEntryRow key={entry.id} entry={entry} showEntity={showEntity} />
-          ))}
-        </ol>
+        <ol className="divide-y divide-line">{entries.map(row)}</ol>
       )}
-      {log.hasNextPage && (
+      {history.hasNextPage && (
         <button
           type="button"
-          onClick={() => void log.fetchNextPage()}
-          disabled={log.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
+          disabled={history.isFetchingNextPage}
           className="mt-2 min-h-9 text-sm text-muted hover:text-ink pointer-coarse:min-h-11"
         >
           Load more
