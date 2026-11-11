@@ -31,6 +31,7 @@ export type Goal = Schemas["Goal"];
 export type SendToAgent = Schemas["SendToAgentRequest"];
 export type Waiting = Schemas["Waiting"];
 export type WaitingRow = Schemas["WaitingRow"];
+export type WaitingStuck = Schemas["WaitingStuck"];
 export type QuestionReply = Schemas["QuestionReplyRequest"];
 export type Tag = Schemas["Tag"];
 export type TagList = Schemas["TagList"];

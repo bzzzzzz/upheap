@@ -49,11 +49,14 @@ order.
    else does. Covers Stable states §1 to §4, Handing work §2, §3, §4, §7. Closing an item also withdraws its open
    questions here. What is left for piece 8: withdrawing the agent's own questions on a take back, since no
    question can be an agent's until runs exist.
-- [ ] 8. **The queue and runs.** `work next`; the claim; a run recorded with how it ended; writes made inside a run
+- [x] 8. **The queue and runs.** `work next`; the claim; a run recorded with how it ended; writes made inside a run
    and what they're refused; `work reached` and its check; failed runs, and a turn that gets stuck and shows
    in Waiting for me.
    Done: a script that plays the agent takes a note to "with context" through the command line alone, and the
-   scenarios 4, 5, 6 and 12 pass as tests. Covers Command-line client §1, §2, Handing work §8, Cost §1.
+   scenarios 4, 5, 6 and 12 pass as tests. Covers Command-line client §1, §2, Handing work §8, Cost §1. A claim
+   lapses after 30 minutes without a heartbeat or a write, and a turn is stuck after 3 failed runs in a row. What is
+   left: the heartbeat timer that keeps a long run alive is piece 9's, and an agent closing a task as done, and
+   reaching done, are piece 11's.
 - [ ] 9. **`work run`.** The loop: asks for next, starts the agent tool with the instructions and the brief, records
    the cost, waits when there's nothing. With a stand-in agent tool for the tests.
    Done: with `work run` going, a note added in the web app gets its context and a question, and carries on
@@ -98,5 +101,5 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
 
 ## Open questions
 
-- "Reached", a turn that gets stuck, Retry, and "Changes asked" at a stable state (piece 8): a turn is only opened
-  and taken back until runs exist, and "all the way" behaves as one state until piece 12.
+- "Changes asked" at a stable state: stage 2, "Putting it right". "All the way" behaves as one state until piece 12.
+  Reached, a stuck turn and Retry are settled (piece 8).

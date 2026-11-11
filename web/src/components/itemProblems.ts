@@ -19,6 +19,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   question_answered: "Someone else replied to this question meanwhile.",
   question_withdrawn: "This question was withdrawn.",
   turn_open: "Someone already sent this to an agent.",
+  turn_not_stuck: "Someone else changed this meanwhile.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };

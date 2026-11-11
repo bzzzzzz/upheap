@@ -1161,7 +1161,6 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - How "go one further" and "all the way" are stored on an item.
 - The exact reach of "all the way" when a turn spawns tasks, notes and heaps. To be iterated on while building.
 - Whether a done task that an agent thinks needs follow-up makes a new note.
-- How many failed runs stop the retries, and how long before a claim lapses.
 - Whether heap scores need normalising before the heap weight is applied.
 - Which Markdown is allowed (tables, images, raw HTML) and how it's made safe to render.
 - What cost is counted in when the agent tool reports tokens, money or nothing.

@@ -3,6 +3,7 @@ import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-ari
 
 import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
 import { useSendToAgent, useTakeBack } from "../api/queries";
+import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
@@ -20,8 +21,6 @@ const pickBoxClass =
 const labelClass = "text-xs font-medium text-ink-soft";
 const fieldClass =
   "field-sizing-content min-h-20 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
-
-const TAKE_BACK_QUESTION = "Take this back from the agent? It stops, and what it changed stays.";
 
 /**
  * Who has the item (ux.md, The item): the person, or an agent, and the person's way to hand it over or take it back.
@@ -85,7 +84,8 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
     );
 
   const canSend = item.allowed_actions.includes("send_to_agent");
-  const canTakeBack = item.allowed_actions.includes("take_back");
+  // While the turn is stuck, Retry and Take back are in Waits for you; this block only says so.
+  const canTakeBack = item.allowed_actions.includes("take_back") && !turn?.stuck;
   const confirmingTakeBack = turn != null && confirming;
 
   return (
@@ -207,9 +207,11 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
   return (
     <>
       <p className="text-sm">
-        {item.waits_for_you
-          ? `An agent is waiting for your answer, going to: ${goal}.`
-          : `With an agent since ${turn.opened_label}, going to: ${goal}${turn.reach === "all_the_way" ? ", all the way" : ""}`}
+        {turn.stuck
+          ? `An agent is stuck, going to: ${goal}.`
+          : item.waits_for_you
+            ? `An agent is waiting for your answer, going to: ${goal}.`
+            : `With an agent since ${turn.opened_label}, going to: ${goal}${turn.reach === "all_the_way" ? ", all the way" : ""}`}
       </p>
       {turn.line && <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">“{turn.line}”</p>}
       {turn.source === "prepare" && <p className="text-xs text-muted">Prepared on add</p>}
