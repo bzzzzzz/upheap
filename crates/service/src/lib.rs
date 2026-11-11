@@ -8,6 +8,8 @@
 //! [`Services::open_local_user`].
 
 mod access;
+#[cfg(feature = "accounts")]
+pub mod account_history;
 mod audit;
 pub mod audit_log;
 #[cfg(feature = "accounts")]

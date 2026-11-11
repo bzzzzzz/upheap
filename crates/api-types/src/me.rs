@@ -2,7 +2,7 @@
 
 use domain::user::User;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::common::{HeapSummaryDto, RoleDto};
@@ -93,6 +93,56 @@ pub struct PasswordChangedDto {
     /// How many other sign-ins the change ended that were still live: other browsers, and clients such as the
     /// command line. The browser it was made from stays signed in on a new session, and isn't counted.
     pub ended_sign_ins: u32,
+}
+
+/// Which page of the account history to read.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AccountHistoryQueryDto {
+    /// `next_cursor` from the previous page.
+    pub cursor: Option<String>,
+    /// Page size, 1 to 200. Defaults to 50.
+    pub limit: Option<u64>,
+}
+
+/// What happened to the account.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = AccountEventKind)]
+pub enum AccountEventKindDto {
+    /// The user changed their password in Account.
+    PasswordChanged,
+    /// The operator made a reset link for the user.
+    PasswordResetLinkMade,
+    /// A password was set with a reset link.
+    PasswordReset,
+    /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+/// One password event in the account's history.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AccountEvent)]
+pub struct AccountEventDto {
+    pub id: Uuid,
+    pub kind: AccountEventKindDto,
+    /// One sentence worded by the server, without a name: "Password changed. 2 other sign-ins ended."
+    pub description: String,
+    /// UTC milliseconds.
+    pub created_at: i64,
+    /// When it happened, in the request's timezone, as the audit log words it: "9 Nov 2026, 14:05".
+    pub created_label: String,
+}
+
+/// A page of the caller's account history, newest first.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AccountHistory)]
+pub struct AccountHistoryDto {
+    pub entries: Vec<AccountEventDto>,
+    /// Pass as `cursor` for the next page; `null` on the last page.
+    pub next_cursor: Option<String>,
 }
 
 /// One live sign-in of a client such as the CLI: the tokens it holds can still be used.

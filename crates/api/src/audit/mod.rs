@@ -63,7 +63,7 @@ fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
 fn to_audit_log_dto(page: AuditPage) -> AuditLogDto {
     AuditLogDto {
         entries: page.entries.into_iter().map(to_audit_entry_dto).collect(),
-        next_cursor: page.next.map(|c| format!("{}.{}", c.created_at.as_millis(), c.id)),
+        next_cursor: page.next.map(format_cursor),
     }
 }
 
@@ -103,7 +103,12 @@ async fn list_team_audit(
     Ok(Json(to_audit_log_dto(page)))
 }
 
-fn parse_cursor(raw: &str) -> Result<AuditCursor, ApiError> {
+/// The opaque cursor a page hands out, which `parse_cursor` reads back.
+pub(crate) fn format_cursor(cursor: AuditCursor) -> String {
+    format!("{}.{}", cursor.created_at.as_millis(), cursor.id)
+}
+
+pub(crate) fn parse_cursor(raw: &str) -> Result<AuditCursor, ApiError> {
     let invalid = || ApiError::BadRequest {
         code: "invalid_cursor",
         detail: "cursor is not one this server issued".to_owned(),

@@ -5,7 +5,7 @@
 import type { Browser, TestInfo } from "@playwright/test";
 
 import { test as closed, type ClosedServer } from "./closedServer";
-import { expect, expectFitsWidth, HEAP_URL, PASSWORD, signOut, test } from "./fixtures";
+import { expect, expectFitsWidth, goTo, HEAP_URL, PASSWORD, signOut, test } from "./fixtures";
 
 const NEW_PASSWORD = "another long password";
 
@@ -77,6 +77,17 @@ closed(
       await expect(page.getByText("Password changed. You're signed in.")).toBeVisible();
       await page.reload();
       await expect(page.getByText("Password changed. You're signed in.")).toHaveCount(0);
+
+      // Account's history has the reset link and its use, newest first. The account is shared, so earlier tests
+      // may have added more.
+      await goTo(page, "Account");
+      const card = page.getByRole("region", { name: "Password", exact: true });
+      await card.getByText("History", { exact: true }).click();
+      const entries = card.getByRole("listitem");
+      await expect(entries.first()).toContainText("Password set with a reset link.");
+      await expect(card.getByText("Reset link made by whoever runs the server.").first()).toBeVisible();
+      await page.goto("/");
+      await expect(page).toHaveURL(HEAP_URL);
 
       // The old password is gone, and the new one signs in.
       await signOut(page);

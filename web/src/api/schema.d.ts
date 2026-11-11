@@ -166,6 +166,27 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/me/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's account history, newest first: their password changes, reset links made for them by whoever runs
+         *     the server, and passwords set with a reset link. Each entry carries a sentence worded by the server. Only the
+         *     caller's own history can be read. Read-only, so a command-line sign-in may read it too.
+         */
+        get: operations["get_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/password": {
         parameters: {
             query?: never;
@@ -1051,6 +1072,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description One password event in the account's history. */
+        AccountEvent: {
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            created_at: number;
+            /** @description When it happened, in the request's timezone, as the audit log words it: "9 Nov 2026, 14:05". */
+            created_label: string;
+            /** @description One sentence worded by the server, without a name: "Password changed. 2 other sign-ins ended." */
+            description: string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AccountEventKind"];
+        };
+        /**
+         * @description What happened to the account.
+         * @enum {string}
+         */
+        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset";
+        /** @description A page of the caller's account history, newest first. */
+        AccountHistory: {
+            entries: components["schemas"]["AccountEvent"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last page. */
+            next_cursor?: string | null;
+        };
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -3038,6 +3085,51 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_history: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountHistory"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

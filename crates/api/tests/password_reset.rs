@@ -374,7 +374,7 @@ async fn making_and_using_a_link_are_recorded_in_the_personal_team_without_secre
     expect_that!(
         phrases,
         superset_of([
-            &"was given a reset link by whoever runs the server",
+            &"got a reset link from whoever runs the server",
             &"set a new password with a reset link"
         ])
     );

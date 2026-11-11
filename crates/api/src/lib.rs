@@ -182,7 +182,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(invites::routes())
         .merge(password_resets::routes())
         .merge(me::sign_ins::routes())
-        .merge(me::password::routes());
+        .merge(me::password::routes())
+        .merge(me::history::routes());
     // Turns are for a build that has agents.
     #[cfg(feature = "agents")]
     let v1 = v1.merge(turns::routes());
