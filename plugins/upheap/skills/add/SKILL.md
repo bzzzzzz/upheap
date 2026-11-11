@@ -10,6 +10,21 @@ are known. It may be one item or a set of them. They go into a heap that exists,
 heap. This skill only adds. It never starts an item, ticks a step, closes anything, or does the work the items
 describe.
 
+## How to write
+
+Everything you write here is read by a person later, often on a phone and with the conversation forgotten: titles,
+descriptions, contexts, steps, questions and your reply. Write all of it this way.
+
+- **Concise.** People skim. Say it once, and cut filler, recaps and hedging.
+- **Main point first.** A title names the thing in a few words. A context opens with what it is and why it
+  matters, and each part leads into the next.
+- **Plain and friendly,** the way a helpful colleague would say it, in the person's own terms. Technical only when
+  the subject is.
+- **Stands alone.** No "as discussed" or "the above": the reader won't have this conversation.
+- **No AI phrasing:** "X, not Y" contrasts, "it's not just X, it's Y", lists of three by habit, "delve",
+  "leverage", "seamless", "robust", "crucial", chains of dashes, rhetorical questions, emoji bullets, and closing
+  summaries that repeat the body.
+
 ## 1. Check the tool and the sign-in
 
 1. Run `upheap guide show`. It prints every command with its flags, and how the tool behaves. Read it: it is the
