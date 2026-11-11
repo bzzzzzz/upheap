@@ -1,6 +1,7 @@
 // The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
+import { localDatabase } from "#local-database";
 import {
   Link,
   Outlet,
@@ -17,6 +18,7 @@ import {
   ChevronDown,
   CircleCheck,
   Ellipsis,
+  Inbox,
   List,
   Plus,
   Settings,
@@ -27,9 +29,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useHeap, useMe, useSetHeapArchived } from "../api/queries";
+import { soleTeam, useHeap, useMe, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
-import { recordRecentHeap } from "../components/heapSwitcherStorage";
+import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { StorageNote } from "../components/LocalDatabase";
@@ -48,6 +50,9 @@ export function AppLayout() {
   // The heap's list, also with an item open over it.
   const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
   // The heap on screen counts as opened once per visit, for the switcher's Recent.
+  // Pages with no heap in their address keep the heap opened last, where Waiting for me needs the heap's views.
+  const onWaiting = useMatch({ from: "/app/waiting", shouldThrow: false }) !== undefined;
+  const shellHeap = heapRef ?? (onWaiting && me ? keptHeap(me) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -63,9 +68,9 @@ export function AppLayout() {
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
-            {me && <Sidebar me={me} heapRef={heapRef} />}
+            {me && <Sidebar me={me} heapRef={shellHeap} />}
             <div className="min-w-0 flex-1 bg-canvas">
-              {me && <PhoneTopBar me={me} heapRef={heapRef} />}
+              {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
               {/* On a phone, room at the bottom for the tabs. */}
               <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
@@ -75,12 +80,27 @@ export function AppLayout() {
                 </div>
               </div>
             </div>
-            {me && heapRef && <PhoneTabs me={me} heapRef={heapRef} />}
+            {me && shellHeap && <PhoneTabs me={me} heapRef={shellHeap} />}
           </div>
         </div>
       </ListSearchProvider>
     </ToastProvider>
   );
+}
+
+/**
+ * The heap the shell keeps on a page without one in its address: the one opened last that is still there and active,
+ * else the first active heap, else the first heap.
+ */
+function keptHeap(me: Me): HeapRef | undefined {
+  const entries = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
+  const kept =
+    readRecentHeaps()
+      .map((id) => entries.find((entry) => entry.heap.id === id && !entry.heap.archived))
+      .find((entry) => entry !== undefined) ??
+    entries.find((entry) => !entry.heap.archived) ??
+    entries[0];
+  return kept && { team: kept.team.slug, heap: kept.heap.slug };
 }
 
 /**
@@ -156,6 +176,28 @@ function NavLink({
   );
 }
 
+/**
+ * Waiting for me, with the number of questions that wait. The count is a badge on the icon in the rail and the tabs, and
+ * on the right in the sidebar; it is part of the link's name, and there is none at zero. Not in the local build.
+ */
+function WaitingLink() {
+  const count = useWaiting().data?.count ?? 0;
+  return (
+    <Link to="/waiting" className={`${navItemClass} relative`}>
+      <Inbox aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
+      <span className="max-w-full truncate">
+        <span className="lg:hidden">Waiting</span>
+        <span className="max-lg:hidden">Waiting for me</span>
+      </span>
+      {count > 0 && (
+        <span className="absolute top-0.5 left-1/2 ml-1 min-w-4 rounded-full bg-accent-ink px-1 text-center text-[10px] leading-4 font-semibold text-canvas tabular-nums lg:static lg:ml-auto lg:min-w-0 lg:bg-transparent lg:px-0 lg:text-sm lg:leading-normal lg:font-normal lg:text-muted">
+          {count}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 /** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
 function heapViews(heapRef: HeapRef, itemOpen: boolean) {
   return {
@@ -189,6 +231,12 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
         <Logo className="size-5 text-accent" />
         Upheap
       </div>
+
+      {!localDatabase && (
+        <div className="lg:border-b lg:border-line lg:pb-4">
+          <WaitingLink />
+        </div>
+      )}
 
       <div className="lg:hidden">
         <HeapSwitcher me={me} heapRef={heapRef} placement="end top">
@@ -289,8 +337,8 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
 }
 
 /**
- * The phone's tabs (ux.md, Layout): Open, Closed, Add in the middle under the thumb, Settings, and More for the
- * rest.
+ * The phone's tabs (ux.md, Layout): Open, Waiting, Add in the middle under the thumb, Closed, and More for the rest,
+ * Settings among it. The local build has nothing to wait for, so its tabs are Open, Closed, Add, Settings and More.
  */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const links = useShellLinks(me, heapRef);
@@ -303,8 +351,10 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   const [more, setMore] = useState(false);
-  // The heap's page that only More leads to, so More shows as active on it. The tabs show only on a heap's pages.
-  const onMorePage = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
+  // The heap's pages that only More leads to, so More shows as active on them.
+  const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
+  const onSettings = useMatch({ from: "/app/teams/$team/heaps/$heap/settings", shouldThrow: false }) !== undefined;
+  const onMorePage = onActivity || (!localDatabase && onSettings);
 
   return (
     <nav
@@ -313,7 +363,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 items-end gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
       <NavLink {...views.open} icon={List} label="Open" />
-      <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
+      {localDatabase ? <NavLink {...views.closed} icon={CircleCheck} label="Closed" /> : <WaitingLink />}
       <button
         type="button"
         aria-label="Add item"
@@ -323,7 +373,11 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       >
         <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
       </button>
-      <NavLink {...views.settings} icon={Settings} label="Settings" />
+      {localDatabase ? (
+        <NavLink {...views.settings} icon={Settings} label="Settings" />
+      ) : (
+        <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
+      )}
       <button
         type="button"
         aria-expanded={more}
@@ -341,7 +395,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
 }
 
 /**
- * More on a phone: the heap's activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
+ * More on a phone: the heap's settings (in the server build; the local build has them as a tab), its activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
  * release, as a button does, so lifting the finger never picks a row.
  */
 function MoreSheet({
@@ -367,6 +421,11 @@ function MoreSheet({
   return (
     <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
       <nav aria-label="More" className="flex flex-col">
+        {!localDatabase && (
+          <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
+            {row("Settings")}
+          </Link>
+        )}
         <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
           {row("Activity")}
         </Link>

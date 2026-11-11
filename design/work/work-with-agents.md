@@ -39,7 +39,7 @@ order.
    question waits for the person.
    Done: a question asked from the command line is answered in the web app and reads back answered in
    `item show`. Covers Questions §1, §2, §4, §5, §6.
-- [ ] 6. **Waiting for me.** The page across heaps with replies in the row, its place in the navigation with the
+- [x] 6. **Waiting for me.** The page across heaps with replies in the row, its place in the navigation with the
    count, the new phone tabs, and "waits for you" on list rows.
    Done: on a phone, an open question is found and answered without opening an item. Covers Questions §3,
    Waiting §1.

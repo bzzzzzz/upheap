@@ -8,6 +8,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { localDatabase } from "#local-database";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
@@ -43,6 +44,7 @@ import {
   type TagPatch,
   type Team,
   type User,
+  type Waiting,
   type WeightsPatch,
 } from "./client";
 
@@ -76,6 +78,7 @@ const teamKey = (team: string) => ["team", team] as const;
 /** Under the team's key, so invalidating the team refreshes its links too. */
 const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
+const waitingKey = ["waiting"] as const;
 const usersKey = (query: string) => ["users", query] as const;
 
 /**
@@ -172,6 +175,20 @@ export function useItem(heap: HeapRef, key: string) {
 }
 
 /**
+ * What waits for the person across their heaps (ux.md, Waiting for me): its count is in the navigation, so it's fetched
+ * for every page, once signed in, and not at all in the local build, where nothing can ask a question. Kept fresh for
+ * 30 s and fetched again on window focus and after writes (no polling).
+ */
+export function useWaiting() {
+  return useQuery({
+    queryKey: waitingKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/waiting")),
+    staleTime: 30_000,
+    enabled: !localDatabase,
+  });
+}
+
+/**
  * The rough due times a due picker offers, from the server, so a picked choice reads back with the label it was
  * picked by. Their dates move with the day, so they're fetched again after a while.
  */
@@ -190,6 +207,8 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: ["item"] }),
+    // An item's state or order changes what waits for the person, and in what order.
+    queryClient.invalidateQueries({ queryKey: waitingKey }),
   ]);
 }
 
@@ -345,8 +364,25 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
         }),
       );
     },
-    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onSuccess: (saved, { question }) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      // The Waiting page's row leaves and its count drops at once; the refetch below confirms them.
+      queryClient.setQueryData<Waiting>(
+        waitingKey,
+        (waiting) =>
+          waiting && {
+            count: Math.max(0, waiting.count - 1),
+            rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question.number === question.number)),
+          },
+      );
+    },
     onError: () => queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) }),
+    // The lists say which items wait for you, and Waiting for me what does.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: rankedKey(heap) }),
+        queryClient.invalidateQueries({ queryKey: waitingKey }),
+      ]),
   });
 }
 

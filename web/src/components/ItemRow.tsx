@@ -112,6 +112,10 @@ export function ItemRow({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {/* Where the end of the row is tight, a dot says it; the words are in the link's name. */}
+            {item.waits_for_you && (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
+            )}
             {/* The link covers the whole row, under the state circle. */}
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
@@ -132,6 +136,7 @@ export function ItemRow({
                 {item.kind === "task" && ", task"}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
+                {item.waits_for_you && ", waits for you"}
               </span>
             </Link>
             <StageIcon stage={item.stage} />
@@ -157,6 +162,11 @@ export function ItemRow({
             <span aria-hidden="true"> · </span>
             <span className="sr-only">, impact </span>
             {item.impact ? SIZE_LABELS[item.impact] : "–"}
+          </span>
+        )}
+        {item.waits_for_you && (
+          <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
+            waits for you
           </span>
         )}
         {actions && <RowActions item={item} onChangeState={onChangeState} />}

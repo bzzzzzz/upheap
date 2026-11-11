@@ -1,5 +1,6 @@
 // The URL is the state: the heap and the page live in the route, so links and reloads work. Paths name teams, heaps
 // and items by their handles (design/architecture.md, Handles), and `/h/…` short links expand to them.
+import { localDatabase } from "#local-database";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
@@ -32,6 +33,7 @@ import { HeapRankingSettings } from "./pages/RankingPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TeamsPage } from "./pages/TeamsPage";
+import { WaitingPage } from "./pages/WaitingPage";
 
 const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
@@ -424,6 +426,16 @@ const shortItemRoute = createRoute({
   },
 });
 
+/** Every open question across the heaps (ux.md, Waiting for me). The local build has none: nothing can ask there. */
+const waitingRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/waiting",
+  beforeLoad: () => {
+    if (localDatabase) throw redirect({ to: "/", replace: true });
+  },
+  component: WaitingPage,
+});
+
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
 const routeTree = rootRoute.addChildren([
@@ -444,6 +456,7 @@ const routeTree = rootRoute.addChildren([
     teamsRoute,
     teamRoute,
     teamActivityRoute,
+    waitingRoute,
     accountRoute,
   ]),
 ]);
