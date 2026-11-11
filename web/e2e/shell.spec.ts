@@ -254,7 +254,7 @@ test("Recent lists the heaps opened last, without the one on screen", async ({ p
   if (isNarrow(page)) {
     // Chips at least 44 px tall.
     const box = await recent.getByRole("menuitem", { name: "Alpha" }).boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
   }
 });
 

@@ -53,11 +53,7 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
     const next = focusNext.current;
     if (next === null || (next === "take-back") !== (turn != null)) return;
     focusNext.current = null;
-    // After the form's own focus restore, which would land on a button that is gone.
-    const frame = requestAnimationFrame(() =>
-      requestAnimationFrame(() => (next === "take-back" ? takeBackButton : sendButton).current?.focus()),
-    );
-    return () => cancelAnimationFrame(frame);
+    (next === "take-back" ? takeBackButton : sendButton).current?.focus();
   }, [turn, takeBackButton]);
 
   const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
