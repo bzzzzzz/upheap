@@ -134,8 +134,11 @@ function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
         params={{ ...heapOf(row), item: row.item.key }}
         // Closing the item goes back here, not to the heap's list.
         state={(prev) => ({ ...prev, closesBack: true })}
-        // A finger gets a 44 px target; the negative margin keeps the line as tall as it was.
-        className="font-medium text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:-my-4 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+        // What closing the item focuses on the way back (`focusRowOf`), as a list row's link is.
+        data-row-link={row.item.key}
+        // A finger gets a 44 px target: padding on an inline link grows what it catches without changing the line, so a
+        // long title still wraps in place.
+        className="font-medium text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:py-4"
       >
         {row.item.title}
       </Link>

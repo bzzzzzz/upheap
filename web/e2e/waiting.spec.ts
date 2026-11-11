@@ -215,6 +215,40 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   await closeItem(page);
   await expect(page).toHaveURL(/\/waiting$/);
   await expect(page.getByRole("heading", { name: /^Waiting for me/, level: 1 })).toBeVisible();
+  // Focus comes back to the row it was opened from.
+  await expect(ca.getByRole("link", { name: "Rotate the certs", exact: true })).toBeFocused();
+});
+
+test("a long item title wraps in its row without running over the words after it", async ({
+  page,
+  heapPath,
+  localBuild,
+}) => {
+  test.skip(localBuild, "Nothing asks a question in the static build.");
+  const title = "Rotate the certificates of every internal service before the old root expires in March";
+  await seed(page, heapPath, { title, questions: [{ kind: "question", text: "Which CA do we use?" }] });
+  await page.goto("/waiting");
+  const link = page.getByRole("link", { name: title, exact: true });
+  await expect(link).toBeVisible();
+  // The boxes of the title's words and of the words after it never cross.
+  const overlaps = await link.evaluate((element) => {
+    const boxes = (range: Range) => [...range.getClientRects()];
+    const own = document.createRange();
+    own.selectNodeContents(element);
+    const after = document.createRange();
+    after.setStartAfter(element);
+    const last = element.parentElement?.lastChild;
+    if (!last) return -1;
+    after.setEndAfter(last);
+    const mine = boxes(own);
+    return boxes(after).filter((b) =>
+      mine.some(
+        (a) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5,
+      ),
+    ).length;
+  });
+  expect(overlaps).toBe(0);
+  if (isPhone(page)) expect(Math.round((await link.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
 });
 
 test("a request is answered with Done or Can't be done, and an answered-first row leaves with a note", async ({
