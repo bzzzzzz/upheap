@@ -379,6 +379,7 @@ impl TestCli {
             env: Environment {
                 server: Some(server.url.clone()),
                 heap: None,
+                run: None,
                 no_color: false,
                 stdout_is_terminal: false,
                 stderr_is_terminal: false,

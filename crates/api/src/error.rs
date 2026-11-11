@@ -14,6 +14,7 @@ use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::question::QuestionError;
+use domain::run::{RunError, RunForbidden};
 use domain::step::StepError;
 use domain::team::TeamError;
 use domain::turn::TurnError;
@@ -95,6 +96,7 @@ struct Classified {
     title: String,
     field: Option<&'static str>,
     hint: Option<String>,
+    item_key: Option<String>,
     category: Category,
 }
 
@@ -105,6 +107,7 @@ fn classify(err: &ApiError) -> Classified {
         title: title.to_owned(),
         field: None,
         hint: None,
+        item_key: None,
         category,
     };
     match err {
@@ -144,6 +147,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         title: err.to_string(),
         field: None,
         hint: None,
+        item_key: None,
         category,
     };
     match err {
@@ -209,6 +213,24 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Turn(TurnError::AlreadyOpen { .. }) => {
             simple(StatusCode::CONFLICT, "turn_open", Category::Conflict)
         }
+        ServiceError::Turn(TurnError::NotStuck { .. }) => {
+            simple(StatusCode::CONFLICT, "turn_not_stuck", Category::Conflict)
+        }
+        ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
+        ServiceError::Run(RunError::CostRecorded) => {
+            simple(StatusCode::CONFLICT, "run_cost_recorded", Category::Conflict)
+        }
+        ServiceError::Run(RunError::WrongItem { key }) => Classified {
+            item_key: Some(key.to_string()),
+            ..simple(StatusCode::FORBIDDEN, "run_wrong_item", Category::Permission)
+        },
+        ServiceError::Run(RunError::Forbidden(RunForbidden::Person)) => {
+            simple(StatusCode::FORBIDDEN, "run_forbidden", Category::Permission)
+        }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::Done)) => {
+            simple(StatusCode::FORBIDDEN, "run_done_needs_review", Category::Permission)
+        }
+        ServiceError::NotReached(_) => simple(StatusCode::UNPROCESSABLE_ENTITY, "not_reached", Category::Caller),
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "step_not_in_item", Category::Caller)
@@ -290,6 +312,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 title: "The database is unavailable; try again shortly".to_owned(),
                 field: None,
                 hint: None,
+                item_key: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -387,6 +410,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::LimitOutOfRange { .. } => ("limit_out_of_range", Some("limit")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),
         ValidationError::ValueUnknown { field } => ("value_unknown", Some(field.as_str())),
+        ValidationError::FieldInvalid { field } => ("invalid_fields", Some(field.as_str())),
         ValidationError::HandleInvalid { field, .. } => ("invalid_handle", Some(field.as_str())),
         ValidationError::ItemKeyInvalid => ("invalid_item_key", None),
         ValidationError::MultipleLines { field } => ("field_not_single_line", Some(field.as_str())),
@@ -404,6 +428,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         title: err.to_string(),
         field,
         hint,
+        item_key: None,
         category: Category::Caller,
     }
 }
@@ -415,6 +440,7 @@ fn unexpected() -> Classified {
         title: "Something went wrong on the server".to_owned(),
         field: None,
         hint: None,
+        item_key: None,
         category: Category::Unexpected,
     }
 }
@@ -442,6 +468,7 @@ impl IntoResponse for ApiError {
             status: classified.status.as_u16(),
             field: classified.field.map(str::to_owned),
             hint: classified.hint,
+            item_key: classified.item_key,
             request_id,
         };
         let mut response = (

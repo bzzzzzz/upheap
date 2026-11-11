@@ -53,8 +53,8 @@ module says what it owns.
 sign-in and sessions, team management, user lookup, OAuth. The local build leaves it out, so that code and its
 dependencies aren't in the wasm at all ([Local build](#local-build)). `api` also has an `agents` feature, on by
 default, for what only the server build has for agents, which the local build leaves out: the stage of an item, sending
-an item to an agent and taking it back (the `/turn` routes and their actions), and the heap setting that agents
-prepare new notes. The features are additive: with `accounts` on, the local user still works, which lets the native API tests
+an item to an agent, taking it back and retrying it (the `/turn` routes and their actions), the agent's queue and
+runs (the `/work` routes, and the `Upheap-Run` header), and the heap setting that agents prepare new notes. The features are additive: with `accounts` on, the local user still works, which lets the native API tests
 cover it.
 
 ## Data model
@@ -111,7 +111,8 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
   person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
-  prepare setting did, then when and by whom it ended and how (taken back; reaching the goal is added with runs).
+  prepare setting did, then when and by whom it ended and how (taken back, or reached) and how many of its runs in a
+  row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
   with someone editing it, and sending and taking back need no `If-Match`. An item has at most one open turn
   (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
@@ -121,6 +122,36 @@ The tables and columns are in the migrations. These are the conventions they fol
   an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
   `heaps.agents_prepare` makes `create_item` open a turn of one state on every new note, whoever added it. Neither
   changes ranking.
+- **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
+  claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
+  ended (`reached`, `asked`, `failed` or `taken_back`), what it said it reached and made (`result`, `links`), why it
+  failed, and its cost in micro-dollars. Like turns, runs are never deleted and never bump the item's `version`.
+  `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
+  blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
+  item's score in its own heap (`rank_open_items`, once per heap), then heap name, then position. A claim takes the
+  locks of every given heap in ID order, as the item writes do, so two claims at once get different items.
+  **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
+  `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
+  wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
+  take back touches it; no job sweeps for them. A turn is **stuck** when `STUCK_AFTER` (3) of its runs in a row
+  failed: a count on the turn, set back to 0 by a run that asked a question or by Retry. A lapsed run not written yet
+  counts in that number too: wherever a turn is read, the queue, the item, a list row, Waiting for me, `Turn::counting_lapse`
+  adds one to its count when it has such a run, so a turn whose third run went quiet is stuck at once, though nobody
+  has claimed since. Retry writes that lapsed run as failed, then resets the count, so it doesn't count twice. A stuck
+  turn is out of the queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of
+  its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
+  failure, and withdraws the open questions asked in a run of it; the person's own stay open.
+  **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads (the `agents` feature only; a
+  build without it ignores the header) into `Principal::run`. A write made in a run must be on the allowlist in
+  `extract.rs` (the item's `PATCH`, steps, questions, and the run's own heartbeat, reached and finish) or it is
+  `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
+  open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
+  and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
+  `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
+  the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
+  stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
+  has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
+  never has to read a message.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -505,9 +536,11 @@ the remaining admins.
    by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A question's are
    recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
    question's number and text and, once answered, the labels picked and the comment. So are a question withdrawn
-   by closing its item (`QuestionWithdrawn`) and a turn (`TurnOpened`, with its reach, goal, line and source, and
-   `TurnTakenBack`, with the goal and why: the person took it back, started the item, closed it, or archived the
-   heap). Closing an item writes its take back, then a withdrawal for each open question, then its own update.
+   by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
+   (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
+   back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and
+   after, and `TurnRetried`). Closing an item writes its take back, then a withdrawal for each open question, then its
+   own update.
 7. Invite links are never deleted. Making and revoking one are team entries (`InviteLinkCreated`,
    `InviteLinkRevoked`) shown to admins, and a join through one is a membership entry (`MemberJoined`) naming the
    link, so a link's own History is its entries by `entity_id`. A link ending by time is not an act and has no entry.
@@ -573,7 +606,7 @@ React app ── openapi-fetch ── worker fetch ─▶ Web Worker
    the web app hides the rest, linking straight to the one team where the server build lists teams. The Team page
    stays as the place to create, rename, archive and unarchive heaps.
 5. **Features, not flags.** The `accounts` feature ([Workspace](#workspace)), `api`'s `agents` feature (the server
-   build sends an item's stage, offers the turn routes and the `send_to_agent`, `take_back` and `set_agents_prepare`
+   build sends an item's stage, offers the turn and `/work` routes and the `send_to_agent`, `take_back`, `retry` and `set_agents_prepare`
    actions, and accepts `agents_prepare`; the local build does none of that, so the web app takes what it shows from
    `allowed_actions`) and `api`'s `trace-and-timeout` feature (the request span
    and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left out, so that code, argon2

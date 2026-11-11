@@ -35,6 +35,7 @@ id_type!(ItemId);
 id_type!(StepId);
 id_type!(QuestionId);
 id_type!(TurnId);
+id_type!(RunId);
 id_type!(TagId);
 id_type!(SavedViewId);
 id_type!(InviteLinkId);

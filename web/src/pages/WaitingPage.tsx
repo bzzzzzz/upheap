@@ -4,14 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
+import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
 
-const rowKey = (row: WaitingRow) => `${row.item.id}:${row.question.number}`;
+/** A row of a stuck turn has its item's ID for a key; a question's row also has the question's number. */
+const rowKey = (row: WaitingRow) =>
+  row.kind === "stuck" ? `${row.item.id}:stuck` : `${row.item.id}:${row.question?.number}`;
 const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: row.heap.slug });
 
 /**
- * Every open question across the person's heaps, most important first, each answered in its row (ux.md, Waiting for
- * me). The rows are the item's Waits for you rows, with a head line that says which item and heap they are on.
+ * Every open question across the person's heaps, and every item whose agent turn is stuck, most important first, each
+ * answered or let go in its row (ux.md, Waiting for me). The rows are the item's Waits for you rows, with a head line
+ * that says which item and heap they are on.
  */
 export function WaitingPage() {
   const { data: me } = useMe();
@@ -20,12 +24,16 @@ export function WaitingPage() {
   const list = useRef<HTMLUListElement>(null);
   const [message, setMessage] = useState("");
   const [elsewhere, setElsewhere] = useState<string[]>([]);
+  // A stuck turn that someone else took back or retried first.
+  const [stuckChanged, setStuckChanged] = useState(false);
   // Replies refused because the item was closed meanwhile, with the comment that was lost, to copy.
   const [refused, setRefused] = useState<{ text: string; comment: string | null }[]>([]);
   // The row just replied to and where it was: once it has left, the focus goes on to the row that took its place.
   const repliedTo = useRef<{ key: string; index: number } | null>(null);
-  // Only questions for now; a kind this client doesn't know is left out. The heading keeps the server's count.
-  const rows = (waiting.data?.rows ?? []).filter((row) => row.kind === "question");
+  // Questions and stuck turns; a kind this client doesn't know is left out. The heading keeps the server's count.
+  const rows = (waiting.data?.rows ?? []).filter(
+    (row) => (row.kind === "question" && row.question) || (row.kind === "stuck" && row.stuck),
+  );
 
   useEffect(() => {
     const replied = repliedTo.current;
@@ -37,7 +45,7 @@ export function WaitingPage() {
     const next = rows[replied.index];
     const first = next
       ? list.current?.querySelector<HTMLElement>(
-          `[data-item="${next.item.id}"][data-question="${next.question.number}"] :is(input, textarea, button):not([data-details]):not(:disabled)`,
+          `[data-item="${next.item.id}"]${next.kind === "stuck" ? "[data-stuck]" : `[data-question="${next.question?.number}"]`} :is(input, textarea, button):not([data-details]):not(:disabled)`,
         )
       : undefined;
     (first ?? heading.current)?.focus();
@@ -73,6 +81,11 @@ export function WaitingPage() {
           Someone else replied to “{text}” meanwhile.
         </p>
       ))}
+      {stuckChanged && (
+        <p role="alert" className="text-sm text-overdue-ink">
+          Someone else changed this meanwhile.
+        </p>
+      )}
       {waiting.isPending ? (
         <p className="py-16 text-center text-muted">Loading…</p>
       ) : waiting.data === undefined ? (
@@ -87,30 +100,56 @@ export function WaitingPage() {
       ) : (
         <>
           <ul ref={list} className="flex flex-col divide-y divide-line">
-            {rows.map((row) => (
-              <QuestionRow
-                key={rowKey(row)}
-                heapRef={heapOf(row)}
-                item={row.item}
-                question={row.question}
-                line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
-                context={<RowContext heapRef={heapOf(row)} itemKey={row.item.key} heapName={row.heap.name} />}
-                onReplied={(question: Question) => {
-                  track(row);
-                  setElsewhere([]);
-                  setRefused([]);
-                  setMessage(`Replied to “${question.text}”.`);
-                }}
-                onElsewhere={(question: Question) => {
-                  track(row);
-                  setElsewhere((current) => [...current, question.text]);
-                }}
-                onRefused={(question: Question, comment: string | null) => {
-                  track(row);
-                  setRefused((current) => [...current, { text: question.text, comment }]);
-                }}
-              />
-            ))}
+            {rows.map((row) =>
+              row.kind === "stuck" && row.stuck ? (
+                <StuckRow
+                  key={rowKey(row)}
+                  heapRef={heapOf(row)}
+                  item={row.item}
+                  stuck={row.stuck}
+                  line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
+                  onRetried={() => {
+                    track(row);
+                    setStuckChanged(false);
+                    setMessage(`Retried “${row.item.title}”.`);
+                  }}
+                  onTakenBack={() => {
+                    track(row);
+                    setStuckChanged(false);
+                    setMessage(`Took back “${row.item.title}”.`);
+                  }}
+                  onElsewhere={() => {
+                    track(row);
+                    setStuckChanged(true);
+                  }}
+                />
+              ) : (
+                row.question && (
+                  <QuestionRow
+                    key={rowKey(row)}
+                    heapRef={heapOf(row)}
+                    item={row.item}
+                    question={row.question}
+                    line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
+                    context={<RowContext heapRef={heapOf(row)} itemKey={row.item.key} heapName={row.heap.name} />}
+                    onReplied={(question: Question) => {
+                      track(row);
+                      setElsewhere([]);
+                      setRefused([]);
+                      setMessage(`Replied to “${question.text}”.`);
+                    }}
+                    onElsewhere={(question: Question) => {
+                      track(row);
+                      setElsewhere((current) => [...current, question.text]);
+                    }}
+                    onRefused={(question: Question, comment: string | null) => {
+                      track(row);
+                      setRefused((current) => [...current, { text: question.text, comment }]);
+                    }}
+                  />
+                )
+              ),
+            )}
           </ul>
           {count > rows.length && (
             <p className="text-[13px] text-muted">
@@ -123,11 +162,14 @@ export function WaitingPage() {
   );
 }
 
-/** "Question · <item> · <heap> · <team> · step “…”": which item the question is on, and where. */
+/**
+ * "Question · <item> · <heap> · <team> · step “…”", or "Stuck · <item> · <heap> · <team>": which item the row is on,
+ * and where.
+ */
 function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
   return (
     <p className="text-xs break-words text-muted">
-      {kindWord(row.question)}
+      {row.kind === "stuck" || !row.question ? "Stuck" : kindWord(row.question)}
       {" · "}
       <Link
         to="/teams/$team/heaps/$heap/items/$item"

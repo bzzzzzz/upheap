@@ -39,6 +39,8 @@ mod turns;
 #[cfg(feature = "accounts")]
 mod users;
 mod views;
+#[cfg(feature = "agents")]
+mod work;
 
 #[cfg(feature = "accounts")]
 use std::time::Duration;
@@ -116,6 +118,7 @@ pub struct CookieSettings {
         (name = "views", description = "A heap's saved views"),
         (name = "parameters", description = "A heap's custom parameters and their options"),
         (name = "audit", description = "The history of a heap or a team"),
+        (name = "work", description = "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps and ask questions, on the run's own item only. Every other write is refused, with a code that starts with `run_`."),
     )
 )]
 struct ApiDoc;
@@ -184,9 +187,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::sign_ins::routes())
         .merge(me::password::routes())
         .merge(me::history::routes());
-    // Turns are for a build that has agents.
+    // Turns, the agent's queue and its runs are for a build that has agents.
     #[cfg(feature = "agents")]
-    let v1 = v1.merge(turns::routes());
+    let v1 = v1.merge(turns::routes()).merge(work::routes());
     let v1 = v1
         .merge(me::routes())
         .merge(due_choices::routes())

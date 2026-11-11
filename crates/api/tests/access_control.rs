@@ -32,6 +32,9 @@ enum Access {
     Team { permission: Permission },
     /// Callers holding `permission` in some shared team. The outsider holds it only in their personal team.
     SharedTeam { permission: Permission },
+    /// A run of the caller's own. Anyone signed in may call it, but a run belongs to the user who claimed it, so
+    /// the outsider, who can't claim in the shared heap, finds none.
+    OwnRun,
 }
 
 /// What a request needs to exist before it is sent.
@@ -88,6 +91,15 @@ enum Target {
     AuthorizationQuery,
     /// An authorization code the shared team's admin approved for the CLI.
     AuthorizationCode,
+    /// The shared heap in the query string, as the agent's queue takes its heaps.
+    Queue,
+    /// An item with an open turn in the shared heap, so the queue has something to claim.
+    Claimable,
+    /// An item whose turn is stuck, in `{item}`.
+    StuckItem,
+    /// A run the caller claimed on an item that has a context, in `{run}`. A caller who can't claim gets a run ID
+    /// nobody has.
+    OwnRun,
 }
 
 /// The body a request carries.
@@ -108,6 +120,12 @@ enum RequestBody {
     ReplyToQuestion,
     /// Sending an item to an agent, one state.
     SendToAgent,
+    /// A claim over the shared heap.
+    Claim,
+    /// A run reaching its goal.
+    Reached,
+    /// A run finishing.
+    Finish,
     /// A tag name no other request used, since names are unique per heap.
     NewTag,
     RenameTag,
@@ -614,6 +632,55 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/turn/retry",
+            edit,
+            Target::StuckItem,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        // The queue refuses an archived heap even to read, as it is for claiming.
+        row(
+            Method::GET,
+            "/work/next",
+            edit,
+            Target::Queue,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/work/runs",
+            edit,
+            Target::Claimable,
+            RequestBody::Claim,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::POST,
+            "/work/runs/{run}/heartbeat",
+            Access::OwnRun,
+            Target::OwnRun,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/work/runs/{run}/reached",
+            Access::OwnRun,
+            Target::OwnRun,
+            RequestBody::Reached,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/work/runs/{run}/finish",
+            Access::OwnRun,
+            Target::OwnRun,
+            RequestBody::Finish,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps/{heap}/items/{item}/reopen",
             edit,
             Target::ClosedItem,
@@ -786,12 +853,19 @@ impl Outcome {
 fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outcome {
     let (permission, writes) = match endpoint.access {
         Access::Public => return Outcome::success(endpoint.success),
-        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. }
+        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. } | Access::OwnRun
             if matches!(caller, Caller::Anonymous) =>
         {
             return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated");
         }
         Access::SignedIn => return Outcome::success(endpoint.success),
+        Access::OwnRun => {
+            return if matches!(caller, Caller::Outsider) {
+                Outcome::problem(StatusCode::NOT_FOUND, "not_found")
+            } else {
+                Outcome::success(endpoint.success)
+            };
+        }
         Access::Heap { permission, writes } => (permission, writes),
         Access::Team { permission } => (permission, false),
         Access::SharedTeam { permission } => {
@@ -974,6 +1048,69 @@ impl World {
         Ok((key, asked.body["questions"][0]["version"].to_string()))
     }
 
+    /// Creates an item as the admin with a context, and sends it to an agent. Returns its key.
+    async fn create_item_with_turn(&self, need: &str) -> Result<String> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/items", self.heap_path()),
+                Some(&self.admin.session),
+                Some(json!({ "need": need, "title": "Target", "description": "Why and how" })),
+            )
+            .await?;
+        let key = created.body["key"].as_str().context("item has no key")?.to_owned();
+        let sent = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/items/{key}/turn", self.heap_path()),
+                Some(&self.admin.session),
+                Some(json!({ "reach": "one" })),
+            )
+            .await?;
+        anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
+        Ok(key)
+    }
+
+    /// Claims as `session` until the run holds `key`; the runs of other items it claims on the way stay live.
+    /// Returns the run's ID.
+    async fn claim_item(&self, session: &str, key: &str) -> Result<String> {
+        let heaps = json!({ "heaps": [format!("{}/{}", self.team_slug, self.heap_slug)] });
+        for _ in 0..50 {
+            let claimed = self
+                .app
+                .send(Method::POST, "/api/v1/work/runs", Some(session), Some(heaps.clone()))
+                .await?;
+            anyhow::ensure!(claimed.status.is_success(), "claim failed: {}", claimed.body);
+            let run = &claimed.body["run"];
+            anyhow::ensure!(!run.is_null(), "nothing left to claim");
+            if run["item"]["key"].as_str() == Some(key) {
+                return Ok(run["id"].as_str().context("run has no id")?.to_owned());
+            }
+        }
+        anyhow::bail!("{key} was not claimed")
+    }
+
+    /// Creates an item whose turn is stuck: three claims of it as the admin, each finished as failed. Returns its key.
+    async fn create_stuck_item(&self) -> Result<String> {
+        let key = self.create_item_with_turn("critical").await?;
+        for _ in 0..3 {
+            let run = self.claim_item(&self.admin.session, &key).await?;
+            let finished = self
+                .app
+                .send(
+                    Method::POST,
+                    &format!("/api/v1/work/runs/{run}/finish"),
+                    Some(&self.admin.session),
+                    Some(json!({ "failure": "crashed" })),
+                )
+                .await?;
+            anyhow::ensure!(finished.status == StatusCode::OK, "finish failed: {}", finished.body);
+        }
+        Ok(key)
+    }
+
     /// Creates a tag as the admin and returns its ID and version.
     async fn create_tag(&self) -> Result<(String, String)> {
         let created = self
@@ -1144,6 +1281,11 @@ impl World {
             RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
             RequestBody::ReplyToQuestion => Some(json!({ "reply": { "comment": "Internal" } })),
             RequestBody::SendToAgent => Some(json!({ "reach": "one" })),
+            RequestBody::Claim => Some(json!({ "heaps": [format!("{}/{}", self.team_slug, self.heap_slug)] })),
+            RequestBody::Reached => {
+                Some(json!({ "result": "Added the context", "links": ["https://example.test/pr/1"] }))
+            }
+            RequestBody::Finish => Some(json!({})),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
             RequestBody::NewView => Some(json!({ "name": "Blocked", "view": { "blocked": "shown" } })),
@@ -1258,6 +1400,23 @@ impl World {
                 common::PKCE_CHALLENGE,
             )),
             Target::AuthorizationCode => code = Some(self.app.approve_cli(&self.admin.session).await?),
+            Target::Queue => path.push_str(&format!("?heaps={}/{}", self.team_slug, self.heap_slug)),
+            Target::Claimable => {
+                self.create_item_with_turn("critical").await?;
+            }
+            Target::StuckItem => path = path.replace("{item}", &self.create_stuck_item().await?),
+            Target::OwnRun => {
+                let run = match session.as_deref() {
+                    // Only a member of the team can claim in its heap.
+                    Some(_) if matches!(caller, Caller::Outsider) => "7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40".to_owned(),
+                    Some(session) => {
+                        let key = self.create_item_with_turn("critical").await?;
+                        self.claim_item(session, &key).await?
+                    }
+                    None => "7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40".to_owned(),
+                };
+                path = path.replace("{run}", &run);
+            }
             Target::OpenItem | Target::ClosedItem => {
                 let (key, version) = self.create_item(matches!(endpoint.target, Target::ClosedItem)).await?;
                 path = path.replace("{item}", &key);

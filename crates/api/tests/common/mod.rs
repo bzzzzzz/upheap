@@ -158,6 +158,7 @@ impl TestApp {
     pub async fn waiting_capped(&self, user_id: &str, max_rows: usize) -> Result<(u32, usize)> {
         let principal = service::Principal {
             user_id: UserId::from_uuid(user_id.parse()?),
+            run: None,
         };
         let waiting = self.services.list_waiting_capped(principal, max_rows).await?;
         Ok((waiting.count, waiting.rows.len()))
@@ -524,6 +525,19 @@ impl TestApp {
                 let diff: String = row.try_get("", "diff")?;
                 Ok((action, serde_json::from_str(&diff)?))
             })
+            .collect()
+    }
+
+    /// The run each audit entry about `entity_id` was made in, oldest first, as `(action, run ID)`.
+    pub async fn audit_runs(&self, entity_id: &str) -> Result<Vec<(String, Option<String>)>> {
+        let id: uuid::Uuid = entity_id.parse()?;
+        let sql = format!("SELECT action, run_id FROM audit_log WHERE entity_id = '{id}' ORDER BY created_at, id");
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?;
+        rows.into_iter()
+            .map(|row| Ok((row.try_get("", "action")?, row.try_get("", "run_id")?)))
             .collect()
     }
 

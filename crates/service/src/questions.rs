@@ -15,7 +15,7 @@ use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
 use crate::audit::{describe_new_question, describe_reply};
-use crate::items::{ItemChildren, ItemView, build_item_view};
+use crate::items::{ItemChildren, ItemView, build_item_view, in_run};
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -34,7 +34,10 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        self.check_run_write(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = store::items::find_item_locking(&txn, item_id)
@@ -61,7 +64,8 @@ impl Services {
             fields,
             principal.user_id,
             now,
-        );
+        )
+        .asked_in(principal.run);
         store::questions::insert_question(&txn, &question).await?;
         let entry = self.item_audit_entry(
             &access.heap,

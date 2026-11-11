@@ -5,6 +5,7 @@
 
 use crate::heap::Heap;
 use crate::item::{Item, Kind, Stage};
+use crate::run::STUCK_AFTER;
 use crate::text::parse_optional;
 use crate::validation::Field;
 use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
@@ -57,6 +58,25 @@ impl Goal {
     pub fn from_code(code: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|goal| goal.code() == code)
     }
+
+    /// The goal in words, as a sentence names it: "with context".
+    pub const fn phrase(self) -> &'static str {
+        match self {
+            Self::WithContext => "with context",
+            Self::Defined => "defined",
+            Self::Done => "done",
+        }
+    }
+
+    /// The stage an item is at when a turn reaches this goal, or `None` for a goal that is not a stage: done closes
+    /// the item.
+    pub const fn stage(self) -> Option<Stage> {
+        match self {
+            Self::WithContext => Some(Stage::WithContext),
+            Self::Defined => Some(Stage::Defined),
+            Self::Done => None,
+        }
+    }
 }
 
 /// How a turn came to be opened.
@@ -84,19 +104,22 @@ impl TurnSource {
     }
 }
 
-/// How a turn ended. The end of a turn whose goal an agent reached is added with runs.
+/// How a turn ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TurnEnd {
     TakenBack,
+    /// A run said the turn's goal was reached, and the check passed.
+    Reached,
 }
 
 impl TurnEnd {
-    pub const ALL: [Self; 1] = [Self::TakenBack];
+    pub const ALL: [Self; 2] = [Self::TakenBack, Self::Reached];
 
     /// Stable code used in storage. Never renamed.
     pub const fn code(self) -> &'static str {
         match self {
             Self::TakenBack => "taken_back",
+            Self::Reached => "reached",
         }
     }
 
@@ -176,13 +199,19 @@ pub struct Turn {
     pub opened_at: Timestamp,
     /// `None` while the turn is open.
     pub ended: Option<Ended>,
+    /// How many of its runs in a row failed. A run that asked a question sets it back to 0. At [`STUCK_AFTER`] the
+    /// turn is stuck.
+    pub failed_runs: u32,
 }
 
-/// A rule opening a turn broke.
+/// A rule opening or retrying a turn broke.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum TurnError {
     #[error("item {item_id} already has an open turn")]
     AlreadyOpen { item_id: ItemId },
+    /// A retry on an item whose turn is not stuck, or has ended.
+    #[error("item {item_id} has no stuck turn")]
+    NotStuck { item_id: ItemId },
 }
 
 impl Turn {
@@ -206,11 +235,44 @@ impl Turn {
             source,
             opened_at: now,
             ended: None,
+            failed_runs: 0,
         }
     }
 
     pub const fn is_open(&self) -> bool {
         self.ended.is_none()
+    }
+
+    /// Whether the turn's runs keep failing: it is open, and has failed [`STUCK_AFTER`] runs in a row. A stuck turn is
+    /// not in the queue, and its item waits for the person.
+    pub const fn is_stuck(&self) -> bool {
+        self.ended.is_none() && self.failed_runs >= STUCK_AFTER
+    }
+
+    /// The turn as it reads right now: when it has a run nobody has heard from for [`crate::run::CLAIM_LAPSE`]
+    /// (`lapsed_unended`), that run counts as failed though it isn't written yet (architecture.md, Runs), so
+    /// `failed_runs` is one more. Every place that reads whether a turn is stuck, or how many runs failed, reads
+    /// through this, so none disagrees with another. Never write the result back: the stored count only grows when a
+    /// lapsed run is written.
+    #[must_use]
+    pub fn counting_lapse(&self, lapsed_unended: bool) -> Self {
+        Self {
+            failed_runs: self.failed_runs.saturating_add(u32::from(lapsed_unended)),
+            ..self.clone()
+        }
+    }
+
+    /// This turn ended because its goal was reached, by `by` at `now`.
+    #[must_use]
+    pub fn reached(&self, by: UserId, now: Timestamp) -> Self {
+        Self {
+            ended: Some(Ended {
+                end: TurnEnd::Reached,
+                at: now,
+                by: Some(by),
+            }),
+            ..self.clone()
+        }
     }
 
     /// This turn taken back by `by` at `now`.
@@ -238,9 +300,10 @@ pub const fn goal_for(item: &Item) -> Goal {
 }
 
 /// Whether an agent has `item`: it is open, its heap is active, it has an open turn, and it doesn't wait for the
-/// person. `open_questions` is how many open questions it has (see [`crate::question::waits_for_you`]).
-pub const fn with_agent(item: &Item, heap: &Heap, open_questions: usize, has_open_turn: bool) -> bool {
-    has_open_turn && !item.is_closed() && !heap.is_archived() && open_questions == 0
+/// person. `open_questions` is how many open questions it has, and `stuck` whether its open turn is stuck (see
+/// [`crate::question::waits_for_you`]).
+pub const fn with_agent(item: &Item, heap: &Heap, open_questions: usize, has_open_turn: bool, stuck: bool) -> bool {
+    has_open_turn && !stuck && !item.is_closed() && !heap.is_archived() && open_questions == 0
 }
 
 #[cfg(test)]
@@ -324,16 +387,18 @@ mod tests {
     #[gtest]
     fn an_agent_has_an_open_item_with_a_turn_that_does_not_wait() {
         let open = item(Kind::Note, Stage::AsWritten);
-        expect_that!(with_agent(&open, &heap(false), 0, true), eq(true));
-        expect_that!(with_agent(&open, &heap(false), 0, false), eq(false));
-        expect_that!(with_agent(&open, &heap(false), 1, true), eq(false));
-        expect_that!(with_agent(&open, &heap(true), 0, true), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 0, true, false), eq(true));
+        expect_that!(with_agent(&open, &heap(false), 0, false, false), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 1, true, false), eq(false));
+        expect_that!(with_agent(&open, &heap(true), 0, true, false), eq(false));
+        // A stuck turn waits for the person.
+        expect_that!(with_agent(&open, &heap(false), 0, true, true), eq(false));
         let mut closed = open;
         closed.state = ItemState::Done {
             closed_at: Timestamp::EPOCH,
             closed_by: None,
         };
-        expect_that!(with_agent(&closed, &heap(false), 0, true), eq(false));
+        expect_that!(with_agent(&closed, &heap(false), 0, true, false), eq(false));
     }
 
     #[gtest]
@@ -356,5 +421,83 @@ mod tests {
         expect_that!(ended.is_open(), eq(false));
         expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::TakenBack)));
         expect_that!(ended.goal, eq(Goal::WithContext));
+    }
+}
+
+#[cfg(test)]
+mod run_tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use googletest::prelude::*;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::HeapId;
+    use crate::handle::ItemKey;
+    use crate::item::{Need, NewItem, Title};
+
+    fn note() -> Item {
+        let fields = NewItem {
+            title: Title::parse("Rotate the certs").expect("valid"),
+            description: None,
+            need: Need::Expected,
+            effort: None,
+            impact: None,
+            due: None,
+            tags: BTreeSet::new(),
+            parameters: BTreeMap::new(),
+        };
+        Item::new(
+            ItemId::from_uuid(Uuid::from_u128(3)),
+            HeapId::from_uuid(Uuid::from_u128(2)),
+            ItemKey::parse("k3x9a").expect("valid"),
+            fields,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        )
+    }
+
+    fn open_turn() -> Turn {
+        Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            &note(),
+            Reach::One,
+            None,
+            TurnSource::GoAhead,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        )
+    }
+
+    #[gtest]
+    fn a_turn_is_stuck_after_three_failed_runs_in_a_row() {
+        let mut turn = open_turn();
+
+        turn.failed_runs = 2;
+        expect_that!(turn.is_stuck(), eq(false));
+        turn.failed_runs = 3;
+        expect_that!(turn.is_stuck(), eq(true));
+        // An ended turn isn't stuck, whatever it failed before.
+        expect_that!(
+            turn.take_back(UserId::from_uuid(Uuid::from_u128(10)), Timestamp::EPOCH)
+                .is_stuck(),
+            eq(false)
+        );
+    }
+
+    #[gtest]
+    fn reaching_the_goal_ends_the_turn() {
+        let ended = open_turn().reached(UserId::from_uuid(Uuid::from_u128(10)), Timestamp::EPOCH);
+
+        expect_that!(ended.is_open(), eq(false));
+        expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::Reached)));
+        expect_that!(TurnEnd::from_code("reached"), some(eq(TurnEnd::Reached)));
+    }
+
+    #[gtest]
+    fn a_goal_is_a_stage_except_done() {
+        expect_that!(Goal::WithContext.stage(), some(eq(Stage::WithContext)));
+        expect_that!(Goal::Defined.stage(), some(eq(Stage::Defined)));
+        expect_that!(Goal::Done.stage(), none());
     }
 }

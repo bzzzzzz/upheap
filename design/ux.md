@@ -313,10 +313,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
     it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
     steps and the count to read, with no checkbox to change, no ⋯ and no Add.
-12. **Waits for you**, while the item is open and has open questions, is the one tinted, outlined block in the item
-    (the accent at a low fill, a 2 px accent border), under the state buttons and above "Why it's #3", the same on
-    the pane, the tablet panel and, inline at the top, the phone sheet. One row per open question, in number
-    order, separated by a thin rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and
+12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the one tinted, outlined
+    block in the item (the accent at a low fill, a 2 px accent border), under the state buttons and above "Why it's
+    #3", the same on the pane, the tablet panel and, inline at the top, the phone sheet. A stuck turn is its first row
+    (see Waiting for me, 7). Then one row per open question, in number order, separated by a thin rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and
     `· step "<title>"` when it names one, the short text in semibold, "Details ▸" when it has details (opening them
     in place), then the reply controls. A question without choices has an "Answer" field and Reply, off until the
     answer has text. With choices it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until
@@ -341,7 +341,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     asking or a second toast. With an agent the block says "With an agent since 14:02" (the time today, else the
     date as the server words it: "yesterday", "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
     "Prepared on add" for a note the heap's setting sent. If the item waits for the person it reads "An agent is
-    waiting for your answer, going to: …". **Take back** asks first, "Take this back from the agent? It stops, and
+    waiting for your answer, going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons:
+    Retry and Take back are in Waits for you. After Retry it reads "With an agent since …" again and the focus goes
+    to the item. **Take back** asks first, "Take this back from the agent? It stops, and
     what it changed stays.", inline on a wide screen and in a sheet on a phone, and gives focus to Send to an agent
     afterwards, with no toast. A failed send or take back says why under the block, and the form keeps its line.
     Someone else's send first says "Someone already sent this to an agent." and the block shows it. Start, Done and
@@ -387,7 +389,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 ## Waiting for me
 
 The page at `/waiting` (server build): every open question on an open item in the person's active heaps, answered in
-its row.
+its row, and every item whose agent turn is stuck, with the ways out.
 
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
@@ -411,6 +413,17 @@ its row.
 6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
    from agents and teammates show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
    "Showing the 500 most important of n."
+7. **A stuck row** is an item whose agent turn failed three runs in a row, so the agents' queue skips it. It is ranked
+   among the question rows by the same order, before that item's questions, and counts in the heading and the
+   navigation. Its head line reads "Stuck · <item> · <heap> · <team>" (and, in the item, "Stuck · going to: …"); under
+   it "3 runs in a row failed: <why the last one failed>", cut to two lines with **Show all** when it runs longer
+   (Show less folds it). Then **Retry**, the primary button, which acts at once, and **Take back**, which asks first
+   inline, "Take this back from the agent? It stops, and what it changed stays." Retry and Take back make the row
+   leave, as a reply does: the focus goes to the row that took its place, else to the heading, and a polite live
+   region says "Retried “<title>”." or "Took back “<title>”." A reader sees the row without either button. If
+   someone else took the turn back or retried it first, the row leaves and a note at the top says "Someone else
+   changed this meanwhile." A reply draft in another row survives a stuck row leaving. On a phone both buttons are
+   44 px, sharing a row.
 
 ## Closed
 

@@ -9,6 +9,7 @@ pub mod item;
 pub mod question;
 pub mod step;
 pub mod tag;
+pub mod work;
 
 use clap::Args;
 use serde::de::DeserializeOwned;
@@ -65,6 +66,12 @@ pub enum UsageError {
     },
     #[error("`{step}` is a step of another item than `{item}`; name a step of {item}, or just its number")]
     StepInOtherItem { step: String, item: String },
+    #[error("UPHEAP_RUN isn't a run ID")]
+    BadRunEnv,
+    #[error("work claim starts a run; unset UPHEAP_RUN first")]
+    ClaimInRun,
+    #[error("work {verb} runs inside a run: set UPHEAP_RUN")]
+    NeedsRun { verb: &'static str },
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

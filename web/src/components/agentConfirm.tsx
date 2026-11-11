@@ -7,6 +7,9 @@ import { focusRowOf, type ChangeState } from "./ItemRow";
 import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
 
+/** What Take back asks before it takes an item back from an agent, on the item and on a stuck row. */
+export const TAKE_BACK_QUESTION = "Take this back from the agent? It stops, and what it changed stays.";
+
 /**
  * Whether moving `item` to `state` takes it back from the agent that has it (Work with agents, What the person does to
  * a turn): starting it, or closing it. The server does the take back with the change; this tells the client to ask

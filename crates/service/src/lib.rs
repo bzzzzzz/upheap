@@ -36,11 +36,12 @@ pub mod turns;
 #[cfg(feature = "accounts")]
 pub mod users;
 pub mod waiting;
+pub mod work;
 
 use std::sync::{Arc, Mutex};
 
 use domain::sign_in::SignInLimit;
-use domain::{Duration, Timestamp, UserId};
+use domain::{Duration, RunId, Timestamp, UserId};
 use store::DatabaseConnection;
 use uuid::Uuid;
 
@@ -53,6 +54,9 @@ pub use store::StoreError;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Principal {
     pub user_id: UserId,
+    /// The run the request is made in, when an agent makes it (the `Upheap-Run` header). Only the API sets it; a
+    /// write made in a run is held to what a run may do (architecture.md, Runs).
+    pub run: Option<RunId>,
 }
 
 /// Deployment settings the use cases depend on. All of them are about accounts, so the local build takes the

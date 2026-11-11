@@ -23,6 +23,7 @@ pub struct Model {
     pub replied_at: Option<i64>,
     pub withdrawn_by: Option<String>,
     pub withdrawn_at: Option<i64>,
+    pub run_id: Option<String>,
     pub version: i32,
 }
 

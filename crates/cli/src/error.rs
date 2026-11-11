@@ -59,6 +59,13 @@ pub enum CliError {
     TokenStore(#[from] TokenStoreError),
     #[error("can't write the output")]
     Output(#[from] std::io::Error),
+    /// A `/work` route answered `404`: the server was built without agents.
+    #[error("This server doesn't run agents.")]
+    NoAgents,
+    /// A route of the run `UPHEAP_RUN` names answered `404`: the server doesn't know the run (it is another user's, or
+    /// from another server), or doesn't run agents.
+    #[error("no run {run} on this server, or it doesn't run agents")]
+    NoSuchRun { run: String },
 }
 
 impl CliError {
@@ -67,7 +74,7 @@ impl CliError {
         match self {
             Self::Config(_) | Self::TokenStore(_) => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
-            Self::NoSuchStep { .. } => 4,
+            Self::NoSuchStep { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
             Self::Lookup(
                 LookupError::MalformedHeap { .. }
                 | LookupError::MalformedItem { .. }
@@ -99,6 +106,12 @@ impl CliError {
 
     /// What to tell the user: the message, the error's causes, and a hint at the next step when there's an obvious one.
     pub fn to_message(&self) -> Vec<String> {
+        self.to_message_in(false)
+    }
+
+    /// [`to_message`](Self::to_message) for a command run inside a run (`UPHEAP_RUN` is set), whose hints are about
+    /// what an agent does next.
+    pub fn to_message_in(&self, in_run: bool) -> Vec<String> {
         let mut lines = vec![format!("error: {}", self.with_causes())];
         if let Some(problem) = self.problem()
             && problem.status >= 500
@@ -106,7 +119,7 @@ impl CliError {
         {
             lines.push(format!("request ID: {request_id}"));
         }
-        if let Some(hint) = self.hint() {
+        if let Some(hint) = self.hint(in_run) {
             lines.push(format!("hint: {hint}"));
         }
         lines
@@ -151,8 +164,11 @@ impl CliError {
         }
     }
 
-    fn hint(&self) -> Option<String> {
+    fn hint(&self, in_run: bool) -> Option<String> {
         let status = self.problem().map(|problem| problem.status);
+        if let Some(hint) = self.problem().and_then(run_hint) {
+            return Some(hint);
+        }
         match (self, status) {
             (
                 Self::TokenStore(TokenStoreError::Corrupt { .. })
@@ -187,6 +203,7 @@ impl CliError {
             )),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
             (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
+                Some("version_conflict") if in_run => Some(format!("Read it again: upheap item show {name}")),
                 Some("version_conflict") => Some(format!(
                     "someone else changed it since it was read; look with `upheap item show {name}` and try again"
                 )),
@@ -209,6 +226,21 @@ impl CliError {
             cause = err.source();
         }
         text
+    }
+}
+
+/// What a run is told when the server refuses a write it made (design: What a run is refused), or `None` for any other
+/// refusal.
+fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
+    match problem.code.as_str() {
+        "run_over" => Some("This run is over. Stop.".to_owned()),
+        "run_wrong_item" => problem
+            .item_key
+            .as_ref()
+            .map(|key| format!("This run holds {key}; write to it only.")),
+        "run_forbidden" => Some("Only the person does that.".to_owned()),
+        "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
+        _ => None,
     }
 }
 
@@ -242,6 +274,15 @@ fn client_exit_code(err: &ClientError) -> u8 {
         ClientError::Setup(_) => 6,
         ClientError::Unreachable { .. } => 5,
         ClientError::Redirected { .. } => 2,
+        // Refused because of the run, not the caller: a rule to read, not a missing permission.
+        ClientError::Problem { problem, .. }
+            if matches!(
+                problem.code.as_str(),
+                "run_forbidden" | "run_done_needs_review" | "run_wrong_item" | "run_over" | "run_cost_recorded"
+            ) =>
+        {
+            3
+        }
         ClientError::Problem { problem, .. } => status_exit_code(problem.status),
         ClientError::OAuthRefused { .. } => 4,
         ClientError::Unreadable { status, .. } => status_exit_code(status.as_u16()),
@@ -274,6 +315,7 @@ mod tests {
                 status,
                 field: None,
                 hint: None,
+                item_key: None,
                 request_id: None,
             }),
             body: String::new(),
@@ -305,6 +347,66 @@ mod tests {
         expect_that!(
             closed.to_message(),
             contains(eq("hint: reopen it first with `upheap item reopen k3x9a`"))
+        );
+    }
+
+    #[gtest]
+    fn a_stale_edit_in_a_run_says_to_read_the_item_again() {
+        let stale = refused(409, "version_conflict");
+
+        expect_that!(
+            stale.to_message_in(true),
+            contains(eq("hint: Read it again: upheap item show k3x9a"))
+        );
+    }
+
+    #[gtest]
+    fn what_a_run_is_refused_is_exit_3_whatever_the_status_with_a_hint() {
+        let run_refusal = |status, code: &str, title: &str| {
+            let mut err = problem(status, code);
+            if let ClientError::Problem { problem, .. } = &mut err {
+                problem.title = title.to_owned();
+                if code == "run_wrong_item" {
+                    problem.item_key = Some("k3x9a".to_owned());
+                }
+            }
+            CliError::Client(err)
+        };
+        let over = run_refusal(409, "run_over", "This run is over.");
+        let wrong = run_refusal(403, "run_wrong_item", "This run is for another item.");
+        let forbidden = run_refusal(403, "run_forbidden", "Only the person does that.");
+        let done = run_refusal(
+            403,
+            "run_done_needs_review",
+            "An agent closes a task as done only after a review.",
+        );
+        let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
+        let missed = run_refusal(422, "not_reached", "The task has no steps.");
+
+        for err in [&over, &wrong, &forbidden, &done, &recorded, &missed] {
+            expect_that!(err.exit_code(), eq(3));
+        }
+        // Their messages say it all: a hint would only contradict them.
+        expect_that!(done.to_message(), not(contains(starts_with("hint:"))));
+        expect_that!(recorded.to_message(), not(contains(starts_with("hint:"))));
+        expect_that!(over.to_message(), contains(eq("hint: This run is over. Stop.")));
+        expect_that!(
+            wrong.to_message(),
+            contains(eq("hint: This run holds k3x9a; write to it only."))
+        );
+        expect_that!(forbidden.to_message(), contains(eq("hint: Only the person does that.")));
+        expect_that!(
+            missed.to_message(),
+            contains(eq("hint: Fix what's missing and say reached again."))
+        );
+    }
+
+    #[gtest]
+    fn a_server_without_agents_is_exit_4() {
+        expect_that!(CliError::NoAgents.exit_code(), eq(4));
+        expect_that!(
+            CliError::NoAgents.to_message(),
+            elements_are![eq("error: This server doesn't run agents.")]
         );
     }
 

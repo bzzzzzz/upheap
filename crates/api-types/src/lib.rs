@@ -29,3 +29,4 @@ pub mod turns;
 pub mod users;
 pub mod views;
 pub mod waiting;
+pub mod work;

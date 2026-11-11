@@ -8,8 +8,11 @@ pub(crate) mod password;
 pub(crate) mod sign_ins;
 
 use api_types::common::HeapSummaryDto;
+use api_types::common::ItemActionDto;
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
-use api_types::waiting::{WaitingDto, WaitingHeapDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto};
+use api_types::waiting::{
+    WaitingDto, WaitingHeapDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
+};
 use axum::Json;
 use axum::extract::State;
 use domain::Timestamp;
@@ -17,7 +20,7 @@ use domain::user::DisplayName;
 use jiff::tz::TimeZone;
 use service::ServiceError;
 use service::me::{HeapOverview, MeView, TeamView};
-use service::waiting::WaitingRow;
+use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
@@ -103,8 +106,25 @@ async fn update_me(
 
 fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> WaitingRowDto {
     let item = row.item;
+    let (kind, question, stuck) = match row.subject {
+        WaitingSubject::Question(question) => (
+            WaitingRowKindDto::Question,
+            Some(to_question_dto(*question, as_of, tz)),
+            None,
+        ),
+        WaitingSubject::Stuck(stuck) => (
+            WaitingRowKindDto::Stuck,
+            None,
+            Some(WaitingStuckDto {
+                failed_runs: stuck.failed_runs,
+                reason: stuck.reason,
+                goal: stuck.goal.into(),
+                allowed_actions: stuck.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+            }),
+        ),
+    };
     WaitingRowDto {
-        kind: WaitingRowKindDto::Question,
+        kind,
         item: WaitingItemDto {
             id: *item.id.as_uuid(),
             key: item.key.to_string(),
@@ -122,15 +142,16 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             team_slug: row.team.slug.to_string(),
             team_name: row.team.name.as_str().to_owned(),
         },
-        question: to_question_dto(row.question, as_of, tz),
+        question,
+        stuck,
         step_title: row.step_title.map(|title| title.as_str().to_owned()),
     }
 }
 
-/// What waits for the signed-in user: the open questions and requests on open items in the active heaps of their
-/// teams, one row each, most important first. Rows are ordered by the item's ranking score in its own heap, highest
-/// first (blockers' inheritance included), then by heap name, the item's position and the question's number; all
-/// heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+/// What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
+/// is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
+/// ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
+/// position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
 #[utoipa::path(get, path = "/me/waiting", tag = "me", security(("session" = [])),
     params(TimeZoneHeader),
     responses((status = 200, body = WaitingDto), (status = 401, description = "`unauthenticated`", body = Problem)))]

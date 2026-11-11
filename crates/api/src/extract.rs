@@ -1,6 +1,8 @@
 //! Request extractors and middleware: session cookie, bearer token, CSRF header, timezone, `If-Match`, and
 //! body/query/path wrappers whose rejections are problem responses.
 
+#[cfg(feature = "agents")]
+use axum::extract::MatchedPath;
 use axum::extract::{FromRequest, FromRequestParts, Request};
 #[cfg(feature = "accounts")]
 use axum::http::HeaderValue;
@@ -8,7 +10,11 @@ use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+#[cfg(feature = "agents")]
+use domain::RunId;
 use domain::Version;
+#[cfg(feature = "agents")]
+use domain::run::{RunError, RunForbidden};
 use jiff::tz::TimeZone;
 use service::Principal;
 #[cfg(feature = "accounts")]
@@ -26,6 +32,66 @@ use crate::{ApiError, AppState, Authentication};
 pub(crate) const SESSION_COOKIE: &str = "heap_session";
 pub(crate) const CSRF_HEADER: &str = "x-csrf-protection";
 pub(crate) const TIME_ZONE_HEADER: &str = "time-zone";
+/// The run an agent writes in, set by the CLI when `UPHEAP_RUN` is.
+#[cfg(feature = "agents")]
+pub(crate) const RUN_HEADER: &str = "upheap-run";
+
+/// What a request made in a run (with the `Upheap-Run` header) may do besides read: the one place that says which
+/// writes an agent has (design: Agent runs, Queue and Runs). A request is allowed when its method and route template
+/// are listed here, and the service then checks the run and the item, and for the item's `PATCH`, which fields. Every
+/// other write is refused with `run_forbidden`: replying to a question, sending and taking back, retrying, claiming
+/// another run, heaps, teams, tags, parameters, views and new items belong to the person.
+///
+/// Templates are those the routes are registered with, under `/api/v1`.
+#[cfg(feature = "agents")]
+const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
+    (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}"),
+    (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/steps"),
+    (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}/steps/{step}"),
+    (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/questions"),
+    (Method::POST, "/work/runs/{run}/heartbeat"),
+    (Method::POST, "/work/runs/{run}/reached"),
+    (Method::POST, "/work/runs/{run}/finish"),
+];
+
+/// `principal` made in the run `Upheap-Run` names, when the request has the header. A header that isn't a run ID is
+/// `400`, on a read as on a write. A read in a run is just a read; a write must be one a run may make
+/// ([`RUN_ALLOWED_WRITES`]).
+#[cfg(feature = "agents")]
+fn in_run(parts: &Parts, principal: Principal) -> Result<Principal, ApiError> {
+    let Some(value) = parts.headers.get(RUN_HEADER) else {
+        return Ok(principal);
+    };
+    let run = value
+        .to_str()
+        .ok()
+        .and_then(|raw| uuid::Uuid::parse_str(raw.trim()).ok())
+        .map(RunId::from_uuid)
+        .ok_or_else(|| ApiError::BadRequest {
+            code: "invalid_header",
+            detail: "Upheap-Run must be a run ID".to_owned(),
+        })?;
+    if matches!(parts.method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return Ok(principal);
+    }
+    let route = parts
+        .extensions
+        .get::<MatchedPath>()
+        .map(|matched| matched.as_str())
+        .map(|path| path.strip_prefix("/api/v1").unwrap_or(path));
+    let allowed = route.is_some_and(|route| {
+        RUN_ALLOWED_WRITES
+            .iter()
+            .any(|(method, template)| *method == parts.method && *template == route)
+    });
+    if !allowed {
+        return Err(ApiError::Service(RunError::Forbidden(RunForbidden::Person).into()));
+    }
+    Ok(Principal {
+        run: Some(run),
+        ..principal
+    })
+}
 
 /// JSON body; a malformed body is a `400` problem.
 #[derive(FromRequest)]
@@ -77,6 +143,9 @@ impl FromRequestParts<AppState> for CurrentUser {
             Authentication::LocalUser(principal) => *principal,
         };
         tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
+        // A build without agents has no runs: the header is ignored.
+        #[cfg(feature = "agents")]
+        let principal = in_run(parts, principal)?;
         Ok(Self(principal))
     }
 }

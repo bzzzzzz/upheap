@@ -158,6 +158,7 @@ impl Services {
             entity_type: EntityType::Tag,
             entity_id: *tag.id.as_uuid(),
             diff,
+            run_id: None,
             created_at: now,
         }
     }

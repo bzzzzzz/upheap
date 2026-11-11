@@ -21,6 +21,12 @@ pub async fn insert_turn(db: &impl ConnectionTrait, turn: &Turn) -> Result<(), S
     Ok(())
 }
 
+/// The turn `id`, open or ended.
+pub async fn find_turn(db: &impl ConnectionTrait, id: TurnId) -> Result<Option<Turn>, StoreError> {
+    let row = item_turns::Entity::find_by_id(id_to_db(id.as_uuid())).one(db).await?;
+    row.map(to_turn).transpose()
+}
+
 /// The open turn of `item_id`, if it has one.
 pub async fn find_open_turn(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Option<Turn>, StoreError> {
     read_open_turn(db, item_id, false).await
@@ -90,6 +96,67 @@ pub async fn list_open_turns_in_heap_locking(
     Ok(turns)
 }
 
+/// Every open turn of the items of `heap_ids`, each with the heap of its item, in one query per [`IN_LIST_CHUNK`]
+/// heaps, as locking reads when `lock` is set (see [`find_open_turn_locking`]). The order is the database's.
+pub async fn list_open_turns_in_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    lock: bool,
+) -> Result<Vec<(HeapId, Turn)>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let query = item_turns::Entity::find()
+            .join(
+                JoinType::InnerJoin,
+                item_turns::Entity::belongs_to(items::Entity)
+                    .from(item_turns::Column::ItemId)
+                    .to(items::Column::Id)
+                    .into(),
+            )
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_turns::Column::EndedAt.is_null())
+            .column_as(items::Column::HeapId, "heap_id");
+        let rows = crate::items::shared_if(query, lock)
+            .into_model::<TurnInHeap>()
+            .all(db)
+            .await?;
+        for TurnInHeap { turn, heap_id } in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &turn.id,
+            };
+            let heap_id = HeapId::from_uuid(read.uuid(&heap_id)?);
+            found.push((heap_id, to_turn(turn)?));
+        }
+    }
+    Ok(found)
+}
+
+/// A turn row with the heap of its item.
+#[derive(sea_orm::FromQueryResult)]
+struct TurnInHeap {
+    #[sea_orm(nested)]
+    turn: item_turns::Model,
+    heap_id: String,
+}
+
+/// Sets how many runs in a row the open turn `id` has failed. Returns whether the turn was open: `false` means it
+/// ended first, and nothing is written.
+pub async fn set_failed_runs(db: &impl ConnectionTrait, id: TurnId, failed_runs: u32) -> Result<bool, StoreError> {
+    let stored = i32::try_from(failed_runs).unwrap_or(i32::MAX);
+    let result = item_turns::Entity::update_many()
+        .set(item_turns::ActiveModel {
+            failed_runs: Set(stored),
+            ..Default::default()
+        })
+        .filter(item_turns::Column::Id.eq(id_to_db(id.as_uuid())))
+        .filter(item_turns::Column::EndedAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
 /// Writes how `turn` ended, if it is still open in the store. Returns whether it was: `false` means someone ended
 /// it first, and nothing is written. An ended turn never changes again.
 pub async fn end_turn(db: &impl ConnectionTrait, turn: &Turn) -> Result<bool, StoreError> {
@@ -124,6 +191,7 @@ fn to_row(turn: &Turn) -> item_turns::ActiveModel {
         ended_at: Set(ended.map(|ended| ended.at.as_millis())),
         ended_by: Set(ended.and_then(|ended| ended.by).map(|user| id_to_db(user.as_uuid()))),
         end_kind: Set(ended.map(|ended| ended.end.code().to_owned())),
+        failed_runs: Set(i32::try_from(turn.failed_runs).unwrap_or(i32::MAX)),
     }
 }
 
@@ -167,5 +235,7 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
         source,
         opened_at: read.timestamp(row.opened_at)?,
         ended,
+        failed_runs: u32::try_from(row.failed_runs)
+            .map_err(|_| read.corrupt(format!("failed_runs {} is negative", row.failed_runs)))?,
     })
 }

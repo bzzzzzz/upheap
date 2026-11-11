@@ -50,6 +50,8 @@ pub struct Environment {
     pub server: Option<String>,
     /// `UPHEAP_HEAP`.
     pub heap: Option<String>,
+    /// `UPHEAP_RUN`: the run an agent writes in. Sent as `Upheap-Run` with every request.
+    pub run: Option<String>,
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
     pub stdout_is_terminal: bool,
@@ -86,6 +88,7 @@ impl Environment {
         Self {
             server: var("UPHEAP_SERVER"),
             heap: var("UPHEAP_HEAP"),
+            run: var("UPHEAP_RUN"),
             no_color: var("NO_COLOR").is_some(),
             stdout_is_terminal: std::io::stdout().is_terminal(),
             stderr_is_terminal: std::io::stderr().is_terminal(),
@@ -136,6 +139,9 @@ enum Command {
     /// Tags in a heap
     #[command(subcommand)]
     Tag(TagCommand),
+    /// What agents work on: the queue, and a run's end
+    #[command(subcommand)]
+    Work(WorkCommand),
     /// Your heaps, and the default one
     #[command(subcommand)]
     Heap(HeapCommand),
@@ -202,6 +208,18 @@ enum TagCommand {
 }
 
 #[derive(Subcommand)]
+enum WorkCommand {
+    /// The item an agent would work on next, without taking it
+    Next(commands::work::next::NextArgs),
+    /// Take the next item and start a run on it
+    Claim(commands::work::claim::ClaimArgs),
+    /// Say the run reached the turn's goal (needs UPHEAP_RUN)
+    Reached(commands::work::reached::ReachedArgs),
+    /// End the run and record what it cost (needs UPHEAP_RUN)
+    Finish(commands::work::finish::FinishArgs),
+}
+
+#[derive(Subcommand)]
 enum HeapCommand {
     /// Add a heap to a team
     Add(commands::heap::add::AddArgs),
@@ -254,6 +272,10 @@ impl Command {
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
             Self::Heap(HeapCommand::Add(args)) => &args.shared,
+            Self::Work(WorkCommand::Next(args)) => &args.shared,
+            Self::Work(WorkCommand::Claim(args)) => &args.shared,
+            Self::Work(WorkCommand::Reached(args)) => &args.shared,
+            Self::Work(WorkCommand::Finish(args)) => &args.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Use(args)) => &args.shared,
             Self::Heap(HeapCommand::Show(args)) => &args.shared,
@@ -280,6 +302,7 @@ where
         mut stderr,
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
+    let in_run = env.run.is_some();
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(err) => {
@@ -306,7 +329,11 @@ where
             commands::guide::show::run(&Cli::command(), &mut out).map_err(CliError::from)
         }
         command => match load_app(env, tokens, browser, stdin) {
-            Ok(app) => dispatch(command, &app, &mut out).await,
+            // Before any request, so a bad run ID is told of once, not as a refusal.
+            Ok(app) => match check_run_env(&app.env) {
+                Ok(()) => dispatch(command, &app, &mut out).await,
+                Err(err) => Err(err.into()),
+            },
             Err(err) => Err(err.into()),
         },
     };
@@ -315,9 +342,17 @@ where
         // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
         Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
-            report(&err, &mut out);
+            report(&err, &mut out, in_run);
             ExitCode::from(err.exit_code())
         }
+    }
+}
+
+/// `UPHEAP_RUN`, when set, must be a run ID.
+fn check_run_env(env: &Environment) -> Result<(), UsageError> {
+    match &env.run {
+        Some(run) if uuid::Uuid::parse_str(run).is_err() => Err(UsageError::BadRunEnv),
+        _ => Ok(()),
     }
 }
 
@@ -364,6 +399,10 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
         Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
+        Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
+        Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,
+        Command::Work(WorkCommand::Reached(args)) => commands::work::reached::run(args, app, out).await,
+        Command::Work(WorkCommand::Finish(args)) => commands::work::finish::run(args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Use(args)) => commands::heap::use_heap::run(args, app, out).await,
         Command::Heap(HeapCommand::Show(args)) => commands::heap::show::run(args, app, out).await,
@@ -375,14 +414,14 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
 }
 
 /// Writes `err` to stderr: the server's problem body as it came with `--json`, a message otherwise.
-fn report(err: &CliError, out: &mut Output) {
+fn report(err: &CliError, out: &mut Output, in_run: bool) {
     if out.mode() == Mode::Json
         && let Some(body) = err.problem_body()
     {
         let _ = out.json_note(body);
         return;
     }
-    for line in err.to_message() {
+    for line in err.to_message_in(in_run) {
         // Nowhere left to report a failure to write to stderr.
         let _ = out.note(&line);
     }
@@ -433,7 +472,7 @@ impl App {
     }
 
     pub fn client(&self, server: Url) -> Result<ApiClient, ClientError> {
-        ApiClient::new(server, self.env.time_zone.clone())
+        ApiClient::new(server, self.env.time_zone.clone()).map(|client| client.in_run(self.env.run.clone()))
     }
 
     /// An access token for `client`'s server, refreshed when the stored one is stale.

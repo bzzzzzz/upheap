@@ -22,6 +22,7 @@ pub fn list_column_specs() -> Vec<ColumnSpec> {
     add_entity::<heaps::Entity>(&mut specs);
     add_entity::<item_parameter_values::Entity>(&mut specs);
     add_entity::<item_questions::Entity>(&mut specs);
+    add_entity::<item_runs::Entity>(&mut specs);
     add_entity::<item_steps::Entity>(&mut specs);
     add_entity::<item_tags::Entity>(&mut specs);
     add_entity::<item_turns::Entity>(&mut specs);

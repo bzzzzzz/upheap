@@ -25,6 +25,8 @@ pub enum AuditAction {
     QuestionWithdrawn,
     TurnOpened,
     TurnTakenBack,
+    TurnReached,
+    TurnRetried,
     TagCreated,
     TagUpdated,
     SavedViewCreated,
@@ -43,7 +45,7 @@ pub enum AuditAction {
 
 impl AuditAction {
     /// Every action, in the order they are declared.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 39] = [
         Self::UserRegistered,
         Self::UserUpdated,
         Self::TeamCreated,
@@ -67,6 +69,8 @@ impl AuditAction {
         Self::QuestionWithdrawn,
         Self::TurnOpened,
         Self::TurnTakenBack,
+        Self::TurnReached,
+        Self::TurnRetried,
         Self::TagCreated,
         Self::TagUpdated,
         Self::SavedViewCreated,
@@ -113,6 +117,8 @@ impl AuditAction {
             Self::QuestionWithdrawn => "question_withdrawn",
             Self::TurnOpened => "turn_opened",
             Self::TurnTakenBack => "turn_taken_back",
+            Self::TurnReached => "turn_reached",
+            Self::TurnRetried => "turn_retried",
             Self::TagCreated => "tag_created",
             Self::TagUpdated => "tag_updated",
             Self::SavedViewCreated => "saved_view_created",

@@ -396,7 +396,7 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
         (waiting) =>
           waiting && {
             count: Math.max(0, waiting.count - 1),
-            rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question.number === question.number)),
+            rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question?.number === question.number)),
           },
       );
     },
@@ -442,21 +442,64 @@ export function useSendToAgent(heap: HeapRef) {
   });
 }
 
-/** Takes the item back from the agent. Taking back what no agent has is not an error: the item comes back as it is. */
+/**
+ * Takes the item back from the agent. Taking back what no agent has is not an error: the item comes back as it is. A
+ * stuck item's row leaves Waiting for me at once; the refetch below confirms it, and the questions the agent asked.
+ */
 export function useTakeBack(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (item: Item) =>
+    mutationFn: async (item: Pick<Item, "key">) =>
       unwrap(
         await api.DELETE("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn", {
           params: { path: { ...heap, item: item.key } },
         }),
       ),
-    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      dropStuckRow(queryClient, saved.id);
+    },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
     },
+  });
+}
+
+/**
+ * Lets the agents try again at an item whose turn is stuck. The answer is the whole item, which replaces the cached one,
+ * and its row leaves Waiting for me at once. A retry of a turn that is no longer stuck (someone took it back or retried
+ * it first) fetches the item and the lists again.
+ */
+export function useRetryTurn(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (item: Pick<Item, "key">) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/retry", {
+          params: { path: { ...heap, item: item.key } },
+        }),
+      ),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      dropStuckRow(queryClient, saved.id);
+    },
+    onError: (_error, item) => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
+  });
+}
+
+/** Takes the stuck row of the item `itemId` out of the cached Waiting for me, and out of its count. */
+function dropStuckRow(queryClient: QueryClient, itemId: string) {
+  queryClient.setQueryData<Waiting>(waitingKey, (waiting) => {
+    if (!waiting) return waiting;
+    const rows = waiting.rows.filter((row) => !(row.kind === "stuck" && row.item.id === itemId));
+    return { ...waiting, rows, count: Math.max(0, waiting.count - (waiting.rows.length - rows.length)) };
   });
 }
 

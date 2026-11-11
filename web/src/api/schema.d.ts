@@ -264,10 +264,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What waits for the signed-in user: the open questions and requests on open items in the active heaps of their
-         *     teams, one row each, most important first. Rows are ordered by the item's ranking score in its own heap, highest
-         *     first (blockers' inheritance included), then by heap name, the item's position and the question's number; all
-         *     heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+         * What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
+         *     is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
+         *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
+         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_waiting"];
         put?: never;
@@ -691,6 +691,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lets the agents try again at an item whose turn is stuck (3 runs in a row failed) and answers with the whole item.
+         *     The count of failed runs goes back to 0, so the item is in the queue again, and `turn_retried` is recorded. Any
+         *     member who may edit items may. It needs no `If-Match`, and the item's `version` doesn't change. An item with no
+         *     open turn, or one that isn't stuck, is `turn_not_stuck`.
+         */
+        post: operations["retry_turn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/options/{option_id}/archive": {
         parameters: {
             query?: never;
@@ -1068,6 +1090,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
+         *     claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
+         *     stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking, highest
+         *     first, then by heap name and the item's position; every heap weighs the same for now. Any member who may edit items
+         *     in every given heap may ask.
+         */
+        get: operations["next_item"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claims the next item of the queue over some heaps and starts a run on it, as `GET /work/next` chooses, under the
+         *     locks of every given heap. Before choosing, it writes every run on those heaps that nobody has heard from for 30
+         *     minutes as failed. The run belongs to the caller; another user who uses its ID gets `404`. `201` with the run, or
+         *     `200` with `run` `null` when nothing waits for an agent. A claim is not audited: runs are their own record.
+         */
+        post: operations["claim_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/runs/{run}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
+         *     asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
+         *     stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
+         *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
+         */
+        post: operations["finish_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/runs/{run}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Says the run is still going: it was heard from now. A run that nobody hears from for 30 minutes, by a heartbeat or
+         *     a write made in it, lapses.
+         */
+        post: operations["heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/runs/{run}/reached": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a
+         *     description and no open question; `defined` needs an open task with a description, a step that isn't dropped and no
+         *     open question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the
+         *     item's stage becomes the goal, and `turn_reached` is recorded. A miss is `not_reached` and names the first condition
+         *     missed; the run stays live, so the agent can fix the item and say it again.
+         */
+        post: operations["reached"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1176,7 +1308,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1244,6 +1376,20 @@ export interface components {
              *     characters. May equal the current one.
              */
             password: string;
+        };
+        /** @description A claim: the run started on the first item of the queue. */
+        Claim: {
+            run?: null | components["schemas"]["Run"];
+            /**
+             * Format: int32
+             * @description As in `WorkNext`.
+             */
+            waiting_count: number;
+        };
+        /** @description Claims the next item of the queue over some heaps. */
+        ClaimRequest: {
+            /** @description One to 20 heaps, each `team/heap` by slug. A heap named twice counts once. */
+            heaps: string[];
         };
         /** @description One live sign-in of a client such as the CLI: the tokens it holds can still be used. */
         ClientSignIn: {
@@ -1394,6 +1540,19 @@ export interface components {
         };
         /** @enum {string} */
         Factor: "need" | "age" | "deadline" | "value" | "parameter" | "blocks";
+        /** @description Ends a run that has not ended, and records what it cost. */
+        FinishRequest: {
+            /**
+             * Format: double
+             * @description What the run cost in US dollars: from 0 to 1,000,000. Set once.
+             */
+            cost_usd?: number | null;
+            /**
+             * @description Why the run failed, for a run that ends without reaching the goal or asking: plain text, cut to 2,000
+             *     characters. Ignored for a run that ended another way.
+             */
+            failure?: string | null;
+        };
         /**
          * @description The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
          *     context and a task not yet defined go to `defined`, and a defined task goes to `done`.
@@ -1729,7 +1888,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back";
+        ItemAction: "edit" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back" | "retry";
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -2103,6 +2262,11 @@ export interface components {
              *     at, such as `my-team` for `My-Team`.
              */
             hint?: string | null;
+            /**
+             * @description The key of the item the error is about, when it is one other than the item asked for: the item a run holds,
+             *     for `run_wrong_item`.
+             */
+            item_key?: string | null;
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -2315,6 +2479,13 @@ export interface components {
          * @enum {string}
          */
         Reach: "one" | "all_the_way";
+        /** @description Says a run reached the turn's goal. */
+        ReachedRequest: {
+            /** @description Up to 10 absolute `http` or `https` addresses of up to 2,000 characters. */
+            links?: string[];
+            /** @description What the run did, in a line or two: plain text, 1 to 2,000 characters. */
+            result: string;
+        };
         RegisterRequest: {
             display_name: string;
             email: string;
@@ -2328,6 +2499,52 @@ export interface components {
         };
         /** @enum {string} */
         Role: "admin" | "member";
+        /** @description A run: one go an agent has at an item's turn. */
+        Run: {
+            /**
+             * Format: double
+             * @description What the run cost in US dollars; `null` until `finish` sets it.
+             */
+            cost_usd?: number | null;
+            end?: null | components["schemas"]["RunEnd"];
+            /**
+             * Format: int64
+             * @description UTC milliseconds; `null` while the run has not ended.
+             */
+            ended_at?: number | null;
+            /** @description Why the run failed; `null` unless it ended as `failed`. */
+            failure?: string | null;
+            /** @description The item's stage when the run started. */
+            from_stage: components["schemas"]["Stage"];
+            /**
+             * Format: int64
+             * @description UTC milliseconds. When the run was last heard from: a heartbeat or a write made in it. After 30 minutes without
+             *     either, the run lapses.
+             */
+            heard_at: number;
+            /** Format: uuid */
+            id: string;
+            /** @description The item the run holds. */
+            item: components["schemas"]["WorkItem"];
+            links: string[];
+            /** @description What the run said it reached; `null` unless it ended as `reached`. */
+            result?: string | null;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            started_at: number;
+        };
+        /**
+         * @description How a run ended.
+         *
+         *     - `reached`: it said the turn's goal was reached, and the check passed.
+         *     - `asked`: it asked one or more questions, so the person has the item.
+         *     - `failed`: it ended without either, or nobody heard from it for 30 minutes.
+         *     - `taken_back`: the person took the turn back while the run was live. Not a failure.
+         * @enum {string}
+         */
+        RunEnd: "reached" | "asked" | "failed" | "taken_back";
         SavedView: {
             allowed_actions: components["schemas"]["SavedViewAction"][];
             /**
@@ -2575,6 +2792,11 @@ export interface components {
         };
         /** @description An item's open turn: the item has been sent to an agent and not taken back. */
         Turn: {
+            /**
+             * Format: int32
+             * @description How many of the turn's runs in a row failed.
+             */
+            failed_runs: number;
             goal: components["schemas"]["Goal"];
             /** @description What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing. */
             line?: string | null;
@@ -2590,7 +2812,19 @@ export interface components {
              */
             opened_label: string;
             reach: components["schemas"]["Reach"];
+            /**
+             * Format: int32
+             * @description How many runs the turn has had.
+             */
+            runs: number;
             source: components["schemas"]["TurnSource"];
+            /**
+             * @description Whether the turn's runs keep failing: 3 in a row failed. A stuck turn is not in the agents' queue, and its item
+             *     waits for the person, who can retry or take it back.
+             */
+            stuck: boolean;
+            /** @description Why the latest failed run failed, when the turn is stuck; otherwise `null`. */
+            stuck_reason: string | null;
         };
         /**
          * @description How a turn came to be opened.
@@ -2633,16 +2867,19 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
-        /** @description What waits for the caller: every open question on an open item in their active heaps, most important first. */
+        /**
+         * @description What waits for the caller: every open question on an open item, and every item with a stuck agent turn, in their
+         *     active heaps, most important first.
+         */
         Waiting: {
             /**
              * Format: int32
-             * @description How many questions wait. At most 500 are in `rows`; this is the true total.
+             * @description How many rows wait, questions and stuck turns. At most 500 are in `rows`; this is the true total.
              */
             count: number;
             /**
              * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
-             *     its heap, then the question's number. Heaps weigh the same for now.
+             *     its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
              */
             rows: components["schemas"]["WaitingRow"][];
         };
@@ -2677,19 +2914,73 @@ export interface components {
             heap: components["schemas"]["WaitingHeap"];
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
-            /** @description The open question, as the item carries it. */
-            question: components["schemas"]["Question"];
+            question: null | components["schemas"]["Question"];
             /**
              * @description The title of the step the question names, so a client needn't load the item's steps. `null` when it names
-             *     none, or one that no longer exists.
+             *     none, or one that no longer exists, and on a `stuck` row.
              */
             step_title?: string | null;
+            stuck: null | components["schemas"]["WaitingStuck"];
         };
         /**
-         * @description What kind of thing waits. Only questions for now: more kinds can join.
+         * @description What kind of thing waits. More kinds can join.
          * @enum {string}
          */
-        WaitingRowKind: "question";
+        WaitingRowKind: "question" | "stuck";
+        /** @description A turn whose runs keep failing. */
+        WaitingStuck: {
+            /** @description What the caller may do about it: `retry` and `take_back`, when they may edit items. */
+            allowed_actions: components["schemas"]["ItemAction"][];
+            /**
+             * Format: int32
+             * @description How many runs in a row failed.
+             */
+            failed_runs: number;
+            /** @description The stable state the turn goes to. */
+            goal: components["schemas"]["Goal"];
+            /** @description Why the latest failed run failed; `null` when that is not known. */
+            reason?: string | null;
+        };
+        /** @description An item an agent may work on: the item, its heap, and the turn it works to. */
+        WorkItem: {
+            /**
+             * Format: int32
+             * @description How many of the turn's runs in a row failed. At 3 the turn is stuck and not in the queue.
+             */
+            failed_runs: number;
+            /** @description The stable state the turn goes to. */
+            goal: components["schemas"]["Goal"];
+            heap: components["schemas"]["WaitingHeap"];
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Five characters, unique within the heap.
+             * @example k3x9a
+             */
+            key: string;
+            kind: components["schemas"]["Kind"];
+            /** @description What the person told the agent: plain text; `null` when they said nothing. */
+            line?: string | null;
+            reach: components["schemas"]["Reach"];
+            /**
+             * Format: int32
+             * @description How many runs the turn has had, ended or not. More than 0 means the work was started before.
+             */
+            runs: number;
+            /** @description Where the item is now. */
+            stage: components["schemas"]["Stage"];
+            title: string;
+        };
+        /** @description The first item of the queue, if there is one. */
+        WorkNext: {
+            item?: null | components["schemas"]["WorkItem"];
+            /**
+             * Format: int32
+             * @description How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
+             *     counts once.
+             */
+            waiting_count: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -4338,6 +4629,15 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            /** @description From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4346,7 +4646,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task` */
+            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4896,6 +5196,61 @@ export interface operations {
                 };
             };
             /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    retry_turn: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` or `turn_not_stuck` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6466,6 +6821,317 @@ export interface operations {
                 };
             };
             /** @description `field_too_short` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    next_item: {
+        parameters: {
+            query?: {
+                /**
+                 * @description One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.
+                 * @example ops/backlog,ops/infra
+                 */
+                heaps?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkNext"];
+                };
+            };
+            /** @description `invalid_query` or `invalid_header` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `forbidden`: the caller can't edit items in a given heap */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A heap outside the caller's teams */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    claim_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Nothing to claim: `run` is `null` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Claim"];
+                };
+            };
+            /** @description A run started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Claim"];
+                };
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `forbidden`, or from inside a run `run_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A heap outside the caller's teams */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `heaps`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    finish_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The run's ID, from the claim. */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinishRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such run, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `run_cost_recorded`: the cost was already set */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The run's ID, from the claim. */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Heard */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such run, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `run_over`: the run has ended or lapsed, or its turn was taken back */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reached: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The run's ID, from the claim. */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReachedRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such run, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `run_over`: the run has ended or lapsed, or its turn was taken back */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, or a link that isn't an absolute `http` or `https` address */
             422: {
                 headers: {
                     [name: string]: unknown;

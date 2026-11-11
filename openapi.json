@@ -828,7 +828,7 @@
         "tags": [
           "me"
         ],
-        "summary": "What waits for the signed-in user: the open questions and requests on open items in the active heaps of their\nteams, one row each, most important first. Rows are ordered by the item's ranking score in its own heap, highest\nfirst (blockers' inheritance included), then by heap name, the item's position and the question's number; all\nheaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.",
+        "summary": "What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn\nis stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's\nranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's\nposition, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.",
         "operationId": "get_waiting",
         "parameters": [
           {
@@ -2598,6 +2598,16 @@
               }
             }
           },
+          "403": {
+            "description": "From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -2609,7 +2619,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed` or `stage_needs_task`",
+            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3496,6 +3506,99 @@
           },
           "409": {
             "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/retry": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Lets the agents try again at an item whose turn is stuck (3 runs in a row failed) and answers with the whole item.\nThe count of failed runs goes back to 0, so the item is in the queue again, and `turn_retried` is recorded. Any\nmember who may edit items may. It needs no `If-Match`, and the item's `version` doesn't change. An item with no\nopen turn, or one that isn't stuck, is `turn_not_stuck`.",
+        "operationId": "retry_turn",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived` or `turn_not_stuck`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5932,6 +6035,429 @@
           }
         ]
       }
+    },
+    "/api/v1/work/next": {
+      "get": {
+        "tags": [
+          "work"
+        ],
+        "summary": "The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is\nclaimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't\nstuck, has no open question, and has no live run. Items come by their score in their own heap's ranking, highest\nfirst, then by heap name and the item's position; every heap weighs the same for now. Any member who may edit items\nin every given heap may ask.",
+        "operationId": "next_item",
+        "parameters": [
+          {
+            "name": "heaps",
+            "in": "query",
+            "description": "One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "ops/backlog,ops/infra"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkNext"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query` or `invalid_header`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the caller can't edit items in a given heap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A heap outside the caller's teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/runs": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Claims the next item of the queue over some heaps and starts a run on it, as `GET /work/next` chooses, under the\nlocks of every given heap. Before choosing, it writes every run on those heaps that nobody has heard from for 30\nminutes as failed. The run belongs to the caller; another user who uses its ID gets `404`. `201` with the run, or\n`200` with `run` `null` when nothing waits for an agent. A claim is not audited: runs are their own record.",
+        "operationId": "claim_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Nothing to claim: `run` is `null`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A run started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`, or from inside a run `run_forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A heap outside the caller's teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `heaps`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/runs/{run}/finish": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.",
+        "operationId": "finish_run",
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "description": "The run's ID, from the claim.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_cost_recorded`: the cost was already set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/runs/{run}/heartbeat": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Says the run is still going: it was heard from now. A run that nobody hears from for 30 minutes, by a heartbeat or\na write made in it, lapses.",
+        "operationId": "heartbeat",
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "description": "The run's ID, from the claim.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Heard"
+          },
+          "404": {
+            "description": "No such run, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_over`: the run has ended or lapsed, or its turn was taken back",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/runs/{run}/reached": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a\ndescription and no open question; `defined` needs an open task with a description, a step that isn't dropped and no\nopen question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the\nitem's stage becomes the goal, and `turn_reached` is recorded. A miss is `not_reached` and names the first condition\nmissed; the run stays live, so the agent can fix the item and say it again.",
+        "operationId": "reached",
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "description": "The run's ID, from the claim.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReachedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_over`: the run has ended or lapsed, or its turn was taken back",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, or a link that isn't an absolute `http` or `https` address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -6193,6 +6719,8 @@
           "question_withdrawn",
           "turn_opened",
           "turn_taken_back",
+          "turn_reached",
+          "turn_retried",
           "tag_created",
           "tag_updated",
           "saved_view_created",
@@ -6378,6 +6906,49 @@
           "password": {
             "type": "string",
             "description": "The new password, named as in registration so a length problem points at the same field. At least 10\ncharacters. May equal the current one."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Claim": {
+        "type": "object",
+        "description": "A claim: the run started on the first item of the queue.",
+        "required": [
+          "waiting_count"
+        ],
+        "properties": {
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Run",
+                "description": "`null` when nothing in the given heaps waits for an agent."
+              }
+            ]
+          },
+          "waiting_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "As in `WorkNext`.",
+            "minimum": 0
+          }
+        }
+      },
+      "ClaimRequest": {
+        "type": "object",
+        "description": "Claims the next item of the queue over some heaps.",
+        "required": [
+          "heaps"
+        ],
+        "properties": {
+          "heaps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One to 20 heaps, each `team/heap` by slug. A heap named twice counts once."
           }
         },
         "additionalProperties": false
@@ -6778,6 +7349,28 @@
           "parameter",
           "blocks"
         ]
+      },
+      "FinishRequest": {
+        "type": "object",
+        "description": "Ends a run that has not ended, and records what it cost.",
+        "properties": {
+          "cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "What the run cost in US dollars: from 0 to 1,000,000. Set once."
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the run failed, for a run that ends without reaching the goal or asking: plain text, cut to 2,000\ncharacters. Ignored for a run that ended another way."
+          }
+        },
+        "additionalProperties": false
       },
       "Goal": {
         "type": "string",
@@ -7586,7 +8179,8 @@
           "add_step",
           "ask_question",
           "send_to_agent",
-          "take_back"
+          "take_back",
+          "retry"
         ]
       },
       "ItemOption": {
@@ -8604,6 +9198,13 @@
             ],
             "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`."
           },
+          "item_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key of the item the error is about, when it is one other than the item asked for: the item a run holds,\nfor `run_wrong_item`."
+          },
           "request_id": {
             "type": [
               "string",
@@ -9075,6 +9676,27 @@
           "all_the_way"
         ]
       },
+      "ReachedRequest": {
+        "type": "object",
+        "description": "Says a run reached the turn's goal.",
+        "required": [
+          "result"
+        ],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 10 absolute `http` or `https` addresses of up to 2,000 characters."
+          },
+          "result": {
+            "type": "string",
+            "description": "What the run did, in a line or two: plain text, 1 to 2,000 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterRequest": {
         "type": "object",
         "required": [
@@ -9105,6 +9727,99 @@
         "enum": [
           "admin",
           "member"
+        ]
+      },
+      "Run": {
+        "type": "object",
+        "description": "A run: one go an agent has at an item's turn.",
+        "required": [
+          "id",
+          "item",
+          "started_at",
+          "heard_at",
+          "from_stage",
+          "links"
+        ],
+        "properties": {
+          "cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "What the run cost in US dollars; `null` until `finish` sets it."
+          },
+          "end": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunEnd",
+                "description": "`null` while the run has not ended."
+              }
+            ]
+          },
+          "ended_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds; `null` while the run has not ended."
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the run failed; `null` unless it ended as `failed`."
+          },
+          "from_stage": {
+            "$ref": "#/components/schemas/Stage",
+            "description": "The item's stage when the run started."
+          },
+          "heard_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds. When the run was last heard from: a heartbeat or a write made in it. After 30 minutes without\neither, the run lapses."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item": {
+            "$ref": "#/components/schemas/WorkItem",
+            "description": "The item the run holds."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the run said it reached; `null` unless it ended as `reached`."
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          }
+        }
+      },
+      "RunEnd": {
+        "type": "string",
+        "description": "How a run ended.\n\n- `reached`: it said the turn's goal was reached, and the check passed.\n- `asked`: it asked one or more questions, so the person has the item.\n- `failed`: it ended without either, or nobody heard from it for 30 minutes.\n- `taken_back`: the person took the turn back while the run was live. Not a failure.",
+        "enum": [
+          "reached",
+          "asked",
+          "failed",
+          "taken_back"
         ]
       },
       "SavedView": {
@@ -9707,9 +10422,19 @@
           "goal",
           "source",
           "opened_at",
-          "opened_label"
+          "opened_label",
+          "stuck",
+          "failed_runs",
+          "stuck_reason",
+          "runs"
         ],
         "properties": {
+          "failed_runs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of the turn's runs in a row failed.",
+            "minimum": 0
+          },
           "goal": {
             "$ref": "#/components/schemas/Goal"
           },
@@ -9743,8 +10468,25 @@
           "reach": {
             "$ref": "#/components/schemas/Reach"
           },
+          "runs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many runs the turn has had.",
+            "minimum": 0
+          },
           "source": {
             "$ref": "#/components/schemas/TurnSource"
+          },
+          "stuck": {
+            "type": "boolean",
+            "description": "Whether the turn's runs keep failing: 3 in a row failed. A stuck turn is not in the agents' queue, and its item\nwaits for the person, who can retry or take it back."
+          },
+          "stuck_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the latest failed run failed, when the turn is stuck; otherwise `null`."
           }
         }
       },
@@ -9851,7 +10593,7 @@
       },
       "Waiting": {
         "type": "object",
-        "description": "What waits for the caller: every open question on an open item in their active heaps, most important first.",
+        "description": "What waits for the caller: every open question on an open item, and every item with a stuck agent turn, in their\nactive heaps, most important first.",
         "required": [
           "count",
           "rows"
@@ -9860,7 +10602,7 @@
           "count": {
             "type": "integer",
             "format": "int32",
-            "description": "How many questions wait. At most 500 are in `rows`; this is the true total.",
+            "description": "How many rows wait, questions and stuck turns. At most 500 are in `rows`; this is the true total.",
             "minimum": 0
           },
           "rows": {
@@ -9868,7 +10610,7 @@
             "items": {
               "$ref": "#/components/schemas/WaitingRow"
             },
-            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, then the question's number. Heaps weigh the same for now."
+            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now."
           }
         }
       },
@@ -9964,7 +10706,8 @@
           "kind",
           "item",
           "heap",
-          "question"
+          "question",
+          "stuck"
         ],
         "properties": {
           "heap": {
@@ -9977,24 +10720,170 @@
             "$ref": "#/components/schemas/WaitingRowKind"
           },
           "question": {
-            "$ref": "#/components/schemas/Question",
-            "description": "The open question, as the item carries it."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Question",
+                "description": "The open question, as the item carries it. Set on a `question` row."
+              }
+            ]
           },
           "step_title": {
             "type": [
               "string",
               "null"
             ],
-            "description": "The title of the step the question names, so a client needn't load the item's steps. `null` when it names\nnone, or one that no longer exists."
+            "description": "The title of the step the question names, so a client needn't load the item's steps. `null` when it names\nnone, or one that no longer exists, and on a `stuck` row."
+          },
+          "stuck": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WaitingStuck",
+                "description": "The stuck turn. Set on a `stuck` row."
+              }
+            ]
           }
         }
       },
       "WaitingRowKind": {
         "type": "string",
-        "description": "What kind of thing waits. Only questions for now: more kinds can join.",
+        "description": "What kind of thing waits. More kinds can join.",
         "enum": [
-          "question"
+          "question",
+          "stuck"
         ]
+      },
+      "WaitingStuck": {
+        "type": "object",
+        "description": "A turn whose runs keep failing.",
+        "required": [
+          "failed_runs",
+          "goal",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemAction"
+            },
+            "description": "What the caller may do about it: `retry` and `take_back`, when they may edit items."
+          },
+          "failed_runs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many runs in a row failed.",
+            "minimum": 0
+          },
+          "goal": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "The stable state the turn goes to."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the latest failed run failed; `null` when that is not known."
+          }
+        }
+      },
+      "WorkItem": {
+        "type": "object",
+        "description": "An item an agent may work on: the item, its heap, and the turn it works to.",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "kind",
+          "stage",
+          "heap",
+          "goal",
+          "reach",
+          "runs",
+          "failed_runs"
+        ],
+        "properties": {
+          "failed_runs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of the turn's runs in a row failed. At 3 the turn is stuck and not in the queue.",
+            "minimum": 0
+          },
+          "goal": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "The stable state the turn goes to."
+          },
+          "heap": {
+            "$ref": "#/components/schemas/WaitingHeap"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Five characters, unique within the heap.",
+            "example": "k3x9a"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "line": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the person told the agent: plain text; `null` when they said nothing."
+          },
+          "reach": {
+            "$ref": "#/components/schemas/Reach"
+          },
+          "runs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many runs the turn has had, ended or not. More than 0 means the work was started before.",
+            "minimum": 0
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage",
+            "description": "Where the item is now."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkNext": {
+        "type": "object",
+        "description": "The first item of the queue, if there is one.",
+        "required": [
+          "waiting_count"
+        ],
+        "properties": {
+          "item": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkItem",
+                "description": "`null` when nothing in the given heaps waits for an agent."
+              }
+            ]
+          },
+          "waiting_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item\ncounts once.",
+            "minimum": 0
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -10053,6 +10942,10 @@
     {
       "name": "audit",
       "description": "The history of a heap or a team"
+    },
+    {
+      "name": "work",
+      "description": "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps and ask questions, on the run's own item only. Every other write is refused, with a code that starts with `run_`."
     }
   ]
 }

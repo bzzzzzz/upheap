@@ -62,7 +62,10 @@ impl Services {
         let cancelled = store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         store::password_resets::insert_reset_link(&txn, &sha256_hex(token.expose()), &link).await?;
         let entry = self.team_audit_entry(
-            Principal { user_id: user.id },
+            Principal {
+                user_id: user.id,
+                run: None,
+            },
             personal_team,
             AuditAction::PasswordResetLinkMade,
             EntityType::User,
@@ -141,7 +144,10 @@ impl Services {
         // There shouldn't be one, since making a link cancels the others; this keeps "one working link" true anyway.
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
-            Principal { user_id: user.id },
+            Principal {
+                user_id: user.id,
+                run: None,
+            },
             personal_team,
             AuditAction::PasswordReset,
             EntityType::User,

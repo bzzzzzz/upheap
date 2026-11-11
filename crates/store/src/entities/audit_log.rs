@@ -13,6 +13,7 @@ pub struct Model {
     pub entity_type: String,
     pub entity_id: String,
     pub diff: String,
+    pub run_id: Option<String>,
     pub created_at: i64,
 }
 

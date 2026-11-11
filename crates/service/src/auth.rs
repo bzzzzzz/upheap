@@ -401,7 +401,7 @@ impl Services {
         let user_id = store::sessions::find_session_user(&self.db, &token.to_hash(), self.now())
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        Ok(Principal { user_id })
+        Ok(Principal { user_id, run: None })
     }
 
     /// Ends the session. Ending an unknown session succeeds.

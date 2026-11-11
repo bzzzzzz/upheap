@@ -92,12 +92,16 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         next_goal,
         with_agent: view.with_agent,
         version: item.version.get(),
-        // Sending an item to an agent and taking it back are offered only in a build that has agents.
+        // Sending an item to an agent, taking it back and retrying it are offered only in a build that has agents.
         allowed_actions: view
             .allowed_actions
             .into_iter()
             .filter(|action| {
-                cfg!(feature = "agents") || !matches!(action, ItemAction::SendToAgent | ItemAction::TakeBack)
+                cfg!(feature = "agents")
+                    || !matches!(
+                        action,
+                        ItemAction::SendToAgent | ItemAction::TakeBack | ItemAction::Retry
+                    )
             })
             .map(ItemActionDto::from)
             .collect(),
@@ -109,6 +113,8 @@ pub(crate) fn to_turn_dto(view: TurnView, as_of: Timestamp, tz: &TimeZone) -> Tu
         &view.turn,
         view.opened_by.as_ref().map(UserRefDto::from),
         describe_since(view.turn.opened_at, as_of, tz),
+        view.runs,
+        view.stuck_reason,
     )
 }
 

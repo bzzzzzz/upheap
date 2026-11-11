@@ -27,6 +27,8 @@ pub struct ApiClient {
     http: reqwest::Client,
     server: Url,
     time_zone: Option<String>,
+    /// The run to write in, sent as `Upheap-Run` with every request.
+    run: Option<String>,
 }
 
 /// A value read from a response, with the body it was read from.
@@ -82,7 +84,16 @@ impl ApiClient {
             http,
             server,
             time_zone,
+            run: None,
         })
+    }
+
+    /// This client writing in `run`, a run ID, when there is one: every request then says so, and the server holds it
+    /// to what a run may do.
+    #[must_use]
+    pub fn in_run(mut self, run: Option<String>) -> Self {
+        self.run = run;
+        self
     }
 
     /// The server's base URL.
@@ -165,6 +176,10 @@ impl ApiClient {
     async fn send(&self, request: RequestBuilder) -> Result<Response, ClientError> {
         let request = match &self.time_zone {
             Some(zone) => request.header("Time-Zone", zone),
+            None => request,
+        };
+        let request = match &self.run {
+            Some(run) => request.header("Upheap-Run", run),
             None => request,
         };
         let response = request.send().await.map_err(|source| ClientError::Unreachable {
