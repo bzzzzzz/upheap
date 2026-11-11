@@ -96,9 +96,12 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         added = match api.patch_item(&key, added.value.version, &patch).await {
             Ok(task) => task,
             Err(err) => {
-                out.note(&format!(
-                    "error: {key} was added as a note; make it a task with `upheap item to-task {key}`"
-                ))?;
+                // With --json, stderr carries only the problem body, which scripts parse.
+                if out.mode() != Mode::Json {
+                    out.note(&format!(
+                        "{key} was added as a note; make it a task with `upheap item to-task {key}`"
+                    ))?;
+                }
                 return Err(err);
             }
         };

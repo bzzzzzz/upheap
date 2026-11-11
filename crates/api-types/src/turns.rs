@@ -75,7 +75,7 @@ impl From<Goal> for GoalDto {
 /// How a turn came to be opened.
 ///
 /// - `go_ahead`: a person sent the item.
-/// - `prepare`: the heap is set so agents prepare new notes, and this one was added.
+/// - `prepare`: the heap is set so agents prepare new items, and this one was added.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = TurnSource)]

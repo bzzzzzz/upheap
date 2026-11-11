@@ -7408,7 +7408,7 @@
         "properties": {
           "agents_prepare": {
             "type": "boolean",
-            "description": "Whether every note added to the heap is sent to an agent to fill in its context. Off for a new heap."
+            "description": "Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with\ncontext, a task to defined. Off for a new heap."
           },
           "allowed_actions": {
             "type": "array",
@@ -10503,7 +10503,7 @@
       },
       "TurnSource": {
         "type": "string",
-        "description": "How a turn came to be opened.\n\n- `go_ahead`: a person sent the item.\n- `prepare`: the heap is set so agents prepare new notes, and this one was added.",
+        "description": "How a turn came to be opened.\n\n- `go_ahead`: a person sent the item.\n- `prepare`: the heap is set so agents prepare new items, and this one was added.",
         "enum": [
           "go_ahead",
           "prepare"
