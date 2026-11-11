@@ -260,3 +260,31 @@ async fn item_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Re
     expect_that!(missing.stderr, contains_substring("/nonexistent/context.txt"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn item_edit_sets_the_stage_and_a_note_cannot_be_defined() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (note, task) = (key(&items[0])?, key(&items[1])?);
+    cli.run(&["item", "to-task", task]).await;
+
+    // Act
+    let with_context = cli.run(&["item", "edit", note, "--stage", "with_context"]).await;
+    let defined_note = cli.run(&["item", "edit", note, "--stage", "defined"]).await;
+    let defined_task = cli.run(&["item", "edit", task, "--stage", "defined"]).await;
+    let unknown = cli.run(&["item", "edit", note, "--stage", "reviewed"]).await;
+
+    // Assert
+    expect_that!(with_context.exited(0), eq(true));
+    expect_that!(server.read_item(&ada, HEAP, note).await?["stage"], eq("with_context"));
+    expect_that!(defined_note.exited(3), eq(true));
+    expect_that!(defined_note.stderr, contains_substring("(stage_needs_task)"));
+    expect_that!(defined_task.exited(0), eq(true));
+    expect_that!(server.read_item(&ada, HEAP, task).await?["stage"], eq("defined"));
+    expect_that!(unknown.exited(2), eq(true));
+    expect_that!(unknown.stderr, contains_substring("unknown stage `reviewed`"));
+    Ok(())
+}
