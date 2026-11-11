@@ -43,8 +43,8 @@ googletest = "0.14"
 http-body-util = "0.1"
 jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
 js-sys = "0.3"
-# The CLI's refresh token: the macOS keychain, the Windows credential manager, or the Secret Service on Linux and
-# the BSDs over zbus, which is pure Rust, so building needs no libdbus.
+# The CLI's refresh token: the Windows credential manager, or the Secret Service on Linux and the BSDs over zbus,
+# which is pure Rust, so building needs no libdbus. On macOS the CLI runs the system's `security` tool instead.
 keyring = "4"
 mime_guess = "2"
 # The server's allocator: musl's own, which the Alpine image would otherwise use, is slow under many threads.

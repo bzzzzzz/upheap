@@ -144,8 +144,11 @@ rm -rf $TMP
 
 - **The macOS binary isn't notarized**
   ([decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow)):
-  after an upgrade, a user may be asked once to let `upheap` use its keychain entry; that's expected. A cask's `zap`
-  doesn't remove keychain entries; `upheap auth logout` does.
+  Gatekeeper is handled by the cask. The keychain doesn't ask after an upgrade, since the entry is read through
+  the system's `security` tool ([architecture.md](architecture.md#cli)). A sign-in made by a
+  version before that asks for `security` until the entry is next written, at the next refresh or sign-in, which
+  makes it `security`'s; "Always Allow" ends it at once. A cask's
+  `zap` doesn't remove keychain entries; `upheap auth logout` does.
 - **sqlx through the pooler.** sqlx prepares statements and sets `extra_float_digits` when it connects, either of
   which PgBouncer can refuse. Neon's pooler accepted both on the first deploy. If a later Neon change breaks it, put
   the direct endpoint in the secret, or have `store::connect` stop sending the parameter

@@ -9,6 +9,8 @@
 pub mod login;
 pub mod loopback;
 pub mod pkce;
+#[cfg(any(target_os = "macos", test))]
+mod security_tool;
 pub mod store;
 
 use std::fs::File;

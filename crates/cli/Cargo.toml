@@ -20,7 +20,6 @@ dirs.workspace = true
 domain.workspace = true
 getrandom = { workspace = true, features = ["std"] }
 jiff.workspace = true
-keyring.workspace = true
 owo-colors.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -37,6 +36,10 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 webbrowser.workspace = true
 whoami.workspace = true
+
+# Everywhere but macOS, where the keychain is reached through the system's `security` tool (auth/security_tool.rs).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
