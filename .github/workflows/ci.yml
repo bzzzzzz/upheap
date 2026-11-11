@@ -159,8 +159,9 @@ jobs:
     name: Local build
     runs-on: ubuntu-latest
     env:
-      # Gzipped bytes of the backend wasm. It was 1.31 MB when the budget was set.
-      WASM_GZIP_BUDGET: 1400000
+      # Gzipped bytes of the backend wasm. It was 1.40 MB when the budget was last raised, with questions and
+      # Waiting for me in it.
+      WASM_GZIP_BUDGET: 1500000
     defaults:
       run:
         working-directory: web

@@ -575,7 +575,7 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 `fetch` and takes the Pages base path from `UPHEAP_BASE`. The build writes a copy of `index.html` as `404.html`,
 which Pages serves for any path without a file, so deep links and reloads work although Pages can't rewrite paths.
 CI lints `service` and `api` without their features and `local` for wasm, builds the backend and fails it over
-1.4 MB gzipped, runs it in Node on SQLite-wasm, and runs the Playwright golden paths against the static build
+1.5 MB gzipped, runs it in Node on SQLite-wasm, and runs the Playwright golden paths against the static build
 served as Pages serves it; the Pages workflow publishes the same build from `main`. The OpenAPI document is about
 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes twice. The commands are in
 [README.md](../README.md#develop).
