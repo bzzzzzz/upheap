@@ -435,8 +435,9 @@ and use cases. **Operations** are functions that do one job and return a result.
 
 1. **`tool <category> <verb> [<required input>...] [--<option>...]`.** Every command is a category and a verb, except
    that a resource which exists only inside another (a parameter's options) is a group under its category,
-   `tool <category> <group> <verb>`. The same verb means the same thing in every category: `item list` and `tag list` both list. More typing than
-   top-level verbs, but the tree stays the same everywhere; aliases can come once usage shows which are worth it.
+   `tool <category> <group> <verb>`. The same verb means the same thing in every category: `item list` and
+   `tag list` both list. More typing than top-level verbs, but the tree stays the same everywhere; aliases can come
+   once usage shows which are worth it.
 2. **Required inputs are positional, options are flags.** Flags-only is for tools called by build systems.
 3. **One verb per state change** (`start`, `done`, `reopen`), not `edit --state done`, so there is one way to do
    it and each reads as a sentence.
