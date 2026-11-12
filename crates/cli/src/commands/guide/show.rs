@@ -44,7 +44,7 @@ pub(crate) fn render(root: &Command) -> String {
     lines.push(INTRO.trim_end().to_owned());
     lines.push(String::new());
     lines.push(format!(
-        "Every command is `{name} <category> <verb>`; <required> and [optional] inputs come before the flags."
+        "Every command is `{name} <category> <verb>`, or `{name} <category> <group> <verb>` for a resource inside another, such as a parameter's options; <required> and [optional] inputs come before the flags."
     ));
     lines.push(String::new());
 

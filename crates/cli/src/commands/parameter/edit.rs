@@ -34,7 +34,8 @@ pub struct EditArgs {
     /// Stop suggesting it for a tag, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub untag: Vec<String>,
-    /// Every option of the parameter, highest priority first, by label or ID, separated by commas
+    /// Every option of the parameter, highest priority first, by label or ID, separated by commas. An option whose
+    /// label has a comma is named by its ID, which `parameter list --json` shows
     #[arg(long, value_name = "OPTIONS", value_delimiter = ',')]
     pub order: Vec<String>,
     #[command(flatten)]
@@ -57,8 +58,11 @@ impl EditArgs {
 /// The kinds of change a parameter takes, each its own write, in the order the edit makes them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Part {
-    /// The name and the weight.
-    Details,
+    /// The name, the weight, or both: which of them the edit gives.
+    Details {
+        name: bool,
+        weight: bool,
+    },
     Tags,
     Order,
 }
@@ -67,7 +71,12 @@ impl Part {
     /// What the part changes, as it reads after "its new": "name and weight".
     fn saved(self) -> &'static str {
         match self {
-            Self::Details => "name and weight",
+            Self::Details {
+                name: true,
+                weight: true,
+            } => "name and weight",
+            Self::Details { name: true, .. } => "name",
+            Self::Details { .. } => "weight",
             Self::Tags => "tags",
             Self::Order => "option order",
         }
@@ -76,7 +85,12 @@ impl Part {
     /// What the part changes, as it reads after "but not its": "tags".
     fn unsaved(self) -> &'static str {
         match self {
-            Self::Details => "name or weight",
+            Self::Details {
+                name: true,
+                weight: true,
+            } => "name or weight",
+            Self::Details { name: true, .. } => "name",
+            Self::Details { .. } => "weight",
             Self::Tags => "tags",
             Self::Order => "order",
         }
@@ -85,7 +99,12 @@ impl Part {
     /// The flags that ask for the part.
     fn flags(self) -> &'static str {
         match self {
-            Self::Details => "--name/--weight",
+            Self::Details {
+                name: true,
+                weight: true,
+            } => "--name/--weight",
+            Self::Details { name: true, .. } => "--name",
+            Self::Details { .. } => "--weight",
             Self::Tags => "--tag/--untag",
             Self::Order => "--order",
         }
@@ -102,7 +121,10 @@ enum Write {
 impl Write {
     fn part(&self) -> Part {
         match self {
-            Self::Details(_) => Part::Details,
+            Self::Details(body) => Part::Details {
+                name: body.name.is_some(),
+                weight: body.weight.is_some(),
+            },
             Self::Tags(_) => Part::Tags,
             Self::Order(_) => Part::Order,
         }
@@ -176,7 +198,13 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         match write.send(&api, &id, version).await {
             Ok(done) => latest = Some(done),
             Err(err) => {
-                if out.mode() != Mode::Json {
+                if out.mode() == Mode::Json {
+                    // With --json, stderr carries only the problem body, which scripts parse; stdout gets the
+                    // parameter as the last saved write left it, so they learn what was saved.
+                    if let Some(last) = &latest {
+                        out.json(&last.body)?;
+                    }
+                } else {
                     let current = latest.as_ref().map_or(&parameter.name, |last| &last.value.name);
                     let left: Vec<Part> = writes[index..].iter().map(Write::part).collect();
                     if let Some(note) = partial_note(current, &saved, &left) {
@@ -346,28 +374,58 @@ mod tests {
 
     #[gtest]
     fn a_failure_after_a_write_says_what_was_saved_and_what_was_not() {
-        use Part::{Details, Order, Tags};
+        use Part::{Order, Tags};
+        let details = Part::Details {
+            name: true,
+            weight: true,
+        };
 
         expect_that!(
-            partial_note("Area", &[Details], &[Tags, Order]),
+            partial_note(
+                "Area",
+                &[Part::Details {
+                    name: true,
+                    weight: false
+                }],
+                &[Order]
+            ),
+            some(eq(
+                "Parameter \"Area\" got its new name, but not its order; run the edit again with --order."
+            ))
+        );
+        expect_that!(
+            partial_note(
+                "Area",
+                &[Part::Details {
+                    name: false,
+                    weight: true
+                }],
+                &[Tags]
+            ),
+            some(eq(
+                "Parameter \"Area\" got its new weight, but not its tags; run the edit again with --tag/--untag."
+            ))
+        );
+        expect_that!(
+            partial_note("Area", &[details], &[Tags, Order]),
             some(eq(
                 "Parameter \"Area\" got its new name and weight, but not its tags or order; run the edit again with --tag/--untag and --order."
             ))
         );
         expect_that!(
-            partial_note("Area", &[Details], &[Tags]),
+            partial_note("Area", &[details], &[Tags]),
             some(eq(
                 "Parameter \"Area\" got its new name and weight, but not its tags; run the edit again with --tag/--untag."
             ))
         );
         expect_that!(
-            partial_note("Area", &[Details], &[Order]),
+            partial_note("Area", &[details], &[Order]),
             some(eq(
                 "Parameter \"Area\" got its new name and weight, but not its order; run the edit again with --order."
             ))
         );
         expect_that!(
-            partial_note("Area", &[Details, Tags], &[Order]),
+            partial_note("Area", &[details, Tags], &[Order]),
             some(eq(
                 "Parameter \"Area\" got its new name and weight and tags, but not its order; run the edit again with --order."
             ))
@@ -382,7 +440,7 @@ mod tests {
 
     #[gtest]
     fn a_failure_of_the_first_write_has_nothing_to_say() {
-        expect_that!(partial_note("Area", &[], &[Part::Details, Part::Tags]), none());
+        expect_that!(partial_note("Area", &[], &[Part::Tags, Part::Order]), none());
     }
 
     #[gtest]

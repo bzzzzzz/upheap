@@ -501,3 +501,90 @@ async fn parameter_option_archive_moves_open_items_to_the_replacement() -> Resul
     expect_that!(item["parameters"][0]["option"]["label"], eq("Frontend"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn parameter_option_archive_again_says_it_is_archived_already_and_changes_nothing() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .add_parameter(&ada, "Area", &["Backend", "Frontend"], &[])
+        .await?;
+    let args = [
+        "parameter",
+        "option",
+        "archive",
+        "Area",
+        "Backend",
+        "--replace-with",
+        "Frontend",
+    ];
+    cli.run(&args).await;
+    let version = listed(&server, &ada, "Area").await?["version"].clone();
+
+    // Act
+    let again = cli.run(&args).await;
+    let json = cli.run(&[args.as_slice(), &["--json"]].concat()).await;
+
+    // Assert
+    expect_that!(again.exited(0), eq(true));
+    expect_that!(
+        again.stdout,
+        eq("Option \"Backend\" in \"Area\" is archived already.\n")
+    );
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["archived_options"][0]["label"], eq("Backend"));
+    expect_that!(listed(&server, &ada, "Area").await?["version"], eq(&version));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn parameter_edit_that_fails_after_a_write_says_what_was_saved() -> Result<()> {
+    // Arrange
+    // The tags write is the one the server can refuse that the client can't check first: a parameter takes at most
+    // 50 tags, and the 51 here are all the heap's own, so each one resolves.
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server.add_parameter(&ada, "Area", &["Backend"], &[]).await?;
+    let mut names = vec!["Infra".to_owned()];
+    for n in 0..50 {
+        let name = format!("Tag {n}");
+        server.send(&ada, "POST", TAGS, Some(json!({ "name": name }))).await?;
+        names.push(name);
+    }
+    let mut args = vec!["parameter", "edit", "Area", "--name", "Team"];
+    for name in &names {
+        args.extend(["--tag", name]);
+    }
+    let mut json_args = vec!["parameter", "edit", "Team", "--name", "Squad"];
+    for name in &names {
+        json_args.extend(["--tag", name]);
+    }
+    json_args.push("--json");
+
+    // Act
+    let human = cli.run(&args).await;
+    let json = cli.run(&json_args).await;
+
+    // Assert
+    expect_that!(human.exited(3), eq(true));
+    expect_that!(human.stdout, eq(""));
+    expect_that!(
+        human.stderr,
+        contains_substring(
+            "Parameter \"Team\" got its new name, but not its tags; run the edit again with --tag/--untag."
+        )
+    );
+    // The rename was saved, tags unchanged. With --json stdout has the renamed parameter and stderr only the problem.
+    expect_that!(listed(&server, &ada, "Squad").await?["tag_ids"], eq(&json!([])));
+    expect_that!(json.exited(3), eq(true));
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["name"], eq("Squad"));
+    expect_that!(json.stderr, contains_substring("\"status\""));
+    expect_that!(json.stderr, not(contains_substring("got its new")));
+    Ok(())
+}

@@ -21,8 +21,8 @@ pub struct ArchiveArgs {
     pub shared: SharedArgs,
 }
 
-/// Archives the parameter. One that is archived already is said so and left alone, since archiving says what the
-/// parameter should end up as. The server refuses while an open item has a value for it. Human output says what was
+/// Archives the parameter. One that is archived already is archived again, since archiving says what the parameter
+/// should end up as and the server answers with it unchanged; the output says so. The server refuses while an open item has a value for it. Human output says what was
 /// done; `--quiet` prints nothing and `--json` the archived parameter.
 pub async fn run(args: ArchiveArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let name = named_heap(args.heap.name.as_deref(), app)?;
@@ -35,14 +35,13 @@ pub async fn run(args: ArchiveArgs, app: &App, out: &mut Output) -> Result<(), C
         heap: &heap,
     };
     let list = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
-    let parameter = match find_parameter(&args.parameter, &list.value, &heap) {
-        Ok(parameter) => parameter,
-        Err(err) => {
-            let Some(archived) = find_archived_parameter(&args.parameter, &list.value) else {
-                return Err(err.into());
-            };
-            return report_archived_already(archived, out);
-        }
+    // A parameter in use first, then an archived one, which the server archives again without change.
+    let (parameter, was_archived) = match find_parameter(&args.parameter, &list.value, &heap) {
+        Ok(parameter) => (parameter, false),
+        Err(err) => match find_archived_parameter(&args.parameter, &list.value) {
+            Some(parameter) => (parameter, true),
+            None => return Err(err.into()),
+        },
     };
     let id = parameter.id.to_string();
     let archived = api
@@ -51,17 +50,16 @@ pub async fn run(args: ArchiveArgs, app: &App, out: &mut Output) -> Result<(), C
     match out.mode() {
         Mode::Json => out.json(&archived.body)?,
         Mode::Quiet => {}
-        Mode::Human => out.line(&format!("Archived parameter \"{}\".", archived.value.name))?,
+        Mode::Human => out.line(&archived_line(&archived.value.name, was_archived))?,
     }
     Ok(())
 }
 
-/// Says that `parameter` was archived before, and writes nothing.
-fn report_archived_already(parameter: &ParameterDto, out: &mut Output) -> Result<(), CliError> {
-    match out.mode() {
-        Mode::Json => out.json(&serde_json::to_string(parameter).map_err(std::io::Error::from)?)?,
-        Mode::Quiet => {}
-        Mode::Human => out.line(&format!("Parameter \"{}\" is archived already.", parameter.name))?,
+/// What the archive did, from the parameter's name and whether the list had it archived already.
+fn archived_line(name: &str, was_archived: bool) -> String {
+    if was_archived {
+        format!("Parameter \"{name}\" is archived already.")
+    } else {
+        format!("Archived parameter \"{name}\".")
     }
-    Ok(())
 }

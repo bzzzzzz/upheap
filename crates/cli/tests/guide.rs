@@ -51,6 +51,27 @@ async fn guide_show_works_where_the_config_file_is_broken() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn guide_show_lists_the_commands_of_a_group_with_their_arguments() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let cli = TestCli::new(&server)?;
+
+    // Act
+    let shown = cli.run(&["guide", "show"]).await;
+
+    // Assert
+    expect_that!(
+        shown.stdout,
+        contains_substring(
+            "  upheap parameter option add <PARAM> <LABEL> [heap]: Add an option as the lowest priority\n"
+        )
+    );
+    expect_that!(shown.stdout, contains_substring("--replace-with <OPTION>"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn guide_show_takes_no_server_flags() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
