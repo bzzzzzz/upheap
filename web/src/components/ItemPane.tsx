@@ -104,7 +104,7 @@ export function ItemPane({
               className="absolute top-1.5 left-1/2 h-1 w-10 -translate-x-1/2 rounded-full bg-line sm:hidden"
             />
           )}
-          <h2 id={headingId} className="flex-1 text-xs font-medium text-muted">
+          <h2 id={headingId} className="min-h-6 flex-1 text-xs font-medium text-muted">
             <span className="sr-only">Item</span>
             {entry && section && <span aria-hidden="true">{section}</span>}
           </h2>

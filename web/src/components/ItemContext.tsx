@@ -8,7 +8,7 @@ import { Sheet } from "./Sheet";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
- * The item's context, its description, read as Markdown with an Edit button (ux.md, The item §4). Edit swaps the text
+ * The item's context, its description, read as Markdown with an Edit button (ux.md, The item §17). Edit swaps the text
  * in place for its source with Save and Cancel on a wide screen and a tablet, and opens a full-height sheet on a
  * phone. With no `edit` the text is only read, and with none and no text the section is absent. Leaving with a changed
  * draft, by closing the item or walking to the next, saves it, so nothing typed is lost; Cancel and Escape are the

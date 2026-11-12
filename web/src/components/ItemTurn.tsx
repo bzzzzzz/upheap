@@ -23,12 +23,12 @@ const labelClass = "text-xs font-medium text-ink-soft";
 const fieldClass =
   "field-sizing-content min-h-20 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
 
-/** What the agent chip reads (ux.md, The item): where the turn is going, that it waits for the person, or that it is stuck. */
+/** What the agent chip reads (ux.md, The item §15): where the turn is going, that it waits for the person, or that it is stuck. */
 const chipText = (item: Item, turn: Turn) =>
   turn.stuck ? "Agent stuck" : item.waits_for_you ? "Agent · waiting for you" : `Agent · to ${GOAL_LABELS[turn.goal]}`;
 
 /**
- * Who has the item, when an agent does (ux.md, The item): a chip in the status line that opens a popover on a wide
+ * Who has the item, when an agent does (ux.md, The item §15): a chip in the status line that opens a popover on a wide
  * screen and a tablet, a sheet on a phone, with since when, where it is going, the person's line and how it began,
  * and Take back, which asks first, inline in the popover or in a sheet on a phone. While the turn is stuck the popover
  * only says so: Retry and Take back are in Waits for you. `onTakenBack` runs once the turn is taken back, which
@@ -155,7 +155,7 @@ export function AgentChip({ heapRef, item, onTakenBack }: { heapRef: HeapRef; it
 }
 
 /**
- * The form that sends the item to an agent, from the item's ⋯ (ux.md, The item): a popover under the ⋯ on a wide
+ * The form that sends the item to an agent, from the item's ⋯ (ux.md, The item §15): a popover under the ⋯ on a wide
  * screen and a tablet, a sheet on a phone. Send acts at once, closes the form, gives focus to the agent chip, and
  * shows a toast with Undo, which takes the turn back. The server decides when there is a goal to offer
  * (`next_goal`) and when sending is allowed; the caller shows the entry only then.

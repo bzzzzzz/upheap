@@ -23,7 +23,7 @@ const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }
 const NOT_SET = "";
 
 /**
- * The item's fields as labelled values (ux.md, The item §3): Need, Effort and Impact in three columns, then Due (a
+ * The item's fields as labelled values (ux.md, The item §16): Need, Effort and Impact in three columns, then Due (a
  * reminder's Date), Tags and each parameter in a row. Each value is a button that opens its editor, when the item can be
  * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone. A change saves at once. An unset
  * effort, impact or due date the server says holds the rank back is marked, as that is where to fix it. Without `edit`

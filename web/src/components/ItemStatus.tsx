@@ -106,7 +106,7 @@ export function StatusLine({
 }
 
 /**
- * The item's place in the list, "#3", which opens why it ranks there (ux.md, The item §6): the contributors with a bar
+ * The item's place in the list, "#3", which opens why it ranks there (ux.md, The item §9): the contributors with a bar
  * for each one's share of the item's priority, then what holds it back, as lines of text: the fields that can fix it
  * show it themselves. With nothing to say, as for the item first in its list, it is only text.
  */

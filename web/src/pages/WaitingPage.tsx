@@ -14,7 +14,7 @@ const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: 
 
 /**
  * Every open question across the person's heaps, and every item whose agent turn is stuck, most important first, each
- * answered or let go in its row (ux.md, Waiting for me). The rows are the item's Waits for you rows, with a head line
+ * answered or let go in its row (ux.md, Waiting for me). The rows are the item's open-question rows in Questions, with a head line
  * that says which item and heap they are on.
  */
 export function WaitingPage() {

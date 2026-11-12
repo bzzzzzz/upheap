@@ -58,7 +58,7 @@ const components: Components = {
 const remarkPlugins = [remarkGfm, remarkBreaks];
 
 /**
- * An item's context as Markdown (ux.md, The item §3), read-only. GitHub-flavoured, with a single newline kept as a line
+ * An item's context as Markdown (ux.md, The item §17), read-only. GitHub-flavoured, with a single newline kept as a line
  * break so a context written as plain text reads as it was typed. Memoised on the text, so a render of the item that
  * leaves the text alone doesn't parse it again.
  */

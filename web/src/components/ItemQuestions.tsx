@@ -332,7 +332,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
 }
 
 /**
- * One open question with its reply controls, in the item's Waits for you and on the Waiting for me page. `line` is the
+ * One open question with its reply controls, in the item's Questions and on the Waiting for me page. `line` is the
  * row's own first line, and `context` what the page folds under the details. The reply and its failures are the
  * same in both: the caller says what to do once the row has been replied to, or turns out to be answered already or
  * on a closed item.
