@@ -87,6 +87,8 @@ pub enum UsageError {
     BadRunEnv,
     #[error("work claim starts a run; unset UPHEAP_RUN first")]
     ClaimInRun,
+    #[error("work run starts runs; unset UPHEAP_RUN first")]
+    RunInRun,
     #[error("work {verb} runs inside a run: set UPHEAP_RUN")]
     NeedsRun { verb: &'static str },
 }

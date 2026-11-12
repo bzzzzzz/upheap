@@ -70,6 +70,34 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
     Ok(())
 }
 
+/// What `item show` prints for `item` in human mode, without colour: the text an agent's brief carries.
+pub(crate) fn item_text(item: &ItemDto, now: jiff::Timestamp) -> String {
+    /// A writer that keeps what it is given, to read it back as text.
+    #[derive(Clone, Default)]
+    struct TextBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for TextBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let buffer = TextBuffer::default();
+    let mut out = Output::new(Box::new(buffer.clone()), Box::new(std::io::sink()), Mode::Human, false);
+    // The buffer takes every write, so rendering cannot fail.
+    let _ = render_item(item, now, &mut out);
+    let bytes = buffer.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
 fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::io::Result<()> {
     let head = [vec![
         Cell::toned(item.key.clone(), Tone::Strong),

@@ -67,6 +67,14 @@ async fn guide_show_lists_the_commands_of_a_group_with_their_arguments() -> Resu
         )
     );
     expect_that!(shown.stdout, contains_substring("--replace-with <OPTION>"));
+    expect_that!(
+        shown.stdout,
+        contains_substring("  upheap work run [heap]: Work the queue: claim an item, start an agent tool on it,")
+    );
+    expect_that!(
+        shown.stdout,
+        contains_substring("      --tool <TOOL>  The agent tool to start on each item\n")
+    );
     Ok(())
 }
 
