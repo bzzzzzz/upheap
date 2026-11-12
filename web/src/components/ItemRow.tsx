@@ -190,7 +190,7 @@ export function ItemRow({
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
             )}
             {/* The same slot says an agent has the item, with a mark: the two never show together. */}
-            {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-ink-soft sm:hidden" />}
+            {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-agent sm:hidden" />}
             {/* The link covers the whole row, under the buttons and tags. */}
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
@@ -608,14 +608,17 @@ function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolea
 }
 
 /**
- * Says an agent has the item: a filled robot in ink, apart from the quiet robot that sends and from the accent that
- * marks in progress, with an accent dot when the agent waits for the person. Not a button; the row's link says the same
- * in words.
+ * Says an agent has the item: a blue robot on a blue tint, so it reads as on in either theme, apart from the quiet robot
+ * that sends and from the accent that marks in progress, with an accent dot when the agent waits for the person. Not a
+ * button; the row's link says the same in words.
  */
 function RobotMark({ waits }: { waits: boolean }) {
   return (
-    <span aria-hidden="true" className="relative flex size-6 items-center justify-center text-ink">
-      <Bot className="size-5 fill-ink/15" />
+    <span
+      aria-hidden="true"
+      className="relative -m-0.5 flex size-7 items-center justify-center rounded-lg bg-agent-soft text-agent"
+    >
+      <Bot className="size-5 fill-agent/20" />
       {waits && <span className="absolute top-0 right-0 size-2 rounded-full bg-accent" />}
     </span>
   );

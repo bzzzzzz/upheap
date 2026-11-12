@@ -215,7 +215,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    accent circle, lightly filled, with two bars) on an in-progress row. Start moves the item to in progress; Unblock
    and Pause move it to open. A screen reader hears ", blocked" after a blocked row's title. Second **Done**, a circle
    with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
-   no line, when the server allows it and no agent has the item; a filled robot mark in ink when an agent has
+   no line, when the server allows it and no agent has the item; a blue robot mark on a blue tint when an agent has
    it, with a small accent dot when it waits for the person; empty otherwise (a reminder, a blocked item, a reader).
    With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
    always in full colour. A quick send shows the toast "Sent to an agent, going to: with context." with Undo (The item
@@ -255,7 +255,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     title stands for it. A screen reader hears ", waits for you" after the title on every width. The closed list never
     shows it.
 14. An open item an agent has shows the robot mark in its slot (point 3), with a dot while it waits for the person: an
-    item that waits for the person is not the agent's, and says so in words (point 13). On a phone a small robot mark
+    item that waits for the person is not the agent's, and says so in words (point 13). On a phone a small blue robot mark
     before the title stands for it. A screen reader hears ", with an agent" after the title. Who has an item never
     changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
