@@ -290,12 +290,14 @@ fn collect_entity_ids(entries: &[AuditEntry], entity_type: EntityType) -> impl I
         .map(|entry| entry.entity_id)
 }
 
-/// The items entries are about, and the blockers their diffs name.
+/// The items entries are about, and the blockers their diffs name: the one picked, and the one whose closing as done
+/// freed the item.
 fn collect_referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
     let blockers = entries
         .iter()
         .filter(|entry| entry.entity_type == EntityType::Item)
-        .filter_map(|entry| entry.diff.get("blocked_by"))
+        .flat_map(|entry| [entry.diff.get("blocked_by"), entry.diff.get("blocker_done")])
+        .flatten()
         .flat_map(|value| [value.get("before"), value.get("after"), Some(value)])
         .flatten()
         .filter_map(|value| value.as_str().and_then(|raw| Uuid::parse_str(raw).ok()));
@@ -438,7 +440,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 49] = [
+const FIELD_ORDER: [&str; 50] = [
     "step",
     "step_title",
     "step_context",
@@ -459,6 +461,7 @@ const FIELD_ORDER: [&str; 49] = [
     "line",
     "source",
     "why",
+    "blocker_done",
     "title",
     "heap",
     "key",
@@ -603,6 +606,7 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "line" => "Line",
         "source" => "Source",
         "why" => "Why",
+        "blocker_done" => "Blocker done",
         "agents_prepare" => "Agents prepare new notes",
         "title" => "Title",
         "heap" => "Heap",
@@ -662,7 +666,7 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
         "due" => describe_recorded_due(value, tz)?,
-        "blocked_by" => names.of_value(value, "Unknown item"),
+        "blocked_by" | "blocker_done" => names.of_value(value, "Unknown item"),
         "heap" => names.of_value(value, "Unknown heap"),
         "tags" => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
         "options" | "archived_options" => join(

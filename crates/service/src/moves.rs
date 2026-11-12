@@ -9,7 +9,7 @@ use domain::{HeapId, ItemId, Version};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
-use crate::audit::{diff_items, diff_moved};
+use crate::audit::diff_moved;
 use crate::items::{ItemChildren, ItemView, build_item_view, new_item_key};
 use crate::{Principal, ServiceError, Services};
 
@@ -19,7 +19,8 @@ impl Services {
     /// with it, and then gets a new one. Its tags and values carry over where the target heap has a tag of the same
     /// name, or a parameter in use and an option in use of the same names ([`domain::item_move::carry_over`]); the
     /// rest are dropped. It stays in its state, and a blocked item stays blocked with nobody picked. Items of the
-    /// heap it leaves that waited for it stay blocked, with nobody picked.
+    /// heap it leaves that waited for it stay blocked by it, and wait for the person, as their blocker is gone
+    /// ([`domain::item::Item::blocker_gone`]); if it comes back, it holds them again.
     ///
     /// Moving an item to the heap it is in changes nothing: it succeeds, after the version check, without an entry.
     ///
@@ -106,27 +107,6 @@ impl Services {
             item.key
         };
 
-        // The items that waited for it stay blocked with nobody picked, each with its own entry in the heap it is in.
-        let waiting = store::items::list_items_blocked_by_locking(&txn, from_heap, item_id).await?;
-        let unblocked = waiting.len();
-        for before in &waiting {
-            let after = store::items::update_item(&txn, &before.without_blocker(), before.version, now)
-                .await?
-                .ok_or(ServiceError::VersionConflict {
-                    expected: before.version,
-                    current: before.version.next(),
-                })?;
-            let entry = self.item_audit_entry(
-                &source,
-                principal,
-                AuditAction::ItemUpdated,
-                &after,
-                diff_items(before, &after),
-                now,
-            );
-            store::audit::insert_audit_entry(&txn, &entry).await?;
-        }
-
         let moved = item.moved_to(to_heap, key, carried.tags, carried.parameters);
         let saved =
             store::items::update_item(&txn, &moved, expected, now)
@@ -157,7 +137,6 @@ impl Services {
             key_changed = key != item.key,
             tags_dropped = carried.tags_dropped,
             values_dropped = carried.values_dropped,
-            unblocked,
             "item moved"
         );
         Ok(view)

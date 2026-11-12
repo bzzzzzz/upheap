@@ -408,6 +408,8 @@ impl ItemPatch {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ItemSummary {
     pub id: ItemId,
+    /// The heap it is in now. A blocker moved away is in another heap than the items it blocked.
+    pub heap_id: HeapId,
     pub key: ItemKey,
     pub title: Title,
     pub state: ItemState,
@@ -417,11 +419,25 @@ impl From<&Item> for ItemSummary {
     fn from(item: &Item) -> Self {
         Self {
             id: item.id,
+            heap_id: item.heap_id,
             key: item.key,
             title: item.title.clone(),
             state: item.state,
         }
     }
+}
+
+/// How a blocked item's blocker stopped holding it. The item stays blocked and waits for the person, who unblocks it,
+/// closes it or picks another blocker (product.md, Items §8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockerGone {
+    /// The blocker was closed as done. Closing a blocker as done frees what it blocks in its heap, so this is an item
+    /// blocked before that rule, or one the blocker left behind in another heap before it closed.
+    Done,
+    /// The blocker was closed as won't do.
+    WontDo,
+    /// The blocker was moved to another heap, and is still open there.
+    Moved,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -518,6 +534,30 @@ impl Item {
         self.state.blocked_by()
     }
 
+    /// How `blocker` stopped holding this item: it is closed, or in another heap. `None` while it holds it, and when
+    /// `blocker` isn't the item this one is blocked by.
+    pub fn blocker_gone(&self, blocker: &ItemSummary) -> Option<BlockerGone> {
+        if self.blocked_by() != Some(blocker.id) {
+            return None;
+        }
+        match blocker.state {
+            ItemState::Done { .. } => Some(BlockerGone::Done),
+            ItemState::WontDo { .. } => Some(BlockerGone::WontDo),
+            ItemState::Open | ItemState::InProgress | ItemState::Blocked { .. } => {
+                (blocker.heap_id != self.heap_id).then_some(BlockerGone::Moved)
+            }
+        }
+    }
+
+    /// The item freed by its blocker closing as done: open, and nothing else changed. The returned item keeps the
+    /// old version; the store bumps it on write.
+    pub fn freed(&self) -> Self {
+        Self {
+            state: ItemState::Open,
+            ..self.clone()
+        }
+    }
+
     /// Applies `patch`, made by `actor` at `now`, and returns the edited item, or `None` when the patch changes
     /// nothing. Closing the item records `actor` as who closed it.
     ///
@@ -596,6 +636,7 @@ impl Item {
     /// The item as it is after it moves to `heap_id` under `key`, carrying `tags` and `parameters` of that heap (see
     /// [`crate::item_move::carry_over`]). Everything else stays, and so does the version, which the store bumps on
     /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it left.
+    /// The items that waited for this one keep it as their blocker, now gone ([`Item::blocker_gone`]).
     pub fn moved_to(
         &self,
         heap_id: HeapId,
@@ -615,16 +656,6 @@ impl Item {
             state,
             ..self.clone()
         }
-    }
-
-    /// The item with its blocker taken away: still blocked, waiting for nobody in particular. An item that isn't
-    /// blocked is returned as it is.
-    pub fn without_blocker(&self) -> Self {
-        let state = match self.state {
-            ItemState::Blocked { .. } => ItemState::Blocked { by: None },
-            other => other,
-        };
-        Self { state, ..self.clone() }
     }
 
     /// The item's values with `changes` applied.
@@ -991,6 +1022,77 @@ mod tests {
 
     fn blocker() -> ItemId {
         ItemId::from_uuid(Uuid::from_u128(7))
+    }
+
+    /// The sample item, blocked by [`blocker`], and the blocker as `state`, in `heap_id`.
+    fn blocked_and_blocker(state: ItemState, heap_id: HeapId) -> (Item, ItemSummary) {
+        let mut blocked = sample_item();
+        blocked.state = ItemState::Blocked { by: Some(blocker()) };
+        let summary = ItemSummary {
+            id: blocker(),
+            heap_id,
+            key: crate::handle::ItemKey::parse("b7b7b").expect("valid"),
+            title: Title::parse("Pick a host").expect("valid"),
+            state,
+        };
+        (blocked, summary)
+    }
+
+    #[gtest]
+    fn a_blocker_closed_or_moved_away_is_gone() {
+        let here = HeapId::from_uuid(Uuid::nil());
+        let elsewhere = HeapId::from_uuid(Uuid::from_u128(9));
+        let done = ItemState::Done {
+            closed_at: at(1),
+            closed_by: None,
+        };
+        let wont_do = ItemState::WontDo {
+            closed_at: at(1),
+            closed_by: None,
+        };
+        let cases = [
+            (ItemState::Open, here, None),
+            (ItemState::InProgress, here, None),
+            (ItemState::Blocked { by: None }, here, None),
+            (done, here, Some(BlockerGone::Done)),
+            (wont_do, here, Some(BlockerGone::WontDo)),
+            (ItemState::Open, elsewhere, Some(BlockerGone::Moved)),
+            // Closed says more than moved.
+            (wont_do, elsewhere, Some(BlockerGone::WontDo)),
+        ];
+        for (state, heap_id, expected) in cases {
+            let (blocked, summary) = blocked_and_blocker(state, heap_id);
+            expect_that!(blocked.blocker_gone(&summary), eq(expected), "{state:?} in {heap_id:?}");
+        }
+    }
+
+    #[gtest]
+    fn only_the_items_own_blocker_can_be_gone() {
+        let (mut item, summary) = blocked_and_blocker(
+            ItemState::WontDo {
+                closed_at: at(1),
+                closed_by: None,
+            },
+            HeapId::from_uuid(Uuid::nil()),
+        );
+        item.state = ItemState::Blocked { by: None };
+        expect_that!(item.blocker_gone(&summary), none());
+        item.state = ItemState::Open;
+        expect_that!(item.blocker_gone(&summary), none());
+    }
+
+    #[gtest]
+    fn a_freed_item_is_open_and_otherwise_the_same() {
+        let (blocked, _) = blocked_and_blocker(ItemState::Open, HeapId::from_uuid(Uuid::nil()));
+        let freed = blocked.freed();
+        expect_that!(freed.state, eq(ItemState::Open));
+        expect_that!(
+            Item {
+                state: blocked.state,
+                ..freed
+            },
+            eq(&blocked)
+        );
     }
 
     #[gtest]

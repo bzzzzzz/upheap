@@ -5,10 +5,12 @@ pub(crate) mod password;
 pub(crate) mod sign_ins;
 
 use api_types::common::HeapSummaryDto;
-use api_types::common::ItemActionDto;
+use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
-use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto};
+use api_types::waiting::{
+    ItemHeapDto, WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
+};
 use axum::Json;
 use axum::extract::State;
 use domain::heap::Heap;
@@ -23,7 +25,7 @@ use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::dto::{IfMatchHeader, to_question_dto, to_ranked_dto, to_turn_dto};
+use crate::dto::{IfMatchHeader, to_blocker_gone_dto, to_question_dto, to_ranked_dto, to_turn_dto};
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::{ApiError, AppState};
@@ -109,10 +111,11 @@ fn to_item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
 
 fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> WaitingRowDto {
     let item = row.item;
-    let (kind, question, stuck) = match row.subject {
+    let (kind, question, stuck, blocker) = match row.subject {
         WaitingSubject::Question(question) => (
             WaitingRowKindDto::Question,
             Some(to_question_dto(*question, as_of, tz)),
+            None,
             None,
         ),
         WaitingSubject::Stuck(stuck) => (
@@ -123,6 +126,17 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
                 reason: stuck.reason,
                 goal: stuck.goal.into(),
                 allowed_actions: stuck.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+            }),
+            None,
+        ),
+        WaitingSubject::BlockerGone(gone) => (
+            WaitingRowKindDto::BlockerGone,
+            None,
+            None,
+            Some(WaitingBlockerDto {
+                item: ItemRefDto::from(gone.blocker),
+                gone: to_blocker_gone_dto(gone.gone),
+                allowed_actions: gone.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
             }),
         ),
     };
@@ -140,14 +154,17 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
         heap: to_item_heap_dto(&row.heap, &row.team),
         question,
         stuck,
+        blocker,
         step_title: row.step_title.map(|title| title.as_str().to_owned()),
     }
 }
 
-/// What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
-/// is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
+/// What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
+/// stuck, and the blocked items whose blocker was closed as won't do or moved to another heap, in the active heaps of
+/// their teams, one row each, most important first. Rows are ordered by the item's
 /// ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-/// position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now.
+/// position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
+/// for now.
 /// Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
 /// most 500 rows come back; `count` is the true total. Read-only, for any member.
 #[utoipa::path(get, path = "/me/waiting", tag = "me", security(("session" = [])),

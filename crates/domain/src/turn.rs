@@ -331,10 +331,17 @@ pub const fn goal_for(item: &Item) -> Goal {
 }
 
 /// Whether an agent has `item`: it is open, its heap is active, it has an open turn, and it doesn't wait for the
-/// person. `open_questions` is how many open questions it has, and `stuck` whether its open turn is stuck (see
-/// [`crate::question::waits_for_you`]).
-pub const fn with_agent(item: &Item, heap: &Heap, open_questions: usize, has_open_turn: bool, stuck: bool) -> bool {
-    has_open_turn && !stuck && !item.is_closed() && !heap.is_archived() && open_questions == 0
+/// person. `open_questions` is how many open questions it has, `stuck` whether its open turn is stuck, and
+/// `blocker_gone` whether its blocker is gone (see [`crate::question::waits_for_you`]).
+pub const fn with_agent(
+    item: &Item,
+    heap: &Heap,
+    open_questions: usize,
+    has_open_turn: bool,
+    stuck: bool,
+    blocker_gone: bool,
+) -> bool {
+    has_open_turn && !stuck && !blocker_gone && !item.is_closed() && !heap.is_archived() && open_questions == 0
 }
 
 #[cfg(test)]
@@ -421,18 +428,20 @@ mod tests {
     #[gtest]
     fn an_agent_has_an_open_item_with_a_turn_that_does_not_wait() {
         let open = item(Kind::Note, Stage::AsWritten);
-        expect_that!(with_agent(&open, &heap(false), 0, true, false), eq(true));
-        expect_that!(with_agent(&open, &heap(false), 0, false, false), eq(false));
-        expect_that!(with_agent(&open, &heap(false), 1, true, false), eq(false));
-        expect_that!(with_agent(&open, &heap(true), 0, true, false), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 0, true, false, false), eq(true));
+        expect_that!(with_agent(&open, &heap(false), 0, false, false, false), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 1, true, false, false), eq(false));
+        expect_that!(with_agent(&open, &heap(true), 0, true, false, false), eq(false));
         // A stuck turn waits for the person.
-        expect_that!(with_agent(&open, &heap(false), 0, true, true), eq(false));
+        expect_that!(with_agent(&open, &heap(false), 0, true, true, false), eq(false));
+        // So does an item whose blocker is gone.
+        expect_that!(with_agent(&open, &heap(false), 0, true, false, true), eq(false));
         let mut closed = open;
         closed.state = ItemState::Done {
             closed_at: Timestamp::EPOCH,
             closed_by: None,
         };
-        expect_that!(with_agent(&closed, &heap(false), 0, true, false), eq(false));
+        expect_that!(with_agent(&closed, &heap(false), 0, true, false, false), eq(false));
     }
 
     fn all_the_way(note: &Item) -> Turn {

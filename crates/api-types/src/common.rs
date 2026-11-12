@@ -4,7 +4,7 @@
 
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
-use domain::item::{Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
+use domain::item::{BlockerGone, Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{ItemAction, QuestionAction, StepAction};
 use domain::question::{QuestionKind, QuestionState};
 use domain::ranking::{Contributor, Factor, Gap, HeldBack};
@@ -587,6 +587,43 @@ pub struct ItemRefDto {
     pub state: StateDto,
 }
 
+/// How a blocker stopped holding the item it blocks. More ways can join.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = BlockerGoneHow)]
+pub enum BlockerGoneHowDto {
+    /// Closed as done. Closing a blocker as done frees what it blocks in its heap, so this is an item blocked before
+    /// that rule, or one left in another heap when the blocker moved.
+    Done,
+    /// Closed as won't do.
+    WontDo,
+    /// Moved to another heap, and still open there.
+    Moved,
+    /// A way this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<BlockerGone> for BlockerGoneHowDto {
+    fn from(how: BlockerGone) -> Self {
+        match how {
+            BlockerGone::Done => Self::Done,
+            BlockerGone::WontDo => Self::WontDo,
+            BlockerGone::Moved => Self::Moved,
+        }
+    }
+}
+
+/// A blocker that stopped holding the item it blocks.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = BlockerGone)]
+pub struct BlockerGoneDto {
+    pub how: BlockerGoneHowDto,
+    /// The heap of the item's team the blocker is in now, when it was moved away from the item's heap.
+    pub moved_to: Option<HeapSummaryDto>,
+}
+
 impl From<ItemSummary> for ItemRefDto {
     fn from(item: ItemSummary) -> Self {
         Self {
@@ -705,9 +742,18 @@ pub struct ItemDto {
     #[serde(deserialize_with = "crate::common::known_values")]
     pub stage_choices: Vec<StageDto>,
     pub state: StateDto,
-    /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be
-    /// closed: finishing a blocker doesn't unblock what waits for it.
+    /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed
+    /// as won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team
+    /// after a move: then `blocker_gone` says so.
     pub blocked_by: Option<ItemRefDto>,
+    /// How the blocker stopped holding the item, when it did: closed, or moved to another heap. The item stays blocked
+    /// and waits for the caller (`waits_for_you`), who unblocks it, closes it or picks another blocker. `null`
+    /// otherwise.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub blocker_gone: Option<BlockerGoneDto>,
     pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,
@@ -750,8 +796,8 @@ pub struct ItemDto {
     /// The item's comments in number order, oldest first. `null` in the ranked list and the closed list: read the
     /// item for its comments.
     pub comments: Option<Vec<CommentDto>>,
-    /// Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the
-    /// caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
+    /// Whether the item is open, in an active heap, and has an open question, a stuck agent turn or a gone blocker:
+    /// it waits for the caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
     /// and in an archived heap.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
     // says required.

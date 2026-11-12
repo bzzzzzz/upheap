@@ -6,7 +6,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::comment::Comment;
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
+use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
 use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
@@ -30,7 +30,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
-use crate::audit::{describe_new_item, describe_new_turn, describe_withdrawal, diff_items};
+use crate::audit::{describe_new_item, describe_new_turn, describe_withdrawal, diff_freed, diff_items};
 use crate::{Principal, RandomSource, ServiceError, Services};
 
 /// A client may keep ranking at an `as_of` for at most this long. Older values are replaced by the current time.
@@ -54,8 +54,11 @@ pub struct ItemView {
     /// Its value for each of the heap's parameters in use, set or not, and for each archived parameter it still
     /// has a value for, by parameter name.
     pub parameters: Vec<ParameterValue>,
-    /// The item it waits for, when it's blocked and one was picked.
+    /// The item it waits for, when it's blocked and one was picked, in whichever heap it is now.
     pub blocked_by: Option<ItemSummary>,
+    /// How its blocker stopped holding it, when it did: closed, or moved to another heap. The item then waits for the
+    /// person.
+    pub blocker_gone: Option<GoneBlocker>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
@@ -76,13 +79,21 @@ pub struct ItemView {
     pub questions: Option<Vec<QuestionView>>,
     /// The item's comments in number order, or `None` in a list, which doesn't carry them.
     pub comments: Option<Vec<CommentView>>,
-    /// Whether the item is open and has an open question, in an active heap (see
+    /// Whether the item is open, in an active heap, and has an open question, a stuck turn or a gone blocker (see
     /// [`domain::question::waits_for_you`]).
     pub waits_for_you: bool,
     /// The item's open turn, when an agent has been sent it and it hasn't been taken back. Closed items have none.
     pub turn: Option<TurnView>,
     /// Whether an agent has the item (see [`domain::turn::with_agent`]).
     pub with_agent: bool,
+}
+
+/// A blocker that stopped holding the item it blocks, as Waits for you and Waiting for me show it.
+#[derive(Clone, Debug)]
+pub struct GoneBlocker {
+    pub how: BlockerGone,
+    /// The heap the blocker is in now, when that isn't the blocked item's heap: it was moved away.
+    pub moved_to: Option<Heap>,
 }
 
 /// An open turn with the user who opened it.
@@ -304,8 +315,9 @@ impl Services {
         to_come.sort_by(|a, b| {
             (a.arrives_at, a.created_at, a.key.as_str()).cmp(&(b.arrives_at, b.created_at, b.key.as_str()))
         });
-        let mut blockers = blocker_summaries(&self.db, heap_id, &items).await?;
-        blockers.extend(blocker_summaries(&self.db, heap_id, &to_come).await?);
+        let mut blockers = blocker_summaries(&self.db, &items).await?;
+        blockers.extend(blocker_summaries(&self.db, &to_come).await?);
+        let gone = gone_blockers(&self.db, items.iter().chain(&to_come), &blockers).await?;
         let mut users = load_item_users(&self.db, &items).await?;
         users.extend(load_item_users(&self.db, &to_come).await?);
 
@@ -316,12 +328,14 @@ impl Services {
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
+            let blocker_gone = gone.get(&item.id).cloned();
             let created_by = pick_user(&users, item.created_by);
             ItemView {
                 item,
                 tags,
                 parameters: values,
                 blocked_by,
+                blocker_gone,
                 created_by,
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
@@ -420,8 +434,9 @@ impl Services {
             let turn = open_turns.remove(&id);
             view.step_progress = step_progress.remove(&id);
             let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-            view.waits_for_you = waits_for_you(&view.item, &heap, open_questions, stuck);
-            view.with_agent = with_agent(&view.item, &heap, open_questions, turn.is_some(), stuck);
+            let blocker_gone = view.blocker_gone.is_some();
+            view.waits_for_you = waits_for_you(&view.item, &heap, open_questions, stuck, blocker_gone);
+            view.with_agent = with_agent(&view.item, &heap, open_questions, turn.is_some(), stuck, blocker_gone);
             view.allowed_actions = allowed_item_actions(&view.item, &heap, role, turn.is_some(), stuck, now);
             view.turn = turn;
         }
@@ -535,6 +550,7 @@ impl Services {
                     tags,
                     parameters: values,
                     blocked_by: None,
+                    blocker_gone: None,
                     created_by,
                     closed_by,
                     allowed_actions,
@@ -643,6 +659,7 @@ impl Services {
             tags,
             parameters: values,
             blocked_by: None,
+            blocker_gone: None,
             created_by,
             closed_by: None,
             allowed_actions,
@@ -690,6 +707,9 @@ impl Services {
     /// heap that doesn't already wait for this one ([`ServiceError::BlockerNotInHeap`],
     /// [`ServiceError::BlockerClosed`], [`ServiceError::BlockingCycle`]). A value set must be an option in use of a
     /// parameter in use of the heap; a value cleared may be of any of its parameters.
+    ///
+    /// Closing an item as done frees the items of its heap it blocks: they go to open, each with its own entry. Closing
+    /// it as won't do leaves them blocked, and they wait for the person ([`Item::blocker_gone`]).
     ///
     /// A patch that changes nothing succeeds and returns the item unchanged, without an audit entry.
     pub async fn update_item(
@@ -765,6 +785,12 @@ impl Services {
                 .withdraw_open_questions(&txn, &access.heap, principal, &current, now)
                 .await?;
         }
+        let freed = if edited.state.kind() == StateKind::Done && !current.is_closed() {
+            self.free_blocked_items(&txn, &access.heap, principal, &current, now)
+                .await?
+        } else {
+            0
+        };
         let saved =
             store::items::update_item(&txn, &edited, expected, now)
                 .await?
@@ -785,7 +811,7 @@ impl Services {
         let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, "item updated");
+        tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, freed, "item updated");
         Ok(view)
     }
 
@@ -823,6 +849,38 @@ impl Services {
             run_id: principal.run,
             created_at: now,
         }
+    }
+
+    /// Frees every item of `heap` that `blocker`, which is being closed as done, blocks: each goes to open, gets its next
+    /// version, and an `item_updated` entry naming the blocker as the reason. Says how many it freed. The caller holds
+    /// the heap lock.
+    async fn free_blocked_items(
+        &self,
+        txn: &store::DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        blocker: &Item,
+        now: Timestamp,
+    ) -> Result<usize, ServiceError> {
+        let blocked = store::items::list_items_blocked_by_locking(txn, heap.id, blocker.id).await?;
+        for before in &blocked {
+            let after = store::items::update_item(txn, &before.freed(), before.version, now)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected: before.version,
+                    current: before.version.next(),
+                })?;
+            let entry = self.item_audit_entry(
+                heap,
+                principal,
+                AuditAction::ItemUpdated,
+                &after,
+                diff_freed(before, &after, blocker),
+                now,
+            );
+            store::audit::insert_audit_entry(txn, &entry).await?;
+        }
+        Ok(blocked.len())
     }
 
     /// Withdraws every open question of `item`, which is being closed: each gets its next version and a
@@ -916,10 +974,24 @@ pub(crate) async fn build_item_view(
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
     let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
     let blocked_by = find_blocker(db, &item).await?;
+    let blocker_gone = match &blocked_by {
+        Some(blocker) => {
+            let blockers = HashMap::from([(blocker.id, blocker.clone())]);
+            gone_blockers(db, [&item], &blockers).await?.remove(&item.id)
+        }
+        None => None,
+    };
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
-    let waits_for_you = waits_for_you(&item, heap, open_questions, stuck);
-    let with_agent = with_agent(&item, heap, open_questions, turn.is_some(), stuck);
+    let waits_for_you = waits_for_you(&item, heap, open_questions, stuck, blocker_gone.is_some());
+    let with_agent = with_agent(
+        &item,
+        heap,
+        open_questions,
+        turn.is_some(),
+        stuck,
+        blocker_gone.is_some(),
+    );
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     let comments = build_comment_views(db, comments).await?;
     Ok(ItemView {
@@ -927,6 +999,7 @@ pub(crate) async fn build_item_view(
         item,
         tags,
         blocked_by,
+        blocker_gone,
         created_by,
         closed_by,
         allowed_actions,
@@ -1218,12 +1291,47 @@ async fn check_blocker(db: &impl ConnectionTrait, item: &Item, blocker: ItemId) 
     }
 }
 
-/// The item `item` waits for, if any.
+/// The item `item` waits for, if any, in whichever heap it is now.
 async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<ItemSummary>, ServiceError> {
     let Some(id) = item.blocked_by() else {
         return Ok(None);
     };
-    Ok(store::items::list_item_summaries(db, item.heap_id, [id]).await?.pop())
+    Ok(store::items::list_blockers(db, [id]).await?.pop())
+}
+
+/// How the blocker of each of `items` whose blocker is gone stopped holding it, by the blocked item's ID, with the
+/// heap a moved blocker is in now. `blockers` holds their blockers by ID ([`blocker_summaries`]). The heaps blockers
+/// moved to are few, as a team has few heaps, and are read once each.
+pub(crate) async fn gone_blockers<'a>(
+    db: &impl ConnectionTrait,
+    items: impl IntoIterator<Item = &'a Item>,
+    blockers: &HashMap<ItemId, ItemSummary>,
+) -> Result<HashMap<ItemId, GoneBlocker>, ServiceError> {
+    let gone: Vec<(&Item, &ItemSummary, BlockerGone)> = items
+        .into_iter()
+        .filter_map(|item| {
+            let blocker = blockers.get(&item.blocked_by()?)?;
+            Some((item, blocker, item.blocker_gone(blocker)?))
+        })
+        .collect();
+    let mut heaps: HashMap<HeapId, Heap> = HashMap::new();
+    for (item, blocker, _) in &gone {
+        if blocker.heap_id != item.heap_id
+            && !heaps.contains_key(&blocker.heap_id)
+            && let Some(heap) = store::heaps::find_heap(db, blocker.heap_id).await?
+        {
+            heaps.insert(heap.id, heap);
+        }
+    }
+    Ok(gone
+        .into_iter()
+        .map(|(item, blocker, how)| {
+            let moved_to = (blocker.heap_id != item.heap_id)
+                .then(|| heaps.get(&blocker.heap_id).cloned())
+                .flatten();
+            (item.id, GoneBlocker { how, moved_to })
+        })
+        .collect())
 }
 
 /// How many open items each of `heap_ids` has at `now`, in one query: those its list shows by default, before
@@ -1270,10 +1378,10 @@ fn pick_user(users: &HashMap<UserId, User>, id: Option<UserId>) -> Option<User> 
     id.and_then(|id| users.get(&id).cloned())
 }
 
-/// Every blocker of `items`, by ID. Blockers among `items` are taken from there; closed ones are loaded.
-async fn blocker_summaries(
+/// Every blocker of `items`, by ID. Blockers among `items` are taken from there; closed ones, and ones moved to another
+/// heap, are loaded.
+pub(crate) async fn blocker_summaries(
     db: &impl ConnectionTrait,
-    heap_id: HeapId,
     items: &[Item],
 ) -> Result<HashMap<ItemId, ItemSummary>, ServiceError> {
     let loaded: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
@@ -1289,7 +1397,7 @@ async fn blocker_summaries(
             }
         }
     }
-    for summary in store::items::list_item_summaries(db, heap_id, missing).await? {
+    for summary in store::items::list_blockers(db, missing).await? {
         found.insert(summary.id, summary);
     }
     Ok(found)

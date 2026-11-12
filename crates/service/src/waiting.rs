@@ -1,10 +1,10 @@
-//! Waiting for me: every open question on an open item, and every item whose agent turn is stuck, across the caller's
-//! heaps, most important first.
+//! Waiting for me: every open question on an open item, every item whose agent turn is stuck, and every blocked item
+//! whose blocker is gone, across the caller's heaps, most important first.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::heap::Heap;
-use domain::item::{Item, Title};
+use domain::item::{Item, ItemSummary, Title};
 use domain::permission::{ItemAction, Permission, allowed_item_actions, allowed_question_actions};
 use domain::step::StepNumber;
 use domain::team::{Role, Team};
@@ -12,7 +12,7 @@ use domain::turn::{Goal, Turn, with_agent};
 use domain::user::User;
 use domain::{HeapId, ItemId, Timestamp, TurnId, UserId};
 
-use crate::items::{OpenRanking, QuestionView, TurnView, rank_open_items, turn_views};
+use crate::items::{GoneBlocker, OpenRanking, QuestionView, TurnView, gone_blockers, rank_open_items, turn_views};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_waiting`] returns. A person waits on tens of questions, not thousands, so one
@@ -22,7 +22,7 @@ pub const MAX_WAITING_ROWS: usize = 500;
 /// What waits for the caller.
 #[derive(Debug)]
 pub struct WaitingView {
-    /// How many rows wait (questions and stuck turns), whether or not they all fit in `rows`.
+    /// How many rows wait (questions, stuck turns and gone blockers), whether or not they all fit in `rows`.
     pub count: u32,
     /// The first [`MAX_WAITING_ROWS`] of them, most important first.
     pub rows: Vec<WaitingRow>,
@@ -34,7 +34,7 @@ pub struct WaitingRow {
     pub item: Item,
     pub heap: Heap,
     pub team: Team,
-    /// The title of the step the question names, when it names one that exists. `None` on a stuck row.
+    /// The title of the step the question names, when it names one that exists. `None` on the other rows.
     pub step_title: Option<Title>,
     pub subject: WaitingSubject,
     /// The item's open turn, if an agent was sent it and it hasn't been taken back. The item waits for the person,
@@ -51,6 +51,17 @@ pub enum WaitingSubject {
     Question(Box<QuestionView>),
     /// A turn whose runs keep failing.
     Stuck(StuckView),
+    /// A blocked item whose blocker was closed or moved to another heap.
+    BlockerGone(BlockerGoneView),
+}
+
+/// A gone blocker, as a row shows it.
+#[derive(Debug)]
+pub struct BlockerGoneView {
+    pub blocker: ItemSummary,
+    pub gone: GoneBlocker,
+    /// What the caller may do about it: change the state, to unblock it, when they may edit items.
+    pub allowed_actions: Vec<ItemAction>,
 }
 
 /// A stuck turn, as a row shows it.
@@ -76,6 +87,7 @@ pub(crate) struct ViewableHeap {
 enum CandidateSubject {
     Question(domain::question::Question),
     Stuck(Turn),
+    BlockerGone(ItemSummary, GoneBlocker),
 }
 
 /// Something that waits, before it is shown: where it ranks and the item it is on.
@@ -91,10 +103,11 @@ struct Candidate {
 }
 
 impl Candidate {
-    /// Where the candidate sorts among those of one item: a stuck turn first, then questions by number.
+    /// Where the candidate sorts among those of one item: a gone blocker or a stuck turn first, then questions by
+    /// number. A blocked item has no stuck turn, as an agent isn't sent a blocked item.
     fn order_in_item(&self) -> u32 {
         match &self.subject {
-            CandidateSubject::Stuck(_) => 0,
+            CandidateSubject::Stuck(_) | CandidateSubject::BlockerGone(..) => 0,
             CandidateSubject::Question(question) => question.number.get(),
         }
     }
@@ -122,10 +135,10 @@ impl Services {
             .collect())
     }
 
-    /// The open questions on open items, and the items whose agent turn is stuck, in the active heaps of the caller's
-    /// teams, ordered by the score of their item in its own heap, highest first (every heap weighs the same for now),
-    /// then by heap (by name), the item's position in its heap, a stuck row before the item's questions, and the
-    /// question's number. Scores are those the heap's list ranks by right now. A question on a reminder to come has no
+    /// The open questions on open items, the items whose agent turn is stuck, and the blocked items whose blocker is
+    /// gone, in the active heaps of the caller's teams, ordered by the score of their item in its own heap, highest
+    /// first (every heap weighs the same for now), then by heap (by name), the item's position in its heap, a stuck or
+    /// gone-blocker row before the item's questions, and the question's number. Scores are those the heap's list ranks by right now. A question on a reminder to come has no
     /// score: its row comes after the ranked ones, by the reminder's date, soonest first.
     ///
     /// Ranking costs one pass over a heap's open items, so only heaps with something waiting are ranked. Any member
@@ -163,7 +176,8 @@ impl Services {
             .map(|(heap_id, turn)| (heap_id, turn.counting_lapse(lapsed.contains(&turn.id))))
             .filter(|(_, turn)| turn.is_stuck())
             .collect();
-        if waiting.is_empty() && stuck.is_empty() {
+        let mut gone = list_gone_blockers(&self.db, &heap_ids).await?;
+        if waiting.is_empty() && stuck.is_empty() && gone.is_empty() {
             return Ok(WaitingView {
                 count: 0,
                 rows: Vec::new(),
@@ -176,7 +190,9 @@ impl Services {
             waiting = rest;
             let (mine_stuck, rest): (Vec<_>, Vec<_>) = stuck.into_iter().partition(|(id, _)| *id == heap.id);
             stuck = rest;
-            if mine.is_empty() && mine_stuck.is_empty() {
+            let (mine_gone, rest): (Vec<_>, Vec<_>) = gone.into_iter().partition(|(item, ..)| item.heap_id == heap.id);
+            gone = rest;
+            if mine.is_empty() && mine_stuck.is_empty() && mine_gone.is_empty() {
                 continue;
             }
             let OpenRanking {
@@ -233,6 +249,20 @@ impl Services {
                     subject: CandidateSubject::Stuck(turn),
                 });
             }
+            for (blocked, blocker, how) in mine_gone {
+                // An item changed since it was read is taken as the ranking read it, which is later.
+                let (Some(item), Some(&(score, position))) = (by_id.get(&blocked.id), ranks.get(&blocked.id)) else {
+                    continue;
+                };
+                candidates.push(Candidate {
+                    heap_index,
+                    score,
+                    position,
+                    to_come_until: None,
+                    item: (*item).clone(),
+                    subject: CandidateSubject::BlockerGone(blocker, how),
+                });
+            }
         }
 
         candidates.sort_by(|a, b| {
@@ -255,7 +285,7 @@ impl Services {
             .iter()
             .filter_map(|candidate| match &candidate.subject {
                 CandidateSubject::Question(question) => question.asked_by,
-                CandidateSubject::Stuck(_) => None,
+                CandidateSubject::Stuck(_) | CandidateSubject::BlockerGone(..) => None,
             })
             .collect::<BTreeSet<_>>()
             .into_iter()
@@ -299,7 +329,7 @@ impl Services {
                 let (team, role) = *team_by_id.get(&heap.team_id)?;
                 let turn = open_turns.get(&candidate.item.id).cloned();
                 let turn_is_stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-                let (subject, step_title, open_questions) = match candidate.subject {
+                let (subject, step_title, open_questions, blocker_gone) = match candidate.subject {
                     CandidateSubject::Question(question) => {
                         let step_title = question
                             .step
@@ -312,7 +342,7 @@ impl Services {
                             withdrawn_by: None,
                             question,
                         };
-                        (WaitingSubject::Question(Box::new(view)), step_title, 1)
+                        (WaitingSubject::Question(Box::new(view)), step_title, 1, false)
                     }
                     CandidateSubject::Stuck(stuck_turn) => {
                         let allowed_actions = allowed_item_actions(&candidate.item, heap, role, true, true, as_of)
@@ -325,12 +355,33 @@ impl Services {
                             goal: stuck_turn.goal,
                             allowed_actions,
                         };
-                        (WaitingSubject::Stuck(view), None, 0)
+                        (WaitingSubject::Stuck(view), None, 0, false)
+                    }
+                    CandidateSubject::BlockerGone(blocker, gone) => {
+                        // Unblock is a change of state; Open needs nothing but the item.
+                        let allowed_actions =
+                            allowed_item_actions(&candidate.item, heap, role, turn.is_some(), turn_is_stuck, as_of)
+                                .into_iter()
+                                .filter(|action| matches!(action, ItemAction::ChangeState))
+                                .collect();
+                        let view = BlockerGoneView {
+                            blocker,
+                            gone,
+                            allowed_actions,
+                        };
+                        (WaitingSubject::BlockerGone(view), None, 0, true)
                     }
                 };
                 Some(WaitingRow {
-                    // The row's item waits for the person: it has an open question or a stuck turn.
-                    with_agent: with_agent(&candidate.item, heap, open_questions, turn.is_some(), turn_is_stuck),
+                    // The row's item waits for the person: it has an open question, a stuck turn or a gone blocker.
+                    with_agent: with_agent(
+                        &candidate.item,
+                        heap,
+                        open_questions,
+                        turn.is_some(),
+                        turn_is_stuck,
+                        blocker_gone,
+                    ),
                     turn,
                     heap: heap.clone(),
                     team: team.clone(),
@@ -344,4 +395,31 @@ impl Services {
         tracing::debug!(user_id = %principal.user_id, count, "listed waiting");
         Ok(WaitingView { count, rows })
     }
+}
+
+/// The blocked items of `heap_ids` whose blocker is gone ([`Item::blocker_gone`]), each with its blocker and how it
+/// went, oldest first. Shared by Waiting for me and the agents' queue, which counts what waits.
+pub(crate) async fn list_gone_blockers(
+    db: &impl store::ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<(Item, ItemSummary, GoneBlocker)>, ServiceError> {
+    let blocked = store::items::list_blocked_items_with_blocker(db, heap_ids).await?;
+    if blocked.is_empty() {
+        return Ok(Vec::new());
+    }
+    let blockers: HashMap<ItemId, ItemSummary> =
+        store::items::list_blockers(db, blocked.iter().filter_map(Item::blocked_by).collect::<BTreeSet<_>>())
+            .await?
+            .into_iter()
+            .map(|blocker| (blocker.id, blocker))
+            .collect();
+    let mut gone = gone_blockers(db, &blocked, &blockers).await?;
+    Ok(blocked
+        .into_iter()
+        .filter_map(|item| {
+            let how = gone.remove(&item.id)?;
+            let blocker = blockers.get(&item.blocked_by()?)?.clone();
+            Some((item, blocker, how))
+        })
+        .collect())
 }
