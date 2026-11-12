@@ -75,6 +75,10 @@ pub enum ServiceError {
     /// The blocker already waits, directly or through others, for the item being blocked.
     #[error("item {item_id} already waits for this item, so it can't block it")]
     BlockingCycle { item_id: ItemId },
+    /// The heap an item is moved to isn't another heap of the item's team, or the caller can't see it. One error for
+    /// all of those, so a stranger learns nothing about other teams' heaps.
+    #[error("the item can only move to another heap of its team")]
+    HeapNotInTeam { heap_id: HeapId },
     #[error(transparent)]
     Team(#[from] TeamError),
     /// An invite link that can't be used to join its team.

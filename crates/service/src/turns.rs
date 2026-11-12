@@ -14,7 +14,7 @@ use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
 use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
-use crate::access::authorize_heap_write;
+use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::{describe_new_turn, describe_retry, describe_take_back, describe_withdrawal};
 use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
@@ -41,9 +41,7 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
         if item.is_closed() {
             return Err(ItemError::Closed { item_id: item.id }.into());
         }
@@ -98,9 +96,7 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
 
         let now = self.now();
         let taken = self
@@ -132,9 +128,7 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
-        let item = store::items::find_item_locking(&txn, item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
         let now = self.now();
         let open = store::turns::find_open_turn_locking(&txn, item.id)
             .await?

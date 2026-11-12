@@ -38,7 +38,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
-| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the local build on GitHub Pages; the CLI as static binaries on GitHub Releases, with a Homebrew cask in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli)) |
+| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI as static binaries on GitHub Releases, with a Homebrew cask in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli)) |
 
 ## Workspace
 
@@ -219,7 +219,9 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    index on `(heap_id, key)`; a clash is retried, and with a few thousand items one happens about once in several
    thousand inserts. `domain` turns random bytes into a key, and the service draws the bytes from the
    `RandomSource` it's given, like its clock, so tests can script them. Items are never deleted, so a key is never
-   reused.
+   reused within a heap, except that one an item took with it when it moved to another heap can be drawn again, about
+   one chance in 30 million per insert. An item that moves to another heap of its team keeps its key unless the
+   target heap has an item with it, and then gets a new one, drawn under the locks the move takes.
 4. **Nothing is reserved.** Every handle sits after a fixed word in the URL (`teams/`, `heaps/`, `items/`), so it
    can't clash with a page the app has now or adds later. Teams start at `/teams/` rather than at the root because
    the root holds the app's own pages and the server's paths (`/api`, `/healthz`, `/oauth`). API paths have the
@@ -229,8 +231,9 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    which has no server to redirect. Items offer Copy link with the short form; the API has none. The CLI takes an
    item as its key within the default heap, or as the full path `my-team/backlog/k3x9a`, a short link without its
    `/h/`, so a pasted link works too.
-6. **Changes.** Usernames and item keys are fixed. Team and heap slugs can change, and an old link stops working
-   when they do; redirects from old handles are out of scope for now.
+6. **Changes.** Usernames are fixed, and an item's key changes only when it moves to a heap that has the key. Team
+   and heap slugs can change, and an item's heap can, by a move. An old link stops working when any of them does;
+   redirects from old handles are out of scope for now.
 7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
    slug, and the first heap is `personal`. The local build's user is `me`, so its links read
    `/upheap/teams/me/heaps/personal/items/k3x9a`. A first OIDC sign-in will ask for a username before creating the
@@ -344,11 +347,18 @@ a fixed time.
    that committed while it waited. SQLite has
    one writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
    matters, no inconsistent state, holds either way.
-2. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
+2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
+   several, then reads the item with a locking read and checks its version. Two moves in opposite directions can't
+   wait for each other, and the second of two moves of one item finds it changed. A blocker is part of a heap's
+   state, so a move takes the item's blocking links to its old heap away both ways: the items that waited for it, and
+   the one it waited for, stay blocked with nobody picked. Since an item's heap can change, a write that finds the
+   heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
+   refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
+3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
    same heap. Closing a blocker later doesn't unblock what waits for it; the blocked item shows the closed blocker
    until someone moves it on.
-3. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break
+4. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break
    the list.
 
 ## API
@@ -551,7 +561,10 @@ the remaining admins.
    Leaving a team is a membership change, so only admins see it, although any member may leave.
 4. The heap log reads what is recorded against the heap. The team log reads the team's own entries and the heaps'
    own entries (created, renamed, archived, context changed), but not what happens inside the heaps. With
-   `entity_id`, either reads one entity's history.
+   `entity_id`, either reads one entity's history. The heap log then reads that entity's entries from every heap of
+   the team, because an item's entries are recorded in the heap it is in after the write: a move (`ItemMoved`) is
+   recorded in the heap the item went to, and its history from before it still shows after it, with the old heap's
+   tags and parameters named. The log is per team, so an item can only move within its team.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
    as text and IDs replaced by current names. The raw `diff` is returned too.
@@ -590,12 +603,12 @@ the remaining admins.
    needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
-7. **Local build:** a static site with no configuration, published to GitHub Pages. One user and one team, which
+7. **Local build:** a static site with no configuration. One user and one team, which
    holds every heap, with the data in the browser ([Local build](#local-build)).
 
 ## Local build
 
-A second way to ship Upheap: a static site on GitHub Pages that runs the whole app in one browser for one person
+A second way to ship Upheap: a static site that runs the whole app in one browser for one person
 and keeps the data there. Nothing to install, no server, no account. The self-hosted server stays the product for
 teams; the local build is for trying Upheap out and for people who only need a personal heap. It doesn't sync
 between devices or share with anyone, has no sign-in, and implements nothing a second time: ranking, validation,
@@ -680,16 +693,14 @@ Browser storage can be cleared by the user, or by the browser when the disk fill
 3. **The last download is kept per browser** in `localStorage`. It is a fact about this browser that no server ever
    sees, so the web app words it itself, the one exception to thin clients (Thin clients §2 of the principles).
 
-### Build and publish
+### Build
 
 `wasm-pack` builds `crates/local` into `web/src/local/backend`, and `vite build --mode local-build` picks the worker
 `fetch` and takes the Pages base path from `UPHEAP_BASE`. The build writes a copy of `index.html` as `404.html`,
 which Pages serves for any path without a file, so deep links and reloads work although Pages can't rewrite paths.
-CI lints `service` and `api` without their features and `local` for wasm, builds the backend and fails it over
-1.5 MB gzipped, runs it in Node on SQLite-wasm, and runs the Playwright golden paths against the static build
-served as Pages serves it; the Pages workflow publishes the same build from `main`. The OpenAPI document is about
-0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes twice. The commands are in
-[README.md](../README.md#develop).
+It isn't published, and CI doesn't build or test
+it. The OpenAPI document is about 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes
+twice. The commands are in [README.md](../README.md#develop).
 
 ## CLI
 
@@ -715,7 +726,9 @@ section is how it maps onto this API.
 4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
    sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`
    ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)). Every request carries the
-   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser.
+   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser. The `--due`
+   help names the choices from `domain::due`, the rule the server lists them by, since help is read offline; the
+   dates and the match still come from the server.
 5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
    a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
    result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against

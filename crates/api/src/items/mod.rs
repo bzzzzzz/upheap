@@ -2,8 +2,8 @@
 
 use api_types::common::{HeapSummaryDto, ItemDto, ItemRefDto};
 use api_types::items::{
-    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery, RankingPreviewDto,
-    RankingPreviewItemDto, RankingPreviewRequestDto,
+    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemPatchDto, RankedListDto, RankedQuery,
+    RankingPreviewDto, RankingPreviewItemDto, RankingPreviewRequestDto,
 };
 use axum::Json;
 use axum::extract::State;
@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use domain::heap::HeapPolicyPatch;
 use domain::item::{ItemPatch, StateKind};
 use domain::parameter::{ParameterError, Weight};
-use domain::{ItemId, ParameterId, Timestamp, ValidationError};
+use domain::{HeapId, ItemId, ParameterId, Timestamp, ValidationError};
 use service::ServiceError;
 use service::items::{ClosedCursor, ParameterWeightDraft, WeightsDraft, parse_preview_limit};
 use utoipa_axum::router::OpenApiRouter;
@@ -31,6 +31,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_closed))
         .routes(routes!(get_item, update_item))
         .routes(routes!(reopen_item))
+        .routes(routes!(move_item))
 }
 
 /// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
@@ -241,6 +242,37 @@ async fn reopen_item(
     let view = state
         .services
         .update_item(path.principal, path.item_id, patch, expected)
+        .await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's
+/// `version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.
+/// Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
+/// the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked, as
+/// do the items that waited for it. Moving an item to the heap it is in succeeds and changes nothing. The response
+/// is the item in its new heap, so its old path stops working.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/move", tag = "items", security(("session" = [])),
+    params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemMoveDto,
+    responses(
+        (status = 200, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed` or `heap_archived` (either heap)", body = Problem),
+        (status = 400, description = "A body that isn't a `heap_id`", body = Problem),
+        (status = 422, description = "`heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn move_item(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+    IfMatch(expected): IfMatch,
+    ApiJson(body): ApiJson<ItemMoveDto>,
+) -> Result<Json<ItemDto>, ApiError> {
+    let view = state
+        .services
+        .move_item(path.principal, path.item_id, HeapId::from_uuid(body.heap_id), expected)
         .await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }

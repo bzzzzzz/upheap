@@ -203,8 +203,10 @@ digit, drawn at random inside the insert transaction and retried on a clash with
 **Instead of.** Sequential numbers per heap, as issue trackers use, or UUIDs in URLs.
 
 **Consequences.** A key says nothing about an item's age or the heap's size. About 30 million keys per heap; a
-clash is rare and a retry settles it. Keys are fixed for life, since items are never deleted. The service draws the
-random bytes from an injected `RandomSource`, so tests can script keys.
+clash is rare and a retry settles it. Keys are never reused, since items are never deleted. An item keeps its
+key when it moves to another heap of its team unless the target heap has it, and then it gets a new one
+([architecture.md](architecture.md), Handles). The service draws the random bytes from an injected
+`RandomSource`, so tests can script keys.
 
 ## 17. The local build is the same backend compiled to WebAssembly, with Cargo features for what it lacks
 
@@ -218,7 +220,7 @@ the local build leaves out.
 **Instead of.** A second implementation in JavaScript, or a runtime "local mode" flag in one build.
 
 **Consequences.** Ranking, validation, permissions and the API are one codebase, and the native tests cover the
-local user too. Nothing left out can reach the wasm, which keeps it inside its size budget. A feature added to the
+local user too. Nothing left out can reach the wasm, which keeps it smaller. A feature added to the
 server must be placed behind `accounts` when the local build can't offer it.
 
 ## 18. SQLite in the browser through SeaORM's proxy connection, on `opfs-sahpool`

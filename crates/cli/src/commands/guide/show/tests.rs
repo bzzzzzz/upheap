@@ -72,6 +72,25 @@ fn every_command_is_listed_with_its_inputs_and_its_own_flags() {
 }
 
 #[gtest]
+fn the_rough_due_choices_are_listed_the_way_they_are_typed() {
+    // Arrange
+    let root = Cli::command();
+
+    // Act
+    let guide = render(&root);
+
+    // Assert
+    let due_lines: Vec<&str> = guide.lines().filter(|line| line.contains("--due <WHEN>")).collect();
+    expect_that!(due_lines.len(), eq(2));
+    for line in due_lines {
+        expect_that!(
+            line,
+            ends_with("a rough choice: in-a-few-days, next-week, in-a-few-weeks, next-month, in-a-few-months")
+        );
+    }
+}
+
+#[gtest]
 fn the_flags_most_commands_share_are_listed_once() {
     // Arrange
     let root = Cli::command();

@@ -266,6 +266,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("blocked_by_item_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "blocking_cycle", Category::Caller)
         },
+        ServiceError::HeapNotInTeam { .. } => Classified {
+            field: Some("heap_id"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "heap_not_in_team", Category::Caller)
+        },
         ServiceError::TagNotInHeap { .. } => Classified {
             field: Some("tag_ids"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_heap", Category::Caller)

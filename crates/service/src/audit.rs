@@ -30,6 +30,25 @@ pub(crate) fn diff_items(before: &Item, after: &Item) -> Value {
     diff_fields(item_fields(before), item_fields(after))
 }
 
+/// The changes a move to another heap makes to an item, in the shape of [`diff_items`] with the heap, and the key when
+/// it changed. Tags and values the target heap lacks show as removed, and the blocker as cleared.
+pub(crate) fn diff_moved(before: &Item, after: &Item) -> Value {
+    let Value::Object(mut changes) = diff_items(before, after) else {
+        return Value::Null;
+    };
+    changes.insert(
+        "heap".into(),
+        json!({ "before": before.heap_id.to_string(), "after": after.heap_id.to_string() }),
+    );
+    if before.key != after.key {
+        changes.insert(
+            "key".into(),
+            json!({ "before": before.key.as_str(), "after": after.key.as_str() }),
+        );
+    }
+    Value::Object(changes)
+}
+
 /// The fields of a newly added step, for its `step_added` entry. The step is named by its number and title; the
 /// context is left out when there is none.
 pub(crate) fn describe_new_step(step: &Step) -> Value {

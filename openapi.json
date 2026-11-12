@@ -2819,6 +2819,158 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/move": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's\n`version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.\nTags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of\nthe same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked, as\ndo the items that waited for it. Moving an item to the heap it is in succeeds and changes nothing. The response\nis the item in its new heap, so its old path stops working.",
+        "operationId": "move_item",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A body that isn't a `heap_id`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "From inside a run: `run_forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `item_closed` or `heap_archived` (either heap)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions": {
       "post": {
         "tags": [
@@ -6956,6 +7108,7 @@
           "heap_unarchived",
           "item_created",
           "item_updated",
+          "item_moved",
           "step_added",
           "step_updated",
           "question_asked",
@@ -8436,6 +8589,7 @@
         "description": "An action the caller can take on an item. Clients show controls only for these.",
         "enum": [
           "edit",
+          "move",
           "change_state",
           "reopen",
           "make_task",
@@ -8475,6 +8629,21 @@
             "type": "string"
           }
         }
+      },
+      "ItemMoveRequest": {
+        "type": "object",
+        "description": "Where to move an item.",
+        "required": [
+          "heap_id"
+        ],
+        "properties": {
+          "heap_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The heap to move the item to: another heap of the item's team."
+          }
+        },
+        "additionalProperties": false
       },
       "ItemOption": {
         "type": "object",

@@ -52,7 +52,8 @@ optional and goes last.
    Playwright suites pass in both build modes.
 
 The pull request that builds the last piece dissolves this doc: the macro is explained in its module doc, What
-stays moves to architecture.md if it's still worth saying, the ideas go to the tracker, and the file goes.
+stays moves to architecture.md if it's still worth saying, the ideas become notes in Upheap, and the
+file goes.
 
 ## Design
 
