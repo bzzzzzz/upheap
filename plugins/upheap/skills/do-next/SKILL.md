@@ -11,8 +11,12 @@ decision about what it is. A task gets done, or partly done, or handed to the pe
 theirs to do.
 
 Talk to the person here, in the conversation: questions, choices, what you're about to do. Record in Upheap what
-has to outlast the conversation: the item's state, its context, its steps, and anything still waiting for them.
-After every session, the item alone should tell the next reader where things stand.
+has to outlast the conversation: the item's state, its context, its steps, its comments, and anything still waiting
+for them. After every session, the item alone should tell the next reader where things stand.
+
+The context says what the item is and what done looks like; comments record what happened since. Where this skill
+says to add a comment, use `upheap comment add` when the guide shows it. An older tool has no comments: add to the
+end of the item's context instead, and keep what's already there.
 
 ## How to write
 

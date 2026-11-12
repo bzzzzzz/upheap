@@ -619,7 +619,8 @@ section is how it maps onto this API.
    its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is
    exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it. A step
    is its item and its number, `<item>.<number>` (`k3x9a.3`, `team/heap/k3x9a.3`), split at the last `.` after the
-   last `/`; questions and comments are named `k3x9a.q2` and `k3x9a.c3` in output, since a link's host has dots and a key never does; `step add --after` also takes the bare number.
+   last `/`, since a link's host has dots and a key never does; `step add --after` also takes the bare number.
+   Questions and comments are named the same way in output, `k3x9a.q2` and `k3x9a.c3`.
 3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
    server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
    refusals. `item block --by` sets `blocked_by_item_id` in the same request; a bare key there is in the blocked

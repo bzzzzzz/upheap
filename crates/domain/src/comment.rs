@@ -4,7 +4,7 @@
 //! the item's version, so an agent or a person can add to an item without rewriting its context or conflicting with
 //! an edit (architecture.md, Data model).
 
-use crate::text::{Context, parse_positive, parse_required};
+use crate::text::{Context, parse_required};
 use crate::validation::Field;
 use crate::{CommentId, ItemId, Timestamp, UserId, ValidationError};
 
@@ -25,12 +25,6 @@ impl CommentNumber {
     /// `None` for zero.
     pub const fn new(value: u32) -> Option<Self> {
         if value == 0 { None } else { Some(Self(value)) }
-    }
-
-    /// A positive integer written in digits, as in a path. `None` for anything else, a sign and a leading zero
-    /// included.
-    pub fn parse(raw: &str) -> Option<Self> {
-        parse_positive(raw).and_then(Self::new)
     }
 
     pub const fn get(self) -> u32 {
@@ -189,13 +183,5 @@ mod tests {
             number_comment(&at_the_limit[..199]).map(CommentNumber::get),
             ok(eq(200))
         );
-    }
-
-    #[gtest]
-    fn a_number_parses_from_digits_only() {
-        expect_that!(CommentNumber::parse("3").map(CommentNumber::get), some(eq(3)));
-        expect_that!(CommentNumber::parse("0"), none());
-        expect_that!(CommentNumber::parse("03"), none());
-        expect_that!(CommentNumber::parse("+3"), none());
     }
 }

@@ -9,7 +9,7 @@ import { fieldClass, focusClass } from "./ItemQuestions";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
- * An item's comments (ux.md, The item §3): the thread under the context, oldest first, at every width and always
+ * An item's comments (ux.md, The item §16): the thread under the context, oldest first, at every width and always
  * open, and under it a field to add one when the server offers `comment`. A comment is never changed or deleted, so a
  * row has no controls, and its text is shown as text, with its line breaks. Nothing is fetched here: `item` is a
  * single-item response, the only kind that carries the comments; a list row has `comments: null`, which reads as none.
@@ -26,7 +26,9 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const focusAfterRender = useFocusAfterRender();
   const comments = item.comments ?? [];
-  const canComment = item.allowed_actions.includes("comment");
+  // A refusal refetches the item, which may no longer offer `comment` (the heap was archived meanwhile): the form
+  // stays while the error does, so the typed text and the reason don't vanish together.
+  const canComment = item.allowed_actions.includes("comment") || add.isError;
 
   if (comments.length === 0 && !canComment) return null;
 
@@ -77,7 +79,8 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
             value={draft}
             onChange={(value) => {
               setDraft(value);
-              if (add.isError) add.reset();
+              // Without the offer the error is what keeps the form, so it stays until the pane closes.
+              if (add.isError && item.allowed_actions.includes("comment")) add.reset();
             }}
             className="flex flex-col gap-1.5"
           >

@@ -507,13 +507,13 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         </>
       )}
 
-      <ItemComments heapRef={heapRef} item={item} />
-
       {update.error && (
         <p role="alert" className="text-sm text-overdue-ink">
           {itemProblem(update.error)}
         </p>
       )}
+
+      <ItemComments heapRef={heapRef} item={item} />
 
       <AnsweredQuestions item={item} />
 
