@@ -2669,7 +2669,8 @@ export interface components {
          * @description How far a turn is meant to go.
          *
          *     - `one`: to the next stable state (`goal`), then back to the person.
-         *     - `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and when a run reaches it the next turn opens at once, until the work is done.
+         *     - `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and
+         *       when a run reaches it the next turn opens at once.
          * @enum {string}
          */
         Reach: "one" | "all_the_way";

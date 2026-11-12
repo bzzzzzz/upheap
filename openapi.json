@@ -10347,7 +10347,7 @@
       },
       "Reach": {
         "type": "string",
-        "description": "How far a turn is meant to go.\n\n- `one`: to the next stable state (`goal`), then back to the person.\n- `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and when a run reaches it the next turn opens at once, until the work is done.",
+        "description": "How far a turn is meant to go.\n\n- `one`: to the next stable state (`goal`), then back to the person.\n- `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and\n  when a run reaches it the next turn opens at once.",
         "enum": [
           "one",
           "all_the_way"
