@@ -14,10 +14,9 @@ import {
 } from "@tanstack/react-router";
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
-import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
+import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
 import { parseListSearch } from "./components/listView";
-import { teamName } from "./components/teamName";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
@@ -243,26 +242,13 @@ const indexRoute = createRoute({
     }
   },
   component: function NoHeaps() {
-    const { data: me } = useMe();
-    const team = me && soleTeam(me);
     return (
       <p className="py-16 text-center text-stone-500">
         You don't have any heaps yet.{" "}
-        {team ? (
-          <>
-            <Link to="/teams/$team" params={{ team: team.slug }} className={linkClass}>
-              Start one
-            </Link>{" "}
-            in {me && teamName(team, me)}.
-          </>
-        ) : (
-          <>
-            <Link to="/teams" className={linkClass}>
-              Create a team
-            </Link>{" "}
-            to start one.
-          </>
-        )}
+        <Link to="/teams" className={linkClass}>
+          Create a team
+        </Link>{" "}
+        to start one.
       </p>
     );
   },
@@ -392,13 +378,6 @@ const heapActivityRoute = createRoute({
 const teamsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/teams",
-  // Without team creation and with one team, the list would hold only that team.
-  beforeLoad: async ({ context }) => {
-    const team = soleTeam(await context.queryClient.ensureQueryData(meQuery));
-    if (team) {
-      throw redirect({ to: "/teams/$team", params: { team: team.slug }, replace: true });
-    }
-  },
   component: TeamsPage,
 });
 

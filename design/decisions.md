@@ -402,4 +402,5 @@ backend, and a second end-to-end suite.
 **Instead of.** Keeping it, with its size limit lifted.
 
 **Consequences.** One configuration to build and test. Code may use what the server has: the blocking pool, timers
-and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19.
+and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19. §2, §12, §15 and §22 cite the local build in passing and stand on their other
+reasons.

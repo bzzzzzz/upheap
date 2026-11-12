@@ -1,20 +1,14 @@
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useMe } from "../api/queries";
+import { useMe } from "../api/queries";
 
 type NamedTeam = { name: string; personal: boolean };
 
 /**
- * Whether the team shows as "<display name>'s team" rather than its stored name (design/ux.md, Teams and Team): a
- * personal team among others, whose stored name is its owner's and reads as a person. Alone, with no Teams list,
- * there is nothing to tell it from, so it keeps its own name.
+ * How the web app names a team. Display only: the stored name is unchanged. A personal team shows as "<display
+ * name>'s team" (design/ux.md, Teams and Team), as its stored name is its owner's and reads as a person.
  */
-export function namedForOwner(team: NamedTeam, me: Me): boolean {
-  return team.personal && soleTeam(me) === undefined;
-}
-
-/** How the web app names a team. Display only: the stored name is unchanged. */
 export function teamName(team: NamedTeam, me: Me): string {
-  return namedForOwner(team, me) ? `${me.user.display_name}'s team` : team.name;
+  return team.personal ? `${me.user.display_name}'s team` : team.name;
 }
 
 /** `teamName` for a component that doesn't hold `me`; until it loads, the stored name. */

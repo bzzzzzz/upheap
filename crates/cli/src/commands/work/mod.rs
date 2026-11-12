@@ -41,7 +41,7 @@ pub(super) async fn resolve_heaps(
         args.names.iter().map(String::as_str).collect()
     };
     // Looked up among the caller's heaps, even when written in full, so a heap that isn't theirs is told apart from
-    // a server that has no agents (which answers `404` for every `/work` route).
+    // an older server without the `/work` routes (which answers `404` for every one).
     let me = client.get::<MeDto>(&["me"], NO_QUERY, token).await?;
     let mut heaps: Vec<String> = Vec::new();
     for name in typed {
@@ -58,8 +58,8 @@ pub(super) fn current_run<'a>(app: &'a App, verb: &'static str) -> Result<&'a st
     app.env.run.as_deref().ok_or(UsageError::NeedsRun { verb })
 }
 
-/// A `404` from a `/work` route means the server doesn't run agents (or, for a run's own routes, doesn't know the
-/// run).
+/// A `404` from a `/work` route means an older server without the `/work` routes (or, for a run's own routes,
+/// doesn't know the run).
 pub(super) fn missing_agents(err: ClientError, run: Option<&str>) -> CliError {
     match err {
         ClientError::Problem { ref problem, .. } if problem.status == 404 => match run {

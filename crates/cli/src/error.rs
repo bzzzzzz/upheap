@@ -59,11 +59,11 @@ pub enum CliError {
     TokenStore(#[from] TokenStoreError),
     #[error("can't write the output")]
     Output(#[from] std::io::Error),
-    /// A `/work` route answered `404`: the server was built without agents.
+    /// A `/work` route answered `404`: an older server without the `/work` routes.
     #[error("This server doesn't run agents.")]
     NoAgents,
     /// A route of the run `UPHEAP_RUN` names answered `404`: the server doesn't know the run (it is another user's, or
-    /// from another server), or doesn't run agents.
+    /// from another server), or the server lacks the `/work` routes.
     #[error("no run {run} on this server, or it doesn't run agents")]
     NoSuchRun { run: String },
 }

@@ -421,8 +421,7 @@ they name. After sign-up, the empty heap offers the next two steps, Add your fir
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.
 
 Among other teams, the personal team shows everywhere as "<name>'s team", by the user's display name whatever it is
-stored as, so it has no Rename. Alone, with no Teams list, it keeps its own name. The label is the
-web app's: the stored name is unchanged, because storing "\<name\>'s team" would need a migration and wouldn't
+stored as, so it has no Rename. The label is the web app's: the stored name is unchanged, because storing "\<name\>'s team" would need a migration and wouldn't
 follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,

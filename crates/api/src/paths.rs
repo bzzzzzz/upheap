@@ -226,7 +226,7 @@ impl FromRequestParts<AppState> for QuestionPath {
 }
 
 /// `{team}/members/{username}`: a team the caller belongs to, and a user, who may or may not be a member. Only team
-/// management names members, and it needs accounts.
+/// management names members.
 pub(crate) struct MemberPath {
     pub principal: Principal,
     pub team_id: TeamId,
@@ -252,7 +252,7 @@ impl FromRequestParts<AppState> for MemberPath {
 }
 
 /// `{team}/invite-links/{id}`: a team the caller belongs to, and the id of one of its invite links, which may not
-/// exist. Only team management names invite links, and it needs accounts.
+/// exist. Only team management names invite links.
 pub(crate) struct InviteLinkPath {
     pub principal: Principal,
     pub team_id: TeamId,

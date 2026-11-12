@@ -28,7 +28,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { soleTeam, useHeap, useMe, useSetHeapArchived, useWaiting } from "../api/queries";
+import { useHeap, useMe, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher } from "../components/HeapSwitcher";
@@ -128,15 +128,10 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
   const { team: teamSlug } = useParams({ strict: false });
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
   const urlTeam = me.teams.find((team) => team.slug === teamSlug);
-  // With one team and no Teams list, the team link goes straight to it, so a link to the team in the URL would
-  // repeat it.
-  const onlyTeam = soleTeam(me);
   return {
     heap: heapTeam?.heaps.find((heap) => heap.slug === heapRef?.heap),
-    team: onlyTeam || !urlTeam ? undefined : { slug: urlTeam.slug, label: teamName(urlTeam, me) },
-    teams: onlyTeam
-      ? ({ to: "/teams/$team", params: { team: onlyTeam.slug }, label: teamName(onlyTeam, me) } as const)
-      : ({ to: "/teams", label: "Teams" } as const),
+    team: !urlTeam ? undefined : { slug: urlTeam.slug, label: teamName(urlTeam, me) },
+    teams: { to: "/teams", label: "Teams" } as const,
   };
 }
 
