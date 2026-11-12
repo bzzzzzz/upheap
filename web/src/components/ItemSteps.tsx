@@ -50,7 +50,12 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
               step={step}
               contextShown={shown.has(step.number)}
               onToggleContext={() => toggleContext(step.number)}
-              onSave={(patch) => update.mutate({ step, patch })}
+              onSave={(patch) =>
+                update.mutateAsync({ step, patch }).then(
+                  () => true,
+                  () => false,
+                )
+              }
             />
           ))}
         </ul>
@@ -87,7 +92,8 @@ function StepRow({
   step: Step;
   contextShown: boolean;
   onToggleContext: () => void;
-  onSave: (patch: StepPatch) => void;
+  /** Resolves to whether the save landed; a failure is shown by the list. */
+  onSave: (patch: StepPatch) => Promise<boolean>;
 }) {
   const canEdit = step.allowed_actions.includes("edit");
   const dropped = step.state === "dropped";
@@ -111,12 +117,15 @@ function StepRow({
   const saveTitle = (field: HTMLTextAreaElement) => {
     const title = field.value.trim();
     // A blank title isn't saved, and neither is a title that hasn't changed: the field shows the saved one again.
-    if (title !== "" && title !== step.title) onSave({ title });
+    if (title !== "" && title !== step.title) void onSave({ title });
     else field.value = step.title;
   };
-  const saveContext = (text: string) => {
+  // Saves a changed context, and resolves to whether the field may close: at once when nothing changed, else once the
+  // save has landed, so a failed save keeps the draft in the field.
+  const saveContext = (text: string): Promise<boolean> => {
     const context = text.trim();
-    if (context !== (step.context ?? "")) onSave({ context: context === "" ? null : context });
+    if (context === (step.context ?? "")) return Promise.resolve(true);
+    return onSave({ context: context === "" ? null : context });
   };
 
   return (
@@ -226,9 +235,19 @@ function StepRow({
               rows={2}
               placeholder="Background for this step"
               onFocus={() => setEditingContext(true)}
+              onKeyDown={(e) => {
+                // Escape does nothing here, so a draft is never lost to a stray key and the item stays open.
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
               onBlur={(e) => {
-                saveContext(e.target.value);
-                setEditingContext(false);
+                const field = e.currentTarget;
+                void saveContext(field.value).then((landed) => {
+                  // Back to the rendered text, unless the save failed or the person came back to the field meanwhile.
+                  if (landed && document.activeElement !== field) setEditingContext(false);
+                });
               }}
               className="field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base"
             />

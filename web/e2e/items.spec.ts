@@ -838,3 +838,40 @@ test("a reader sees a step's context rendered and no Edit", async ({ page, heapP
   await expect(steps.getByRole("button", { name: "Edit step context" })).toHaveCount(0);
   await expect(steps.getByRole("textbox", { name: "Step context" })).toHaveCount(0);
 });
+
+test("a step's context edit that fails to save stays in the field, and Escape neither drops it nor closes the item", async ({
+  page,
+  heapPath,
+}) => {
+  const steps = await openTaskWithStep(page, heapPath, "Old text");
+  await steps.getByRole("button", { name: "Show context" }).click();
+  await steps.getByRole("button", { name: "Edit step context" }).click();
+  const field = steps.getByRole("textbox", { name: "Step context" });
+  await field.fill("New text");
+  await field.press("Escape");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("New text");
+  await expect(itemPane(page)).toBeVisible();
+
+  // The save is refused: the field stays, with the draft, and the reason shows.
+  await page.route(/\/steps\/\d+$/, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ type: "about:blank", title: "Internal error", status: 500, code: "internal" }),
+        })
+      : route.fallback(),
+  );
+  await field.press("Tab");
+  await expect(steps.getByRole("alert")).toBeVisible();
+  await expect(field).toHaveValue("New text");
+  await expect(steps.locator("p", { hasText: "Old text" })).toHaveCount(0);
+
+  // Once it can be saved, leaving the field again saves it and shows it rendered.
+  await page.unroute(/\/steps\/\d+$/);
+  await field.focus();
+  await field.press("Tab");
+  await expect(field).toHaveCount(0);
+  await expect(steps.getByText("New text")).toBeVisible();
+});

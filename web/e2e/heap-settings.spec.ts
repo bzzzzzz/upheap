@@ -199,6 +199,9 @@ test("General has no Context card, and Context is a tab between General and Tags
   await expect(page.getByRole("region", { name: "Agents" })).toBeVisible();
   const tabs = page.getByRole("navigation", { name: "Settings" });
   await expect(tabs.getByRole("link")).toHaveText(["General", "Context", "Tags", "Parameters", "Ranking"]);
+  // Every tab fits the width, on a phone too, down to a 375 px one: none hides past the edge of the bar.
+  if (test.info().project.name === "phone") await page.setViewportSize({ width: 375, height: 667 });
+  expect(await tabs.evaluate((nav) => nav.scrollWidth <= nav.clientWidth)).toBe(true);
   await goTo(page, "Context");
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/context$`));
   await expect(tabs.getByRole("link", { name: "Context" })).toHaveAttribute("aria-current", "page");
@@ -227,7 +230,7 @@ test("the context renders as Markdown, and never runs what it holds", async ({ p
   await expect(card).toContainText("x");
 });
 
-test("a reader and an archived heap show the context rendered, without Edit", async ({ page, heapPath }) => {
+test("an archived heap shows the context rendered, without Edit", async ({ page, heapPath }) => {
   await goTo(page, "Context");
   const card = page.getByRole("region", { name: "Context", exact: true });
   await card.getByRole("button", { name: "Edit" }).click();

@@ -15,13 +15,13 @@ import { cardClass, cardTitleClass, inputClass, nameFormClasses } from "./settin
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
+// On a phone the five tabs are a little tighter, so they fit a 375 px screen and none hides off its edge.
 const tabClass =
-  "-mb-px flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-medium text-ink-soft hover:text-ink data-[status=active]:border-accent data-[status=active]:text-ink";
+  "-mb-px flex min-h-11 shrink-0 items-center border-b-2 border-transparent px-3 text-sm font-medium max-sm:px-2 max-sm:text-[13px] text-ink-soft hover:text-ink data-[status=active]:border-accent data-[status=active]:text-ink";
 
 /**
  * The heap's settings (ux.md, Heap settings): General (name, link name, agents, archive), Context, Tags, Parameters and
- * Ranking, each a tab
- * with its own path under `/settings`. The tab's page renders below them.
+ * Ranking, each a tab with its own path under `/settings`. The tab's page renders below them.
  */
 export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
   const { data: heap } = useHeap(heapRef);
@@ -30,7 +30,7 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
       <h1 className="mt-6 mb-3 text-[22px] font-semibold tracking-[-0.015em] sm:mb-1">Settings</h1>
       {/* A phone's top bar already names the heap. */}
       {heap && <p className="mb-3 hidden text-sm text-muted sm:block">{heap.name}</p>}
-      <nav aria-label="Settings" className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
+      <nav aria-label="Settings" className="mb-6 flex gap-1 overflow-x-auto border-b border-line max-sm:gap-0">
         <Link
           to="/teams/$team/heaps/$heap/settings"
           params={heapRef}

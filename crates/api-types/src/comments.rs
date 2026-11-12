@@ -13,7 +13,7 @@ use crate::common::UserRefDto;
 #[serde(deny_unknown_fields)]
 #[schema(as = AddCommentRequest)]
 pub struct AddCommentDto {
-    /// Plain text, trimmed, 1 to 20,000 characters. Line breaks are kept.
+    /// Markdown, trimmed, 1 to 20,000 characters. Line breaks are kept.
     pub body: String,
 }
 
@@ -31,7 +31,7 @@ pub struct CommentDto {
     /// The comment's number within its item, given when it was added and never changed or reused. The comment is
     /// named by its item's key and this number, as `k3x9a.c3`.
     pub number: u32,
-    /// Plain text, with its line breaks.
+    /// Markdown, as written.
     pub body: String,
     /// Who wrote it. `null` only if they can't be found.
     pub created_by: Option<UserRefDto>,

@@ -43,7 +43,7 @@ impl std::fmt::Display for CommentNumber {
     }
 }
 
-/// What a comment says: plain text, trimmed, 1 to 20,000 characters, line breaks kept.
+/// What a comment says: Markdown, trimmed, 1 to 20,000 characters, line breaks kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentBody(String);
 
