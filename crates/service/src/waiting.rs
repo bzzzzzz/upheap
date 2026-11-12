@@ -10,7 +10,7 @@ use domain::step::StepNumber;
 use domain::team::{Role, Team};
 use domain::turn::{Goal, Turn, with_agent};
 use domain::user::User;
-use domain::{HeapId, ItemId, TurnId, UserId};
+use domain::{HeapId, ItemId, Timestamp, TurnId, UserId};
 
 use crate::items::{OpenRanking, QuestionView, TurnView, rank_open_items, turn_views};
 use crate::{Principal, ServiceError, Services};
@@ -83,6 +83,9 @@ struct Candidate {
     heap_index: usize,
     score: f64,
     position: u32,
+    /// When the item arrives, when it is a reminder to come: it has no rank, so it sorts after the ranked ones, by
+    /// this, soonest first.
+    to_come_until: Option<Timestamp>,
     item: Item,
     subject: CandidateSubject,
 }
@@ -122,7 +125,8 @@ impl Services {
     /// The open questions on open items, and the items whose agent turn is stuck, in the active heaps of the caller's
     /// teams, ordered by the score of their item in its own heap, highest first (every heap weighs the same for now),
     /// then by heap (by name), the item's position in its heap, a stuck row before the item's questions, and the
-    /// question's number. Scores are those the heap's list ranks by right now.
+    /// question's number. Scores are those the heap's list ranks by right now. A question on a reminder to come has no
+    /// score: its row comes after the ranked ones, by the reminder's date, soonest first.
     ///
     /// Ranking costs one pass over a heap's open items, so only heaps with something waiting are ranked. Any member
     /// may ask; nobody sees a heap outside their teams.
@@ -175,13 +179,31 @@ impl Services {
             if mine.is_empty() && mine_stuck.is_empty() {
                 continue;
             }
-            let OpenRanking { items, ranking, .. } = rank_open_items(&self.db, heap, as_of).await?;
+            let OpenRanking {
+                items,
+                ranking,
+                to_come,
+                ..
+            } = rank_open_items(&self.db, heap, as_of, as_of).await?;
             let ranks: HashMap<ItemId, (f64, u32)> = ranking
                 .iter()
                 .map(|ranked| (ranked.item_id, (ranked.score, ranked.position)))
                 .collect();
             let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
+            let to_come_by_id: HashMap<ItemId, &Item> = to_come.iter().map(|item| (item.id, item)).collect();
             for (_, question) in mine {
+                // A reminder to come has no rank, but its question waits all the same: it comes after the ranked ones.
+                if let Some(item) = to_come_by_id.get(&question.item_id) {
+                    candidates.push(Candidate {
+                        heap_index,
+                        score: 0.0,
+                        position: 0,
+                        to_come_until: item.arrives_at,
+                        item: (*item).clone(),
+                        subject: CandidateSubject::Question(question),
+                    });
+                    continue;
+                }
                 // An item closed since the questions were read is gone from the ranking, and doesn't wait.
                 let (Some(item), Some(&(score, position))) =
                     (by_id.get(&question.item_id), ranks.get(&question.item_id))
@@ -192,6 +214,7 @@ impl Services {
                     heap_index,
                     score,
                     position,
+                    to_come_until: None,
                     item: (*item).clone(),
                     subject: CandidateSubject::Question(question),
                 });
@@ -205,6 +228,7 @@ impl Services {
                     heap_index,
                     score,
                     position,
+                    to_come_until: None,
                     item: (*item).clone(),
                     subject: CandidateSubject::Stuck(turn),
                 });
@@ -212,8 +236,11 @@ impl Services {
         }
 
         candidates.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
+            a.to_come_until
+                .is_some()
+                .cmp(&b.to_come_until.is_some())
+                .then_with(|| b.score.total_cmp(&a.score))
+                .then_with(|| a.to_come_until.cmp(&b.to_come_until))
                 .then_with(|| a.heap_index.cmp(&b.heap_index))
                 .then_with(|| a.position.cmp(&b.position))
                 .then_with(|| a.order_in_item().cmp(&b.order_in_item()))
