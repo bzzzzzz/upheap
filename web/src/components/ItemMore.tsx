@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -20,7 +20,6 @@ import { BlockerSelect } from "./BlockerSelect";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { compactButtonClass } from "./buttons";
 import { shortLink, useCopyText } from "./copyLink";
-import { SendToAgent } from "./ItemTurn";
 import { changeLabel, isClosed, NEXT_STATES, STAGE_LABELS } from "./labels";
 import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
 import { PopoverSheet } from "./PopoverSheet";
@@ -68,7 +67,6 @@ function actionsOf(item: Item) {
     others,
     wontDo: canChange && !isClosed(state),
     makeTask: allowed.includes("make_task") && !arrivedReminder,
-    goal: allowed.includes("send_to_agent") ? item.next_goal : null,
     changeBlocker: item.state === "blocked" && canChange,
     stages: item.stage_choices,
   };
@@ -77,7 +75,7 @@ function actionsOf(item: Item) {
 /**
  * The item's main state button and its ⋯ (More), beside the title on a wide screen and a tablet and in the bar at the
  * bottom of a phone's sheet (ux.md, The item §6). ⋯ is a menu on a wide screen and a tablet, a sheet on a phone; what it
- * opens, the Send to an agent form and Change blocker, opens under it as a popover, or as a sheet on a phone. Picking
+ * opens, Change blocker, opens under it as a popover, or as a sheet on a phone. Picking
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
  * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. A state change
  * goes through `onState`, which may ask whether to take the item back from its agent first.
@@ -102,16 +100,6 @@ export function ItemActions({
   const setToast = useToast();
   const { copy } = useCopyText();
   const [confirming, setConfirming] = useState(false);
-  const [sending, setSending] = useState(false);
-  // Set by a send, until the item shows the agent's chip, which then takes the focus. The send form goes away with the
-  // send (the item can no longer be sent), so this is kept here.
-  const focusChip = useRef(false);
-  const hasTurn = item.turn != null;
-  useEffect(() => {
-    if (!focusChip.current || !hasTurn || sending) return;
-    focusChip.current = false;
-    focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]"));
-  }, [hasTurn, sending, focusAfterRender]);
   const [changing, setChanging] = useState(false);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const actions = actionsOf(item);
@@ -139,7 +127,6 @@ export function ItemActions({
       asker.current = "more";
       setConfirming(true);
     },
-    send: () => setSending(true),
     changeBlocker: () => setChanging(true),
   };
 
@@ -197,11 +184,6 @@ export function ItemActions({
           {actions.makeTask && (
             <MenuEntry id="make_task" onAction={openers.makeTask}>
               Make it a task…
-            </MenuEntry>
-          )}
-          {actions.goal && (
-            <MenuEntry id="send" onAction={openers.send}>
-              Send to an agent…
             </MenuEntry>
           )}
           {actions.changeBlocker && (
@@ -262,21 +244,6 @@ export function ItemActions({
           closeConfirm();
         }}
       />
-      {actions.goal && (
-        <SendToAgent
-          heapRef={heapRef}
-          item={item}
-          goal={actions.goal}
-          isOpen={sending}
-          onClose={(sent) => {
-            setSending(false);
-            // A send moves focus to the agent chip instead.
-            if (sent) focusChip.current = true;
-            else focusAfterRender(() => moreRef.current);
-          }}
-          triggerRef={moreRef}
-        />
-      )}
       {actions.changeBlocker && (
         <PopoverSheet
           title="Change blocker"
@@ -319,7 +286,7 @@ function MoreSheet({
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   onState: (state: ItemState) => void;
   onWontDo: () => void;
-  openers: { makeTask: () => void; send: () => void; changeBlocker: () => void };
+  openers: { makeTask: () => void; changeBlocker: () => void };
   onCopyLink: () => void;
   onStage: (keys: Selection) => void;
 }) {
@@ -354,11 +321,6 @@ function MoreSheet({
         {actions.makeTask && (
           <button type="button" onClick={then(openers.makeTask)} className={sheetRowClass}>
             Make it a task…
-          </button>
-        )}
-        {actions.goal && (
-          <button type="button" onClick={then(openers.send)} className={sheetRowClass}>
-            Send to an agent…
           </button>
         )}
         {actions.changeBlocker && (

@@ -1,3 +1,4 @@
+import { Bot } from "lucide-react";
 import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
@@ -164,12 +165,81 @@ export function AgentChip({ heapRef, item, onTakenBack }: { heapRef: HeapRef; it
 }
 
 /**
- * The form that sends the item to an agent, from the item's ⋯ (ux.md, The item §15): a popover under the ⋯ on a wide
- * screen and a tablet, a sheet on a phone. Send acts at once, closes the form, gives focus to the agent chip, and
- * shows a toast with Undo, which takes the turn back. The server decides when there is a goal to offer
- * (`next_goal`) and when sending is allowed; the caller shows the entry only then.
+ * Sends an item to an agent and says so (ux.md, The item §15): a toast naming where the turn is going, with Undo, which
+ * takes the turn back (recorded in the item's history, with no second toast), or an error toast. The one place that
+ * builds that toast, for the item's form and the list row's quick send. `sendWithUndo` resolves with the item the
+ * server answered, or `undefined` when the send failed. The form says a failure in itself instead (`toastErrors` off),
+ * from the returned `error`.
  */
-export function SendToAgent({
+export function useSendWithUndo(heapRef: HeapRef, toastErrors = true) {
+  const send = useSendToAgent(heapRef);
+  const takeBack = useTakeBack(heapRef);
+  const setToast = useToast();
+  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
+  const sendWithUndo = (item: Item, reach: Reach, line: string | null) =>
+    send.mutateAsync({ item, body: { reach, line } }).then(
+      (saved) => {
+        setToast({
+          message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
+          undo: () => void takeBack.mutateAsync(saved).then(undefined, failed),
+        });
+        return saved;
+      },
+      (error: Error) => {
+        if (toastErrors) failed(error);
+        return undefined;
+      },
+    );
+  return { sendWithUndo, pending: send.isPending, error: send.error };
+}
+
+/**
+ * The button in the item's status line before an agent has the item (ux.md, The item §15), which opens the form that
+ * sends it: how far, and a line for the agent. A popover under the button on a wide screen and a tablet, a sheet on a
+ * phone. The server decides when sending is allowed (`send_to_agent`) and when there is a goal to offer (`next_goal`);
+ * the button shows only then. `onSent` runs once a send has closed the form, for the caller that moves focus on to the
+ * agent chip, which replaces this button. Cancelling returns focus to the button.
+ */
+export function SendToAgentButton({ heapRef, item, onSent }: { heapRef: HeapRef; item: Item; onSent: () => void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const focusAfterRender = useFocusAfterRender();
+  const [open, setOpen] = useState(false);
+  const goal = item.allowed_actions.includes("send_to_agent") ? item.next_goal : null;
+  if (item.turn || !goal) return null;
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        className={`${chipClass} gap-1`}
+      >
+        <Bot aria-hidden="true" className="size-3.5" />
+        Send to an agent
+      </button>
+      <SendToAgent
+        heapRef={heapRef}
+        item={item}
+        goal={goal}
+        isOpen={open}
+        onClose={(sent) => {
+          setOpen(false);
+          if (sent) onSent();
+          else focusAfterRender(() => button.current);
+        }}
+        triggerRef={button}
+      />
+    </>
+  );
+}
+
+/**
+ * The form that sends the item to an agent (ux.md, The item §15). Send acts at once, closes the form and shows the
+ * toast with Undo.
+ */
+function SendToAgent({
   heapRef,
   item,
   goal,
@@ -185,30 +255,19 @@ export function SendToAgent({
   onClose: (sent: boolean) => void;
   triggerRef: RefObject<HTMLElement | null>;
 }) {
-  const send = useSendToAgent(heapRef);
-  const takeBack = useTakeBack(heapRef);
-  const setToast = useToast();
-  const turn = item.turn;
+  const { sendWithUndo, pending, error } = useSendWithUndo(heapRef, false);
   // Someone else's send that arrives while the form is open closes it: the chip shows the agent has the item.
-  const formOpen = isOpen && !turn;
-  // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't take it back.
+  const formOpen = isOpen && !item.turn;
+  // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't cancel it.
   const sent = useRef(false);
 
-  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
   const sendNow = (reach: Reach, line: string) => {
     sent.current = false;
-    return send.mutateAsync({ item, body: { reach, line: line.trim() === "" ? null : line } }).then(
-      (saved) => {
-        sent.current = true;
-        onClose(true);
-        setToast({
-          message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
-          // Undo is a take back, recorded in the item's history, with no second toast.
-          undo: () => void takeBack.mutateAsync(saved).then(undefined, failed),
-        });
-      },
-      () => undefined,
-    );
+    return sendWithUndo(item, reach, line.trim() === "" ? null : line).then((saved) => {
+      if (!saved) return;
+      sent.current = true;
+      onClose(true);
+    });
   };
 
   return (
@@ -219,18 +278,18 @@ export function SendToAgent({
       onClose={() => {
         if (!sent.current) onClose(false);
       }}
-      placement="bottom end"
+      placement="bottom start"
       size="narrow"
     >
       <SendForm
         goal={goal}
-        pending={send.isPending}
+        pending={pending}
         onSend={(reach, line) => void sendNow(reach, line)}
         onCancel={() => onClose(false)}
       />
-      {send.error && (
+      {error && (
         <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(send.error)}
+          {itemProblem(error)}
         </p>
       )}
     </PopoverSheet>

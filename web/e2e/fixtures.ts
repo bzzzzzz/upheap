@@ -214,8 +214,8 @@ export async function drag(page: Page, target: Locator, dx: number, dy: number, 
 }
 
 /**
- * Marks an open item done from its list row: a swipe right on a touch screen, the done button beside play with a
- * mouse (design/ux.md, The list).
+ * Marks an open item done from its list row: a swipe right on a touch screen, the row's Done button with a mouse
+ * (design/ux.md, The list).
  */
 export async function markDoneFromList(page: Page, title: string, from: Locator = row(page, title)) {
   const touch = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
