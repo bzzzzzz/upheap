@@ -444,8 +444,8 @@ pub struct Item {
     pub impact: Option<Size>,
     pub due: Option<Due>,
     /// The first millisecond of the reminder's date in the time zone of the request that set it; the item joins the
-    /// list from then. `None` for an item that was never a reminder. Kept when the reminder becomes a task, so its
-    /// age doesn't go back to its creation.
+    /// list from then. `None` for an item that was never a reminder. When the reminder becomes a task, the time it
+    /// joined the list: its date, or the change if that came first, so its age counts from then.
     pub arrives_at: Option<Timestamp>,
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. Unset parameters are left out, and rank as their

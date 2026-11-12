@@ -243,6 +243,9 @@ impl Services {
                 .then_with(|| a.to_come_until.cmp(&b.to_come_until))
                 .then_with(|| a.heap_index.cmp(&b.heap_index))
                 .then_with(|| a.position.cmp(&b.position))
+                // Reminders to come share a date and a position; keep each one's rows together, in the list's order.
+                .then_with(|| a.item.created_at.cmp(&b.item.created_at))
+                .then_with(|| a.item.id.cmp(&b.item.id))
                 .then_with(|| a.order_in_item().cmp(&b.order_in_item()))
         });
         let count = u32::try_from(candidates.len()).unwrap_or(u32::MAX);

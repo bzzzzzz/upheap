@@ -291,7 +291,9 @@ export interface paths {
          * What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
          *     is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
          *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now.
+         *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
+         *     most 500 rows come back; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_waiting"];
         put?: never;
@@ -2990,6 +2992,7 @@ export interface components {
             /**
              * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
              *     its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
+             *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
              */
             rows: components["schemas"]["WaitingRow"][];
         };

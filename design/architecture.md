@@ -109,8 +109,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   same inputs and policy the heap's list ranks by (`RankedItem.score`, blocker inheritance included), and the users
   who asked. Rows are ordered by the item's score in its own heap, highest first, then heap name, the item's
   position and the question number; heap weights, when they come, multiply the score. A question on a reminder to
-  come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most 500 rows,
-  with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
+  come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most
+  500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
@@ -311,9 +311,10 @@ a fixed time.
 4. **Reminders to come** are not ranked: `rank_open_items` splits them off (`Item::is_to_come`) at the server's
    clock, not at the time a list ranks at, so a reminder whose date comes while a list is open joins it on the next
    fetch. No list or queue sees them, and every open count leaves them out (`count_items_by_heap` takes the time to
-   compare with). Waiting for me keeps a question on one, after the ranked rows and by the reminder's date. They are not hidden from search: the list's `reminders` setting adds them to the response as a group of
-   their own, soonest first and filtered like the rest, and a client that searches asks for it. The client still
-   searches the text itself.
+   compare with). Waiting for me keeps a question on one, after the ranked rows and by the reminder's date. They are
+   not hidden from search: the list's `reminders` setting adds them to the response as a group of their own,
+   soonest first and filtered like the rest, and a client that searches asks for it. The client still searches the
+   text itself.
 5. The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text, which
    is a momentary narrowing. Saved views store the same settings under the query parameters' names, so a client
    turns one into a list query field by field.

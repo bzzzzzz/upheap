@@ -1070,9 +1070,9 @@ pub(crate) struct OpenRanking {
 }
 
 /// Ranks every open item of the heap that isn't a reminder to come at `now`, at `as_of` and under its stored
-/// weights, as its list does, and returns the items and parameters with the ranking, and the reminders left out. Every ranked item is
-/// ranked, because a blocker inherits from what it blocks even when that is left out of what a caller shows. The one
-/// place that says how a heap's current order is made, so no list drifts from another.
+/// weights, as its list does, and returns the items and parameters with the ranking, and the reminders left out.
+/// Every ranked item is ranked, because a blocker inherits from what it blocks even when that is left out of what a
+/// caller shows. The one place that says how a heap's current order is made, so no list drifts from another.
 pub(crate) async fn rank_open_items(
     db: &impl ConnectionTrait,
     heap: &Heap,

@@ -51,8 +51,8 @@ const CLOSE_SPEED = 600;
  * the list on a tablet, with the list still live beside it, and a sheet from the bottom on a phone. Each change saves
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
- * pane (ux.md, The item §7); `listed` is whether the item is a row on screen, a reminder to come included, which has no
- * `entry`.
+ * pane (ux.md, The item §7); `listed` is whether the item is a row on screen, a reminder to come included, which
+ * has no `entry`.
  */
 export function ItemPane({
   heapRef,
