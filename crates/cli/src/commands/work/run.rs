@@ -1,4 +1,4 @@
-//! `upheap work run --tool <tool> [--heap <heap>]... [--once]`: the agent loop.
+//! `upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>]`: the agent loop.
 //!
 //! It claims the next item of the queue, starts the agent tool on it with a brief, keeps the claim alive, records
 //! how the run ended and what it cost, and waits when there is nothing to do. The server decides how a run ended
@@ -6,14 +6,18 @@
 //! [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass their own.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use api_types::common::ItemDto;
 use api_types::heaps::HeapDto;
 use api_types::work::{ClaimDto, ClaimRequestDto, FinishRequestDto, RunDto, RunEndDto};
 use clap::Args;
+use futures_util::future::join_all;
 use reqwest::Url;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::watch;
 use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
@@ -40,13 +44,16 @@ pub struct RunArgs {
     pub tool: Tool,
     #[command(flatten)]
     pub heaps: HeapsArgs,
-    /// Do one run, or nothing when there is nothing to do, and exit
+    /// Do one run, or nothing when there is nothing to do, and exit. With --workers, one run for each worker
     #[arg(long)]
     pub once: bool,
     /// Start each run in a new directory under this one, made with the tool's instructions and settings for working
     /// there. Left out, every run starts in this directory, as it is
     #[arg(long, value_name = "DIR")]
     pub root: Option<PathBuf>,
+    /// How many runs to keep going at once, each on its own item. Above 1, needs --root
+    #[arg(long, value_name = "N", default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=MAX_WORKERS as i64))]
+    pub workers: u8,
     /// A file with your own instructions for every run: how you want work done on this machine. Each run is told
     /// them after Upheap's own rules and before the heap's context. Read once, when the loop starts
     #[arg(long, value_name = "FILE")]
@@ -61,11 +68,18 @@ pub struct RunArgs {
 /// prints the key of each item worked, `--json` each run as the server records its end. Exit 0 when stopped or
 /// `--once` is done, and 5 when the server can't be reached with `--once`. Refused inside a run.
 ///
+/// With `--workers N`, up to N runs go at once, each on its own item, and a line is printed as each ends. One Ctrl-C
+/// reaches them all: no run starts, the live ones end, and a second Ctrl-C stops them now. With `--once`, each worker
+/// does one pass, so up to N runs. Above 1 it needs `--root`, since runs in one directory would trample each other.
+///
 /// With `--root`, each run gets a directory of its own under it, named by the item's key and the run's ID, which the
 /// tool sets up and starts in. Nothing removes them: what a run left there is the person's to look at and clear.
 pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     if app.env.run.is_some() {
         return Err(UsageError::RunInRun.into());
+    }
+    if args.workers > 1 && args.root.is_none() {
+        return Err(UsageError::WorkersWithoutRoot { workers: args.workers }.into());
     }
     let server = app.server(&args.shared)?;
     let client = app.client(server.clone())?;
@@ -77,8 +91,9 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         Some(path) => Some(read_instructions(path).await?),
         None => None,
     };
-    if out.mode() == Mode::Human {
-        out.line(&header(&heaps, args.tool, args.once))?;
+    let mode = out.mode();
+    if mode == Mode::Human {
+        out.line(&header(&heaps, args.tool, args.once, args.workers))?;
     }
     let WorkDeps {
         tools,
@@ -87,32 +102,47 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         heartbeat_every,
         finish_retry,
     } = work;
-    let mut worker = RunLoop {
+    let (stop, _) = watch::channel(Stop::No);
+    let shared = Shared {
         app,
         server,
         tool: args.tool,
         heaps: heaps.into_iter().map(|heap| heap.handle).collect(),
         once: args.once,
+        workers: args.workers,
         root,
         instructions,
         tools,
-        interrupts: interrupts(),
         idle_wait,
         heartbeat_every,
         finish_retry,
-        stopping: false,
-        idle_noted: None,
-        unreachable_noted: false,
+        mode,
+        out: Mutex::new(out),
+        noted: Mutex::new(Noted::default()),
+        live: AtomicUsize::new(0),
+        first_error: Mutex::new(None),
+        stop,
     };
-    worker.work_the_queue(out).await
+    shared.work_the_queue(interrupts()).await
 }
 
-/// `Working in Work and House with claude. Ctrl-C stops after the current run.`
-fn header(heaps: &[NamedHeap], tool: Tool, once: bool) -> String {
+/// The most runs `--workers` allows at once.
+const MAX_WORKERS: u8 = 8;
+
+/// `Working in Work and House with claude, 3 runs at a time. Ctrl-C stops after the current runs.`
+fn header(heaps: &[NamedHeap], tool: Tool, once: bool, workers: u8) -> String {
     let names: Vec<&str> = heaps.iter().map(|heap| heap.name.as_str()).collect();
-    let mut text = format!("Working in {} with {tool}.", join_names(&names));
+    let mut text = format!("Working in {} with {tool}", join_names(&names));
+    if workers > 1 {
+        text.push_str(&format!(", {workers} runs at a time"));
+    }
+    text.push('.');
     if !once {
-        text.push_str(" Ctrl-C stops after the current run.");
+        text.push_str(if workers > 1 {
+            " Ctrl-C stops after the current runs."
+        } else {
+            " Ctrl-C stops after the current run."
+        });
     }
     text
 }
@@ -133,14 +163,12 @@ fn directory_name(run: &RunDto) -> String {
     format!("{key}-{}", run.id)
 }
 
-/// What the loop does next.
+/// What a worker does next.
 enum Next {
     /// Claim again at once.
     Again,
     /// Wait before claiming again.
     Wait,
-    /// End the loop.
-    Stop,
 }
 
 /// What the loop does when a claim, or the reads that follow it, fail.
@@ -148,7 +176,7 @@ enum Next {
 enum AfterFailure {
     /// Say the server can't be reached, wait, and ask again.
     TryAgain,
-    /// End the loop with the error.
+    /// End the worker with the error.
     Stop,
 }
 
@@ -202,77 +230,197 @@ async fn read_instructions(path: PathBuf) -> Result<String, CliError> {
     }
 }
 
-/// The loop's context: what it works on, how, and what it has said so far.
-struct RunLoop<'a> {
+/// How far the loop has been told to stop. It only moves forward.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Stop {
+    /// Keep working.
+    No,
+    /// Claim nothing new; let the live runs end and be recorded.
+    AfterRuns,
+    /// Stop every live tool now.
+    Now,
+}
+
+/// What has been said while the loop stays idle or out of reach, shared by every worker so a stretch is said once.
+#[derive(Default)]
+struct Noted {
+    /// How many items waited for the person when the idle line was last printed, while the loop stays idle.
+    idle: Option<u32>,
+    /// Whether the server being out of reach has been said, while it stays so.
+    unreachable: bool,
+}
+
+/// The loop's context: what it works on, how, and what it has said so far. One, borrowed by every worker.
+///
+/// The workers and the interrupt listener run on the task that runs the command, joined together, not as spawned
+/// tasks: a spawned task must be `'static`, and they all borrow the [`App`]. The binary runs on one thread anyway, so
+/// nothing is lost, and nothing here is held across an `.await` but the stop signal.
+struct Shared<'a> {
     app: &'a App,
     server: Url,
     tool: Tool,
     /// The heaps the queue is over, each as `team/heap`.
     heaps: Vec<String>,
     once: bool,
+    /// How many workers there are.
+    workers: u8,
     /// Where each run's own directory is made; `None` when runs start in this directory.
     root: Option<PathBuf>,
     /// The runner's own instructions, for every run's brief.
     instructions: Option<String>,
     tools: Box<dyn AgentTools>,
-    interrupts: UnboundedReceiver<Interrupt>,
     idle_wait: Duration,
     heartbeat_every: Duration,
     finish_retry: Duration,
-    /// The person pressed Ctrl-C once: the loop ends after the run it is in.
-    stopping: bool,
-    /// How many items waited for the person when the idle line was last printed, while the loop stays idle.
-    idle_noted: Option<u32>,
-    /// Whether the server being out of reach has been said, while it stays so.
-    unreachable_noted: bool,
+    mode: Mode,
+    /// Locked only to write, never across an `.await`, so lines from two workers never tear or interleave.
+    out: Mutex<&'a mut Output>,
+    noted: Mutex<Noted>,
+    /// How many runs are live: claimed and not yet recorded and printed.
+    live: AtomicUsize,
+    /// The error that ended the first worker that failed; the command fails with it once every worker has ended.
+    first_error: Mutex<Option<CliError>>,
+    stop: watch::Sender<Stop>,
 }
 
-impl RunLoop<'_> {
-    async fn work_the_queue(&mut self, out: &mut Output) -> Result<(), CliError> {
-        loop {
-            if self.is_interrupted() {
-                return Ok(());
+impl Shared<'_> {
+    /// Runs every worker, and the listener for interrupts until they have all ended.
+    async fn work_the_queue(&self, interrupts: UnboundedReceiver<Interrupt>) -> Result<(), CliError> {
+        let workers = join_all((0..self.workers).map(|_| self.work()));
+        // The listener never ends by itself, so the workers ending is what ends this.
+        tokio::select! {
+            _ = workers => {}
+            () = self.listen(interrupts) => {}
+        }
+        match lock(&self.first_error).take() {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
+    }
+
+    /// Turns the person's interrupts into the stop signal. Once nobody can interrupt any more, waits for ever: the
+    /// workers carry on.
+    async fn listen(&self, mut interrupts: UnboundedReceiver<Interrupt>) {
+        while let Some(interrupt) = interrupts.recv().await {
+            match interrupt {
+                Interrupt::CtrlC if *self.stop.borrow() == Stop::No => {
+                    self.raise(Stop::AfterRuns);
+                    if self.live.load(Ordering::SeqCst) > 0 {
+                        let text = if self.workers > 1 {
+                            "Stopping after the current runs. Ctrl-C again stops them now."
+                        } else {
+                            "Stopping after this run. Ctrl-C again stops it now."
+                        };
+                        self.note(text);
+                    }
+                }
+                Interrupt::CtrlC | Interrupt::Now => self.raise(Stop::Now),
             }
-            let next = match self.work_a_pass(out).await {
+        }
+        std::future::pending::<()>().await;
+    }
+
+    /// Moves the stop signal forward to `to`, never back.
+    fn raise(&self, to: Stop) {
+        self.stop.send_if_modified(|stop| {
+            let moved = to > *stop;
+            if moved {
+                *stop = to;
+            }
+            moved
+        });
+    }
+
+    /// Whether the loop was told to stop in any way: nothing new is claimed.
+    fn is_stopping(&self) -> bool {
+        *self.stop.borrow() != Stop::No
+    }
+
+    /// Waits until the stop signal is at least `level`.
+    async fn stop_reaches(&self, level: Stop) {
+        let mut stop = self.stop.subscribe();
+        // The sender lives as long as `self`, so this can't fail.
+        let _ = stop.wait_for(|stop| *stop >= level).await;
+    }
+
+    /// Writes with the output, for as long as `write` takes and no longer.
+    fn write<T>(&self, write: impl FnOnce(&mut Output) -> T) -> T {
+        write(&mut lock(&self.out))
+    }
+
+    /// A note on stderr. Nowhere left to say it if stderr is gone.
+    fn note(&self, text: &str) {
+        let _ = self.write(|out| out.note(text));
+    }
+
+    /// One worker: claims, works the run, and asks again, until it is told to stop, or fails.
+    async fn work(&self) {
+        loop {
+            if self.is_stopping() {
+                return;
+            }
+            let next = match self.work_a_pass().await {
                 Ok(next) => next,
                 Err(err) if after_failure(&err, self.once) == AfterFailure::TryAgain => {
-                    self.note_unreachable(out);
+                    self.note_unreachable();
                     Next::Wait
                 }
-                Err(err) => return Err(err),
+                Err(err) => return self.end_with(err),
             };
             match next {
-                Next::Stop => return Ok(()),
-                _ if self.once => return Ok(()),
+                _ if self.once => return,
                 Next::Again => {}
                 Next::Wait => {
                     if !self.wait_to_ask_again().await {
-                        return Ok(());
+                        return;
                     }
                 }
             }
         }
     }
 
+    /// Ends the worker with `err`. The others claim nothing new and let their live runs end. The first error is the
+    /// one the command fails with; the rest are logged.
+    fn end_with(&self, err: CliError) {
+        let mut first = lock(&self.first_error);
+        if first.is_some() {
+            tracing::warn!(error = %err, "another worker ended with an error");
+            return;
+        }
+        self.raise(Stop::AfterRuns);
+        if self.live.load(Ordering::SeqCst) > 0 {
+            self.note(&format!("Stopping after the current runs: {err}"));
+        }
+        *first = Some(err);
+    }
+
     /// Claims once, and works the run that came of it.
-    async fn work_a_pass(&mut self, out: &mut Output) -> Result<Next, CliError> {
+    async fn work_a_pass(&self) -> Result<Next, CliError> {
         let claimed = self.claim().await?;
-        self.unreachable_noted = false;
+        lock(&self.noted).unreachable = false;
         let Some(run) = claimed.value.run else {
-            self.note_idle(out, claimed.value.waiting_count)?;
+            self.note_idle(claimed.value.waiting_count)?;
             return Ok(Next::Wait);
         };
-        self.idle_noted = None;
+        lock(&self.noted).idle = None;
+        // A run claimed after the stop signal is still worked to its end: abandoning it would leave it to lapse.
+        self.live.fetch_add(1, Ordering::SeqCst);
+        let result = self.work_claimed(run).await;
+        self.live.fetch_sub(1, Ordering::SeqCst);
+        result
+    }
+
+    async fn work_claimed(&self, run: RunDto) -> Result<Next, CliError> {
         let Some(goal) = KnownGoal::from_dto(run.item.goal) else {
             let failure = "This version of upheap doesn't know this turn's goal. Update upheap.";
             let request = FinishRequestDto {
                 cost_usd: None,
                 failure: Some(failure.to_owned()),
             };
-            self.finish_and_print(out, &run, &request).await?;
+            self.finish_and_print(&run, &request).await?;
             return Ok(Next::Wait);
         };
-        self.work_one(out, run, goal).await
+        self.work_one(run, goal).await
     }
 
     async fn claim(&self) -> Result<Fetched<ClaimDto>, CliError> {
@@ -288,8 +436,8 @@ impl RunLoop<'_> {
     }
 
     /// Runs the tool on the claimed `run`, keeps the claim alive meanwhile, and records how it ended.
-    async fn work_one(&mut self, out: &mut Output, run: RunDto, goal: KnownGoal) -> Result<Next, CliError> {
-        self.note_started(out, &run);
+    async fn work_one(&self, run: RunDto, goal: KnownGoal) -> Result<Next, CliError> {
+        self.note_started(&run);
         let handle = HeapHandle {
             team: run.item.heap.team_slug.clone(),
             heap: run.item.heap.slug.clone(),
@@ -301,9 +449,9 @@ impl RunLoop<'_> {
                     cost_usd: None,
                     failure: Some(format!("Couldn't read the item before starting: {err}")),
                 };
-                self.finish_and_print(out, &run, &request).await?;
+                self.finish_and_print(&run, &request).await?;
                 // An item that is gone, such as one moved to another heap since the claim, is that item's trouble:
-                // the next may be fine. Anything else would fail every run, so it ends the loop.
+                // the next may be fine. Anything else would fail every run, so it ends the worker.
                 return if is_about_the_item(&err) {
                     Ok(Next::Again)
                 } else {
@@ -334,7 +482,7 @@ impl RunLoop<'_> {
             dir: self.root.as_ref().map(|root| root.join(directory_name(&run))),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
-        let driven = self.drive_tool(out, &run, start).await;
+        let driven = self.drive_tool(&run, start).await;
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
                 tracing::debug!(run_id = %run.id, last_message = ?report.last_message, "the tool ended");
@@ -360,12 +508,12 @@ impl RunLoop<'_> {
                 (request, None)
             }
         };
-        self.finish_and_print(out, &run, &request).await?;
-        // Every run would fail the same way, so the loop does not go on.
+        self.finish_and_print(&run, &request).await?;
+        // Every run would fail the same way, so the worker does not go on.
         if let Some(err) = not_started {
             return Err(err.into());
         }
-        Ok(if self.stopping { Next::Stop } else { Next::Again })
+        Ok(Next::Again)
     }
 
     /// The heap, for its context, and the item, as they are now.
@@ -390,13 +538,12 @@ impl RunLoop<'_> {
     }
 
     /// Waits for the tool, and while it runs says every `heartbeat_every` that the run is alive. Gives up the tool
-    /// (which stops it) when the server says the run is over, or on the person's second Ctrl-C or a request to
-    /// stop now. The first Ctrl-C only notes that the loop will end after this run.
-    async fn drive_tool(&mut self, out: &mut Output, run: &RunDto, start: ToolStart) -> Driven {
+    /// (which stops it) when the server says the run is over, or when the stop signal says to stop now: the person's
+    /// second Ctrl-C or a request to stop now. The first Ctrl-C only keeps the loop from claiming again.
+    async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
         let mut tool = self.tools.run(start);
         let mut heartbeat = tokio::time::interval_at(Instant::now() + self.heartbeat_every, self.heartbeat_every);
         heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        let mut listening = true;
         let mut alive = true;
         loop {
             tokio::select! {
@@ -411,18 +558,7 @@ impl RunLoop<'_> {
                         alive = false;
                     }
                 }
-                interrupt = self.interrupts.recv(), if listening => match interrupt {
-                    None => listening = false,
-                    Some(Interrupt::CtrlC) if !self.stopping => {
-                        self.stopping = true;
-                        // Nowhere left to say it if stderr is gone.
-                        let _ = out.note("Stopping after this run. Ctrl-C again stops it now.");
-                    }
-                    Some(_) => {
-                        self.stopping = true;
-                        return Driven::Stopped;
-                    }
-                },
+                () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
             }
         }
     }
@@ -456,22 +592,16 @@ impl RunLoop<'_> {
     }
 
     /// Records the end of `run` and prints its line. When the end can't be recorded: with `--once` and the server out
-    /// of reach, the error ends the command; otherwise a warning says so, and the run lapses on the server.
-    async fn finish_and_print(
-        &self,
-        out: &mut Output,
-        run: &RunDto,
-        request: &FinishRequestDto,
-    ) -> Result<(), CliError> {
+    /// of reach, the error ends the worker; otherwise a warning says so, and the run lapses on the server.
+    async fn finish_and_print(&self, run: &RunDto, request: &FinishRequestDto) -> Result<(), CliError> {
         match self.finish_with_retry(run, request).await {
             Ok(finished) => {
                 tracing::info!(run_id = %run.id, end = ?finished.value.end, "run ended");
-                self.print_run(out, &finished).map_err(CliError::from)
+                self.print_run(&finished).map_err(CliError::from)
             }
             Err(err) if self.once && is_unreachable(&err) => Err(err),
             Err(err) => {
-                // Nowhere left to say it if stderr is gone.
-                let _ = out.note(&format!("warning: couldn't record the end of run {}: {err}", run.id));
+                self.note(&format!("warning: couldn't record the end of run {}: {err}", run.id));
                 Ok(())
             }
         }
@@ -502,9 +632,10 @@ impl RunLoop<'_> {
     }
 
     /// What a run that ended prints on stdout: its line, the key with `--quiet`, or the server's body with `--json`.
-    fn print_run(&self, out: &mut Output, finished: &Fetched<RunDto>) -> std::io::Result<()> {
+    /// The line and the failure under it are written together, under one lock.
+    fn print_run(&self, finished: &Fetched<RunDto>) -> std::io::Result<()> {
         let run = &finished.value;
-        match out.mode() {
+        self.write(|out| match self.mode {
             Mode::Json => out.json(&finished.body),
             Mode::Quiet => out.line(&run.item.key),
             Mode::Human => {
@@ -536,12 +667,12 @@ impl RunLoop<'_> {
                 }
                 Ok(())
             }
-        }
+        })
     }
 
     /// `14:02  k3x9a  Rotate the certs  note → with context  started`, on stderr.
-    fn note_started(&self, out: &mut Output, run: &RunDto) {
-        if out.mode() != Mode::Human {
+    fn note_started(&self, run: &RunDto) {
+        if self.mode != Mode::Human {
             return;
         }
         let line = format!(
@@ -552,17 +683,20 @@ impl RunLoop<'_> {
             journey(&run.item)
         );
         // Nowhere left to say it if stderr is gone.
-        let _ = out.note_toned(&line, Tone::Dim);
+        let _ = self.write(|out| out.note_toned(&line, Tone::Dim));
     }
 
-    /// `14:06  Nothing to do. 1 item waits for you. Asking again in a minute.`, once for each stretch of idling: again
-    /// only when the number of items that wait for the person changes.
-    fn note_idle(&mut self, out: &mut Output, waiting: u32) -> std::io::Result<()> {
-        if self.idle_noted == Some(waiting) {
-            return Ok(());
+    /// `14:06  Nothing to do. 1 item waits for you. Asking again in a minute.`, once for each stretch of idling across
+    /// all workers: again only when the number of items that wait for the person changes.
+    fn note_idle(&self, waiting: u32) -> std::io::Result<()> {
+        {
+            let mut noted = lock(&self.noted);
+            if noted.idle == Some(waiting) {
+                return Ok(());
+            }
+            noted.idle = Some(waiting);
         }
-        self.idle_noted = Some(waiting);
-        if out.mode() != Mode::Human {
+        if self.mode != Mode::Human {
             return Ok(());
         }
         let mut text = String::from("Nothing to do.");
@@ -574,47 +708,46 @@ impl RunLoop<'_> {
             text.push_str(" Asking again in a minute.");
         }
         let now = self.local_time(self.app.now().as_millisecond());
-        out.line_parts(&[
-            (now.as_str(), Tone::Dim),
-            ("  ", Tone::Plain),
-            (text.as_str(), Tone::Plain),
-        ])
+        self.write(|out| {
+            out.line_parts(&[
+                (now.as_str(), Tone::Dim),
+                ("  ", Tone::Plain),
+                (text.as_str(), Tone::Plain),
+            ])
+        })
     }
 
     /// `14:07  Can't reach the server. Trying again in a minute.`, on stderr, once for each stretch of it.
-    fn note_unreachable(&mut self, out: &mut Output) {
-        if std::mem::replace(&mut self.unreachable_noted, true) {
-            return;
-        }
-        // So the idle line is said again once the server is back, and this note isn't the last word.
-        self.idle_noted = None;
-        let now = self.local_time(self.app.now().as_millisecond());
-        // Nowhere left to say it if stderr is gone.
-        let _ = out.note(&format!("{now}  Can't reach the server. Trying again in a minute."));
-    }
-
-    /// Whether the person interrupted while nothing was running: the loop ends.
-    fn is_interrupted(&mut self) -> bool {
-        self.interrupts.try_recv().is_ok()
-    }
-
-    /// Waits `idle_wait` before asking again. False when the person interrupted, which ends the loop at once.
-    async fn wait_to_ask_again(&mut self) -> bool {
-        match tokio::time::timeout(self.idle_wait, self.interrupts.recv()).await {
-            Err(_elapsed) => true,
-            Ok(Some(_)) => false,
-            // Nobody can interrupt any more.
-            Ok(None) => {
-                tokio::time::sleep(self.idle_wait).await;
-                true
+    fn note_unreachable(&self) {
+        {
+            let mut noted = lock(&self.noted);
+            if std::mem::replace(&mut noted.unreachable, true) {
+                return;
             }
+            // So the idle line is said again once the server is back, and this note isn't the last word.
+            noted.idle = None;
         }
+        let now = self.local_time(self.app.now().as_millisecond());
+        self.note(&format!("{now}  Can't reach the server. Trying again in a minute."));
+    }
+
+    /// Waits `idle_wait` before asking again. False when the loop was told to stop, which ends the worker at once.
+    async fn wait_to_ask_again(&self) -> bool {
+        tokio::time::timeout(self.idle_wait, self.stop_reaches(Stop::AfterRuns))
+            .await
+            .is_err()
     }
 
     /// `ms`, UTC milliseconds, as `14:02` in the machine's time zone, or UTC without one.
     fn local_time(&self, ms: i64) -> String {
         local_time(ms, self.app.env.time_zone.as_deref())
     }
+}
+
+/// Locks `mutex`. A worker that panicked while writing leaves nothing half-done worth refusing for, so poison is
+/// ignored.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// `ms`, UTC milliseconds, as `HH:MM` in the time zone named by `zone`, or in UTC when there is none or it is unknown.
@@ -721,12 +854,20 @@ mod tests {
         ];
 
         expect_that!(
-            header(&heaps, Tool::Claude, false),
+            header(&heaps, Tool::Claude, false, 1),
             eq("Working in Work and House with claude. Ctrl-C stops after the current run.")
         );
         expect_that!(
-            header(&heaps, Tool::Claude, true),
+            header(&heaps, Tool::Claude, true, 1),
             eq("Working in Work and House with claude.")
+        );
+        expect_that!(
+            header(&heaps, Tool::Claude, false, 3),
+            eq("Working in Work and House with claude, 3 runs at a time. Ctrl-C stops after the current runs.")
+        );
+        expect_that!(
+            header(&heaps, Tool::Claude, true, 3),
+            eq("Working in Work and House with claude, 3 runs at a time.")
         );
     }
 
