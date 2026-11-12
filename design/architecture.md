@@ -119,8 +119,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   prepare setting did, then when and by whom it ended and how (taken back, or reached) and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
-  with someone editing it, and sending and taking back need no `If-Match`. An item has at most one open turn
-  (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
+  with someone editing it, and sending and taking back need no `If-Match`. A turn sent all the way still goes one
+  stable state: when a run reaches it, the next turn opens in the same transaction with the same reach, line and
+  opener, going to where the item is by then, so the item never has a moment with the person. An item has at most
+  one open turn (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
   so no constraint is needed. A turn is taken back by the person's own request, and implied by starting or closing the
   item (in the same transaction as the change, with its own `turn_taken_back` entry first) and by archiving the heap
   (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,

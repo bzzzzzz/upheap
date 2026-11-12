@@ -62,13 +62,23 @@ impl World {
     }
 
     async fn send_turn(&self, key: &str) -> Result<()> {
+        self.send_turn_with(key, json!({ "reach": "one" })).await
+    }
+
+    /// Sends the item to an agent, all the way, with a line.
+    async fn send_all_the_way(&self, key: &str) -> Result<()> {
+        self.send_turn_with(key, json!({ "reach": "all_the_way", "line": "Use the new CA." }))
+            .await
+    }
+
+    async fn send_turn_with(&self, key: &str, body: Value) -> Result<()> {
         let sent = self
             .app
             .send(
                 Method::POST,
                 &format!("{}/turn", self.item_path(key).await?),
                 Some(&self.session),
-                Some(json!({ "reach": "one" })),
+                Some(body),
             )
             .await?;
         anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
@@ -493,6 +503,163 @@ async fn a_golden_turn_takes_a_note_to_with_context() -> Result<()> {
     expect_that!(reached_diff["goal"], eq(&json!("with_context")));
     expect_that!(reached_diff["stage"]["before"], eq(&json!("as_written")));
     expect_that!(reached_diff["stage"]["after"], eq(&json!("with_context")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_sent_all_the_way_opens_the_next_turn_when_reached() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add("Rotate the certs", json!({})).await?;
+    w.send_all_the_way(&key).await?;
+    let run = w.claimed().await?;
+    let written = w.write_context(&run, &key, "The certs expire on Friday").await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+    let queued = w.next().await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
+    let runs = w.app.audit_runs(item["id"].as_str().context("id")?).await?;
+    let finished = w.finish(&run, json!({ "cost_usd": 0.31 })).await?;
+
+    // Assert
+    expect_that!(written.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(reached.body["end"], eq(&json!("reached")));
+    // The run still describes the turn it belonged to.
+    expect_that!(reached.body["item"]["goal"], eq(&json!("with_context")));
+    expect_that!(item["stage"], eq(&json!("with_context")));
+    expect_that!(item["with_agent"], eq(true));
+    expect_that!(item["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(item["turn"]["reach"], eq(&json!("all_the_way")));
+    expect_that!(item["turn"]["line"], eq(&json!("Use the new CA.")));
+    expect_that!(item["turn"]["ended"], eq(&Value::Null));
+    expect_that!(queued.body["item"]["key"], eq(&json!(key)));
+    expect_that!(finished.status, eq(StatusCode::OK));
+    expect_that!(finished.body["end"], eq(&json!("reached")));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"turn_opened"),
+            eq(&"item_updated"),
+            eq(&"turn_reached"),
+            eq(&"turn_opened"),
+        ]
+    );
+    expect_that!(runs[3].1.as_deref(), some(eq(run.as_str())));
+    expect_that!(runs[4].1.as_deref(), some(eq(run.as_str())));
+    let opened = &entries[4].1;
+    expect_that!(opened["reach"], eq(&json!("all_the_way")));
+    expect_that!(opened["goal"], eq(&json!("defined")));
+    expect_that!(opened["line"], eq(&json!("Use the new CA.")));
+    expect_that!(opened["source"], eq(&json!("go_ahead")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_sent_all_the_way_goes_on_to_defined_and_then_to_done() -> Result<()> {
+    // Arrange: a note with context, sent all the way, whose first turn goes to defined.
+    let w = world().await?;
+    let key = w
+        .add("Rotate the certs", json!({ "description": "Why and how" }))
+        .await?;
+    w.edit(&key, json!({ "stage": "with_context" })).await?;
+    w.send_all_the_way(&key).await?;
+    let run = w.claimed().await?;
+    let version = w.get(&key).await?["version"].clone();
+    let made_task = w
+        .in_run(
+            &run,
+            Method::PATCH,
+            &w.item_path(&key).await?,
+            Some(&version),
+            Some(json!({ "kind": "task" })),
+        )
+        .await?;
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/steps", w.item_path(&key).await?),
+            None,
+            Some(json!({ "title": "Order the certs" })),
+        )
+        .await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+    let second = w.claimed().await?;
+    let too_early = w.reached(&second).await?;
+    let still = w.get(&key).await?;
+
+    // Assert
+    expect_that!(made_task.status, eq(StatusCode::OK));
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(item["stage"], eq(&json!("defined")));
+    expect_that!(item["turn"]["goal"], eq(&json!("done")));
+    expect_that!(item["turn"]["reach"], eq(&json!("all_the_way")));
+    expect_that!(item["turn"]["line"], eq(&json!("Use the new CA.")));
+    // Done never passes yet, and the turn stays open.
+    expect_that!(too_early.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(still["turn"]["goal"], eq(&json!("done")));
+    expect_that!(still["with_agent"], eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_of_one_state_leaves_the_item_to_the_person_when_reached() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+    let _ = w.write_context(&run, &key, "Why and how").await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(item["with_agent"], eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_next_turn_goes_where_the_item_is_after_the_person_went_past_the_goal() -> Result<()> {
+    // Arrange: a note sent all the way, which the person makes a defined task while the agent works.
+    let w = world().await?;
+    let key = w.add("Rotate the certs", json!({})).await?;
+    w.send_all_the_way(&key).await?;
+    let run = w.claimed().await?;
+    let described = w
+        .edit(
+            &key,
+            json!({ "description": "Rotate them before Friday", "kind": "task" }),
+        )
+        .await?;
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(described.status, eq(StatusCode::OK));
+    expect_that!(defined.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(item["stage"], eq(&json!("defined")));
+    expect_that!(item["turn"]["goal"], eq(&json!("done")));
+    expect_that!(item["turn"]["reach"], eq(&json!("all_the_way")));
     Ok(())
 }
 
