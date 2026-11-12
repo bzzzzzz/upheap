@@ -131,6 +131,33 @@ fn set_up_directory(dir: &Path) -> std::io::Result<()> {
 /// How long a tool that was told to stop has to end before it is killed.
 pub(super) const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// How many tools that were told to stop have not ended yet, shared by every run a [`super::SystemTools`] starts, so
+/// the loop can wait for them: a stopped tool still holds what it works in until it is gone.
+#[derive(Clone, Debug)]
+pub(super) struct StopTracker(std::sync::Arc<tokio::sync::watch::Sender<usize>>);
+
+impl StopTracker {
+    pub(super) fn new() -> Self {
+        Self(std::sync::Arc::new(tokio::sync::watch::channel(0).0))
+    }
+
+    #[cfg(unix)]
+    fn count_in(&self) {
+        self.0.send_modify(|count| *count += 1);
+    }
+
+    #[cfg(unix)]
+    fn count_out(&self) {
+        self.0.send_modify(|count| *count = count.saturating_sub(1));
+    }
+
+    /// Waits until no tool is being stopped. A tool counted in after this is called is not waited for.
+    pub(super) async fn settled(&self) {
+        // `wait_for` looks at the current count before it waits, so a count that reached 0 already is not missed.
+        let _ = self.0.subscribe().wait_for(|count| *count == 0).await;
+    }
+}
+
 /// The tool's process. Dropped before the tool ended, it stops the tool: asked to end first, so the tool can end
 /// what it started, then killed with its group.
 ///
@@ -142,11 +169,15 @@ struct Running {
     /// The process group the tool leads, which `process_group(0)` gave it, until the tool has ended.
     #[cfg(unix)]
     group: Option<rustix::process::Pid>,
+    /// Told when the tool is stopped, and again when it has ended.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    stops: StopTracker,
 }
 
 impl Running {
-    fn new(child: tokio::process::Child) -> Self {
+    fn new(child: tokio::process::Child, stops: StopTracker) -> Self {
         Self {
+            stops,
             #[cfg(unix)]
             group: child
                 .id()
@@ -192,10 +223,22 @@ struct Stopping {
     child: tokio::process::Child,
     group: rustix::process::Pid,
     ended: bool,
+    stops: StopTracker,
 }
 
 #[cfg(unix)]
 impl Stopping {
+    /// Counts itself in; the count goes down again when it is dropped.
+    fn new(child: tokio::process::Child, group: rustix::process::Pid, stops: StopTracker) -> Self {
+        stops.count_in();
+        Self {
+            child,
+            group,
+            ended: false,
+            stops,
+        }
+    }
+
     /// Waits up to `STOP_GRACE` for the tool to end, and kills its group when it has not. Blocks the thread.
     fn see_out(mut self) {
         let deadline = std::time::Instant::now() + STOP_GRACE;
@@ -217,6 +260,8 @@ impl Drop for Stopping {
             // A group that is gone already is what was wanted.
             let _ = rustix::process::kill_process_group(self.group, rustix::process::Signal::KILL);
         }
+        // Last, so whoever waits for the tool to be gone finds it so.
+        self.stops.count_out();
     }
 }
 
@@ -229,11 +274,7 @@ impl Drop for Running {
         };
         // A group that is gone already is what was wanted.
         let _ = kill_process_group(group, Signal::TERM);
-        let stopping = Stopping {
-            child,
-            group,
-            ended: false,
-        };
+        let stopping = Stopping::new(child, group, self.stops.clone());
         // A drop cannot await, and under a runtime this thread may be the only one, running every other run too: the
         // wait for the tool to end and the kill after it go to a blocking thread. The runtime waits for it when it
         // shuts down, so `upheap` does not exit with the tool still running. Outside a runtime there is nothing else
@@ -251,7 +292,7 @@ impl Drop for Running {
 /// up first, writes the brief to its stdin and closes it, and reads it to its
 /// end. The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not
 /// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
-pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport, ToolError> {
+pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
     command.args(arguments(start.access, start.dir.is_some()));
     if let Some(dir) = start.dir {
@@ -275,7 +316,7 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         tool: Tool::Claude,
         source,
     })?;
-    let mut running = Running::new(child);
+    let mut running = Running::new(child, stops);
     let (stdin, stdout, stderr) = running.pipes();
     // The output pipes stay the child's, read through borrows: were they this function's own, a stop would close
     // them before the tool is asked to end, and what the tool prints on its way out would kill it mid-cleanup.

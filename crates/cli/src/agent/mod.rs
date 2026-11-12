@@ -116,6 +116,12 @@ pub trait AgentTools: Send + Sync {
 
     /// Runs `tool` to its end. Dropping the future stops the tool.
     fn run(&self, start: ToolStart) -> Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>>;
+
+    /// Waits until every tool this has stopped has ended or been killed. A stopped tool takes up to a few seconds to
+    /// end, and until it has, it still holds what it worked in. Ready at once when nothing was stopped.
+    fn settled(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(std::future::ready(()))
+    }
 }
 
 /// An interruption of the loop.
@@ -196,16 +202,24 @@ fn listen_for_signals() -> UnboundedReceiver<Interrupt> {
 pub struct SystemTools {
     /// The program to start for [`Tool::Claude`] in place of the one on `PATH`. For tests.
     claude: Option<PathBuf>,
+    /// The tools stopped and not yet ended.
+    stops: claude::StopTracker,
 }
 
 impl SystemTools {
     pub fn new() -> Self {
-        Self { claude: None }
+        Self {
+            claude: None,
+            stops: claude::StopTracker::new(),
+        }
     }
 
     /// Tools whose `claude` is the program at `path`, wherever `PATH` points.
     pub fn with_claude(path: PathBuf) -> Self {
-        Self { claude: Some(path) }
+        Self {
+            claude: Some(path),
+            stops: claude::StopTracker::new(),
+        }
     }
 
     fn program(&self, tool: Tool) -> Result<PathBuf, ToolError> {
@@ -231,11 +245,16 @@ impl AgentTools for SystemTools {
 
     fn run(&self, start: ToolStart) -> Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>> {
         let program = self.program(start.tool);
+        let stops = self.stops.clone();
         Box::pin(async move {
             match start.tool {
-                Tool::Claude => claude::run(program?, start).await,
+                Tool::Claude => claude::run(program?, start, stops).await,
             }
         })
+    }
+
+    fn settled(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(self.stops.settled())
     }
 }
 

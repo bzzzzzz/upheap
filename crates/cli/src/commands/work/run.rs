@@ -413,7 +413,7 @@ impl Shared<'_> {
         self.raise(Stop::AfterRuns);
         if self.live.load(Ordering::SeqCst) > 0 {
             self.note(&format!(
-                "Stopping after the current runs: {err}. Ctrl-C stops them now."
+                "Stopping after the current runs: {err}. Ctrl-C twice stops them now."
             ));
         }
         *first = Some(err);
@@ -512,6 +512,11 @@ impl Shared<'_> {
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
         let driven = self.drive_tool(&run, start).await;
+        // A tool that was stopped is still ending, and in a directory shared with the next run (no `--root`) two agents
+        // would work at once. So the run is recorded, and the next one claimed, only once the tool is gone.
+        if matches!(driven, Driven::Over | Driven::Stopped) {
+            self.tools.settled().await;
+        }
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
                 tracing::debug!(run_id = %run.id, last_message = ?report.last_message, "the tool ended");
