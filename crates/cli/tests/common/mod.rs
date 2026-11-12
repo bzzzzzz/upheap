@@ -648,6 +648,9 @@ pub struct StandIn {
     installed: bool,
     starts: Arc<Mutex<Vec<ToolStart>>>,
     stopped: Arc<AtomicUsize>,
+    /// When set, [`AgentTools::settled`] waits for a permit, as a tool still ending would hold it up.
+    settle_gate: Option<Arc<tokio::sync::Semaphore>>,
+    settles_asked: Arc<AtomicUsize>,
 }
 
 impl StandIn {
@@ -662,7 +665,21 @@ impl StandIn {
             installed: true,
             starts: Arc::default(),
             stopped: Arc::default(),
+            settle_gate: None,
+            settles_asked: Arc::default(),
         }
+    }
+
+    /// A tool whose stopped runs take as long to be gone as `gate` has no permits: [`AgentTools::settled`] waits for
+    /// one. Without a gate it is ready at once.
+    pub fn with_settle_gate(mut self, gate: Arc<tokio::sync::Semaphore>) -> Self {
+        self.settle_gate = Some(gate);
+        self
+    }
+
+    /// How many times the loop asked whether the stopped tools are gone.
+    pub fn settles_asked(&self) -> usize {
+        self.settles_asked.load(Ordering::SeqCst)
     }
 
     /// A machine where the tool isn't installed.
@@ -694,6 +711,16 @@ impl AgentTools for StandIn {
         } else {
             Err(ToolError::NotInstalled { tool })
         }
+    }
+
+    fn settled(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        self.settles_asked.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            if let Some(gate) = &self.settle_gate {
+                // The permit goes back when it is dropped, so an open gate stays open.
+                let _ = gate.acquire().await;
+            }
+        })
     }
 
     fn run(&self, start: ToolStart) -> AgentRun {

@@ -131,6 +131,10 @@ fn set_up_directory(dir: &Path) -> std::io::Result<()> {
 /// How long a tool that was told to stop has to end before it is killed.
 pub(super) const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// How long a killed tool has to be gone and reaped before it is counted out anyway.
+#[cfg(unix)]
+const REAP_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
+
 /// How many tools that were told to stop have not ended yet, shared by every run a [`super::SystemTools`] starts, so
 /// the loop can wait for them: a stopped tool still holds what it works in until it is gone.
 #[derive(Clone, Debug)]
@@ -151,7 +155,7 @@ impl StopTracker {
         self.0.send_modify(|count| *count = count.saturating_sub(1));
     }
 
-    /// Waits until no tool is being stopped. A tool counted in after this is called is not waited for.
+    /// Waits until the count of tools being stopped is seen at 0, so one counted in while it waits is waited for too.
     pub(super) async fn settled(&self) {
         // `wait_for` looks at the current count before it waits, so a count that reached 0 already is not missed.
         let _ = self.0.subscribe().wait_for(|count| *count == 0).await;
@@ -259,6 +263,20 @@ impl Drop for Stopping {
         if !self.ended {
             // A group that is gone already is what was wanted.
             let _ = rustix::process::kill_process_group(self.group, rustix::process::Signal::KILL);
+            // Counted out only once the leader is reaped, so that whoever waits finds it gone, not dying or a zombie.
+            // Reaped, its group's number may be given to another: no more signals.
+            let deadline = std::time::Instant::now() + REAP_LIMIT;
+            loop {
+                if !matches!(self.child.try_wait(), Ok(None)) {
+                    self.ended = true;
+                    break;
+                }
+                if std::time::Instant::now() >= deadline {
+                    tracing::warn!("a killed tool was not gone after {REAP_LIMIT:?}");
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
         }
         // Last, so whoever waits for the tool to be gone finds it so.
         self.stops.count_out();

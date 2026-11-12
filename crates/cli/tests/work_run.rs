@@ -465,6 +465,64 @@ async fn taking_the_turn_back_mid_run_stops_the_tool_and_the_line_says_so() -> R
 
 #[gtest]
 #[tokio::test]
+async fn a_run_taken_back_is_recorded_only_once_its_stopped_tool_is_gone() -> Result<()> {
+    // Arrange: an agent that never ends on its own, and a tool that takes as long to be gone as the test lets it.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    let entered = Arc::new(Notify::new());
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = {
+        let entered = entered.clone();
+        StandIn::new(move |_| {
+            let entered = entered.clone();
+            async move {
+                entered.notify_one();
+                std::future::pending::<Result<ToolReport, ToolError>>().await
+            }
+        })
+        .with_settle_gate(gate.clone())
+    };
+    let (_, no_interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+
+    // Act: take the turn back, and look once the loop is waiting for the tool to be gone.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let watching = async {
+        entered.notified().await;
+        server
+            .send(
+                &ada,
+                "DELETE",
+                &format!("/teams/ada/heaps/personal/items/{note}/turn"),
+                None,
+            )
+            .await?;
+        wait_until("the loop to ask whether the tool is gone", || tool.settles_asked() == 1).await?;
+        let (line_before, starts_before, stopped_before) = (
+            lines_with(&stdout.contents(), &note).len(),
+            tool.starts().len(),
+            tool.stopped(),
+        );
+        gate.add_permits(1);
+        anyhow::Ok((line_before, starts_before, stopped_before))
+    };
+    let (outcome, watched) = tokio::join!(running, watching);
+
+    // Assert: until the tool was gone nothing was recorded and nothing was claimed; then the line came.
+    let (line_before, starts_before, stopped_before) = watched?;
+    expect_that!(line_before, eq(0));
+    expect_that!(starts_before, eq(1));
+    expect_that!(stopped_before, eq(1));
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("taken back")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_tool_still_ending_after_it_reached_keeps_its_cost() -> Result<()> {
     // Arrange: an agent that says reached at once, then takes its time to end, with heartbeats sent meanwhile. The
     // server answers those as it does for a run taken back: the run is over.
