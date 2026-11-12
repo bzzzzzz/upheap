@@ -240,7 +240,8 @@ mod processes {
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
         let mut running = tools.run(start(Access::Do));
 
-        // Act: poll it until the script has started, then drop it. The drop returns once the script has ended.
+        // Act: poll it until the script has started, then drop it. The drop returns at once; the script ends soon
+        // after, on a thread of its own.
         let waited = tokio::time::timeout(Duration::from_secs(10), async {
             tokio::select! {
                 _ = &mut running => {}
@@ -253,9 +254,122 @@ mod processes {
         })
         .await;
         drop(running);
+        let cleaned_in_time = tokio::time::timeout(Duration::from_secs(10), async {
+            while !cleaned.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await;
 
         // Assert
         verify_that!(waited.is_ok(), eq(true))?;
-        verify_that!(cleaned.exists(), eq(true))
+        verify_that!(cleaned_in_time.is_ok(), eq(true))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn stopped_tools_that_ignore_the_request_do_not_hold_up_the_thread_and_are_killed() -> googletest::Result<()>
+    {
+        // Arrange: two scripts that ignore being asked to end, each noting its process number.
+        let mut dirs = Vec::new();
+        let mut runs = Vec::new();
+        for _ in 0..2 {
+            let dir = tempfile::tempdir()?;
+            let body = format!(
+                "trap '' TERM\necho $$ > '{}'\nwhile true; do sleep 0.05; done",
+                dir.path().join("pid").display()
+            );
+            let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+            runs.push(Box::pin(tools.run(start(Access::Do))));
+            dirs.push(dir);
+        }
+        let started = tokio::time::timeout(Duration::from_secs(10), async {
+            let mut polled = Box::pin(futures_util::future::join_all(runs.iter_mut()));
+            tokio::select! {
+                _ = &mut polled => {}
+                () = async {
+                    while !dirs.iter().all(|dir| dir.path().join("pid").exists()) {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                } => {}
+            }
+        })
+        .await;
+
+        // Act: stop both together.
+        let before = std::time::Instant::now();
+        drop(runs);
+        let took = before.elapsed();
+
+        // Assert: the thread was free at once, and both were killed after the grace.
+        verify_that!(started.is_ok(), eq(true))?;
+        verify_that!(took, lt(claude::STOP_GRACE / 3))?;
+        for dir in &dirs {
+            let pid = std::fs::read_to_string(dir.path().join("pid"))?.trim().to_owned();
+            let gone = tokio::time::timeout(Duration::from_secs(10), async {
+                while std::process::Command::new("kill")
+                    .args(["-0", &pid])
+                    .output()
+                    .is_ok_and(|o| o.status.success())
+                {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await;
+            verify_that!(gone.is_ok(), eq(true))?;
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn settled_waits_until_a_stopped_tool_that_ignores_the_request_is_gone() -> googletest::Result<()> {
+        // Arrange: a script that ignores being asked to end, noting its process number, and is running.
+        let dir = tempfile::tempdir()?;
+        let pid_file = dir.path().join("pid");
+        let body = format!(
+            "trap '' TERM\necho $$ > '{}'\nwhile true; do sleep 0.05; done",
+            pid_file.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+        let mut running = Box::pin(tools.run(start(Access::Do)));
+        let started = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::select! {
+                _ = &mut running => {}
+                () = async {
+                    while !pid_file.exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                } => {}
+            }
+        })
+        .await;
+        let pid = std::fs::read_to_string(&pid_file)?.trim().to_owned();
+
+        // Act: stop it, and wait for it to settle.
+        drop(running);
+        let before = std::time::Instant::now();
+        let settled = tokio::time::timeout(Duration::from_secs(10), tools.settled()).await;
+        let took = before.elapsed();
+        let alive = std::process::Command::new("kill")
+            .args(["-0", &pid])
+            .output()
+            .is_ok_and(|o| o.status.success());
+
+        // Assert: it waited for the kill after the grace, and the process is gone.
+        verify_that!(started.is_ok(), eq(true))?;
+        verify_that!(settled.is_ok(), eq(true))?;
+        verify_that!(took, ge(claude::STOP_GRACE / 2))?;
+        verify_that!(alive, eq(false))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn settled_with_nothing_stopped_returns_at_once() -> googletest::Result<()> {
+        let tools = SystemTools::new();
+
+        let settled = tokio::time::timeout(Duration::from_millis(500), tools.settled()).await;
+
+        verify_that!(settled.is_ok(), eq(true))
     }
 }

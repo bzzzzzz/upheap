@@ -4,16 +4,17 @@
 mod common;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use cli::{Access, Interrupt, TokenStore, ToolError, ToolReport, ToolStart};
+use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart};
 use common::{Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, cli_in_heap, key, wait_until};
 use domain::Duration;
 use googletest::prelude::*;
 use serde_json::{Value, json};
-use tokio::sync::Notify;
 use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::{Barrier, Notify, Semaphore};
 
 const ONCE: &[&str] = &["work", "run", "--tool", "claude", "--once"];
 const LOOP: &[&str] = &["work", "run", "--tool", "claude"];
@@ -464,6 +465,64 @@ async fn taking_the_turn_back_mid_run_stops_the_tool_and_the_line_says_so() -> R
 
 #[gtest]
 #[tokio::test]
+async fn a_run_taken_back_is_recorded_only_once_its_stopped_tool_is_gone() -> Result<()> {
+    // Arrange: an agent that never ends on its own, and a tool that takes as long to be gone as the test lets it.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    let entered = Arc::new(Notify::new());
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = {
+        let entered = entered.clone();
+        StandIn::new(move |_| {
+            let entered = entered.clone();
+            async move {
+                entered.notify_one();
+                std::future::pending::<Result<ToolReport, ToolError>>().await
+            }
+        })
+        .with_settle_gate(gate.clone())
+    };
+    let (_, no_interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+
+    // Act: take the turn back, and look once the loop is waiting for the tool to be gone.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let watching = async {
+        entered.notified().await;
+        server
+            .send(
+                &ada,
+                "DELETE",
+                &format!("/teams/ada/heaps/personal/items/{note}/turn"),
+                None,
+            )
+            .await?;
+        wait_until("the loop to ask whether the tool is gone", || tool.settles_asked() == 1).await?;
+        let (line_before, starts_before, stopped_before) = (
+            lines_with(&stdout.contents(), &note).len(),
+            tool.starts().len(),
+            tool.stopped(),
+        );
+        gate.add_permits(1);
+        anyhow::Ok((line_before, starts_before, stopped_before))
+    };
+    let (outcome, watched) = tokio::join!(running, watching);
+
+    // Assert: until the tool was gone nothing was recorded and nothing was claimed; then the line came.
+    let (line_before, starts_before, stopped_before) = watched?;
+    expect_that!(line_before, eq(0));
+    expect_that!(starts_before, eq(1));
+    expect_that!(stopped_before, eq(1));
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("taken back")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_tool_still_ending_after_it_reached_keeps_its_cost() -> Result<()> {
     // Arrange: an agent that says reached at once, then takes its time to end, with heartbeats sent meanwhile. The
     // server answers those as it does for a run taken back: the run is over.
@@ -605,6 +664,249 @@ async fn a_second_ctrl_c_stops_the_tool_and_the_run_counts_as_failed() -> Result
     expect_that!(lines[0], contains_substring("  failed  "));
     expect_that!(lines[1], eq("       Stopped by the person."));
     expect_that!(tool.stopped(), eq(1));
+    Ok(())
+}
+
+/// An agent that waits until the test has let `gate` give it a permit, then writes the context and says reached.
+fn gated_agent(agent: &Agent, gate: &Arc<Semaphore>) -> StandIn {
+    let (agent, gate) = (agent.clone(), gate.clone());
+    StandIn::new(move |start| {
+        let (agent, gate) = (agent.clone(), gate.clone());
+        async move {
+            if let Ok(permit) = gate.acquire().await {
+                permit.forget();
+            }
+            let item = item_key_of(&start);
+            agent
+                .upheap_with_stdin(
+                    &start,
+                    &["item", "edit", &item, "--context-file", "-", "-q"],
+                    "Context.\n",
+                )
+                .await;
+            agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+            Ok(ToolReport::default())
+        }
+    })
+}
+
+/// An agent that never ends on its own.
+fn endless_agent() -> StandIn {
+    StandIn::new(|_| std::future::pending::<Result<ToolReport, ToolError>>())
+}
+
+/// `--workers <n> --root <a new directory>`, with the directory kept alive by the returned guard.
+fn workers_in_a_root(n: u8) -> Result<(Vec<String>, tempfile::TempDir)> {
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs").to_string_lossy().into_owned();
+    let args = ["--workers".to_owned(), n.to_string(), "--root".to_owned(), root].to_vec();
+    Ok((args, parent))
+}
+
+fn with_args(base: &[&str], extra: &[String]) -> Vec<String> {
+    base.iter()
+        .map(|arg| (*arg).to_owned())
+        .chain(extra.iter().cloned())
+        .collect()
+}
+
+/// Runs `args` as `work run`, failing the test instead of hanging when it takes more than 20 seconds.
+async fn run_work_bounded(cli: &TestCli, args: &[String], tool: &StandIn) -> Result<Outcome> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    Ok(tokio::time::timeout(StdDuration::from_secs(20), cli.run_work(&args, tool)).await?)
+}
+
+#[gtest]
+#[tokio::test]
+async fn two_workers_work_two_items_at_once() -> Result<()> {
+    // Arrange: two prepared notes, and an agent that finishes only once both runs are in.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    let barrier = Arc::new(Barrier::new(2));
+    let tool = {
+        let (agent, barrier) = (cli.agent(), barrier.clone());
+        StandIn::new(move |start| {
+            let (agent, barrier) = (agent.clone(), barrier.clone());
+            async move {
+                barrier.wait().await;
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                Ok(ToolReport::default())
+            }
+        })
+    };
+    let (args, _root) = workers_in_a_root(2)?;
+
+    // Act: one worker alone would wait at the barrier for ever, so the run is bounded.
+    let outcome = run_work_bounded(&cli, &with_args(ONCE, &args), &tool).await?;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        outcome.stdout,
+        starts_with("Working in Personal with claude, 2 runs at a time.\n")
+    );
+    let keys: std::collections::BTreeSet<String> = tool.starts().iter().map(item_key_of).collect();
+    expect_that!(keys.len(), eq(2));
+    expect_that!(
+        lines_with(&outcome.stdout, "reached"),
+        elements_are![
+            matches_regex(r"^\d\d:\d\d  \w+  .*  reached  \d+m\d\ds$"),
+            matches_regex(r"^\d\d:\d\d  \w+  .*  reached  \d+m\d\ds$")
+        ]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn one_ctrl_c_with_two_runs_lets_both_end_and_claims_nothing_new() -> Result<()> {
+    // Arrange: three prepared notes, two workers.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    add_note(&server, &ada, "Water the plants").await?;
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = gated_agent(&cli.agent(), &gate);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (args, _root) = workers_in_a_root(2)?;
+    let args = with_args(LOOP, &args);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    // Act
+    let looping = tokio::time::timeout(
+        StdDuration::from_secs(20),
+        cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
+    );
+    let pressing = async {
+        wait_until("both runs", || tool.starts().len() == 2).await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        wait_until("the stopping note", || {
+            stderr
+                .contents()
+                .contains("Stopping after the current runs. Ctrl-C again stops them now.")
+        })
+        .await?;
+        gate.add_permits(2);
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+    let outcome = outcome?;
+    let next = cli.run(&["work", "next", "--quiet"]).await;
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(2));
+    expect_that!(tool.starts().len(), eq(2));
+    expect_that!(next.stdout.trim().is_empty(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_second_ctrl_c_stops_every_run() -> Result<()> {
+    // Arrange: two notes, two workers, agents that never end.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    let tool = endless_agent();
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (args, _root) = workers_in_a_root(2)?;
+    let args = with_args(LOOP, &args);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    // Act
+    let looping = tokio::time::timeout(
+        StdDuration::from_secs(20),
+        cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
+    );
+    let pressing = async {
+        wait_until("both runs", || tool.starts().len() == 2).await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        wait_until("the stopping note", || {
+            stderr.contents().contains("Stopping after the current runs.")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+    let outcome = outcome?;
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    let lines: Vec<&str> = outcome.stdout.lines().skip(1).collect();
+    expect_that!(lines.len(), eq(4));
+    for pair in lines.chunks(2) {
+        expect_that!(pair[0], contains_substring("  failed  "));
+        expect_that!(pair[1], eq("       Stopped by the person."));
+    }
+    expect_that!(tool.stopped(), eq(2));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn several_workers_without_a_root_are_refused_before_any_request() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(&[ONCE, &["--workers", "2"]].concat(), &tool).await;
+    let next = cli.run(&["work", "next", "--quiet"]).await;
+
+    // Assert
+    expect_that!(outcome.exited(2), eq(true));
+    expect_that!(outcome.stderr, contains_substring("add --root"));
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(next.stdout.trim().is_empty(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn workers_out_of_range_are_refused() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let none = cli.run_work(&[ONCE, &["--workers", "0"]].concat(), &tool).await;
+    let nine = cli.run_work(&[ONCE, &["--workers", "9"]].concat(), &tool).await;
+
+    // Assert
+    expect_that!(none.exited(2), eq(true));
+    expect_that!(nine.exited(2), eq(true));
+    expect_that!(tool.starts().len(), eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn more_workers_than_items_say_nothing_to_do_at_most_once() -> Result<()> {
+    // Arrange: one note, three workers.
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = context_writing_agent(&cli.agent(), 0.1);
+    let (args, _root) = workers_in_a_root(3)?;
+
+    // Act
+    let outcome = run_work_bounded(&cli, &with_args(ONCE, &args), &tool).await?;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts().len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "Nothing to do").len(), le(1));
     Ok(())
 }
 
@@ -994,5 +1296,190 @@ async fn a_server_that_cannot_be_reached_is_exit_5_with_once() -> Result<()> {
     // Assert
     expect_that!(outcome.exited(5), eq(true));
     expect_that!(tool.starts().len(), eq(0));
+    Ok(())
+}
+
+/// An agent whose first run is gated and says it is live, and whose second can't start once the first is live: the
+/// error that ends the loop while another run is going on.
+fn one_run_live_then_one_that_cannot_start(agent: &Agent, gate: &Arc<Semaphore>) -> StandIn {
+    let (agent, gate) = (agent.clone(), gate.clone());
+    let (live, count) = (Arc::new(Notify::new()), Arc::new(AtomicUsize::new(0)));
+    StandIn::new(move |start| {
+        let (agent, gate, live) = (agent.clone(), gate.clone(), live.clone());
+        let first = count.fetch_add(1, Ordering::SeqCst) == 0;
+        async move {
+            if first {
+                live.notify_one();
+                if let Ok(permit) = gate.acquire().await {
+                    permit.forget();
+                }
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                Ok(ToolReport::default())
+            } else {
+                live.notified().await;
+                Err(ToolError::WouldNotStart {
+                    tool: Tool::Claude,
+                    source: std::io::Error::other("no such luck"),
+                })
+            }
+        }
+    })
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_worker_that_fails_lets_the_other_run_end_claims_nothing_new_and_fails_the_command() -> Result<()> {
+    // Arrange: three notes, two workers; one run goes live, the other can't start.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    add_note(&server, &ada, "Water the plants").await?;
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = one_run_live_then_one_that_cannot_start(&cli.agent(), &gate);
+    let (_interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (args, _root) = workers_in_a_root(2)?;
+    let args = with_args(LOOP, &args);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    // Act: the live run is released only once the loop has said it is stopping.
+    let looping = tokio::time::timeout(
+        StdDuration::from_secs(20),
+        cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
+    );
+    let releasing = async {
+        wait_until("the stopping note", || {
+            stderr.contents().contains("Stopping after the current runs:")
+        })
+        .await?;
+        gate.add_permits(1);
+        anyhow::Ok(())
+    };
+    let (outcome, released) = tokio::join!(looping, releasing);
+    let outcome = outcome?;
+    let next = cli.run(&["work", "next", "--quiet"]).await;
+
+    // Assert
+    released?;
+    expect_that!(outcome.exited(6), eq(true));
+    expect_that!(outcome.stderr, contains_substring("Stopping after the current runs: "));
+    expect_that!(outcome.stderr, contains_substring("Ctrl-C twice stops them now."));
+    expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "failed").len(), eq(1));
+    expect_that!(tool.starts().len(), eq(2));
+    expect_that!(next.stdout.trim().is_empty(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn after_a_worker_fails_the_first_ctrl_c_still_lets_the_live_run_end() -> Result<()> {
+    // Arrange: as above.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = one_run_live_then_one_that_cannot_start(&cli.agent(), &gate);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (args, _root) = workers_in_a_root(2)?;
+    let args = with_args(LOOP, &args);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    // Act: one Ctrl-C after the failure; the run is released only when the loop has taken the press as the gentle one.
+    let looping = tokio::time::timeout(
+        StdDuration::from_secs(20),
+        cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
+    );
+    let pressing = async {
+        wait_until("the failure note", || {
+            stderr.contents().contains("Stopping after the current runs:")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        wait_until("the gentle note", || {
+            stderr.contents().contains("Ctrl-C again stops them now.")
+        })
+        .await?;
+        gate.add_permits(1);
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+    let outcome = outcome?;
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(6), eq(true));
+    expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(1));
+    expect_that!(outcome.stdout, not(contains_substring("Stopped by the person.")));
+    expect_that!(tool.stopped(), eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_worker_claims_again_while_another_run_goes_on() -> Result<()> {
+    // Arrange: three notes, two workers; the first run is gated, the others are fast.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    add_note(&server, &ada, "Water the plants").await?;
+    let gate = Arc::new(Semaphore::new(0));
+    let tool = {
+        let (agent, gate, count) = (cli.agent(), gate.clone(), Arc::new(AtomicUsize::new(0)));
+        StandIn::new(move |start| {
+            let (agent, gate) = (agent.clone(), gate.clone());
+            let gated = count.fetch_add(1, Ordering::SeqCst) == 0;
+            async move {
+                if gated && let Ok(permit) = gate.acquire().await {
+                    permit.forget();
+                }
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                Ok(ToolReport::default())
+            }
+        })
+    };
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (args, _root) = workers_in_a_root(2)?;
+    let args = with_args(LOOP, &args);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+    // Act: both fast runs end while the gated one is still live; then the person stops after runs and it is released.
+    let looping = tokio::time::timeout(
+        StdDuration::from_secs(20),
+        cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
+    );
+    let pressing = async {
+        wait_until("two runs ended while one is live", || {
+            lines_with(&stdout.contents(), "reached").len() == 2
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        wait_until("the stopping note", || stderr.contents().contains("Stopping after")).await?;
+        gate.add_permits(1);
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+    let outcome = outcome?;
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(3));
+    expect_that!(tool.starts().len(), eq(3));
     Ok(())
 }

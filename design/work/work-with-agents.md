@@ -409,7 +409,6 @@ From the steps above that ask something of the product.
 - Upheap watching a pull request or a document for new comments. The person's reply in Upheap is what sends the
   work back.
 - Setting up the agent tool, its sign-in and its permissions.
-- Sending many items on at once.
 - Anything about teammates beyond what a member can do today: who answers, who reviews.
 - Being told about any of this without looking.
 
@@ -1034,7 +1033,7 @@ starts the agent tool. A command with it set writes as an agent, inside that run
 is the person's own.
 
 ```
-C1 · upheap work run --tool <tool> [--heap <heap>]... [--once]     constant · core
+C1 · upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>]     constant · core
 
 $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
@@ -1044,11 +1043,13 @@ Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after 
 
 --heap    repeatable; with none, the default heap. Heaps agents make from these are included.
 --once    do one run, or nothing when there is nothing, and exit.
+--workers keep up to N runs going at once (1 to 8, default 1), each on its own item. Above 1, needs --root.
 The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
 prints, the state to reach, and the person's line.
 How a run ended is read off it: it said `work reached` and the check passed; or it left an open
 question; otherwise it failed. Cost is what the tool reported, or blank.
-Ctrl-C: once, the current run finishes and the loop stops; twice, the run is stopped and counts as failed.
+Ctrl-C: once, the current run (every current run, with --workers) finishes and the loop stops; twice, the runs are
+stopped and count as failed.
 Exits:  0 stopped by the person, or --once done; 2 no heap named and no default; 4 not signed in;
         5 server unreachable with --once (without it the loop waits and tries again); 6 the tool isn't
         installed or wouldn't start.

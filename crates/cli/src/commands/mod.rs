@@ -89,6 +89,8 @@ pub enum UsageError {
     ClaimInRun,
     #[error("work run starts runs; unset UPHEAP_RUN first")]
     RunInRun,
+    #[error("--workers {workers} runs several agents at once, and each needs a directory of its own: add --root <DIR>")]
+    WorkersWithoutRoot { workers: u8 },
     #[error("work {verb} runs inside a run: set UPHEAP_RUN")]
     NeedsRun { verb: &'static str },
 }
