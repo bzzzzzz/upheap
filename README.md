@@ -185,13 +185,13 @@ under the root instead, named by the item's key and the run's ID, with a `CLAUDE
 and `claude` may run any command, edit and read, for preparing as well: a run there has to clone and build what it
 works on. Nothing removes these directories. With `--instructions <file>`, every run is also told what the file
 says: your own way of working on this machine (which skills to use, how to check and review a change), which
-comes before the heap's context on how the work is done. The file is read once, when the loop starts. With `--allow <rule>`, every run's `claude` may also use what the rule
-allows (Claude's rule syntax, such as `mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions;
-`--allow-prepare` and `--allow-do` add a rule to runs that prepare an item or do a task only. Each flag takes one
-rule and can be repeated; a rule with a comma or a space is refused. Upheap's refusal of `upheap auth` still holds.
-Exit codes: 0 done, 2 bad command line, 3 refused, 4
-not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything
-else.
+comes before the heap's context on how the work is done. The file is read once, when the loop starts. With
+`--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as
+`mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions; `--allow-prepare` and `--allow-do` add a
+rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
+comma or a space is refused. Upheap's refusal of `upheap auth` still holds. Exit codes: 0 done, 2 bad command line,
+3 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool),
+1 anything else.
 
 ### From Claude Code
 
