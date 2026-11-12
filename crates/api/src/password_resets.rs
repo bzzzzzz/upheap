@@ -1,6 +1,5 @@
 //! Opening a password reset link and setting a password through it, by the link's token. The operator makes links
-//! with a server command (README, Resetting a password). The local build has no passwords, so it leaves these out
-//! (the `accounts` feature).
+//! with a server command (README, Resetting a password).
 
 use api_types::auth::{PasswordResetAccountDto, PasswordResetDto, PasswordResetStateDto, SetPasswordRequestDto};
 use api_types::me::UserDto;
@@ -16,7 +15,7 @@ use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::auth::{cookie_settings, signed_in_with};
+use crate::auth::signed_in_with;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath};
 use crate::{ApiError, AppState};
@@ -94,7 +93,7 @@ async fn reset_password(
     ApiJson(body): ApiJson<SetPasswordRequestDto>,
 ) -> Result<Response, ApiError> {
     let token = parse_token(path.0)?;
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     let grant = state.services.reset_password(&token, &body.password).await?;
     Ok(signed_in_with(
         StatusCode::OK,

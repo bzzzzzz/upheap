@@ -42,13 +42,9 @@ What it is not:
 
 1. Upheap is free and open source.
 2. Teams self-host it, on Postgres, MySQL or SQLite. There is no hosted or paid tier.
-3. One person can also use it without hosting anything: a static, single-user build runs entirely in the browser and
-   keeps the data there ([architecture.md](architecture.md#local-build)). It has no accounts and no teammates, all
-   its heaps belong to one team, and it is not a hosted tier, since no data leaves the browser.
-4. The server exposes an API that any client can use. There are two clients, the web app and the `upheap`
+3. The server exposes an API that any client can use. There are two clients, the web app and the `upheap`
    command-line client, and the API assumes neither.
-5. Working with agents needs a server, which one person can run for themselves alone. The browser-only build has
-   no agents.
+4. Working with agents needs a server, which one person can run for themselves alone.
 
 ## Accounts and sign-in
 

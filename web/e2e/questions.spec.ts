@@ -53,12 +53,7 @@ async function questionsOf(page: Page, item: string) {
   return (await response.json()).questions;
 }
 
-test("a question without choices is answered with text, and then reads in Questions", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a question without choices is answered with text, and then reads in Questions", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
     { kind: "question", text: "Which CA do we use?" },
     { kind: "question", text: "Who signs off?" },
@@ -114,12 +109,7 @@ test("a question without choices is answered with text, and then reads in Questi
   expect([one.state, one.reply.comment, two.reply.comment]).toEqual(["answered", "Let's Encrypt", "Sam"]);
 });
 
-test("a choice question is answered by one pick, a many-choice one by any number", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a choice question is answered by one pick, a many-choice one by any number", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Plan the move", [
     { kind: "question", text: "Which CA?", choices: ["Internal", "Let's Encrypt"] },
     { kind: "question", text: "Which regions?", choices: ["EU", "US", "Asia"], many: true },
@@ -157,12 +147,7 @@ test("a choice question is answered by one pick, a many-choice one by any number
   expect([second.reply.picked, second.reply.comment]).toEqual([[0, 2], null]);
 });
 
-test("a request is replied to at once with Done or Can't be done, and a comment", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a request is replied to at once with Done or Can't be done, and a comment", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Stage the token", [
     { kind: "request", text: "Put a staging token in the vault." },
     { kind: "request", text: "Open the firewall." },
@@ -195,8 +180,7 @@ test("a request is replied to at once with Done or Can't be done, and a comment"
   expect([second.reply.picked, second.reply.comment]).toEqual([[1], null]);
 });
 
-test("details open in place, and the row names its step", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("details open in place, and the row names its step", async ({ page, heapPath }) => {
   await itemWithQuestions(
     page,
     heapPath,
@@ -222,8 +206,7 @@ test("details open in place, and the row names its step", async ({ page, heapPat
   ).toHaveCount(0);
 });
 
-test("someone else's reply meanwhile takes the row away with a note", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("someone else's reply meanwhile takes the row away with a note", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
     { kind: "question", text: "Which CA do we use?" },
     { kind: "question", text: "Who signs off?" },
@@ -258,9 +241,7 @@ test("someone else's reply meanwhile takes the row away with a note", async ({ p
 test("the section is absent without open questions, and closing the item withdraws them, as Questions reads", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
   await itemWithQuestions(page, heapPath, "Plain item", []);
   await expect(waits(page)).toHaveCount(0);
   await expect(answered(page)).toHaveCount(0);
@@ -289,12 +270,7 @@ test("the section is absent without open questions, and closing the item withdra
   await expect(answered(page)).toContainText("Withdrawn");
 });
 
-test("a failed reply keeps the row with its picks and comment, and says why", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a failed reply keeps the row with its picks and comment, and says why", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Plan the move", [
     { kind: "question", text: "Which regions?", choices: ["EU", "US", "Asia"], many: true },
   ]);
@@ -319,8 +295,7 @@ test("a failed reply keeps the row with its picks and comment, and says why", as
   expect((await questionsOf(page, item))[0].state).toBe("open");
 });
 
-test("closing the item before a reply lands keeps a note with the comment", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("closing the item before a reply lands keeps a note with the comment", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
     { kind: "question", text: "Which CA do we use?" },
   ]);
@@ -343,12 +318,7 @@ test("closing the item before a reply lands keeps a note with the comment", asyn
   expect((await questionsOf(page, item))[0].state).toBe("withdrawn");
 });
 
-test("in an archived heap a question shows its text and details, with no controls", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("in an archived heap a question shows its text and details, with no controls", async ({ page, heapPath }) => {
   await itemWithQuestions(page, heapPath, "Rotate the certs", [
     { kind: "question", text: "Which CA do we use?", details: "Internal or public." },
     { kind: "request", text: "Put a token in the vault." },

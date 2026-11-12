@@ -184,32 +184,3 @@ async fn a_team_counts_its_members_as_they_join_and_go() -> Result<()> {
     expect_that!(member_count(&app, &grace, &personal).await?, eq(&json!(1)));
     Ok(())
 }
-
-#[gtest]
-#[tokio::test]
-async fn the_local_build_reports_the_same_counts() -> Result<()> {
-    // Arrange
-    let app = TestApp::start_local().await?;
-    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
-    let team = me.body["teams"][0]["id"].as_str().context("no team")?.to_owned();
-    let heap = me.body["teams"][0]["heaps"][0]["id"]
-        .as_str()
-        .context("no heap")?
-        .to_owned();
-
-    // Act
-    app.send(
-        Method::POST,
-        &format!("{}/items", app.heap_url(&heap).await?),
-        None,
-        Some(json!({ "title": "Mine", "need": "expected" })),
-    )
-    .await?;
-    let counts = open_counts(&app, None, &team, &heap).await?;
-    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
-
-    // Assert
-    expect_that!(counts, eq(&[json!(1), json!(1), json!(1)]));
-    expect_that!(me.body["teams"][0]["member_count"], eq(&json!(1)));
-    Ok(())
-}

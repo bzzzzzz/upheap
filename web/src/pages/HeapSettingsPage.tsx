@@ -1,5 +1,4 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { localDatabase } from "#local-database";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Switch } from "react-aria-components";
 
@@ -55,8 +54,7 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
 
 /**
  * The heap's name, its link name (the last part of its path), its context and whether it's archived. Those who may
- * change them, as `allowed_actions` says, edit them in place; everyone else reads them. The local build has no
- * context card.
+ * change them, as `allowed_actions` says, edit them in place; everyone else reads them.
  */
 export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
@@ -153,9 +151,9 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}
       </section>
 
-      {!localDatabase && <HeapContextCard team={heapRef.team} heap={data} canEdit={can("edit_context")} />}
+      <HeapContextCard team={heapRef.team} heap={data} canEdit={can("edit_context")} />
 
-      {!localDatabase && <AgentsCard team={heapRef.team} heap={data} canSet={can("set_agents_prepare")} />}
+      <AgentsCard team={heapRef.team} heap={data} canSet={can("set_agents_prepare")} />
 
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>

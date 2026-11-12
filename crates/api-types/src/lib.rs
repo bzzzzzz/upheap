@@ -7,7 +7,7 @@
 //!
 //! Response types derive `Deserialize` as well as `Serialize`, so a client reads them back; request and query
 //! types derive `Serialize` where a client sends them. This crate has no IO, and nothing in the workspace
-//! but `domain` (outside it: serde, utoipa, jiff and uuid), so it builds for the browser and for the CLI alike.
+//! but `domain` (outside it: serde, utoipa, jiff and uuid), so a client never links the server.
 
 pub mod audit;
 pub mod auth;

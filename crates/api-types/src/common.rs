@@ -694,11 +694,10 @@ pub struct ItemDto {
     pub title: String,
     pub description: Option<String>,
     pub kind: KindDto,
-    /// How far the item has been prepared. `null` when the item is closed, and always in a build without the stage
-    /// (the static, single-user one).
+    /// How far the item has been prepared. `null` when the item is closed.
     pub stage: Option<StageDto>,
     /// The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
-    /// Empty when the item is closed, when the caller can't edit it, and in a build without the stage.
+    /// Empty when the item is closed, and when the caller can't edit it.
     #[serde(deserialize_with = "crate::common::known_values")]
     pub stage_choices: Vec<StageDto>,
     pub state: StateDto,
@@ -758,7 +757,7 @@ pub struct ItemDto {
     #[schema(required = true)]
     pub turn: Option<TurnDto>,
     /// The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item
-    /// is sent. `null` on a closed item, on a reminder (no turn opens on one) and in a build that has no agents.
+    /// is sent. `null` on a closed item and on a reminder (no turn opens on one).
     #[serde(default)]
     #[schema(required = true)]
     pub next_goal: Option<GoalDto>,

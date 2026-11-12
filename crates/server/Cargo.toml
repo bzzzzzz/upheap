@@ -19,14 +19,14 @@ postgres = ["store/postgres"]
 
 [dependencies]
 anyhow.workspace = true
-api = { workspace = true, features = ["accounts", "agents", "trace-and-timeout"] }
+api.workspace = true
 axum = { workspace = true, features = ["http1", "tokio"] }
 domain.workspace = true
 mime_guess.workspace = true
 mimalloc.workspace = true
 rust-embed.workspace = true
 serde_json.workspace = true
-service = { workspace = true, features = ["accounts"] }
+service.workspace = true
 store.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "net", "time"] }
 tracing.workspace = true

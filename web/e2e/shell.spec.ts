@@ -98,8 +98,8 @@ const MORE_HEAPS = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Go
 const isNarrow = (page: Page) => (page.viewportSize()?.width ?? 0) < 640;
 const isCoarse = (page: Page) => page.evaluate(() => matchMedia("(pointer: coarse)").matches);
 
-test("the heap switcher opens another heap", async ({ page, localBuild }) => {
-  await addHeaps(page, ["Garden"], localBuild);
+test("the heap switcher opens another heap", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
   const startUrl = page.url();
   const heaps = await openSwitcher(page);
   // The heap on screen is checked.
@@ -118,8 +118,8 @@ test("the heap switcher opens another heap", async ({ page, localBuild }) => {
   await expect(heaps).toHaveCount(0);
 });
 
-test("a modifier-click on a heap opens it in a new tab", async ({ page, localBuild }) => {
-  await addHeaps(page, ["Garden"], localBuild);
+test("a modifier-click on a heap opens it in a new tab", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
   const heaps = await openSwitcher(page);
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   const [tab] = await Promise.all([
@@ -139,16 +139,16 @@ test("the heap switcher starts a new heap in the heap's team", async ({ page }) 
   await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
 });
 
-test("a short list of heaps has no search and no Recent", async ({ page, localBuild }) => {
-  await addHeaps(page, MORE_HEAPS.slice(0, 5), localBuild);
+test("a short list of heaps has no search and no Recent", async ({ page }) => {
+  await addHeaps(page, MORE_HEAPS.slice(0, 5));
   const heaps = await openSwitcher(page);
   await expect(heaps.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
   await expect(heaps.getByLabel("Find a heap")).toHaveCount(0);
   await expect(heaps.getByText("Recent", { exact: true })).toHaveCount(0);
 });
 
-test("a long list of heaps is searched as you type, and Enter opens the first match", async ({ page, localBuild }) => {
-  await addHeaps(page, ["Q4 planning", "Meal planning", ...MORE_HEAPS.slice(0, 5)], localBuild);
+test("a long list of heaps is searched as you type, and Enter opens the first match", async ({ page }) => {
+  await addHeaps(page, ["Q4 planning", "Meal planning", ...MORE_HEAPS.slice(0, 5)]);
   const heaps = await openSwitcher(page);
   const field = heaps.getByLabel("Find a heap");
   await expect(field).toBeVisible();
@@ -161,8 +161,8 @@ test("a long list of heaps is searched as you type, and Enter opens the first ma
   await expect(heaps).toHaveCount(0);
 });
 
-test("searching for a heap that isn't there offers to make it, named as typed", async ({ page, localBuild }) => {
-  await addHeaps(page, MORE_HEAPS, localBuild);
+test("searching for a heap that isn't there offers to make it, named as typed", async ({ page }) => {
+  await addHeaps(page, MORE_HEAPS);
   const heaps = await openSwitcher(page);
   await heaps.getByLabel("Find a heap").fill("Roadmap");
   await expect(heaps.getByText("No heap matches “Roadmap”", { exact: true })).toBeVisible();
@@ -177,10 +177,10 @@ test("searching for a heap that isn't there offers to make it, named as typed", 
   await expect(heaps).toHaveCount(0);
 });
 
-test("the arrow keys move through the heaps from the search field", async ({ page, localBuild }) => {
+test("the arrow keys move through the heaps from the search field", async ({ page }) => {
   test.skip(isNarrow(page), "A phone has no keyboard.");
   test.skip(await isCoarse(page), "A coarse pointer doesn't focus the search field, so as not to raise a keyboard.");
-  await addHeaps(page, MORE_HEAPS, localBuild);
+  await addHeaps(page, MORE_HEAPS);
   const start = page.url();
   const heaps = await openSwitcher(page);
   await expect(heaps.getByLabel("Find a heap")).toBeFocused();
@@ -193,12 +193,9 @@ test("the arrow keys move through the heaps from the search field", async ({ pag
   expect(page.url()).not.toBe(start);
 });
 
-test("Escape clears the search first and then closes the switcher, with focus back on its button", async ({
-  page,
-  localBuild,
-}) => {
+test("Escape clears the search first and then closes the switcher, with focus back on its button", async ({ page }) => {
   test.skip(isNarrow(page), "A phone has no keyboard.");
-  await addHeaps(page, MORE_HEAPS, localBuild);
+  await addHeaps(page, MORE_HEAPS);
   const opener = page.getByRole("button", { name: /^Switch heap/ });
   const heaps = await openSwitcher(page);
   const field = heaps.getByLabel("Find a heap");
@@ -211,8 +208,8 @@ test("Escape clears the search first and then closes the switcher, with focus ba
   await expect(opener).toBeFocused();
 });
 
-test("archived heaps are folded away, and found by search", async ({ page, localBuild }) => {
-  await addHeaps(page, ["Old news"], localBuild);
+test("archived heaps are folded away, and found by search", async ({ page }) => {
+  await addHeaps(page, ["Old news"]);
   const start = new URL(page.url()).pathname;
   await page.goto(start.replace(/[^/]+$/, "old-news"));
   await expect(page.getByRole("button", { name: /^Switch heap: Old news/ })).toBeVisible();
@@ -231,7 +228,7 @@ test("archived heaps are folded away, and found by search", async ({ page, local
 
   // Searching finds it, tagged, once the list is long.
   await page.keyboard.press("Escape");
-  await addHeaps(page, MORE_HEAPS, localBuild);
+  await addHeaps(page, MORE_HEAPS);
   heaps = await openSwitcher(page);
   await heaps.getByLabel("Find a heap").fill("old");
   const found = heaps.getByRole("menuitem", { name: /Old news/ });
@@ -239,8 +236,8 @@ test("archived heaps are folded away, and found by search", async ({ page, local
   await expect(heaps.getByRole("status")).toHaveText("1 heap");
 });
 
-test("Recent lists the heaps opened last, without the one on screen", async ({ page, localBuild }) => {
-  await addHeaps(page, MORE_HEAPS, localBuild);
+test("Recent lists the heaps opened last, without the one on screen", async ({ page }) => {
+  await addHeaps(page, MORE_HEAPS);
   const start = new URL(page.url()).pathname;
   await page.goto(start.replace(/[^/]+$/, "alpha"));
   await expect(page.getByRole("button", { name: /^Switch heap: Alpha/ })).toBeVisible();
@@ -258,8 +255,7 @@ test("Recent lists the heaps opened last, without the one on screen", async ({ p
   }
 });
 
-test("a team folds in the switcher, and stays folded", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build has one team, so there is nothing to fold.");
+test("a team folds in the switcher, and stays folded", async ({ page }) => {
   await addHeaps(page, MORE_HEAPS);
   await createTeam(page, "Acme");
 
@@ -297,7 +293,7 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await expect(row(page, "Water the plants")).toBeVisible();
 });
 
-test("Sign out is on the Account page, not in the navigation, and only on the server", async ({ page, localBuild }) => {
+test("Sign out is on the Account page, not in the navigation", async ({ page }) => {
   const signOut = page.getByRole("button", { name: "Sign out", exact: true });
   await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
   await expect(signOut).toHaveCount(0);
@@ -311,7 +307,7 @@ test("Sign out is on the Account page, not in the navigation, and only on the se
 
   await goTo(page, "Account");
   await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
-  await expect(signOut).toHaveCount(localBuild ? 0 : 1);
+  await expect(signOut).toHaveCount(1);
 });
 
 test("the theme picked on Account holds over a reload and in other tabs, and System follows the device", async ({
@@ -404,8 +400,7 @@ test("on a phone, More shows as active on the pages it holds", async ({ page }) 
   await expect(more).not.toHaveAttribute("data-status");
 });
 
-test("the heap's team shows in its title and links from the navigation", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build has one personal team.");
+test("the heap's team shows in its title and links from the navigation", async ({ page }) => {
   await createTeam(page, "Acme");
   await page.getByRole("button", { name: "+ New heap" }).click();
   await page.getByLabel("New heap name").fill("Launch");
@@ -438,11 +433,7 @@ test("the heap's team shows in its title and links from the navigation", async (
   await expect(page).toHaveURL(/\/teams\/acme(-\d+)?$/);
 });
 
-test("the personal team reads as the user's team, and its heap's title is the heap name alone", async ({
-  page,
-  localBuild,
-}) => {
-  test.skip(localBuild, "The local build has no Teams list.");
+test("the personal team reads as the user's team, and its heap's title is the heap name alone", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^[^·]+$/);
   // The sidebar's button names the team on every heap, being the switcher; the phone's top bar doesn't for this one.
   if (isPhone(page)) await expect(page.getByRole("button", { name: /^Switch heap/ })).toHaveAccessibleName(/^[^·]+$/);
@@ -466,19 +457,4 @@ test("the personal team reads as the user's team, and its heap's title is the he
 
   await page.goto("/teams");
   await expect(page.getByRole("link", { name: "Open Tester's team" })).toBeVisible();
-});
-
-test("alone, as in the local build, the personal team keeps its own name", async ({ page, localBuild }) => {
-  test.skip(!localBuild, "Only the local build has one team and no Teams list.");
-  // There is no list of teams to tell it from, so "<name>'s team" would only read as "Me's team".
-  if (isPhone(page)) {
-    await page.getByRole("button", { name: "More" }).click();
-    await page.getByRole("link", { name: "My heaps" }).click();
-  } else {
-    await page
-      .getByRole("complementary", { name: "Heaps and views" })
-      .getByRole("link", { name: "My heaps", exact: true })
-      .click();
-  }
-  await expect(page.getByRole("heading", { name: "My heaps", level: 1 })).toBeVisible();
 });

@@ -1,5 +1,4 @@
-//! A new user with a team of their own and a first heap in it: what registering makes, and what the local build
-//! makes for its one user.
+//! A new user with a team of their own and a first heap in it: what registering makes.
 
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::Handle;
@@ -11,16 +10,10 @@ use domain::validation::Field;
 use domain::{HeapId, TeamId, Timestamp, UserId, Version};
 use serde_json::json;
 use store::audit::NewAuditEntry;
-use store::{ConnectionTrait, StoreError, TransactionTrait};
+use store::{ConnectionTrait, StoreError};
 
 use crate::error::handle_taken_on_duplicate;
-use crate::{Principal, ServiceError, Services};
-
-/// The local build's one user. Nobody signs in, so the address is never used, and `.invalid` can't be anyone's.
-const LOCAL_EMAIL: &str = "me@upheap.invalid";
-const LOCAL_USERNAME: &str = "me";
-const LOCAL_DISPLAY_NAME: &str = "Me";
-const LOCAL_TEAM_NAME: &str = "My heaps";
+use crate::{ServiceError, Services};
 
 /// Everyone's first heap, in their personal team.
 const FIRST_HEAP_NAME: &str = "Personal";
@@ -34,37 +27,6 @@ pub(crate) struct PersonalUser {
 }
 
 impl Services {
-    /// The local build's one user, made the first time with their team and first heap, which every later heap
-    /// joins. Later calls return the same user.
-    ///
-    /// Call it once, before serving requests: two first calls at once could each make a user.
-    pub async fn open_local_user(&self) -> Result<Principal, ServiceError> {
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
-        if let Some(user) = store::users::find_first_user(&txn).await? {
-            return Ok(Principal {
-                user_id: user.id,
-                run: None,
-            });
-        }
-        let made = self
-            .insert_personal_user(
-                &txn,
-                Email::parse(LOCAL_EMAIL)?,
-                Handle::parse(LOCAL_USERNAME, Field::Username)?,
-                DisplayName::parse(LOCAL_DISPLAY_NAME)?,
-                Name::parse(LOCAL_TEAM_NAME)?,
-                self.now(),
-            )
-            .await?;
-        txn.commit().await.map_err(StoreError::from)?;
-
-        tracing::info!(user_id = %made.user.id, team_id = %made.team.id, heap_id = %made.heap.id, "local user created");
-        Ok(Principal {
-            user_id: made.user.id,
-            run: None,
-        })
-    }
-
     /// Inserts a new user, their personal team with `username` as its slug and them as its only admin, and a first
     /// heap in it, with an audit entry for each. Fails with [`ServiceError::EmailTaken`] when the email is taken and
     /// [`ServiceError::HandleTaken`] when the username is.

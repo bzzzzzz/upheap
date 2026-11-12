@@ -29,7 +29,7 @@ use utoipa_axum::routes;
 
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiQuery, SessionUser};
-use crate::{ApiError, AppState, Authentication};
+use crate::{ApiError, AppState};
 
 /// The consent page's endpoints, behind the CSRF check.
 pub(crate) fn authorize_routes() -> OpenApiRouter<AppState> {
@@ -59,7 +59,6 @@ async fn check_authorization(
     State(state): State<AppState>,
     ApiQuery(request): ApiQuery<AuthorizationRequestDto>,
 ) -> Result<Json<ClientDto>, ApiError> {
-    require_accounts(&state)?;
     let checked = state.services.check_authorization(request.as_params())?;
     Ok(Json(ClientDto {
         client_id: checked.client.id.to_owned(),
@@ -209,7 +208,6 @@ async fn issue_token(
     State(state): State<AppState>,
     form: Result<Form<TokenRequestForm>, FormRejection>,
 ) -> Result<Response, TokenFailure> {
-    require_accounts(&state)?;
     let Form(form) = form.map_err(|rejection| OAuthRefusal::invalid_request(rejection.body_text()))?;
     let client_id = form.client_id.as_deref().ok_or(OAuthRefusal::missing("client_id"))?;
     let pair = match form.grant_type.as_str() {
@@ -268,17 +266,8 @@ async fn revoke_token(
     State(state): State<AppState>,
     form: Result<Form<RevokeRequestForm>, FormRejection>,
 ) -> Result<StatusCode, TokenFailure> {
-    require_accounts(&state)?;
     let Form(form) = form.map_err(|rejection| OAuthRefusal::invalid_request(rejection.body_text()))?;
     let token = OAuthSecret::from_client(form.token.ok_or(OAuthRefusal::missing("token"))?);
     state.services.revoke_token(form.client_id.as_deref(), &token).await?;
     Ok(StatusCode::OK)
-}
-
-/// A server whose one user needs no signing in issues no tokens either, so it has no such routes.
-pub(crate) fn require_accounts(state: &AppState) -> Result<(), ApiError> {
-    match state.authentication {
-        Authentication::Sessions(_) => Ok(()),
-        Authentication::LocalUser(_) => Err(ApiError::NoSuchRoute),
-    }
 }

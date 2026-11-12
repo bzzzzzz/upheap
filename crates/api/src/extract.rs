@@ -1,39 +1,30 @@
 //! Request extractors and middleware: session cookie, bearer token, CSRF header, timezone, `If-Match`, and
 //! body/query/path wrappers whose rejections are problem responses.
 
-#[cfg(feature = "agents")]
 use axum::extract::MatchedPath;
 use axum::extract::{FromRequest, FromRequestParts, Request};
-#[cfg(feature = "accounts")]
 use axum::http::HeaderValue;
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-#[cfg(feature = "agents")]
 use domain::RunId;
 use domain::Version;
-#[cfg(feature = "agents")]
 use domain::run::{RunError, RunForbidden};
 use jiff::tz::TimeZone;
 use service::Principal;
-#[cfg(feature = "accounts")]
 use service::ServiceError;
-#[cfg(feature = "accounts")]
 use service::auth::SessionToken;
-#[cfg(feature = "accounts")]
 use service::oauth::OAuthSecret;
 use utoipa::IntoParams;
 
-#[cfg(feature = "accounts")]
 use crate::CookieSettings;
-use crate::{ApiError, AppState, Authentication};
+use crate::{ApiError, AppState};
 
 pub(crate) const SESSION_COOKIE: &str = "heap_session";
 pub(crate) const CSRF_HEADER: &str = "x-csrf-protection";
 pub(crate) const TIME_ZONE_HEADER: &str = "time-zone";
 /// The run an agent writes in, set by the CLI when `UPHEAP_RUN` is.
-#[cfg(feature = "agents")]
 pub(crate) const RUN_HEADER: &str = "upheap-run";
 
 /// What a request made in a run (with the `Upheap-Run` header) may do besides read: the one place that says which
@@ -43,7 +34,6 @@ pub(crate) const RUN_HEADER: &str = "upheap-run";
 /// another run, heaps, teams, tags, parameters, views and new items belong to the person.
 ///
 /// Templates are those the routes are registered with, under `/api/v1`.
-#[cfg(feature = "agents")]
 const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}"),
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/steps"),
@@ -57,7 +47,6 @@ const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
 /// `principal` made in the run `Upheap-Run` names, when the request has the header. A header that isn't a run ID is
 /// `400`, on a read as on a write. A read in a run is just a read; a write must be one a run may make
 /// ([`RUN_ALLOWED_WRITES`]).
-#[cfg(feature = "agents")]
 fn in_run(parts: &Parts, principal: Principal) -> Result<Principal, ApiError> {
     let Some(value) = parts.headers.get(RUN_HEADER) else {
         return Ok(principal);
@@ -108,8 +97,7 @@ pub(crate) struct ApiQuery<T>(pub T);
 #[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub(crate) struct ApiPath<T>(pub T);
 
-/// The caller, from a bearer token, the session cookie or the local user (see [`Authentication`]). Records
-/// `user_id` on the request span.
+/// The caller, from a bearer token or the session cookie. Records `user_id` on the request span.
 ///
 /// A request whose `Authorization` header uses the `Bearer` scheme is authenticated by it alone, and any cookie is
 /// ignored, even when the token is malformed or empty. That is what lets such requests skip the CSRF check
@@ -122,29 +110,21 @@ pub(crate) struct CurrentUser(pub Principal);
 impl FromRequestParts<AppState> for CurrentUser {
     type Rejection = ApiError;
 
-    // Only sessions and tokens read the request.
-    #[cfg_attr(not(feature = "accounts"), allow(unused_variables))]
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let principal = match &state.authentication {
-            #[cfg(feature = "accounts")]
-            Authentication::Sessions(_) if has_bearer_scheme(&parts.headers) => {
-                let token = bearer_token(&parts.headers).ok_or(ApiError::BearerRejected)?;
-                state
-                    .services
-                    .authenticate_access_token(&token)
-                    .await
-                    .map_err(|err| match err {
-                        ServiceError::Unauthenticated => ApiError::BearerRejected,
-                        other => ApiError::Service(other),
-                    })?
-            }
-            #[cfg(feature = "accounts")]
-            Authentication::Sessions(_) => session_principal(parts, state).await?,
-            Authentication::LocalUser(principal) => *principal,
+        let principal = if has_bearer_scheme(&parts.headers) {
+            let token = bearer_token(&parts.headers).ok_or(ApiError::BearerRejected)?;
+            state
+                .services
+                .authenticate_access_token(&token)
+                .await
+                .map_err(|err| match err {
+                    ServiceError::Unauthenticated => ApiError::BearerRejected,
+                    other => ApiError::Service(other),
+                })?
+        } else {
+            session_principal(parts, state).await?
         };
         tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
-        // A build without agents has no runs: the header is ignored.
-        #[cfg(feature = "agents")]
         let principal = in_run(parts, principal)?;
         Ok(Self(principal))
     }
@@ -153,22 +133,16 @@ impl FromRequestParts<AppState> for CurrentUser {
 /// The caller from the session cookie alone, for what only the user in their browser may do: approving a client's
 /// access. A request with a bearer token is refused, so a client holding a token can't approve more access for
 /// itself, and so the request can't have skipped the CSRF check.
-#[cfg(feature = "accounts")]
 pub(crate) struct SessionUser(pub Principal);
 
-#[cfg(feature = "accounts")]
 impl FromRequestParts<AppState> for SessionUser {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let principal = match &state.authentication {
-            Authentication::Sessions(_) if has_bearer_scheme(&parts.headers) => {
-                return Err(ServiceError::Unauthenticated.into());
-            }
-            Authentication::Sessions(_) => session_principal(parts, state).await?,
-            // There is no signing in, so nothing to approve.
-            Authentication::LocalUser(_) => return Err(ApiError::NoSuchRoute),
-        };
+        if has_bearer_scheme(&parts.headers) {
+            return Err(ServiceError::Unauthenticated.into());
+        }
+        let principal = session_principal(parts, state).await?;
         tracing::Span::current().record("user_id", tracing::field::display(principal.user_id));
         Ok(Self(principal))
     }
@@ -180,30 +154,26 @@ impl FromRequestParts<AppState> for SessionUser {
 /// A bearer token is authenticated exactly as for [`CurrentUser`], and a rejected one is `401`: a client that sends
 /// one expects it to count. Otherwise a session cookie is used, and one that is unknown or expired counts as signed
 /// out, not as `401`, because the page behind the link works signed out too and the person can't act on the error.
-#[cfg(feature = "accounts")]
 pub(crate) struct MaybeUser(pub Option<Principal>);
 
-#[cfg(feature = "accounts")]
 impl FromRequestParts<AppState> for MaybeUser {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let principal =
-            if matches!(state.authentication, Authentication::Sessions(_)) && !has_bearer_scheme(&parts.headers) {
-                match session_principal(parts, state).await {
-                    Ok(principal) => Some(principal),
-                    Err(ApiError::Service(ServiceError::Unauthenticated)) => None,
-                    Err(other) => return Err(other),
-                }
-            } else {
-                let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
-                Some(principal)
-            };
+        let principal = if has_bearer_scheme(&parts.headers) {
+            let CurrentUser(principal) = CurrentUser::from_request_parts(parts, state).await?;
+            Some(principal)
+        } else {
+            match session_principal(parts, state).await {
+                Ok(principal) => Some(principal),
+                Err(ApiError::Service(ServiceError::Unauthenticated)) => None,
+                Err(other) => return Err(other),
+            }
+        };
         Ok(Self(principal))
     }
 }
 
-#[cfg(feature = "accounts")]
 async fn session_principal(parts: &Parts, state: &AppState) -> Result<Principal, ApiError> {
     let token = session_token(&parts.headers).ok_or(ServiceError::Unauthenticated)?;
     Ok(state.services.authenticate_session(&token).await?)
@@ -221,7 +191,6 @@ fn has_bearer_scheme(headers: &HeaderMap) -> bool {
 
 /// The token from an `Authorization: Bearer <token>` header, or nothing when the header doesn't hold one: another
 /// scheme, or `Bearer` with no token or a malformed one.
-#[cfg(feature = "accounts")]
 fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
     if !has_bearer_scheme(headers) {
         return None;
@@ -234,7 +203,6 @@ fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
 }
 
 /// The session token from the `Cookie` header, if there is one.
-#[cfg(feature = "accounts")]
 pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
     headers
         .get_all(header::COOKIE)
@@ -247,7 +215,6 @@ pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
 }
 
 /// A `Set-Cookie` value that stores `token` as the session cookie.
-#[cfg(feature = "accounts")]
 pub(crate) fn session_cookie(token: &SessionToken, settings: &CookieSettings) -> Option<HeaderValue> {
     let secure = if settings.secure { "; Secure" } else { "" };
     let max_age = settings.max_age.as_secs();
@@ -259,7 +226,6 @@ pub(crate) fn session_cookie(token: &SessionToken, settings: &CookieSettings) ->
 }
 
 /// A `Set-Cookie` value that removes the session cookie.
-#[cfg(feature = "accounts")]
 pub(crate) fn clear_session_cookie(settings: &CookieSettings) -> HeaderValue {
     let secure = if settings.secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(

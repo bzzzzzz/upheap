@@ -66,9 +66,7 @@ const waitsForYou = (page: Page): Locator => itemPane(page).getByRole("region", 
 test("a stuck turn is a row in Waiting for me with its reason, and Retry puts it back at once", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const certs = await seedStuck(page, heapPath, "Rotate the certs", "The tool crashed");
 
   await openWaiting(page, 1);
@@ -105,12 +103,7 @@ test("a stuck turn is a row in Waiting for me with its reason, and Retry puts it
   expect(next.item.key).toBe(certs.key);
 });
 
-test("Take back on a stuck row asks first, and the item is the person's after", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("Take back on a stuck row asks first, and the item is the person's after", async ({ page, heapPath }) => {
   const certs = await seedStuck(page, heapPath, "Rotate the certs");
   await openWaiting(page, 1);
   const stuck = rows(page).first();
@@ -136,8 +129,7 @@ test("Take back on a stuck row asks first, and the item is the person's after", 
   expect(fetched.with_agent).toBe(false);
 });
 
-test("a long reason is cut to two lines, with Show all", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("a long reason is cut to two lines, with Show all", async ({ page, heapPath }) => {
   const reason = Array.from({ length: 40 }, (_, line) => `Line ${line + 1} of the tool's output.`).join("\n");
   await seedStuck(page, heapPath, "Rotate the certs", reason);
   await openWaiting(page, 1);
@@ -154,8 +146,7 @@ test("a long reason is cut to two lines, with Show all", async ({ page, heapPath
   expect((await text.boundingBox())?.height ?? 0).toBeLessThan(full);
 });
 
-test("a short reason has no Show all", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("a short reason has no Show all", async ({ page, heapPath }) => {
   await seedStuck(page, heapPath, "Rotate the certs", "Out of memory");
   await openWaiting(page, 1);
 
@@ -166,9 +157,7 @@ test("a short reason has no Show all", async ({ page, heapPath, localBuild }) =>
 test("a reply draft in another row survives a stuck row leaving, and the focus goes to that row", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   // The stuck item is the more important one, so its row is first.
   await seedStuck(page, heapPath, "Rotate the certs", "The tool crashed", "critical");
   const plan = await page.request.post(`/api/v1${heapPath}/items`, {
@@ -197,12 +186,7 @@ test("a reply draft in another row survives a stuck row leaving, and the focus g
   await expect(rows(page).first().getByLabel("Answer")).toBeFocused();
 });
 
-test("a retry of a turn someone took back meanwhile says so and the row leaves", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("a retry of a turn someone took back meanwhile says so and the row leaves", async ({ page, heapPath }) => {
   const certs = await seedStuck(page, heapPath, "Rotate the certs");
   await openWaiting(page, 1);
   const taken = await page.request.delete(`${certs.item}/turn`, { headers });
@@ -220,9 +204,7 @@ test("a retry of a turn someone took back meanwhile says so and the row leaves",
 test("the item shows its stuck turn in Waits for you, and Retry hands it back to the agents", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const certs = await seedStuck(page, heapPath, "Rotate the certs", "The tool crashed");
   await page.goto(`${heapPath}/items/${certs.key}`);
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
@@ -250,9 +232,7 @@ test("the item shows its stuck turn in Waits for you, and Retry hands it back to
 test("Take back from the item's stuck row asks first and leaves the item with the person", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const certs = await seedStuck(page, heapPath, "Rotate the certs");
   await page.goto(`${heapPath}/items/${certs.key}`);
   await expect(waitsForYou(page)).toBeVisible();
@@ -268,8 +248,7 @@ test("Take back from the item's stuck row asks first and leaves the item with th
   await expect(who(page).getByRole("button", { name: "Send to an agent", exact: true })).toBeVisible();
 });
 
-test("the item list says a stuck item waits for you", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("the item list says a stuck item waits for you", async ({ page, heapPath }) => {
   await seedStuck(page, heapPath, "Rotate the certs");
   await page.reload();
 

@@ -4,7 +4,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "src/api/schema.d.ts", "src/local/backend"] },
+  { ignores: ["dist", "src/api/schema.d.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.strict],
     files: ["**/*.{ts,tsx}"],
@@ -17,8 +17,8 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    // Playwright tests, their config and the scripts run in Node.
-    files: ["e2e/**/*.ts", "playwright.config.ts", "scripts/**/*.ts"],
+    // Playwright tests and their config run in Node.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
     languageOptions: { globals: globals.node },
   },
 );

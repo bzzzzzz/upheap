@@ -1,5 +1,4 @@
-//! Changing teams: creating and renaming them, and adding, removing and promoting their members. The local build
-//! has one team of one person and leaves all of this out (the `accounts` feature).
+//! Changing teams: creating and renaming them, and adding, removing and promoting their members.
 //!
 //! Every team write locks the team row before it reads anything else, then reads the memberships and checks the
 //! caller's permission on them, so two changes in one team run one after the other and the last-admin rule

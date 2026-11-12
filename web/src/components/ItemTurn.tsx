@@ -25,7 +25,7 @@ const fieldClass =
 /**
  * Who has the item (ux.md, The item): the person, or an agent, and the person's way to hand it over or take it back.
  * The server decides when there is one to show: an agent has the item, or the person may send it or take it back. A
- * closed item, an archived heap, a reader and the local build, which has no agents, have none of these.
+ * closed item, an archived heap and a reader have none of these.
  */
 export function ItemTurn({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const offered = item.allowed_actions.includes("send_to_agent") || item.allowed_actions.includes("take_back");

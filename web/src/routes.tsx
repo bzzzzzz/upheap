@@ -1,6 +1,5 @@
 // The URL is the state: the heap and the page live in the route, so links and reloads work. Paths name teams, heaps
 // and items by their handles (design/architecture.md, Handles), and `/h/…` short links expand to them.
-import { localDatabase } from "#local-database";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
@@ -15,10 +14,9 @@ import {
 } from "@tanstack/react-router";
 
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
-import { meQuery, soleTeam, useAuthorizationCheck, useHeap, useMe, useSignOut } from "./api/queries";
+import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
 import { parseListSearch } from "./components/listView";
-import { teamName } from "./components/teamName";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
@@ -244,26 +242,13 @@ const indexRoute = createRoute({
     }
   },
   component: function NoHeaps() {
-    const { data: me } = useMe();
-    const team = me && soleTeam(me);
     return (
       <p className="py-16 text-center text-stone-500">
         You don't have any heaps yet.{" "}
-        {team ? (
-          <>
-            <Link to="/teams/$team" params={{ team: team.slug }} className={linkClass}>
-              Start one
-            </Link>{" "}
-            in {me && teamName(team, me)}.
-          </>
-        ) : (
-          <>
-            <Link to="/teams" className={linkClass}>
-              Create a team
-            </Link>{" "}
-            to start one.
-          </>
-        )}
+        <Link to="/teams" className={linkClass}>
+          Create a team
+        </Link>{" "}
+        to start one.
       </p>
     );
   },
@@ -393,13 +378,6 @@ const heapActivityRoute = createRoute({
 const teamsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/teams",
-  // Without team creation and with one team, as in the local build, the list would hold only that team.
-  beforeLoad: async ({ context }) => {
-    const team = soleTeam(await context.queryClient.ensureQueryData(meQuery));
-    if (team) {
-      throw redirect({ to: "/teams/$team", params: { team: team.slug }, replace: true });
-    }
-  },
   component: TeamsPage,
 });
 
@@ -422,7 +400,7 @@ const teamActivityRoute = createRoute({
 });
 
 // Short links (design/architecture.md, Handles): the handles alone, in fixed positions, swapped for the full path as they open.
-// The router does it, so they work the same in the local build, which has no server to redirect.
+// The router does it, so the server needs no route for them.
 const shortTeamRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/h/$team",
@@ -447,13 +425,10 @@ const shortItemRoute = createRoute({
   },
 });
 
-/** Every open question across the heaps (ux.md, Waiting for me). The local build has none: nothing can ask there. */
+/** Every open question across the heaps (ux.md, Waiting for me). */
 const waitingRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/waiting",
-  beforeLoad: () => {
-    if (localDatabase) throw redirect({ to: "/", replace: true });
-  },
   component: WaitingPage,
 });
 
@@ -484,7 +459,7 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {
-  // The local build may be served below the root, such as `/upheap/` on GitHub Pages.
+  // Vite's base, which is the root unless the app is built for another.
   return createRouter({
     routeTree,
     context: { queryClient },

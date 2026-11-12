@@ -3,7 +3,7 @@
 Upheap as a ranked todo list that also carries a project's context and hands part of the work to AI agents:
 notes, tasks with steps and reminders, questions that wait for the person, and an agent loop run from the
 command line. It serves Product Notes, tasks and reminders, Questions, Working with agents, Review, The agent
-loop, Heaps §5 and Distribution §5, where Product is [product.md](../product.md).
+loop, Heaps §5 and Distribution §4, where Product is [product.md](../product.md).
 
 The design is agreed and is in [work-with-agents-design.md](work-with-agents-design.md).
 
@@ -96,8 +96,6 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
     cost (W14, W22).
 - [ ] 6. **The other moves:** a note becoming a step, and a new heap that joins the queue (C10, C11).
 - [ ] 7. **Told apart:** an agent's changes marked in item history and Activity (W21).
-- [ ] 8. **The local build:** steps, kinds, reminders and Markdown checked there, with everything about agents
-    absent.
 
 ## Open questions
 

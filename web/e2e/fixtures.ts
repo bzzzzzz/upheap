@@ -1,25 +1,17 @@
-// What the golden-path tests share, on the server and on the local build: a fresh heap per test, and ways to find
-// and add items as a user would.
+// What the golden-path tests share: a fresh heap per test, and ways to find and add items as a user would.
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 
 type Size = "S" | "M" | "L" | "XL";
 
-/** The option the local build's config sets. */
-export type LocalBuildOptions = { localBuild: boolean };
-
-export const test = base.extend<{ heapPath: string } & LocalBuildOptions>({
-  /** Whether the tests run against the local build, which has one user and nothing to sign in to. */
-  localBuild: [false, { option: true }],
+export const test = base.extend<{ heapPath: string }>({
   /**
-   * Opens a heap of the test's own: on the server, a new account's personal heap, which registering through the API
-   * signs the page in to (the sign-up form has its own test); in the local build, the local user's first heap, as
-   * every test's browser context starts with empty storage. So tests can run in parallel. Automatic, so a test that
-   * doesn't need the heap's path gets its heap too.
+   * Opens a heap of the test's own: a new account's personal heap, which registering through the API signs the page
+   * in to (the sign-up form has its own test). So tests can run in parallel. Automatic, so a test that doesn't need
+   * the heap's path gets its heap too.
    */
   heapPath: [
-    async ({ page, localBuild }, use) => {
-      if (!localBuild) await registerThroughApi(page);
-      // Relative, so the local build's base path stays.
+    async ({ page }, use) => {
+      await registerThroughApi(page);
       await page.goto("./");
       await expect(page).toHaveURL(HEAP_URL);
       await use(new URL(page.url()).pathname);
@@ -30,7 +22,7 @@ export const test = base.extend<{ heapPath: string } & LocalBuildOptions>({
 
 export { expect };
 
-/** A heap's address: `/teams/{team}/heaps/{heap}`, under the local build's base path too. */
+/** A heap's address: `/teams/{team}/heaps/{heap}`. */
 export const HEAP_URL = /\/teams\/[^/]+\/heaps\/[^/]+$/;
 
 /** An email and username no other test uses, also across repeats and parallel workers. */
@@ -43,7 +35,7 @@ export function uniqueUser() {
 export const PASSWORD = "a long test password";
 
 /**
- * Registers a new account through the API, which signs the page in to it (server only). Returns its email and
+ * Registers a new account through the API, which signs the page in to it. Returns its email and
  * username; the password is `PASSWORD`.
  */
 export async function registerThroughApi(page: Page) {
@@ -272,29 +264,19 @@ export async function signOut(page: Page) {
 export const dayFromToday = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 
 /**
- * Adds heaps named `names` to the team of the heap on screen and returns to that heap, reloaded so the switcher
- * lists them. On the server this goes through the API; the local build has none, so it uses the switcher's New heap.
+ * Adds heaps named `names` to the team of the heap on screen, through the API, and returns to that heap, reloaded so
+ * the switcher lists them.
  */
-export async function addHeaps(page: Page, names: string[], localBuild = false) {
+export async function addHeaps(page: Page, names: string[]) {
   const start = new URL(page.url()).pathname;
   const team = /\/teams\/([^/]+)\//.exec(start)?.[1];
   if (!team) throw new Error(`not on a heap: ${start}`);
   for (const name of names) {
-    if (localBuild) {
-      await page.getByRole("button", { name: /^Switch heap/ }).click();
-      const heaps = page.getByRole("dialog", { name: "Heaps" });
-      await heaps.getByRole("button", { name: /^New heap in / }).click();
-      await heaps.getByLabel(/^Name of the new heap in /).fill(name);
-      await heaps.getByRole("button", { name: "Add heap" }).click();
-      await expect(heaps).toHaveCount(0);
-      await expect(page.getByRole("button", { name: new RegExp(`^Switch heap: ${name}`) })).toBeVisible();
-    } else {
-      const created = await page.request.post(`/api/v1/teams/${team}/heaps`, {
-        headers: { "x-csrf-protection": "1" },
-        data: { name },
-      });
-      expect(created.status()).toBe(201);
-    }
+    const created = await page.request.post(`/api/v1/teams/${team}/heaps`, {
+      headers: { "x-csrf-protection": "1" },
+      data: { name },
+    });
+    expect(created.status()).toBe(201);
   }
   await page.goto(start);
   await expect(page).toHaveURL(HEAP_URL);

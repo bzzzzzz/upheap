@@ -1,3 +1,0 @@
-# getrandom 0.3 needs its browser backend picked by a cfg flag as well as a feature (see crates/local).
-[target.wasm32-unknown-unknown]
-rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

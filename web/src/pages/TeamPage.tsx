@@ -6,7 +6,6 @@ import { Button, Menu, MenuTrigger } from "react-aria-components";
 import { ApiProblem, type Heap, type Team, type TeamMember, type UserMatch } from "../api/client";
 import {
   isUserQuery,
-  soleTeam,
   useAddMember,
   useCreateHeap,
   useFindUsers,
@@ -29,7 +28,7 @@ import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
-import { namedForOwner, useTeamName } from "../components/teamName";
+import { useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
@@ -79,14 +78,11 @@ type TeamEdit = "name" | "slug";
  * sit under the ⋯ by the name; the name and link name are edited in place when chosen.
  */
 function TeamHeader({ team }: { team: Team }) {
-  const { data: me } = useMe();
   const label = useTeamName(team);
   const update = useUpdateTeam();
   const navigate = useNavigate();
   const [editing, setEditing] = useState<TeamEdit | null>(null);
   const can = (action: Team["allowed_actions"][number]) => team.allowed_actions.includes(action);
-  // In the local build there's no Teams list to go back to: `/teams` leads here.
-  const listed = me !== undefined && soleTeam(me) === undefined;
   const role = team.personal ? "your personal team" : team.role === "admin" ? "you're an admin" : "you're a member";
   // After Save, Cancel or Escape, focus goes back to the ⋯ the editor came from.
   const { ref: moreButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing !== null);
@@ -104,16 +100,10 @@ function TeamHeader({ team }: { team: Team }) {
   return (
     <div className="flex flex-col gap-0.5">
       <p className="text-xs text-muted">
-        {listed ? (
-          <>
-            <Link to="/teams" className="text-ink-soft hover:text-ink hover:underline">
-              Teams
-            </Link>
-            {` · ${role}`}
-          </>
-        ) : (
-          role.charAt(0).toUpperCase() + role.slice(1)
-        )}
+        <Link to="/teams" className="text-ink-soft hover:text-ink hover:underline">
+          Teams
+        </Link>
+        {` · ${role}`}
       </p>
       <div className="flex min-h-9 items-center gap-1.5">
         {editing === "name" ? (
@@ -142,7 +132,7 @@ function TeamHeader({ team }: { team: Team }) {
             <MenuPopover placement="bottom start">
               <Menu aria-label={`More for ${label}`} className="outline-none" onAction={act}>
                 {/* A team shown as "<name>'s team" whatever it is stored as: renaming it would change nothing. */}
-                {can("rename") && !(me && namedForOwner(team, me)) ? <MenuEntry id="rename">Rename</MenuEntry> : null}
+                {can("rename") && !team.personal ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
                 <MenuEntry id="activity">Activity</MenuEntry>
               </Menu>

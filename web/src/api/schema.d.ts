@@ -1961,7 +1961,7 @@ export interface components {
             stage?: null | components["schemas"]["Stage"];
             /**
              * @description The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
-             *     Empty when the item is closed, when the caller can't edit it, and in a build without the stage.
+             *     Empty when the item is closed, and when the caller can't edit it.
              */
             stage_choices: components["schemas"]["Stage"][];
             state: components["schemas"]["ItemState"];
@@ -2156,7 +2156,7 @@ export interface components {
             tag?: string[];
         };
         Me: {
-            /** @description Empty for the local build's one user, who can't sign out and has only the one team. */
+            /** @description What the user may do with their account, such as signing out and making teams. */
             allowed_actions: components["schemas"]["MeAction"][];
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];

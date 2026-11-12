@@ -692,29 +692,6 @@ async fn approving_needs_a_session() -> Result<()> {
     Ok(())
 }
 
-#[gtest]
-#[tokio::test]
-async fn the_local_build_has_no_oauth() -> Result<()> {
-    // Arrange
-    let app = TestApp::start_local().await?;
-
-    // Act
-    let checked = app
-        .send(
-            Method::GET,
-            &format!("/api/v1/oauth/authorize?{}", authorization_query("state", "s")),
-            None,
-            None,
-        )
-        .await?;
-    let token = app.exchange_code("x").await?;
-
-    // Assert
-    expect_that!(checked.status, eq(StatusCode::NOT_FOUND));
-    expect_that!(token.status, eq(StatusCode::NOT_FOUND));
-    Ok(())
-}
-
 /// Whether `response` is a refusal of the grant.
 fn is_invalid_grant(response: &TestResponse) -> bool {
     response.status == StatusCode::BAD_REQUEST && response.body["error"] == json!("invalid_grant")
@@ -1147,23 +1124,11 @@ async fn a_bearer_token_lists_and_ends_sign_ins_and_a_cookie_write_needs_the_csr
 
 #[gtest]
 #[tokio::test]
-async fn sign_ins_need_a_signed_in_caller_and_the_local_build_has_none() -> Result<()> {
+async fn sign_ins_need_a_signed_in_caller() -> Result<()> {
     let app = TestApp::start().await?;
-    let local = TestApp::start_local().await?;
 
     let anonymous = app.send(Method::GET, "/api/v1/me/sign-ins", None, None).await?;
-    let in_local = local.send(Method::GET, "/api/v1/me/sign-ins", None, None).await?;
-    let delete_in_local = local
-        .send(
-            Method::DELETE,
-            "/api/v1/me/sign-ins/7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40",
-            None,
-            None,
-        )
-        .await?;
 
     expect_that!(anonymous.status, eq(StatusCode::UNAUTHORIZED));
-    expect_that!(in_local.status, eq(StatusCode::NOT_FOUND));
-    expect_that!(delete_in_local.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

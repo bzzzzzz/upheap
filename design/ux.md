@@ -33,31 +33,10 @@ The app is one React app whose layout changes with the width: **phone** under 64
 
 ## Core flows
 
-The jobs each build must support. **Loop** flows happen many times a day, **setup** flows once or rarely,
+The jobs the app must support. **Loop** flows happen many times a day, **setup** flows once or rarely,
 **recovery** flows after a mistake or a failure.
 
-### One person, the local build
-
-1. **First open** (setup). The page opens the browser's database and makes the user, the team and the heap
-   "Personal". If storage can't open, every page shows an error; if Upheap is already open in another tab, a page
-   says so and opens once that tab closes. The empty heap says to add the first thing, and the storage note says the
-   data lives only in this browser. The first items go in through Add, with Add another keeping the dialog open, and
-   come back ranked, each with its contributors.
-2. **Daily loop** (loop). The list shows in-progress items pinned on top, then Up next. Start one from the item or
-   by swiping its row left; finish it with the state circle, a swipe right, or Done in the item; each change gets an
-   undo toast. Add what came up with the Add button, `N`, or + on a phone. Re-size or re-date in the item and watch
-   it move. Block an item, naming what it waits for; it leaves the list, since blocked items are hidden by default,
-   and "Show them" brings them back to unblock. Find an item with search.
-3. **Weekly review** (weekly). Closed: reopen what was closed by mistake, within its week, which is also the fix for
-   a missed Undo (recovery). Back in the list, close what won't happen as Won't do and re-size the rest. A reload
-   re-ranks at the current time.
-4. **Keeping the data safe** (setup, then recovery). The storage note leads to Account's Your data: download a copy
-   now and then. To restore, or to move to another browser, open a copy, confirm the replace, and the page reloads
-   with it.
-
-Not core here: more heaps, the settings tabs, saved views, filters and sort. One heap and its list do the job.
-
-### A team, the server build
+### A team
 
 1. **Sign up and sign in** (setup). Create account with a name, username, email and password lands on the empty
    personal heap. Later visits sign in; when the session ends, sign-in brings the user back to the page they were on
@@ -66,13 +45,20 @@ Not core here: more heaps, the settings tabs, saved views, filters and sort. One
    opens. The admin adds a heap, adds each teammate (who must have an account; invitations come later), and makes a
    second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
    switcher.
-3. **Daily loop in a shared heap** (loop). Pick the heap, then the single-user loop. Teammates' changes arrive as
-   the list refetches, and rows animate to their new places.
-4. **Coordinating.** See what others changed in the refreshed list, an item's history or the heap's Activity.
+3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one from
+   the item or by swiping its row left; finish it with the state circle, a swipe right, or Done in the item; each
+   change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone. Re-size or re-date in the
+   item and watch it move. Block an item, naming what it waits for; it leaves the list, since blocked items are
+   hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
+   teammates' changes arrive as the list refetches, and rows animate to their new places.
+4. **Weekly review** (weekly). Closed: reopen what was closed by mistake, within its week, which is also the fix for
+   a missed Undo (recovery). Back in the list, close what won't happen as Won't do and re-size the rest. A reload
+   re-ranks at the current time.
+5. **Coordinating.** See what others changed in the refreshed list, an item's history or the heap's Activity.
    Saving over a teammate's change shows a conflict and their version; redo the change if it still applies
    (recovery). Point someone at an item with Copy link: it opens the item, after sign-in if needed, or says the item
    can't be seen.
-5. **Admin basics** (setup, occasional). On the Team page: add members, make or unmake admins, remove someone; add,
+6. **Admin basics** (setup, occasional). On the Team page: add members, make or unmake admins, remove someone; add,
    rename and archive heaps, with the archived banner to unarchive; custom parameters in the heap's Settings; leave,
    or read why the only admin can't.
 
@@ -97,24 +83,20 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width | Navigation | List | Item |
 | --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More (the local build: Open, Closed, +, Settings, More) | Full width, compact rows | Bottom sheet over the list |
-| Tablet, 640–1023 px | An 80 px rail: Waiting (server build), the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it (server build), a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams, Account and the storage note at the bottom | Middle column | Pane beside the list while an item is selected |
+| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More | Full width, compact rows | Bottom sheet over the list |
+| Tablet, 640–1023 px | An 80 px rail: Waiting, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column | Pane beside the list while an item is selected |
 
-**More** on a phone holds Settings (server build), Activity, Team, Teams and Account (with Your data in the local build), as a card of 52 px
-rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards, which are Profile, Password (server build), Appearance, Command line (server build) and Your data (local
-build). The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
+**More** on a phone holds Settings, Activity, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
+its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
 the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
-the team in the URL (a link to its page, shown on the heap's pages and the team's own, and not in the local build,
-where Teams already leads to the one team), Teams and Account. The heap's title names its team too ("Product ·
+the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's title names its team too ("Product ·
 Acme"), on the phone's top bar as well, except for a heap in the personal team.
 
 A phone's tabs have room for four: Waiting sits left of the + and Closed right of it, and Settings and Activity go
-into More with the account pages. The local build has nothing to wait for, so it keeps Open, Closed, +, Settings and
-More, and no Waiting anywhere.
+into More with the account pages.
 
 **Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
 me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
@@ -147,12 +129,12 @@ turns the card into a form: a textarea that grows with its text, Save and Cancel
 the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
 saved a different context meanwhile, it shows above the kept draft under "Saved meanwhile", and Save again replaces
 it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
-Cancel give focus back to Edit. The local build has no Context card.
+Cancel give focus back to Edit.
 
 The **Agents** card, under Context, has a switch, "Agents prepare new notes", with the line "Each note added here is
 sent to an agent to fill in its context, then comes back to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
 switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
-"off". The local build has no Agents card.
+"off".
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
@@ -200,7 +182,7 @@ Pickers that are lists (heaps, due choices, a parameter's options) are 52 px row
 The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". From 8 unarchived
 heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
 opened in this browser, not the one on screen, as chips on a phone. Recent and the folds are kept in localStorage,
-since a "last opened" on the server would cost a write on every heap visit and wouldn't work in the local build;
+since a "last opened" on the server would cost a write on every heap visit;
 they don't follow the user to another device. Search gives a flat list with the team and an
 "archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
 clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
@@ -221,10 +203,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    right edge. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
    line up), and an item with context or defined has a page or a clipboard icon after it. The row shows no words for
    them; a screen reader hears them after the title ("Rotate the certs, task, defined"). A task with steps shows how
-   many are ticked, small and muted, after the stage icon (`2/5`; the static build, which shows no stage icon, has it
-   in the same place), and a screen reader hears ", 2 of 5 steps ticked" after the title. Dropped steps don't
-   count, and a task without an open or ticked step shows nothing. The static build never shows a stage icon.
-   A reminder has a calendar-clock icon in the same slot, and a screen reader hears ", reminder".
+   many are ticked, small and muted, after the stage icon (`2/5`), and a screen reader hears ", 2 of 5 steps ticked"
+   after the title. Dropped steps don't count, and a task without an open or ticked step shows nothing. A reminder
+   has a calendar-clock icon in the same slot, and a screen reader hears ", reminder".
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
@@ -257,12 +238,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 12. The hidden-items note offers the fix: "3 blocked items are hidden. Show them."
 13. An open item with an open question says **waits for you** at the end of its row, small, semibold and in the accent.
     On a phone, where the end of the row is tight, a small accent dot before the title stands for it. A screen reader
-    hears ", waits for you" after the title on every width. The closed list and the static build never show it.
+    hears ", waits for you" after the title on every width. The closed list never shows it.
 14. An open item an agent has says **with an agent** at the end of its row, small, in the quiet ink and at normal
     weight, where "waits for you" would be: the two never show together, as an item that waits for the person is
     not the agent's. On a phone a small robot mark before the title stands for it. A screen reader hears ", with an
-    agent" after the title. Who has an item never changes its place. The closed list and the static build never show
-    it.
+    agent" after the title. Who has an item never changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
     agent has “Rotate the certs”. Marking it done takes it back from the agent." The circle, a swipe, `x`, the
     hover Start and ⋯ (Start, Won't do) go through the one ask, which is a dialog on a wide screen and a sheet on a
@@ -282,7 +262,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it,
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens with the kind line under the title ("Task · With context": the icons with their words, and the kind
-   alone when the item is closed or in the static build), then the state (the likeliest next state as the main
+   alone when the item is closed), then the state (the likeliest next state as the main
    button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
    bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
    line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
@@ -344,8 +324,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 14. **Questions n**, a closed disclosure just above History, lists the answered questions and the withdrawn ones in
     number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as written>` and
     "<who>, <when>" in quiet text, or a muted "Withdrawn". It only reads; changing a reply is later.
-15. **Who has it** is a quiet block under Waits for you and above "Why it's #3", on an open item in an active heap
-    (not in the static build). With no agent it says "With you." and has **Send to an agent**, which opens a form:
+15. **Who has it** is a quiet block under Waits for you and above "Why it's #3", on an open item in an active heap.
+    With no agent it says "With you." and has **Send to an agent**, which opens a form:
     a popover on a wide screen and a tablet, a sheet on a phone. The form has two choices, "To <where it goes>" (the
     next stable state: with context, defined or done) and "All the way", or on a defined task the one line "To
     done"; "A line for the agent (optional)"; Send and Cancel. Send acts at once, closes the form, gives focus to
@@ -405,7 +385,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 ## Waiting for me
 
-The page at `/waiting` (server build): every open question on an open item in the person's active heaps, answered in
+The page at `/waiting`: every open question on an open item in the person's active heaps, answered in
 its row, and every item whose agent turn is stuck, with the ways out.
 
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
@@ -458,8 +438,7 @@ they name. After sign-up, the empty heap offers the next two steps, Add your fir
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.
 
 Among other teams, the personal team shows everywhere as "<name>'s team", by the user's display name whatever it is
-stored as, so it has no Rename. Alone, as in the local build, it keeps its own name ("My heaps"). The label is the
-web app's: the stored name is unchanged, because storing "\<name\>'s team" would need a migration and wouldn't
+stored as, so it has no Rename. The label is the web app's: the stored name is unchanged, because storing "\<name\>'s team" would need a migration and wouldn't
 follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
@@ -499,8 +478,7 @@ no sign-in. The server decides the state (the link's state, the viewer's standin
 order, and the page only shows it:
 
 - **Checking the link…** while it loads, with no form.
-- **Not an invite link** for any token the server doesn't know, naming no team. The local build has no invite
-  endpoints, so it says this for every link.
+- **Not an invite link** for any token the server doesn't know, naming no team.
 - **Already a member:** no page; they land in the team (below) with "You're already in Acme.", whatever the
   link's state.
 - **Ended or revoked:** says which, who the link was for and from, and to ask the team for a new one.
@@ -531,8 +509,7 @@ the state, and the page only shows it:
 
 - **Checking the link…** while it loads.
 - **Not a reset link** for any token the server doesn't know: "This isn't a reset link.", "Check that the whole link
-  was copied, or ask whoever runs this server for a new one." The local build has no passwords and no reset
-  endpoints, so it says this for every link.
+  was copied, or ask whoever runs this server for a new one."
 - **Used**, **cancelled** (a newer link was made, or the password was changed: "A newer one was made, or the password
   was changed since.") and **ended** say which, in a heading ("This reset link was already used.", "… no longer
   works.", "… has ended."), then "Ask whoever runs this server for a new one."
@@ -553,7 +530,7 @@ the toast "Password changed. You're signed in.", shown once like the invite page
 
 ## Password
 
-In the server build, Account's Password card sits between Profile and Appearance. Closed, it is the heading "Password"
+Account's Password card sits between Profile and Appearance. Closed, it is the heading "Password"
 and a **Change password** button on one row (wrapping on a narrow phone). Pressing the button replaces it with a
 form: **Current password** (focused) and **New password** with the hint "At least 10 characters.", then **Change
 password** and **Cancel**, and under them "This signs you out of your other browsers and the command line." Enter in
@@ -570,8 +547,7 @@ A success closes the form and shows a status line under the heading, "Password c
 Focus goes to Change password, and the Command line card is read again, since the change ended its sign-ins. The
 browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user
 lands on sign-in at its next request. A change also cancels the user's working reset link ([Reset page](#reset-page)),
-so a copy of it can't be used afterwards. The card is there when the server's `change_password` action is, so never in
-the local build.
+so a copy of it can't be used afterwards. The card is there when the server's `change_password` action is.
 
 At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
 member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest
@@ -583,26 +559,15 @@ change adds its entry to an open History at once, and to a closed one by the tim
 
 ## Command line
 
-In the server build, Account's Command line card lists where the `upheap` CLI is signed in as the user. A row has a
+Account's Command line card lists where the `upheap` CLI is signed in as the user. A row has a
 terminal icon, the machine's name (the client's name when it sent none), "Signed in 3 Nov · last used 2 days ago", and
 a **Sign out** button named for the machine. The server words the name and both dates, in the request's time zone. The
 button turns the row into an inline confirm that names it and says the CLI there stops working until someone runs
 `upheap auth login` again; one row confirms at a time, and Cancel gives focus back to the row's button. While a
 sign-out is pending, the other rows' buttons are disabled. After a sign-out the card says so in a status line and focus
 moves to its heading, since the row it was on is gone. With none signed in, the card says so and shows the command to
-start with, with this server's address. The card is there when the server's `manage_sign_ins` action is, so never in
-the local build, which has no accounts and nothing to sign in to. Ending a sign-in never touches the browser's own
+start with, with this server's address. The card is there when the server's `manage_sign_ins` action is. Ending a sign-in never touches the browser's own
 session.
-
-## Your data
-
-In the local build, the storage note is normally just "Stored only in this browser · Download a copy". It becomes a
-nudge only when it applies: when the browser hasn't agreed to keep the data, and when no copy was downloaded in the
-last two weeks, or ever. Account's Your data card has Download a copy, Open a copy… and "2 heaps · 41 items · last
-downloaded 26 Oct". The replace confirmation names the file, says what the copy holds and from when, compares the
-item counts, and offers Download current first; a file that isn't an Upheap database is refused in the confirm. It's
-a modal on a wide screen and a sheet on a phone. How the data is kept is in
-[architecture.md](architecture.md#keeping-the-data).
 
 ## Conflicts and errors
 
@@ -620,7 +585,7 @@ a modal on a wide screen and a sheet on a phone. How the data is kept is in
 1. **Confirmations.** A reversible change acts at once and offers Undo in a toast: state changes, archiving a heap,
    a view or a parameter. A change that can't be undone, or that affects other people, asks first, inline or in a
    dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own
-   admin role, revoking an invite link, replacing all local data, and discarding a typed title.
+   admin role, revoking an invite link, and discarding a typed title.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's state buttons sit in a bar at its bottom; on a wide screen they're the main button plus the others.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
@@ -634,7 +599,7 @@ a modal on a wide screen and a sheet on a phone. How the data is kept is in
 ## Testing
 
 The Playwright golden paths run on phone (Pixel 7 emulation) and tablet (iPad emulation) projects as well as desktop
-Chromium, against both the server and the local build.
+Chromium, against the real server.
 
 ## Later: keyboard
 
@@ -649,23 +614,3 @@ The wide screen gets shortcuts once the screens work without them, shown in the 
    every heap needs a server search endpoint; today's search filters only the loaded list.
 
 The keys that are already built (`N`, `/`, ↑ ↓, Enter, `x`, `⌘↵`) keep working. They just aren't shown yet.
-
-## Later: an installable app
-
-Once the website works at every width, the local build can become a Progressive Web App (PWA): the same site,
-installable from the browser and working offline. App-store builds can follow by wrapping it in Tauri 2. React Native
-is not the route: it would mean rebuilding every screen without the DOM, and its JavaScript engine can't run the local
-build's WebAssembly backend ([decisions.md](decisions.md#22-one-react-app-for-every-width)).
-
-What the PWA would need, for when it's picked up:
-
-1. A manifest (name, icons with maskable variants, `display: standalone`, `start_url` and `scope` at the base path)
-   and an Apple touch icon.
-2. A service worker (vite-plugin-pwa) that precaches the app, the WebAssembly backend and SQLite-wasm, with
-   navigations falling back to `index.html`.
-3. An update prompt, since a new version waits for a reload; migrations already run when the worker opens the
-   database.
-4. Install where the browser offers it, and Share → Add to Home Screen instructions on iOS. Installed apps also get
-   persistent storage more readily, and iOS doesn't clear their data after seven days unused.
-
-The server build needs the network for every request, so it would get only the manifest.

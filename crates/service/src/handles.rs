@@ -88,7 +88,6 @@ async fn resolve_team(db: &impl ConnectionTrait, principal: Principal, slug: &Ha
 
 /// A free slug for a new team called `name`: made from the name, with the first of `-2`, `-3`… that no team or
 /// username has when the plain one is taken.
-#[cfg(feature = "accounts")]
 pub(crate) async fn free_team_slug(db: &impl ConnectionTrait, name: &Name) -> Result<Handle, ServiceError> {
     for candidate in candidates(name, "team")? {
         if store::teams::find_team_by_slug(db, &candidate).await?.is_none() {

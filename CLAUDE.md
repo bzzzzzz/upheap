@@ -2,7 +2,7 @@
 
 A ranked todo list for teams. Items go into a heap with a need, a rough size, impact and due date, and the server
 ranks them, explains each position, and keeps the ranking current as time passes. One binary serves the API and the
-web app, on SQLite, MySQL or Postgres. A static build runs the same backend in the browser for one person.
+web app, on SQLite, MySQL or Postgres.
 
 ## Components
 
@@ -15,7 +15,6 @@ web app, on SQLite, MySQL or Postgres. A static build runs the same backend in t
 - `crates/cli`: the `upheap` command-line client (lib + thin bin), over HTTP with `api-types`. Never depends on `api`,
   `service` or `store` outside its tests.
 - `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
-- `crates/local`: the backend compiled to WebAssembly, for the static single-user build.
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.
 
 Build, run and check commands are in [README.md](README.md).

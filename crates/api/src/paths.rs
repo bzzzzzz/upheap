@@ -5,9 +5,7 @@
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-#[cfg(feature = "accounts")]
 use domain::InviteLinkId;
-#[cfg(feature = "accounts")]
 use domain::UserId;
 use domain::handle::{Handle, ItemKey};
 use domain::question::QuestionNumber;
@@ -18,7 +16,6 @@ use serde::Deserialize;
 use service::handles::HeapRef;
 use service::{Principal, ServiceError};
 use utoipa::IntoParams;
-#[cfg(feature = "accounts")]
 use uuid::Uuid;
 
 use crate::extract::{ApiPath, CurrentUser};
@@ -92,7 +89,6 @@ pub(crate) struct QuestionParams {
     question: String,
 }
 
-#[cfg(feature = "accounts")]
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Path)]
 pub(crate) struct MemberParams {
@@ -104,7 +100,6 @@ pub(crate) struct MemberParams {
     username: String,
 }
 
-#[cfg(feature = "accounts")]
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Path)]
 pub(crate) struct InviteLinkParams {
@@ -231,15 +226,13 @@ impl FromRequestParts<AppState> for QuestionPath {
 }
 
 /// `{team}/members/{username}`: a team the caller belongs to, and a user, who may or may not be a member. Only team
-/// management names members, and it needs accounts.
-#[cfg(feature = "accounts")]
+/// management names members.
 pub(crate) struct MemberPath {
     pub principal: Principal,
     pub team_id: TeamId,
     pub user_id: UserId,
 }
 
-#[cfg(feature = "accounts")]
 impl FromRequestParts<AppState> for MemberPath {
     type Rejection = ApiError;
 
@@ -259,15 +252,13 @@ impl FromRequestParts<AppState> for MemberPath {
 }
 
 /// `{team}/invite-links/{id}`: a team the caller belongs to, and the id of one of its invite links, which may not
-/// exist. Only team management names invite links, and it needs accounts.
-#[cfg(feature = "accounts")]
+/// exist. Only team management names invite links.
 pub(crate) struct InviteLinkPath {
     pub principal: Principal,
     pub team_id: TeamId,
     pub link_id: InviteLinkId,
 }
 
-#[cfg(feature = "accounts")]
 impl FromRequestParts<AppState> for InviteLinkPath {
     type Rejection = ApiError;
 

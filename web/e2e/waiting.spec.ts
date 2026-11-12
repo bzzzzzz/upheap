@@ -77,9 +77,7 @@ const waitingPath = (page: Page) => new URL(page.url()).pathname;
 test("on a phone an open question is found in the Waiting tab and answered without opening the item", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
   const other = await newHeap(page, teamOf(heapPath), "Launch");
   const certs = await seed(page, heapPath, {
     title: "Rotate the certs",
@@ -136,9 +134,7 @@ test("on a phone an open question is found in the Waiting tab and answered witho
 test("rows follow the score across heaps, with their item, heap, team and step, and Details unfold their context", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
   // A second team, so the team names show.
   const made = await page.request.post("/api/v1/teams", {
     headers,
@@ -219,12 +215,7 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   await expect(ca.getByRole("link", { name: "Rotate the certs", exact: true })).toBeFocused();
 });
 
-test("a long item title wraps in its row without running over the words after it", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a long item title wraps in its row without running over the words after it", async ({ page, heapPath }) => {
   const title = "Rotate the certificates of every internal service before the old root expires in March";
   await seed(page, heapPath, { title, questions: [{ kind: "question", text: "Which CA do we use?" }] });
   await page.goto("/waiting");
@@ -254,9 +245,7 @@ test("a long item title wraps in its row without running over the words after it
 test("a request is answered with Done or Can't be done, and an answered-first row leaves with a note", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
   const { item } = await seed(page, heapPath, {
     title: "Rotate the certs",
     questions: [
@@ -309,8 +298,7 @@ test("a request is answered with Done or Can't be done, and an answered-first ro
   await expect(page.getByText("Nothing waits for you.")).toBeVisible();
 });
 
-test("a list row says it waits for you until the question is answered", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("a list row says it waits for you until the question is answered", async ({ page, heapPath }) => {
   const { item } = await seed(page, heapPath, {
     title: "Rotate the certs",
     questions: [{ kind: "question", text: "Which CA do we use?" }],
@@ -339,11 +327,7 @@ test("a list row says it waits for you until the question is answered", async ({
   expect((await (await page.request.get(item)).json()).waits_for_you).toBe(false);
 });
 
-test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in More", async ({
-  page,
-  localBuild,
-}) => {
-  test.skip(localBuild, "The static build has its own tabs.");
+test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in More", async ({ page }) => {
   test.skip(!isPhone(page), "Tabs are the phone's.");
   const tabs = page.getByRole("navigation", { name: "Heap views" });
   const names = await tabs
@@ -365,12 +349,7 @@ test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in
   await expect(tabs.getByRole("button", { name: "More" })).toHaveAttribute("aria-current", "true");
 });
 
-test("on the Waiting page the shell keeps the heap opened last, and marks no view", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
+test("on the Waiting page the shell keeps the heap opened last, and marks no view", async ({ page, heapPath }) => {
   const other = await newHeap(page, teamOf(heapPath), "Launch");
   await page.goto(other);
   await expect(page.getByRole("button", { name: /^Switch heap: Launch/ })).toBeVisible();
@@ -397,9 +376,7 @@ test("on the Waiting page the shell keeps the heap opened last, and marks no vie
 test("the navigation entry has the width's form: with the count on the right, or badged under its label", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "Nothing asks a question in the static build.");
   const width = page.viewportSize()?.width ?? 0;
   // No count at zero; the entry stays.
   await expect(entry(page)).toBeVisible();

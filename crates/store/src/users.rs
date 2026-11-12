@@ -62,16 +62,6 @@ pub async fn find_user_by_email(db: &impl ConnectionTrait, email: &Email) -> Res
     Ok(to_users(db, row.into_iter().collect()).await?.pop())
 }
 
-/// The user who was created first, if there is any. The local build has only one.
-pub async fn find_first_user(db: &impl ConnectionTrait) -> Result<Option<User>, StoreError> {
-    let row = users::Entity::find()
-        .order_by_asc(users::Column::CreatedAt)
-        .order_by_asc(users::Column::Id)
-        .one(db)
-        .await?;
-    Ok(to_users(db, row.into_iter().collect()).await?.pop())
-}
-
 /// The users among `ids`, in no particular order. Unknown IDs are left out.
 pub async fn list_users(db: &impl ConnectionTrait, ids: &[UserId]) -> Result<Vec<User>, StoreError> {
     if ids.is_empty() {

@@ -516,22 +516,3 @@ async fn items_are_found_by_their_key_within_their_heap() -> Result<()> {
     }
     Ok(())
 }
-
-#[gtest]
-#[tokio::test]
-async fn the_local_user_is_me_with_a_personal_heap() -> Result<()> {
-    // Arrange
-    let app = TestApp::start_local().await?;
-
-    // Act
-    let me = app.send(Method::GET, "/api/v1/me", None, None).await?;
-    let list = app
-        .send(Method::GET, "/api/v1/teams/me/heaps/personal/items", None, None)
-        .await?;
-
-    // Assert
-    expect_that!(me.body["user"]["username"], eq(&json!("me")));
-    expect_that!(me.body["teams"][0]["slug"], eq(&json!("me")));
-    expect_that!(list.status, eq(StatusCode::OK));
-    Ok(())
-}

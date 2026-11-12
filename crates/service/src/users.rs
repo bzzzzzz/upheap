@@ -1,4 +1,4 @@
-//! Finding users to add to a team. The local build has no one else, and leaves this out (the `accounts` feature).
+//! Finding users to add to a team.
 
 use domain::handle::Handle;
 use domain::permission::Permission;
