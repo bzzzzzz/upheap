@@ -1,6 +1,7 @@
 //! The question commands: their args and flows, and what they share.
 
 pub mod ask;
+pub mod reply;
 
 use api_types::common::ItemDto;
 use serde::Serialize;
@@ -37,6 +38,53 @@ impl HeapApi<'_> {
             Err(err) => Err(err.into()),
         }
     }
+}
+
+impl HeapApi<'_> {
+    /// `PATCH` of `body` to question `number` of the item with `key`, which is at `version`. A `404` is the question
+    /// not being there. A stale, answered or closed refusal names the item as `team/heap/key`.
+    pub async fn patch_question(
+        &self,
+        key: &str,
+        number: u32,
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<ItemDto>, CliError> {
+        let number_text = number.to_string();
+        match self
+            .client
+            .patch(
+                &self.path(&["items", key, "questions", &number_text]),
+                body,
+                version,
+                self.token,
+            )
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => {
+                Err(self.no_such_question(key, number))
+            }
+            Err(source @ ClientError::Problem { .. }) if is_refused_reply(&source) => Err(CliError::ItemRefused {
+                name: format!("{}/{key}", self.heap),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// The failure for a question number the item `key` doesn't have.
+    pub fn no_such_question(&self, key: &str, number: u32) -> CliError {
+        CliError::NoSuchQuestion {
+            name: format!("{key}.q{number}"),
+            heap: self.heap.to_string(),
+        }
+    }
+}
+
+fn is_refused_reply(err: &ClientError) -> bool {
+    matches!(err, ClientError::Problem { problem, .. }
+        if matches!(problem.code.as_str(), "version_conflict" | "item_closed" | "question_answered"))
 }
 
 fn is_closed(err: &ClientError) -> bool {

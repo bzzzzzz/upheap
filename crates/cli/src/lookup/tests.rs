@@ -445,3 +445,101 @@ fn an_archived_or_unknown_option_lists_the_options_in_use() -> googletest::Resul
         err(displays_as(eq("parameter `Empty` in ada/personal has no option `X`")))
     )
 }
+
+#[gtest]
+fn a_question_is_named_by_its_item_and_number() -> googletest::Result<()> {
+    verify_that!(
+        QuestionName::parse("k3x9a.q2")?,
+        eq(&QuestionName {
+            item_typed: "k3x9a".to_owned(),
+            item: ItemName::Key("k3x9a".to_owned()),
+            number: 2,
+        })
+    )?;
+    verify_that!(
+        QuestionName::parse("team/heap/k3x9a.q12")?,
+        eq(&QuestionName {
+            item_typed: "team/heap/k3x9a".to_owned(),
+            item: item_in("team", "heap", "k3x9a"),
+            number: 12,
+        })
+    )?;
+    verify_that!(
+        QuestionName::parse("https://up.heap.example.test/h/team/heap/k3x9a.q3")?,
+        eq(&QuestionName {
+            item_typed: "https://up.heap.example.test/h/team/heap/k3x9a".to_owned(),
+            item: item_in("team", "heap", "k3x9a"),
+            number: 3,
+        })
+    )?;
+    Ok(())
+}
+
+#[gtest]
+fn anything_else_names_no_question() {
+    for bad in [
+        "",
+        "k3x9a",
+        "k3x9a.2",
+        "k3x9a.q",
+        "k3x9a.q0",
+        "k3x9a.Q2",
+        "k3x9a.q-1",
+        "k3x9a.q02",
+        ".q2",
+        "a/b.q2",
+        "k3x9a.q2.q3",
+    ] {
+        expect_that!(
+            QuestionName::parse(bad),
+            err(matches_pattern!(LookupError::MalformedQuestion { .. })),
+            "{bad:?}"
+        );
+    }
+}
+
+fn picks(typed: &[&str], choices: &[&str]) -> Result<Vec<u32>, LookupError> {
+    let strings = |texts: &[&str]| texts.iter().map(|text| (*text).to_owned()).collect::<Vec<_>>();
+    match_choices("k3x9a.q2", &strings(typed), &strings(choices))
+}
+
+#[gtest]
+fn a_pick_is_a_label_ignoring_case_or_a_number() {
+    expect_that!(picks(&["internal"], &["Internal", "Let's Encrypt"]), ok(eq(&vec![0])));
+    expect_that!(
+        picks(&["  LET'S encrypt "], &["Internal", "Let's Encrypt"]),
+        ok(eq(&vec![1]))
+    );
+    expect_that!(picks(&["2", "1"], &["a", "b", "c"]), ok(eq(&vec![1, 0])));
+}
+
+#[gtest]
+fn a_label_beats_a_number_and_a_repeated_pick_counts_once() {
+    expect_that!(picks(&["2"], &["x", "2"]), ok(eq(&vec![1])));
+    expect_that!(picks(&["1"], &["a", "1"]), ok(eq(&vec![1])));
+    expect_that!(picks(&["b", "2", "a", "B"], &["a", "b"]), ok(eq(&vec![1, 0])));
+}
+
+#[gtest]
+fn an_unknown_pick_lists_the_choices() {
+    for typed in ["maybe", "0", "3", "-1", ""] {
+        expect_that!(
+            picks(&[typed], &["Done", "Can't be done"]),
+            err(matches_pattern!(LookupError::UnknownChoice {
+                typed: eq(typed),
+                known: eq(&vec!["Done".to_owned(), "Can't be done".to_owned()]),
+                ..
+            })),
+            "{typed:?}"
+        );
+    }
+}
+
+#[gtest]
+fn a_pick_on_a_free_text_question_is_refused() {
+    expect_that!(
+        picks(&["1"], &[]),
+        err(matches_pattern!(LookupError::NoChoicesToPick { .. }))
+    );
+    expect_that!(picks(&[], &[]), ok(eq(&Vec::<u32>::new())));
+}
