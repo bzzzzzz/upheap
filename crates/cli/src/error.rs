@@ -44,6 +44,10 @@ pub enum CliError {
     /// The item a command named has no question by the number it gave.
     #[error("no question `{name}` in {heap}")]
     NoSuchQuestion { name: String, heap: String },
+    /// A question that takes no reply from this command: it was withdrawn when its item closed, or it is answered
+    /// already with another reply.
+    #[error("{}", .refusal.message(.name))]
+    QuestionRefused { name: String, refusal: QuestionRefusal },
     /// The server refused a change to an item because it moved on or is closed. Carries the item as `team/heap/key`,
     /// for a hint that can be pasted whatever heap is the default.
     #[error("{source}")]
@@ -71,6 +75,28 @@ pub enum CliError {
     NoSuchRun { run: String },
 }
 
+/// Why a question takes no reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestionRefusal {
+    /// Closing its item took it back unanswered. Reopening the item doesn't bring it back.
+    Withdrawn,
+    /// It has another reply, and a reply can't be changed here.
+    AnsweredDifferently,
+}
+
+impl QuestionRefusal {
+    fn message(self, name: &str) -> String {
+        match self {
+            Self::Withdrawn => {
+                format!("{name} was withdrawn when its item closed, so there is nothing to reply to")
+            }
+            Self::AnsweredDifferently => {
+                format!("{name} is answered already with another reply, which can't be changed here")
+            }
+        }
+    }
+}
+
 impl CliError {
     /// The exit code for the failure's category.
     pub fn exit_code(&self) -> u8 {
@@ -95,8 +121,10 @@ impl CliError {
                 | LookupError::UnknownParameter { .. }
                 | LookupError::UnknownOption { .. }
                 | LookupError::UnknownChoice { .. }
+                | LookupError::NoPickGiven { .. }
                 | LookupError::NoChoicesToPick { .. },
             ) => 3,
+            Self::QuestionRefused { .. } => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))

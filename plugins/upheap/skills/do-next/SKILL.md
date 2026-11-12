@@ -63,8 +63,9 @@ one they mean, or the highest in progress, and read where it got to before doing
 
 Pass over an item, and say so in a line, when:
 
-- It waits for the person's answer. Tell them the question. If they answer now, reply with `upheap question reply`,
-  with what they said, and go on with it.
+- It waits for the person's answer. Tell them the question. If they answer now, reply with `upheap question reply`
+  when the guide shows it; otherwise, or when the answer fits none of the choices, record it in the item's context.
+  Then go on with it.
 - It's been sent on to an agent: `upheap item show` prints a `Turn:` line. An unattended run may take it, so
   leave it, unless the person says to do it here.
 - It's blocked.
@@ -136,8 +137,8 @@ Telling the person how to do it is this session's result for that item.
    when it's one action.
 4. Move the item back to open. Open a request on it with `upheap question request`, saying what to do in a
    line, so it shows as waiting for them.
-5. If they do it right now and tell you, tick the steps, reply Done to the request with `upheap question reply`, and
-   close the item with `upheap item done`.
+5. If they do it right now and tell you, tick the steps, reply Done to the request with `upheap question reply`, if the guide
+   shows it, and close the item with `upheap item done`.
 
 ### Doing it
 

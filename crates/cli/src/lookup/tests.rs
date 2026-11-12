@@ -543,3 +543,14 @@ fn a_pick_on_a_free_text_question_is_refused() {
     );
     expect_that!(picks(&[], &[]), ok(eq(&Vec::<u32>::new())));
 }
+
+#[gtest]
+fn a_choice_question_needs_a_pick() {
+    expect_that!(
+        picks(&[], &["A", "B"]),
+        err(matches_pattern!(LookupError::NoPickGiven {
+            known: eq(&vec!["A".to_owned(), "B".to_owned()]),
+            ..
+        }))
+    );
+}

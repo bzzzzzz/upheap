@@ -29,7 +29,8 @@ Exit codes
 
 Long text
 - Anything longer than a line goes in from a file: write the file, then pass it with --context-file (an item's,
-  a step's or a heap's context) or --details-file (a question's long version). `-` in place of the file reads stdin.
+  a step's or a heap's context), --details-file (a question's long version) or --comment-file (a reply's comment).
+  `-` in place of the file reads stdin.
 - `upheap item add` takes the context with --context-file too, and a task's steps with --step, so a task with its
   context and steps is one call. If a step fails, the item stays added with the steps before it, and the output
   names its key: add the rest with `upheap step add`, don't add the item again.

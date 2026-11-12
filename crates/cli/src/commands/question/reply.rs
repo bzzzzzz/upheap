@@ -2,15 +2,18 @@
 //!
 //! The CLI reads the item first, for the question's version and its choices, which it needs to turn what was typed
 //! into the indices the API takes. The server owns every other rule: how many picks, whether a comment is needed,
-//! an open question on an open item. A question that is answered already is refused, not treated as done, since the
-//! new reply would be lost.
+//! an open question on an open item. Repeating a command is safe: a question answered already with this very reply
+//! is said to be, and makes no write. Another reply is refused, since it would be lost, and so is a question that
+//! closing its item withdrew.
 
+use api_types::common::{QuestionDto, QuestionStateDto};
 use api_types::questions::{QuestionPatchDto, ReplyDto};
 use clap::Args;
 
 use crate::commands::heap_api::{HeapApi, read_context, read_text_flag};
 use crate::commands::item::common::locate_item;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
+use crate::error::QuestionRefusal;
 use crate::lookup::{QuestionName, match_choices};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
@@ -64,11 +67,28 @@ pub async fn run_reply(args: ReplyArgs, app: &App, out: &mut Output) -> Result<(
         .flatten()
         .find(|question| question.number == name.number)
         .ok_or_else(|| api.no_such_question(&at.key, name.number))?;
-    let picked = match_choices(
-        &format!("{}.q{}", at.key, question.number),
-        &args.picks,
-        &question.choices,
-    )?;
+    let full_name = format!("{}.q{}", at.key, question.number);
+    if question.state == QuestionStateDto::Withdrawn {
+        return Err(CliError::QuestionRefused {
+            name: full_name,
+            refusal: QuestionRefusal::Withdrawn,
+        });
+    }
+    let picked = match_choices(&full_name, &args.picks, &question.choices)?;
+    if question.state == QuestionStateDto::Answered {
+        if !is_same_reply(question, &picked, comment.as_deref()) {
+            return Err(CliError::QuestionRefused {
+                name: full_name,
+                refusal: QuestionRefusal::AnsweredDifferently,
+            });
+        }
+        match out.mode() {
+            Mode::Json => out.json(&item.body)?,
+            Mode::Quiet => {}
+            Mode::Human => out.line(&format!("{full_name} is already answered with that."))?,
+        }
+        return Ok(());
+    }
     let patch = QuestionPatchDto {
         reply: Some(ReplyDto { picked, comment }),
     };
@@ -84,4 +104,17 @@ pub async fn run_reply(args: ReplyArgs, app: &App, out: &mut Output) -> Result<(
         ))?,
     }
     Ok(())
+}
+
+/// Whether the answered `question` has the reply of `picked` and `comment`: the picks as a set, the comments
+/// trimmed, none the same as an empty one.
+fn is_same_reply(question: &QuestionDto, picked: &[u32], comment: Option<&str>) -> bool {
+    let Some(reply) = &question.reply else {
+        return false;
+    };
+    let mut have = reply.picked.clone();
+    let mut want = picked.to_vec();
+    have.sort_unstable();
+    want.sort_unstable();
+    have == want && reply.comment.as_deref().unwrap_or("").trim() == comment.unwrap_or("").trim()
 }
