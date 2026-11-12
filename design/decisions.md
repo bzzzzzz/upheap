@@ -404,3 +404,23 @@ backend, and a second end-to-end suite.
 **Consequences.** One configuration to build and test. Code may use what the server has: the blocking pool, timers
 and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19. §2, §12, §15 and §22 cite the local build in passing and stand on their other
 reasons.
+
+## 35. A gone blocker is read, not stored; done frees, won't do and a move wait for the person
+
+**Context.** Blocked items are hidden from the list. Closing their blocker changed nothing, so work free to go on
+stayed out of sight. Moving a blocker to another heap cleared the link, leaving items blocked by nothing.
+
+**Decision.** Closing a blocker as done moves what it blocks in its heap to open, in the same transaction, with an
+entry in each item's history. Closing it as won't do, or moving it to another heap, leaves the items blocked and
+pointing at it, and they wait for the person. Whether a blocker is gone is read off the item and its blocker (closed,
+or in another heap), never stored, so reopening the blocker or moving it back ends the wait with no write. A move
+keeps the link across heaps of the team.
+
+**Instead of.** Unblocking on every close, which guesses that refused work no longer matters. Storing a "waits on its
+blocker" flag, which every state change, reopen and move would have to keep in step. Clearing the link on a move,
+which loses what the item waited for.
+
+**Consequences.** `blocked_by_item_id` can name an item of another heap of the same team, so blockers are read
+without a heap scope, while setting one still needs an open item of the same heap. Reopening a done blocker doesn't
+block what it freed again. A blocker moved away and then closed as done there doesn't free what it left behind; those
+items keep waiting ([architecture.md](architecture.md#cycle-detection-and-locking) §2–3).

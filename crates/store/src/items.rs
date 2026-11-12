@@ -118,6 +118,54 @@ pub async fn list_item_summaries(
     Ok(summaries)
 }
 
+/// The summaries of the blockers `ids`, in whichever heap each is now, in no particular order.
+///
+/// Not scoped by heap, unlike the rest: a blocker moved to another heap stays the blocker of the items it left
+/// behind, and a move stays in its team, so the caller, who may see the blocked item, may see its blocker.
+pub async fn list_blockers(
+    db: &impl ConnectionTrait,
+    ids: impl IntoIterator<Item = ItemId>,
+) -> Result<Vec<ItemSummary>, StoreError> {
+    let ids: Vec<String> = ids.into_iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut summaries = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = items::Entity::find()
+            .filter(items::Column::Id.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            summaries.push(ItemSummary::from(&to_item(row)?));
+        }
+    }
+    Ok(summaries)
+}
+
+/// Every blocked item of `heap_ids` with a blocker picked, oldest first, without its tags and values. With
+/// [`list_blockers`] it finds the items whose blocker is gone ([`Item::blocker_gone`]). A heap blocks tens of items,
+/// so reading them all for Waiting for me and the agents' queue is cheap; a team with thousands would want the
+/// blocker's state in this query instead.
+pub async fn list_blocked_items_with_blocker(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<Item>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut items = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = items::Entity::find()
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::State.eq(StateKind::Blocked.code()))
+            .filter(items::Column::BlockedByItemId.is_not_null())
+            .order_by_asc(items::Column::CreatedAt)
+            .order_by_asc(items::Column::Id)
+            .all(db)
+            .await?;
+        for row in rows {
+            items.push(to_item(row)?);
+        }
+    }
+    Ok(items)
+}
+
 /// The item `id` of `heap_id`, without its tags, or `None` when the heap has no such item.
 ///
 /// It's a locking read (`FOR SHARE` on MySQL and Postgres), which sees the latest committed row rather than the
@@ -138,8 +186,7 @@ pub async fn find_item_summary_locking(
 }
 
 /// The items of `heap_id` that wait for `blocker`, with locking reads (`FOR SHARE` on MySQL and Postgres) like
-/// [`find_item_locking`], oldest first. A write that takes `blocker` out of the heap calls it after
-/// [`crate::heaps::lock_heap`].
+/// [`find_item_locking`], oldest first. A write that closes `blocker` calls it after [`crate::heaps::lock_heap`].
 pub async fn list_items_blocked_by_locking(
     db: &impl ConnectionTrait,
     heap_id: HeapId,

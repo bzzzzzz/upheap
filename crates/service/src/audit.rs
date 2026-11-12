@@ -50,6 +50,16 @@ pub(crate) fn diff_moved(before: &Item, after: &Item) -> Value {
     Value::Object(changes)
 }
 
+/// The changes freeing an item makes when its blocker is closed as done, in the shape of [`diff_items`], with
+/// `blocker_done` naming the blocker as the reason.
+pub(crate) fn diff_freed(before: &Item, after: &Item, blocker: &Item) -> Value {
+    let Value::Object(mut changes) = diff_items(before, after) else {
+        return Value::Null;
+    };
+    changes.insert("blocker_done".into(), json!(blocker.id.to_string()));
+    Value::Object(changes)
+}
+
 /// The fields of a newly added step, for its `step_added` entry. The step is named by its number and title; the
 /// context is left out when there is none.
 pub(crate) fn describe_new_step(step: &Step) -> Value {

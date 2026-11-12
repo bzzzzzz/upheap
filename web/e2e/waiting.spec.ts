@@ -125,7 +125,9 @@ test("on a phone an open question is found in the Waiting tab and answered witho
 
   // The last reply: the empty state, no count anywhere, and the focus on the heading.
   await expect(page.getByText("Nothing waits for you.")).toBeVisible();
-  await expect(page.getByText("Questions from agents and teammates show up here.")).toBeVisible();
+  await expect(
+    page.getByText("Questions from agents and teammates, and work whose blocker was closed, show up here."),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Waiting for me", level: 1, exact: true })).toBeFocused();
   await expect(entry(page)).toHaveAccessibleName(/^Waiting( for me)?$/);
   expect((await (await page.request.get(certs.item)).json()).questions[0].reply.comment).toBe("Let's Encrypt");
@@ -297,6 +299,59 @@ test("a request is answered with Done or Can't be done, and an answered-first ro
   await expect(note).toContainText("The item was closed before your reply to “Put a token in the vault.” was sent.");
   await expect(note).toContainText("Your comment: Done by hand");
   await expect(page.getByText("Nothing waits for you.")).toBeVisible();
+});
+
+test("an item whose blocker was closed as won't do waits in its row and in the item, and Unblock frees it", async ({
+  page,
+  heapPath,
+}) => {
+  // "Ship the feed" waits for "Pick a host", which is closed as won't do; "Write the post" is freed by "Draft it" done.
+  const host = await seed(page, heapPath, { title: "Pick a host", questions: [] });
+  const feed = await seed(page, heapPath, { title: "Ship the feed", questions: [] });
+  const draft = await seed(page, heapPath, { title: "Draft it", questions: [] });
+  const post = await seed(page, heapPath, { title: "Write the post", questions: [] });
+  const block = async (item: string, blocker: string) => {
+    const [current, by] = [await (await page.request.get(item)).json(), await (await page.request.get(blocker)).json()];
+    const blocked = await page.request.patch(item, {
+      headers: { ...headers, "If-Match": `"${current.version}"` },
+      data: { state: "blocked", blocked_by_item_id: by.id },
+    });
+    expect(blocked.status()).toBe(200);
+  };
+  const close = async (item: string, state: "done" | "wont_do") => {
+    const current = await (await page.request.get(item)).json();
+    const closed = await page.request.patch(item, {
+      headers: { ...headers, "If-Match": `"${current.version}"` },
+      data: { state },
+    });
+    expect(closed.status()).toBe(200);
+  };
+  await block(feed.item, host.item);
+  await block(post.item, draft.item);
+  await close(host.item, "wont_do");
+  await close(draft.item, "done");
+  expect((await (await page.request.get(post.item)).json()).state).toBe("open");
+
+  await page.goto("/waiting");
+  await expect(rows(page)).toHaveCount(1);
+  const waiting = rows(page).first();
+  await expect(waiting).toContainText("Blocker closed · Ship the feed");
+  await expect(waiting).toContainText("Waits for “Pick a host”, closed as won't do");
+  await expect(waiting.getByRole("link", { name: "Open Ship the feed" })).toBeVisible();
+
+  // The item says the same in its Waits for you, with Unblock and no Open, as it is open already.
+  await waiting.getByRole("link", { name: "Open Ship the feed" }).click();
+  const waits = itemPane(page).getByRole("region", { name: "Waits for you" });
+  await expect(waits).toContainText("Waits for “Pick a host”, closed as won't do");
+  await expect(waits.getByRole("link", { name: "Open Ship the feed" })).toHaveCount(0);
+  await closeItem(page);
+  await expect(page).toHaveURL(/\/waiting$/);
+
+  // Unblock in the row: it leaves, the item is open, and nothing waits.
+  await rows(page).first().getByRole("button", { name: "Unblock Ship the feed" }).click();
+  await expect(page.getByText("Nothing waits for you.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Unblocked" })).toHaveText("Unblocked “Ship the feed”.");
+  expect((await (await page.request.get(feed.item)).json()).state).toBe("open");
 });
 
 test("a list row says it waits for you until the question is answered", async ({ page, heapPath }) => {

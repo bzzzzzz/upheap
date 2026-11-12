@@ -4,18 +4,18 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{ItemActionDto, KindDto, QuestionDto, StageDto};
+use crate::common::{BlockerGoneDto, ItemActionDto, ItemRefDto, KindDto, QuestionDto, StageDto};
 use crate::turns::{GoalDto, TurnDto};
 
-/// What waits for the caller: every open question on an open item, and every item with a stuck agent turn, in their
-/// active heaps, most important first.
+/// What waits for the caller: every open question on an open item, every item with a stuck agent turn, and every
+/// blocked item whose blocker is gone, in their active heaps, most important first.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Waiting)]
 pub struct WaitingDto {
-    /// How many rows wait, questions and stuck turns. At most 500 are in `rows`; this is the true total.
+    /// How many rows wait: questions, stuck turns and gone blockers. At most 500 are in `rows`; this is the true total.
     pub count: u32,
     /// Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
-    /// its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
+    /// its heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.
     /// Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
     pub rows: Vec<WaitingRowDto>,
 }
@@ -29,6 +29,9 @@ pub enum WaitingRowKindDto {
     Question,
     /// An item whose agent turn is stuck: 3 runs in a row failed.
     Stuck,
+    /// A blocked item whose blocker was closed as won't do (or done, before closing as done freed what it blocks), or
+    /// moved to another heap.
+    BlockerGone,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -52,8 +55,12 @@ pub struct WaitingRowDto {
     #[serde(default)]
     #[schema(required = true)]
     pub stuck: Option<WaitingStuckDto>,
+    /// The gone blocker. Set on a `blocker_gone` row.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub blocker: Option<WaitingBlockerDto>,
     /// The title of the step the question names, so a client needn't load the item's steps. `null` when it names
-    /// none, or one that no longer exists, and on a `stuck` row.
+    /// none, or one that no longer exists, and on the other rows.
     pub step_title: Option<String>,
 }
 
@@ -68,6 +75,18 @@ pub struct WaitingStuckDto {
     /// The stable state the turn goes to.
     pub goal: GoalDto,
     /// What the caller may do about it: `retry` and `take_back`, when they may edit items.
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<ItemActionDto>,
+}
+
+/// A blocker that stopped holding the row's item, which stays blocked until the caller moves it on.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = WaitingBlocker)]
+pub struct WaitingBlockerDto {
+    /// The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap.
+    pub item: ItemRefDto,
+    pub gone: BlockerGoneDto,
+    /// What the caller may do about it: `change_state`, to unblock the item, when they may edit items.
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,
 }
@@ -94,6 +113,10 @@ pub struct WaitingItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub with_agent: bool,
+    /// The item's version, for `If-Match` on a change made from the row, such as Unblock.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub version: u32,
 }
 
 /// The heap a row's item is in, and its team.

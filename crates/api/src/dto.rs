@@ -5,8 +5,9 @@
 
 use api_types::comments::CommentDto;
 use api_types::common::{
-    ContributorDto, DueDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto,
-    ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
+    ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto,
+    StepProgressDto, UserRefDto,
 };
 use api_types::turns::TurnDto;
 use domain::Timestamp;
@@ -14,7 +15,7 @@ use domain::due::{describe_ago, describe_date, describe_due, describe_since, gro
 use domain::item::Kind;
 use domain::turn::goal_for;
 use jiff::tz::TimeZone;
-use service::items::{CommentView, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
+use service::items::{CommentView, GoneBlocker, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
 use utoipa::IntoParams;
 
 fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
@@ -48,6 +49,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         stage_choices: view.stage_choices.into_iter().map(StageDto::from).collect(),
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
+        blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
@@ -101,6 +103,13 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         with_agent: view.with_agent,
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+    }
+}
+
+pub(crate) fn to_blocker_gone_dto(gone: GoneBlocker) -> BlockerGoneDto {
+    BlockerGoneDto {
+        how: gone.how.into(),
+        moved_to: gone.moved_to.as_ref().map(HeapSummaryDto::from),
     }
 }
 

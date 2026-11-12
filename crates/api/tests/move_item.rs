@@ -596,7 +596,7 @@ async fn values_are_kept_by_parameter_name_and_option_label_and_the_rest_are_dro
 
 #[gtest]
 #[tokio::test]
-async fn blocking_links_to_the_old_heap_are_removed_both_ways() -> Result<()> {
+async fn items_left_behind_keep_the_moved_blocker_and_wait_for_the_person() -> Result<()> {
     // Arrange: M waits for B, and A waits for M.
     let w = world().await?;
     let b = w.app.new_item(&w.session, &w.from, json!({ "title": "B" })).await?;
@@ -623,29 +623,70 @@ async fn blocking_links_to_the_old_heap_are_removed_both_ways() -> Result<()> {
     let moved = w.moved().await?;
     let a_after = get(&w.app, &w.session, &w.app.item_url(id(&a)).await?).await?;
     let a_log = history(&w.app, &w.session, &w.from, &id(&a)).await?;
+    let waiting = get(&w.app, &w.session, "/api/v1/me/waiting").await?;
 
-    // Assert
+    // Assert: M loses its own blocker in the heap it left; A keeps M, now gone, and waits for the person.
     expect_that!(moved.status, eq(StatusCode::OK));
     expect_that!(moved.body["state"], eq(&json!("blocked")));
     expect_that!(moved.body["blocked_by"], eq(&Value::Null));
     expect_that!(a_after.body["state"], eq(&json!("blocked")));
-    expect_that!(a_after.body["blocked_by"], eq(&Value::Null));
-    expect_that!(a_after.body["version"], eq(&json!(3)));
     expect_that!(
-        actions(&a_log),
-        elements_are![eq(&"item_updated"), eq(&"item_updated"), eq(&"item_created")]
+        a_after.body["blocked_by"],
+        eq(&json!({ "id": id(&w.item), "key": moved.body["key"], "title": "Rotate the certs", "state": "blocked" }))
     );
+    expect_that!(a_after.body["blocker_gone"]["how"], eq(&json!("moved")));
+    expect_that!(a_after.body["blocker_gone"]["moved_to"]["id"], eq(&json!(w.to)));
     expect_that!(
-        changes(&a_log["entries"][0]),
-        elements_are![eq(
-            &json!({ "field": "blocked_by", "label": "Blocked by", "before": "Rotate the certs", "after": null })
-        )]
+        a_after.body["blocker_gone"]["moved_to"]["name"],
+        eq(&json!("Agent work"))
     );
-    expect_that!(a_log["entries"][0]["diff"]["blocked_by"]["after"], eq(&Value::Null));
+    expect_that!(a_after.body["waits_for_you"], eq(&json!(true)));
+    // Nothing was written to A: its blocker went, and A stayed as it was.
+    expect_that!(a_after.body["version"], eq(&json!(2)));
+    expect_that!(actions(&a_log), elements_are![eq(&"item_updated"), eq(&"item_created")]);
+    expect_that!(waiting.body["count"], eq(&json!(1)));
+    expect_that!(waiting.body["rows"][0]["kind"], eq(&json!("blocker_gone")));
+    expect_that!(waiting.body["rows"][0]["item"]["id"], eq(&json!(id(&a))));
     expect_that!(
-        a_log["entries"][0]["diff"]["blocked_by"]["before"],
+        waiting.body["rows"][0]["blocker"]["item"]["id"],
         eq(&json!(id(&w.item)))
     );
+    expect_that!(waiting.body["rows"][0]["blocker"]["gone"]["how"], eq(&json!("moved")));
+    expect_that!(
+        waiting.body["rows"][0]["blocker"]["allowed_actions"],
+        eq(&json!(["change_state"]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_blocker_moved_back_holds_what_it_left_again() -> Result<()> {
+    // Arrange: A waits for M, which is moved away.
+    let w = world().await?;
+    let a = w.app.new_item(&w.session, &w.from, json!({ "title": "A" })).await?;
+    let blocked = edit(
+        &w.app,
+        &w.session,
+        &a,
+        json!({ "state": "blocked", "blocked_by_item_id": id(&w.item) }),
+    )
+    .await?;
+    anyhow::ensure!(blocked.status == StatusCode::OK, "block A failed: {}", blocked.body);
+    let moved = w.moved().await?;
+    anyhow::ensure!(moved.status == StatusCode::OK, "move failed: {}", moved.body);
+
+    // Act
+    let back = move_current(&w.app, &w.session, &w.app.item_url(id(&w.item)).await?, &w.from).await?;
+    let a_after = get(&w.app, &w.session, &w.app.item_url(id(&a)).await?).await?;
+    let waiting = get(&w.app, &w.session, "/api/v1/me/waiting").await?;
+
+    // Assert
+    expect_that!(back.status, eq(StatusCode::OK));
+    expect_that!(a_after.body["blocked_by"]["id"], eq(&json!(id(&w.item))));
+    expect_that!(a_after.body["blocker_gone"], eq(&Value::Null));
+    expect_that!(a_after.body["waits_for_you"], eq(&json!(false)));
+    expect_that!(waiting.body["count"], eq(&json!(0)));
     Ok(())
 }
 

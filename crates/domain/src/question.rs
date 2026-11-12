@@ -437,9 +437,11 @@ pub const fn check_questions_editable(item: &Item) -> Result<(), ItemError> {
 }
 
 /// Whether `item` waits for the person: it is open, its heap is active and it has an open question, whoever asked it,
-/// or its open turn is `stuck` (Waiting for me). The heap's other rules, such as the role, don't matter: any member sees it waiting.
-pub const fn waits_for_you(item: &Item, heap: &Heap, open_questions: usize, stuck: bool) -> bool {
-    !item.is_closed() && !heap.is_archived() && (open_questions > 0 || stuck)
+/// its open turn is `stuck`, or its blocker is gone, closed or moved away ([`crate::item::Item::blocker_gone`]), so
+/// someone has to say what happens to it (Waiting for me). The heap's other rules, such as the role, don't matter: any
+/// member sees it waiting.
+pub const fn waits_for_you(item: &Item, heap: &Heap, open_questions: usize, stuck: bool, blocker_gone: bool) -> bool {
+    !item.is_closed() && !heap.is_archived() && (open_questions > 0 || stuck || blocker_gone)
 }
 
 /// Checks that `fields` can be asked on `item`, whose questions are `questions` and whose steps are numbered

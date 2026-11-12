@@ -1,7 +1,8 @@
 //! The item a blocked item waits for.
 //!
-//! `blocked_by_item_id` is set only while the item is blocked. It points to an item of the same heap, which the
-//! service checks, as it checks that no blocking cycle forms. The index serves lookups of what an item blocks.
+//! `blocked_by_item_id` is set only while the item is blocked. It points to an item of the same heap when it is set,
+//! which the service checks, as it checks that no blocking cycle forms; a blocker moved to another heap later keeps
+//! the link (decisions.md §35). The index serves lookups of what an item blocks.
 //!
 //! SQLite can't add a foreign key to an existing table with `ALTER TABLE … ADD CONSTRAINT`, but it accepts one on
 //! a column added with `ADD COLUMN`, so the column is added with its reference there. MySQL gets the usual

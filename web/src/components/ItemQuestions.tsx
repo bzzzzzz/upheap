@@ -8,9 +8,11 @@ import {
   type Item,
   type Question,
   type QuestionReply,
+  type WaitingBlocker,
   type WaitingStuck,
 } from "../api/client";
 import { useReplyToQuestion } from "../api/queries";
+import { BlockerGoneRow, blockerGoneWord } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, isClosed } from "./labels";
@@ -125,6 +127,16 @@ function stuckOf(item: Item): WaitingStuck | null {
   };
 }
 
+/** The gone-blocker row an item shows in Waits for you, or none while its blocker holds it (or it has none). */
+function blockerGoneOf(item: Item): WaitingBlocker | null {
+  if (item.state !== "blocked" || !item.blocked_by || !item.blocker_gone) return null;
+  return {
+    item: item.blocked_by,
+    gone: item.blocker_gone,
+    allowed_actions: item.allowed_actions.filter((action) => action === "change_state"),
+  };
+}
+
 /**
  * What an item is waiting for the person to answer (ux.md, The item): the open questions, which sit in the Questions
  * section, and the item's stuck turn, when it has one, which sits in Waits for you at the top. The two share what a
@@ -145,11 +157,13 @@ export function useItemWaits(item: Item) {
   // The number of the question just replied to: once its row has left, focus goes on to the next one.
   const repliedTo = useRef<number | null>(null);
   const stuck = stuckOf(item);
-  // Set when the stuck row was acted on here: once it has left, focus goes to the item, as there is no next row.
+  const blocker = blockerGoneOf(item);
+  // Set when the stuck or gone-blocker row was acted on here: once it has left, focus goes to the item, as there is
+  // no next row.
   const actedOnStuck = useRef(false);
 
   useEffect(() => {
-    if (!actedOnStuck.current || stuck) return;
+    if (!actedOnStuck.current || stuck || blocker) return;
     actedOnStuck.current = false;
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
@@ -194,11 +208,17 @@ export function useItemWaits(item: Item) {
     setStuckChanged(false);
     setMessage(`Took back “${item.title}”.`);
   };
+  const unblocked = () => {
+    actedOnStuck.current = true;
+    setStuckChanged(false);
+    setMessage(`Unblocked “${item.title}”.`);
+  };
 
   return {
     closed,
     open,
     stuck,
+    blocker,
     listId,
     message,
     elsewhere,
@@ -210,6 +230,7 @@ export function useItemWaits(item: Item) {
     refusedReply,
     retried,
     tookBack,
+    unblocked,
   };
 }
 
@@ -223,13 +244,13 @@ function firstControl(list: HTMLElement | null, number: number) {
 }
 
 /**
- * Waits for you, the one tinted, outlined block at the top of the item (ux.md, The item): the stuck turn, when it
- * has one, with Retry and Take back, and one line saying how many questions wait, with Answer to go to the first. The
+ * Waits for you, the one tinted, outlined block at the top of the item (ux.md, The item): the gone blocker, when it
+ * has one, with Unblock, the stuck turn, when it has one, with Retry and Take back, and one line saying how many questions wait, with Answer to go to the first. The
  * reply controls are in {@link ItemQuestions}, under the Steps. It stays mounted when empty, for the live message
  * after the last reply and the note about a stuck turn someone else dealt with.
  */
 export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
-  const { open, stuck } = waits;
+  const { open, stuck, blocker } = waits;
   const answer = () => {
     const first = open[0];
     if (!first) return;
@@ -242,13 +263,25 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
       <span role="status" className="sr-only">
         {waits.message}
       </span>
-      {(stuck || open.length > 0) && (
+      {(blocker || stuck || open.length > 0) && (
         <section
           aria-label="Waits for you"
           className="flex flex-col gap-1.5 rounded-xl border-2 border-accent bg-accent/10 p-3"
         >
           <h3 className="text-xs font-medium text-accent-ink">Waits for you</h3>
           <div className="flex flex-col divide-y divide-accent/30">
+            {blocker && (
+              <ul className="py-3 first:pt-0 last:pb-0">
+                <BlockerGoneRow
+                  heapRef={heapRef}
+                  item={item}
+                  blocker={blocker}
+                  line={<p className="text-xs text-muted">{blockerGoneWord(blocker.gone)}</p>}
+                  onUnblocked={waits.unblocked}
+                  onElsewhere={() => waits.setStuckChanged(true)}
+                />
+              </ul>
+            )}
             {stuck && (
               <ul className="py-3 first:pt-0 last:pb-0">
                 <StuckRow

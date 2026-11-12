@@ -348,15 +348,22 @@ a fixed time.
    matters, no inconsistent state, holds either way.
 2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
    several, then reads the item with a locking read and checks its version. Two moves in opposite directions can't
-   wait for each other, and the second of two moves of one item finds it changed. A blocker is part of a heap's
-   state, so a move takes the item's blocking links to its old heap away both ways: the items that waited for it, and
-   the one it waited for, stay blocked with nobody picked. Since an item's heap can change, a write that finds the
+   wait for each other, and the second of two moves of one item finds it changed. The item's own blocker is part of
+   its old heap's state, so the moved item stays blocked with nobody picked. The items that waited for it keep it as
+   their blocker, now in another heap of the team, so they wait for the person (§3), and a move back makes it hold
+   them again; the move writes nothing to them. Since an item's heap can change, a write that finds the
    heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
    refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
-   same heap. Closing a blocker later doesn't unblock what waits for it; the blocked item shows the closed blocker
-   until someone moves it on.
+   same heap when it is set. Closing a blocker as done frees what it blocks in its heap: in the same transaction,
+   under the heap lock, each item it blocks goes to open with its own `item_updated` entry naming the blocker
+   (`blocker_done`), and gets its next version. Closing it as won't do writes nothing to them: an item whose blocker is
+   closed, or in another heap after a move (§2), stays blocked and waits for the person, which is read off the item
+   and its blocker, never stored (`Item::blocker_gone`). It shows in Waiting for me and its count, in the item's Waits
+   for you, and in the agents' waiting count, until the person unblocks it, closes it or picks another blocker.
+   Reopening the blocker makes it hold them again; an item it freed stays open, and its history says why. Items
+   blocked by a done item before this rule weren't freed; they wait the same way.
 4. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break
    the list.
 

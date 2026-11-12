@@ -24,6 +24,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
 use crate::audit::{describe_new_turn, describe_reached};
 use crate::items::{OpenRanking, rank_open_items};
+use crate::waiting::list_gone_blockers;
 use crate::{Principal, ServiceError, Services};
 
 /// An item an agent may work on, with the heap it is in and the turn it works to.
@@ -496,6 +497,7 @@ impl Services {
             .into_iter()
             .map(|(_, question)| question.item_id)
             .collect();
+        let gone = list_gone_blockers(db, &heap_ids).await?;
         let waiting: HashSet<ItemId> = with_question
             .iter()
             .copied()
@@ -505,6 +507,7 @@ impl Services {
                     .filter(|(_, turn)| turn.is_stuck())
                     .map(|(_, turn)| turn.item_id),
             )
+            .chain(gone.iter().map(|(item, ..)| item.id))
             .collect();
         let waiting_count = u32::try_from(waiting.len()).unwrap_or(u32::MAX);
 

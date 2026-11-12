@@ -313,6 +313,34 @@ async fn next_with_nothing_to_do_says_how_many_wait_for_the_person() -> Result<(
 
 #[gtest]
 #[tokio::test]
+async fn an_item_whose_blocker_was_refused_counts_as_waiting_for_the_person() -> Result<()> {
+    // Arrange: "Ship the feed" waits for "Pick a host", which is closed as won't do.
+    let w = world().await?;
+    let blocker = w.add("Pick a host", json!({})).await?;
+    let blocked = w.add("Ship the feed", json!({})).await?;
+    let blocker_id = w.get(&blocker).await?["id"].clone();
+    let edited = w
+        .edit(
+            &blocked,
+            json!({ "state": "blocked", "blocked_by_item_id": blocker_id }),
+        )
+        .await?;
+    anyhow::ensure!(edited.status == StatusCode::OK, "block failed: {}", edited.body);
+    let closed = w.edit(&blocker, json!({ "state": "wont_do" })).await?;
+    anyhow::ensure!(closed.status == StatusCode::OK, "close failed: {}", closed.body);
+
+    // Act
+    let next = w.next().await?;
+
+    // Assert
+    expect_that!(next.status, eq(StatusCode::OK));
+    expect_that!(next.body["item"], eq(&Value::Null));
+    expect_that!(next.body["waiting_count"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_heaps_list_is_validated() -> Result<()> {
     // Arrange
     let w = world().await?;
