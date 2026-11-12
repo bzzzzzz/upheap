@@ -11377,7 +11377,8 @@
           "title",
           "kind",
           "turn",
-          "with_agent"
+          "with_agent",
+          "version"
         ],
         "properties": {
           "id": {
@@ -11416,6 +11417,12 @@
                 "description": "The item's open turn, if an agent was sent it and it hasn't been taken back."
               }
             ]
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The item's version, for `If-Match` on a change made from the row, such as Unblock.",
+            "minimum": 0
           },
           "with_agent": {
             "type": "boolean",

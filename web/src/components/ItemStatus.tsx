@@ -83,7 +83,8 @@ export function StatusLine({
             Blocked by
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
-              params={{ ...heapRef, item: blocker.key }}
+              // A blocker moved to another heap of the team is opened there.
+              params={{ ...heapRef, heap: item.blocker_gone?.moved_to?.slug ?? heapRef.heap, item: blocker.key }}
               search={true}
               // In place of this item, so Back still closes the pane rather than walking back through the blockers.
               replace

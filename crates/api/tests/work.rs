@@ -320,7 +320,10 @@ async fn an_item_whose_blocker_was_refused_counts_as_waiting_for_the_person() ->
     let blocked = w.add("Ship the feed", json!({})).await?;
     let blocker_id = w.get(&blocker).await?["id"].clone();
     let edited = w
-        .edit(&blocked, json!({ "state": "blocked", "blocked_by_item_id": blocker_id }))
+        .edit(
+            &blocked,
+            json!({ "state": "blocked", "blocked_by_item_id": blocker_id }),
+        )
         .await?;
     anyhow::ensure!(edited.status == StatusCode::OK, "block failed: {}", edited.body);
     let closed = w.edit(&blocker, json!({ "state": "wont_do" })).await?;

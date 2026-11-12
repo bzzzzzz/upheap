@@ -113,6 +113,10 @@ pub struct WaitingItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub with_agent: bool,
+    /// The item's version, for `If-Match` on a change made from the row, such as Unblock.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub version: u32,
 }
 
 /// The heap a row's item is in, and its team.

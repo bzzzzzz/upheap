@@ -45,6 +45,7 @@ import {
   type Team,
   type User,
   type Waiting,
+  type WaitingRow,
   type WeightsPatch,
 } from "./client";
 
@@ -527,11 +528,50 @@ export function useRetryTurn(heap: HeapRef) {
   });
 }
 
+/**
+ * Unblocks an item whose blocker is gone, from its row in Waiting for me or in the item's Waits for you: moves it to
+ * open at the version the row knows, or the newer one an edit of the item brought back, in the item edits' scope so it
+ * waits for one on its way. The answer replaces the cached item and the lists' copies, and the row leaves at once. A
+ * change by someone else in between fails with a conflict and fetches the item again.
+ */
+export function useUnblock(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: { id: "item-edits" },
+    mutationFn: async (item: Pick<Item, "key" | "version">) => {
+      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
+      return unwrap(
+        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
+          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
+          body: { state: "open" },
+        }),
+      );
+    },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      replaceListedItem(queryClient, heap, saved);
+      dropWaitingRows(queryClient, saved.id, "blocker_gone");
+    },
+    onError: (_error, item) => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+    },
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
+  });
+}
+
 /** Takes the stuck row of the item `itemId` out of the cached Waiting for me, and out of its count. */
 function dropStuckRow(queryClient: QueryClient, itemId: string) {
+  dropWaitingRows(queryClient, itemId, "stuck");
+}
+
+/** Takes the rows of `kind` on the item `itemId` out of the cached Waiting for me, and out of its count. */
+function dropWaitingRows(queryClient: QueryClient, itemId: string, kind: WaitingRow["kind"]) {
   queryClient.setQueryData<Waiting>(waitingKey, (waiting) => {
     if (!waiting) return waiting;
-    const rows = waiting.rows.filter((row) => !(row.kind === "stuck" && row.item.id === itemId));
+    const rows = waiting.rows.filter((row) => !(row.kind === kind && row.item.id === itemId));
     return { ...waiting, rows, count: Math.max(0, waiting.count - (waiting.rows.length - rows.length)) };
   });
 }

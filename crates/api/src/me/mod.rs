@@ -150,6 +150,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             stage: Some(item.stage.into()),
             turn: row.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
             with_agent: row.with_agent,
+            version: item.version.get(),
         },
         heap: to_item_heap_dto(&row.heap, &row.team),
         question,

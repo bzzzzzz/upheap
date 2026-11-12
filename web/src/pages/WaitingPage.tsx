@@ -3,19 +3,28 @@ import { useEffect, useRef, useState } from "react";
 
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
+import { BlockerGoneRow, blockerGoneWord } from "../components/BlockerGoneRow";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
 import { Markdown } from "../components/Markdown";
 import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
 
-/** A row of a stuck turn has its item's ID for a key; a question's row also has the question's number. */
+/** A stuck turn's or a gone blocker's row has its item's ID and its kind for a key; a question's row has the question's number. */
 const rowKey = (row: WaitingRow) =>
-  row.kind === "stuck" ? `${row.item.id}:stuck` : `${row.item.id}:${row.question?.number}`;
+  row.kind === "question" ? `${row.item.id}:${row.question?.number}` : `${row.item.id}:${row.kind}`;
+
+/** The attribute that marks a row's element, under its `data-item`. */
+const rowMark = (row: WaitingRow) =>
+  row.kind === "stuck"
+    ? "[data-stuck]"
+    : row.kind === "blocker_gone"
+      ? "[data-blocker-gone]"
+      : `[data-question="${row.question?.number}"]`;
 const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: row.heap.slug });
 
 /**
- * Every open question across the person's heaps, and every item whose agent turn is stuck, most important first, each
- * answered or let go in its row (ux.md, Waiting for me). The rows are the item's open-question rows in Questions, with a head line
+ * Every open question across the person's heaps, every item whose agent turn is stuck, and every blocked item whose
+ * blocker is gone, most important first, each answered or let go in its row (ux.md, Waiting for me). The rows are the item's open-question rows in Questions, with a head line
  * that says which item and heap they are on.
  */
 export function WaitingPage() {
@@ -25,15 +34,19 @@ export function WaitingPage() {
   const list = useRef<HTMLUListElement>(null);
   const [message, setMessage] = useState("");
   const [elsewhere, setElsewhere] = useState<string[]>([]);
-  // A stuck turn that someone else took back or retried first.
+  // A stuck turn that someone else took back or retried first, or a blocked item someone else changed first.
   const [stuckChanged, setStuckChanged] = useState(false);
   // Replies refused because the item was closed meanwhile, with the comment that was lost, to copy.
   const [refused, setRefused] = useState<{ text: string; comment: string | null }[]>([]);
   // The row just replied to and where it was: once it has left, the focus goes on to the row that took its place.
   const repliedTo = useRef<{ key: string; index: number } | null>(null);
-  // Questions and stuck turns; a kind this client doesn't know is left out. The heading keeps the server's count.
+  // Questions, stuck turns and gone blockers; a kind this client doesn't know is left out. The heading keeps the
+  // server's count.
   const rows = (waiting.data?.rows ?? []).filter(
-    (row) => (row.kind === "question" && row.question) || (row.kind === "stuck" && row.stuck),
+    (row) =>
+      (row.kind === "question" && row.question) ||
+      (row.kind === "stuck" && row.stuck) ||
+      (row.kind === "blocker_gone" && row.blocker),
   );
 
   useEffect(() => {
@@ -46,7 +59,7 @@ export function WaitingPage() {
     const next = rows[replied.index];
     const first = next
       ? list.current?.querySelector<HTMLElement>(
-          `[data-item="${next.item.id}"]${next.kind === "stuck" ? "[data-stuck]" : `[data-question="${next.question?.number}"]`} :is(input, textarea, button):not([data-details]):not(:disabled)`,
+          `[data-item="${next.item.id}"]${rowMark(next)} :is(input, textarea, button, a[aria-label]):not([data-details]):not(:disabled)`,
         )
       : undefined;
     (first ?? heading.current)?.focus();
@@ -96,13 +109,33 @@ export function WaitingPage() {
       ) : rows.length === 0 ? (
         <div className="py-16 text-center">
           <p>Nothing waits for you.</p>
-          <p className="mt-1 text-[13px] text-muted">Questions from agents and teammates show up here.</p>
+          <p className="mt-1 text-[13px] text-muted">
+            Questions from agents and teammates, and work whose blocker was closed, show up here.
+          </p>
         </div>
       ) : (
         <>
           <ul ref={list} className="flex flex-col divide-y divide-line">
             {rows.map((row) =>
-              row.kind === "stuck" && row.stuck ? (
+              row.kind === "blocker_gone" && row.blocker ? (
+                <BlockerGoneRow
+                  key={rowKey(row)}
+                  heapRef={heapOf(row)}
+                  item={row.item}
+                  blocker={row.blocker}
+                  open
+                  line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
+                  onUnblocked={() => {
+                    track(row);
+                    setStuckChanged(false);
+                    setMessage(`Unblocked “${row.item.title}”.`);
+                  }}
+                  onElsewhere={() => {
+                    track(row);
+                    setStuckChanged(true);
+                  }}
+                />
+              ) : row.kind === "stuck" && row.stuck ? (
                 <StuckRow
                   key={rowKey(row)}
                   heapRef={heapOf(row)}
@@ -164,13 +197,17 @@ export function WaitingPage() {
 }
 
 /**
- * "Question · <item> · <heap> · <team> · step “…”", or "Stuck · <item> · <heap> · <team>": which item the row is on,
- * and where.
+ * "Question · <item> · <heap> · <team> · step “…”", "Stuck · <item> · <heap> · <team>" or "Blocker closed · <item> ·
+ * <heap> · <team>": which item the row is on, and where.
  */
 function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
   return (
     <p className="text-xs break-words text-muted">
-      {row.kind === "stuck" || !row.question ? "Stuck" : kindWord(row.question)}
+      {row.kind === "blocker_gone" && row.blocker
+        ? blockerGoneWord(row.blocker.gone)
+        : row.kind === "stuck" || !row.question
+          ? "Stuck"
+          : kindWord(row.question)}
       {" · "}
       <Link
         to="/teams/$team/heaps/$heap/items/$item"

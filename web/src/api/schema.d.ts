@@ -3118,6 +3118,11 @@ export interface components {
             stage?: null | components["schemas"]["Stage"];
             title: string;
             turn: null | components["schemas"]["Turn"];
+            /**
+             * Format: int32
+             * @description The item's version, for `If-Match` on a change made from the row, such as Unblock.
+             */
+            version: number;
             /** @description Whether an agent has the item: always `false` here, as a row's item waits for the caller. */
             with_agent: boolean;
         };
