@@ -282,8 +282,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
    line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
    it says "Joins the list on 12 March"), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
-   four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description)
-   and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
+   four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description),
+   the comments (point 16) and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
    sheet; the context saves as its sheet closes.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
@@ -356,6 +356,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Someone else's send first says "Someone already sent this to an agent." and the block shows it. Start, Done and
     Won't do in the item ask before they take an item back ("An agent has this. Starting it takes it back. Take it
     back and start it?"), inline beside the state buttons or in a sheet; Blocked and Open don't.
+
+16. **Comments n**, under the context at every width and always open (not a disclosure, not a sheet row: on a phone it
+    follows the context row), lists the item's comments oldest first with a thin rule between them. Each is a quiet
+    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it as plain
+    text with its line breaks kept; a comment is never edited or deleted, so a row has no controls. The heading is
+    "Comments 3", or just "Comments" when there are none. Under the list, where the server offers `comment` (also on
+    a closed item), is the field "Add a comment" that grows with its text, and a Comment button, off until the field
+    has text and while it is sending; on a phone the button spans the width and is 44 px, on wider screens it is at
+    the right. Nothing is optimistic: the comment shows from the server's answer, the field clears, the focus stays
+    in it and a polite live region says "Comment added". If it fails, the field keeps its text and the reason shows
+    under it. What is typed lives apart from the item, so another edit saving or a refetch doesn't touch it. Where
+    `comment` isn't offered (an archived heap) the comments read with no field, and with none the section is absent.
 
 ## Adding an item
 

@@ -17,6 +17,7 @@ import { DuePicker, DueRows } from "./DuePicker";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
 import { ItemMore, MakeTaskButton } from "./ItemMore";
+import { ItemComments } from "./ItemComments";
 import { AnsweredQuestions, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
 import { ItemTurn } from "./ItemTurn";
@@ -505,6 +506,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           </div>
         </>
       )}
+
+      <ItemComments heapRef={heapRef} item={item} />
 
       {update.error && (
         <p role="alert" className="text-sm text-overdue-ink">
