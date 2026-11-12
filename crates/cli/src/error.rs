@@ -41,6 +41,13 @@ pub enum CliError {
     /// The item a command named has no step by the number it gave.
     #[error("no step `{name}` in {heap}")]
     NoSuchStep { name: String, heap: String },
+    /// The item a command named has no question by the number it gave.
+    #[error("no question `{name}` in {heap}")]
+    NoSuchQuestion { name: String, heap: String },
+    /// A question that, by the item just read, takes no reply from this command: it was withdrawn, or it is answered
+    /// already with another reply.
+    #[error("{}", .refusal.message(.name))]
+    QuestionRefused { name: String, refusal: QuestionRefusal },
     /// The server refused a change to an item because it moved on or is closed. Carries the item as `team/heap/key`,
     /// for a hint that can be pasted whatever heap is the default.
     #[error("{source}")]
@@ -68,17 +75,40 @@ pub enum CliError {
     NoSuchRun { run: String },
 }
 
+/// Why a question takes no reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestionRefusal {
+    /// It was taken back unanswered: its item closed, or its agent's turn was taken back. Nothing brings it back.
+    Withdrawn,
+    /// It has another reply, and a reply can't be changed here.
+    AnsweredDifferently,
+}
+
+impl QuestionRefusal {
+    fn message(self, name: &str) -> String {
+        match self {
+            Self::Withdrawn => {
+                format!("{name} was withdrawn, so there is nothing to reply to")
+            }
+            Self::AnsweredDifferently => {
+                format!("{name} is answered already with another reply, which can't be changed here")
+            }
+        }
+    }
+}
+
 impl CliError {
     /// The exit code for the failure's category.
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::Config(_) | Self::TokenStore(_) => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
-            Self::NoSuchStep { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
+            Self::NoSuchStep { .. } | Self::NoSuchQuestion { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
             Self::Lookup(
                 LookupError::MalformedHeap { .. }
                 | LookupError::MalformedItem { .. }
-                | LookupError::MalformedStep { .. },
+                | LookupError::MalformedStep { .. }
+                | LookupError::MalformedQuestion { .. },
             ) => 2,
             Self::Lookup(
                 LookupError::UnknownHeap { .. }
@@ -89,8 +119,12 @@ impl CliError {
                 | LookupError::UnknownView { .. }
                 | LookupError::AmbiguousView { .. }
                 | LookupError::UnknownParameter { .. }
-                | LookupError::UnknownOption { .. },
+                | LookupError::UnknownOption { .. }
+                | LookupError::UnknownChoice { .. }
+                | LookupError::NoPickGiven { .. }
+                | LookupError::NoChoicesToPick { .. },
             ) => 3,
+            Self::QuestionRefused { .. } => 3,
             Self::Auth(AuthError::NotSignedIn { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
@@ -201,6 +235,10 @@ impl CliError {
             (Self::NoSuchStep { name, .. }, _) => Some(format!(
                 "`upheap item show {}` lists the item's steps",
                 name.rsplit_once('.').map_or(name.as_str(), |(item, _)| item)
+            )),
+            (Self::NoSuchQuestion { name, .. }, _) => Some(format!(
+                "`upheap item show {}` lists its questions",
+                name.rsplit_once(".q").map_or(name.as_str(), |(item, _)| item)
             )),
             (_, Some(404)) => Some("`upheap heap list` lists the heaps you can use".to_owned()),
             (Self::ItemRefused { name, .. }, _) => match self.problem().map(|problem| problem.code.as_str()) {
