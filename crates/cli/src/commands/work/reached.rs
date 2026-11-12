@@ -44,6 +44,8 @@ pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), C
         Mode::Quiet => {}
         Mode::Human => {
             let item = &reached.value.item;
+            // The server's rule for opening the next turn (`Turn::follow_on` in the domain crate), which the
+            // response doesn't carry: change the two together.
             let ending = if item.reach == ReachDto::AllTheWay && item.goal != GoalDto::Done {
                 "goes on, all the way"
             } else {
