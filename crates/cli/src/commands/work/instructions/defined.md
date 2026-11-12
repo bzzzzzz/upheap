@@ -8,7 +8,7 @@ done looks like, under a line starting "Done when:". Add a step for each part of
 (`upheap step add <key> "<title>"`, with `--context-file -` when a step needs background). Set effort when it is
 clear (`upheap item edit <key> --effort s|m|l|xl`).
 
-If the item is really several pieces of work, don't split it: this version can't. Say so in the context and ask
+If the item is really several pieces of work, don't split it: this version can't. Say so in a comment and ask
 the person how they want it cut.
 
 Don't do the work and don't tick steps.

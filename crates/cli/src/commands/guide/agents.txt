@@ -42,8 +42,10 @@ The usual order of work
    A reminder, added with `upheap item add "<title>" --reminder <date>`, stays out of the list until that date;
    `upheap item list --reminders shown` lists those still to come.
 3. Write what you learn, decide or do where the next reader will look: as a comment on the item, with
-   `upheap comment add`, not in your reply. A comment adds to the item without touching its context. Change the
-   context, with --context-file on `upheap item edit`, only to correct or restate what the item is.
+   `upheap comment add`, not in your reply. A comment adds to the item without touching its context. Rewrite the
+   context, with --context-file on `upheap item edit`, only when what the item is has changed: it had none, or
+   the task or what done looks like turned out different from what is written. Progress, findings and decisions
+   are never a reason to rewrite it.
    Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
    then a step for each part, ticked as each one is finished.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no

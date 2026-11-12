@@ -51,6 +51,10 @@ When asked to write a "doc", write it as a Markdown file in `design/`, or in `de
 add it to `design/README.md`, not as an external document (Claude Docs,
 Notion, Google Docs).
 
+When you work on an item in Upheap, record progress, findings, decisions and where the work is as comments on the
+item (`upheap comment add`), not by rewriting its context. Rewrite an item's context only when the task's
+definition did change: what the work is, or what done looks like. Then say in a comment what changed and why.
+
 Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `design/work/`.
 Add it to Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command
 is installed and signed in. When it can't, name the follow-up in your reply and in the pull request's description,
