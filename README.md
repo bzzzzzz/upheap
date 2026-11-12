@@ -157,6 +157,7 @@ cargo run -p cli -- work next                                    # what an agent
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
 cargo run -p cli -- work run --tool claude                       # the agent loop: claim, start claude on the item, record the run, repeat; Ctrl-C stops it
 cargo run -p cli -- work run --tool claude --heap work --once    # one run in a heap, or nothing when there is nothing to do
+cargo run -p cli -- work run --tool claude --root ~/agent-runs   # each run in a new directory under the root, set up for claude
 UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  # with a run, writes are the run's
 UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
 UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
@@ -176,7 +177,10 @@ reminder a task and start it, on the run's own item only, and is refused anythin
 starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
 item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
 `auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
-and run what your own and the project's Claude settings allow. Exit codes: 0 done, 2 bad command line, 3 refused, 4
+and run what your own and the project's Claude settings allow. With `--root`, each run starts in a new directory
+under the root instead, named by the item's key and the run's ID, with a `CLAUDE.md` that says how to work there
+and Claude settings that allow any command, edit and read, for preparing as well: a run there has to clone and
+build what it works on. Nothing removes these directories. Exit codes: 0 done, 2 bad command line, 3 refused, 4
 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything
 else.
 

@@ -732,6 +732,80 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
 
 #[gtest]
 #[tokio::test]
+async fn with_a_root_each_run_gets_a_directory_of_its_own_under_it_named_by_its_item() -> Result<()> {
+    // Arrange: two notes to prepare, and a root that isn't there yet.
+    let (server, ada, cli, first) = with_prepared_note().await?;
+    let second = add_note(&server, &ada, "Order the certificate").await?;
+    let tool = idle_agent(None);
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let root_arg = root.to_string_lossy().into_owned();
+    let once_in_root = [ONCE, &["--root", &root_arg]].concat();
+
+    // Act
+    let one = cli.run_work(&once_in_root, &tool).await;
+    let two = cli.run_work(&once_in_root, &tool).await;
+    let without = cli.run_work(ONCE, &tool).await;
+
+    // Assert: the loop makes the root, and hands the tool a directory to make in it.
+    expect_that!(one.exited(0), eq(true));
+    expect_that!(two.exited(0), eq(true));
+    expect_that!(without.exited(0), eq(true));
+    expect_that!(root.is_dir(), eq(true));
+    let starts = tool.starts();
+    let dirs: Vec<_> = starts.iter().map(|start| start.dir.clone()).collect();
+    assert_that!(dirs.len(), eq(3));
+    let (Some(a), Some(b)) = (&dirs[0], &dirs[1]) else {
+        anyhow::bail!("the runs with a root have no directory: {dirs:?}");
+    };
+    expect_that!(a.parent(), some(eq(root.as_path())));
+    expect_that!(b.parent(), some(eq(root.as_path())));
+    expect_that!(a, not(eq(b)));
+    let names = [a, b].map(|dir| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
+    expect_that!(names, each(matches_regex(r"[0-9a-z]+-[0-9a-f-]{36}")));
+    // Each is named by the key of the item it worked, whichever of the two the queue gave it.
+    let keys = [format!("{first}-"), format!("{second}-")];
+    expect_that!(
+        names.iter().all(|name| keys.iter().any(|key| name.starts_with(key))),
+        eq(true)
+    );
+    expect_that!(dirs[2], none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_root_that_cannot_be_made_is_exit_6_and_nothing_is_claimed() -> Result<()> {
+    // Arrange: the root would be inside a file.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let parent = tempfile::tempdir()?;
+    let file = parent.path().join("a-file");
+    std::fs::write(&file, "")?;
+    let root = file.join("runs").to_string_lossy().into_owned();
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(&[ONCE, &["--root", &root]].concat(), &tool).await;
+    let next = cli.run(&["work", "next"]).await;
+
+    // Assert
+    expect_that!(outcome.exited(6), eq(true));
+    expect_that!(
+        outcome.stderr,
+        starts_with(format!("error: couldn't make a directory for the run at {root}").as_str())
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_substring("hint: check that `--root` names a directory you can write to")
+    );
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(next.stdout, not(contains_substring("started")));
+    expect_that!(next.stdout, contains_substring(note.as_str()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_tool_that_is_not_installed_is_exit_6_and_nothing_is_claimed() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, note) = with_prepared_note().await?;

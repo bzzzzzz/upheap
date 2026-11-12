@@ -51,6 +51,9 @@ pub struct ToolStart {
     pub brief: String,
     /// Variables to add to the tool's environment: the run, the server and the heap.
     pub env: Vec<(String, String)>,
+    /// A directory for the tool to make, set up for itself and run in: one that doesn't exist yet. `None` to run
+    /// in the directory `work run` was started in, as it is.
+    pub dir: Option<PathBuf>,
 }
 
 /// What the tool reported when it ended.
@@ -76,6 +79,24 @@ pub enum ToolError {
         #[source]
         source: std::io::Error,
     },
+    #[error("couldn't make a directory for the run at {}", dir.display())]
+    NoDirectory {
+        dir: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// `root` as an absolute path, made if it isn't there: where `work run --root` puts each run's directory. Checked
+/// once, before the first claim, so a root that can't be used fails before any item is taken.
+pub fn make_root(root: &Path) -> Result<PathBuf, ToolError> {
+    let no_directory = |source| ToolError::NoDirectory {
+        dir: root.to_owned(),
+        source,
+    };
+    let root = std::path::absolute(root).map_err(no_directory)?;
+    std::fs::create_dir_all(&root).map_err(no_directory)?;
+    Ok(root)
 }
 
 impl ToolError {

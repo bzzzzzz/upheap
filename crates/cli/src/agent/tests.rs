@@ -52,6 +52,7 @@ mod processes {
             access,
             brief: "The brief\nin two lines\n".to_owned(),
             env: vec![("UPHEAP_RUN".to_owned(), "the-run".to_owned())],
+            dir: None,
         }
     }
 
@@ -117,6 +118,67 @@ mod processes {
         let result = tools.run(start(Access::Do)).await;
 
         expect_that!(result, err(matches_pattern!(ToolError::WouldNotStart { .. })));
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn with_a_directory_it_is_made_set_up_and_where_the_script_runs() -> googletest::Result<()> {
+        // Arrange: the script records where it runs. The run's directory is under a root that isn't there yet.
+        let dir = tempfile::tempdir()?;
+        let seen = dir.path().join("seen");
+        let body = format!("pwd -P > '{}'\nprintf '%s' '{{\"is_error\":false}}'", seen.display());
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+        let run_dir = dir.path().join("root").join("k3x9a-the-run");
+
+        // Act
+        let report = tools
+            .run(ToolStart {
+                dir: Some(run_dir.clone()),
+                ..start(Access::Do)
+            })
+            .await;
+
+        // Assert
+        verify_that!(report?.failure, none())?;
+        verify_that!(
+            PathBuf::from(std::fs::read_to_string(&seen)?.trim_end()),
+            eq(&run_dir.canonicalize()?)
+        )?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
+            contains_substring("for one run on one Upheap item")
+        )?;
+        let settings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(run_dir.join(".claude/settings.json"))?)?;
+        verify_that!(settings["permissions"]["allow"].as_array(), some(not(is_empty())))?;
+        verify_that!(
+            settings["permissions"]["deny"],
+            eq(&serde_json::json!(["Bash(upheap auth:*)"]))
+        )
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_directory_that_is_there_already_is_left_alone_and_the_script_never_starts() -> googletest::Result<()> {
+        // Arrange
+        let dir = tempfile::tempdir()?;
+        let started = dir.path().join("started");
+        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo > '{}'", started.display()))?);
+        let run_dir = dir.path().join("taken");
+        std::fs::create_dir(&run_dir)?;
+
+        // Act
+        let result = tools
+            .run(ToolStart {
+                dir: Some(run_dir.clone()),
+                ..start(Access::Do)
+            })
+            .await;
+
+        // Assert
+        verify_that!(result, err(matches_pattern!(ToolError::NoDirectory { .. })))?;
+        verify_that!(std::fs::read_dir(&run_dir)?.count(), eq(0))?;
+        verify_that!(started.exists(), eq(false))
     }
 
     #[gtest]
