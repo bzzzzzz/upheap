@@ -683,7 +683,8 @@ saying so.
 1. **Clients render what the server returns** ([API, Responses](#responses) §1–2; [User interface,
    Principles](#principles) §6): ranking, permissions, contributors, fuzzy due-date labels and validation live on
    the server. A client's own logic is text search, local UI state and animation, and it shows or hides actions
-   only from `allowed_actions`. Anything else is a bug.
+   only from `allowed_actions`. Anything else is a bug. One exception: the CLI's help names the rough due choices
+   from `domain`, since help is read offline; the server still lists their dates and the CLI matches against that.
 
 ### Ranking
 

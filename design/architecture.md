@@ -599,7 +599,9 @@ section is how it maps onto this API.
 4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
    sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`
    ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)). Every request carries the
-   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser.
+   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser. The `--due`
+   help names the choices from `domain::due`, the rule the server lists them by, since help is read offline; the
+   dates and the match still come from the server.
 5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
    a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
    result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
