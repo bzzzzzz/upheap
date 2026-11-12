@@ -15,7 +15,7 @@ use crate::{Principal, ServiceError, Services};
 
 impl Services {
     /// Moves the item to `to_heap`, another heap of its team, if the item is still at version `expected`. It keeps
-    /// its context, steps, questions, turn, runs and history. It keeps its key unless the target heap has an item
+    /// its context, steps, questions, comments, turn, runs and history. It keeps its key unless the target heap has an item
     /// with it, and then gets a new one. Its tags and values carry over where the target heap has a tag of the same
     /// name, or a parameter in use and an option in use of the same names ([`domain::item_move::carry_over`]); the
     /// rest are dropped. It stays in its state, and a blocked item stays blocked with nobody picked. Items of the

@@ -150,6 +150,8 @@ cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
+cargo run -p cli -- comment add k3x9a "Used the internal CA."   # a comment on the item; or --file notes.md, or - for stdin
+cargo run -p cli -- comment list k3x9a                          # an item's comments, oldest first
 cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file
 cargo run -p cli -- work next                                    # what an agent would work on next, without taking it
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
@@ -169,13 +171,14 @@ cargo run -p cli -- auth logout
 
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
 `UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. With `UPHEAP_RUN` set to a run's ID, every
-request is made inside that run: it may write the item's context, steps and questions, make a note or a reminder a
-task and start it, on the run's own item only, and is refused anything else with exit 3. `work run` starts `claude`
-on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an item (give it its
-context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not `auth`), read files under that directory and use
-the web, and nothing else. To do a task, it may also edit files, and run what your own and the project's Claude settings allow.
-Exit codes: 0 done, 2 bad command line, 3 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup
-broken (no keychain, or no agent tool), 1 anything else.
+request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
+reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
+starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
+item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
+`auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
+and run what your own and the project's Claude settings allow. Exit codes: 0 done, 2 bad command line, 3 refused, 4
+not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything
+else.
 
 ### From Claude Code
 

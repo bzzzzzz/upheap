@@ -723,7 +723,7 @@ joining the queue; and need being settled for everything made from a note.
    other command is refused without a prompt, the run carries on, and the refusal is listed in
    `permission_denials`. `work run` gives the tool two sets of flags. To prepare an item (`with_context`,
    `defined`): `--permission-mode dontAsk --allowedTools <upheap rules> "Read(./**)" "Grep(./**)" "Glob(./**)" WebFetch
-   WebSearch`, where the upheap rules name the commands a run uses (`Bash(upheap item:*)`, `step`, `question`,
+   WebSearch`, where the upheap rules name the commands a run uses (`Bash(upheap item:*)`, `step`, `question`, `comment`,
    `work reached`, `guide`, and the read-only `heap`, `tag` and `parameter` ones) and leave out `auth`, so it
    can run `upheap`, read files under the directory `work run` was started in and use the web, and nothing else. To
    do a task (`done`): `--permission-mode acceptEdits --allowedTools <upheap rules>`, so edits are accepted,

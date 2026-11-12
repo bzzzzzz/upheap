@@ -116,6 +116,7 @@ impl Services {
             let children = ItemChildren {
                 steps,
                 questions: store::questions::list_questions_locking(&txn, item.id).await?,
+                comments: store::comments::list_comments_locking(&txn, item.id).await?,
                 open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
                 locking: true,
             };

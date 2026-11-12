@@ -51,10 +51,11 @@ pub(super) fn arguments(access: Access) -> Vec<&'static str> {
 
 /// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached. Not all
 /// of `upheap`: text an agent reads could talk it into `upheap auth logout`, which the server has no say in.
-const UPHEAP_COMMANDS: [&str; 9] = [
+const UPHEAP_COMMANDS: [&str; 10] = [
     "Bash(upheap item:*)",
     "Bash(upheap step:*)",
     "Bash(upheap question:*)",
+    "Bash(upheap comment:*)",
     "Bash(upheap work reached:*)",
     "Bash(upheap guide:*)",
     "Bash(upheap heap show:*)",
@@ -255,6 +256,7 @@ mod tests {
                 "Bash(upheap item:*)",
                 "Bash(upheap step:*)",
                 "Bash(upheap question:*)",
+                "Bash(upheap comment:*)",
                 "Bash(upheap work reached:*)",
                 "Bash(upheap guide:*)",
                 "Bash(upheap heap show:*)",
@@ -285,6 +287,7 @@ mod tests {
                 "Bash(upheap item:*)",
                 "Bash(upheap step:*)",
                 "Bash(upheap question:*)",
+                "Bash(upheap comment:*)",
                 "Bash(upheap work reached:*)",
                 "Bash(upheap guide:*)",
                 "Bash(upheap heap show:*)",

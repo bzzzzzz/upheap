@@ -16,6 +16,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   too_many_steps: "A task has at most 100 steps.",
   step_not_in_item: "That step isn't in this task any more.",
   too_many_questions: "An item has at most 100 questions.",
+  too_many_comments: "An item has at most 200 comments.",
   question_answered: "Someone else replied to this question meanwhile.",
   question_withdrawn: "This question was withdrawn.",
   turn_open: "Someone already sent this to an agent.",

@@ -149,6 +149,9 @@ enum Command {
     /// Questions and requests on an item
     #[command(subcommand)]
     Question(QuestionCommand),
+    /// Comments on an item
+    #[command(subcommand)]
+    Comment(CommentCommand),
     /// Tags in a heap
     #[command(subcommand)]
     Tag(TagCommand),
@@ -215,6 +218,14 @@ enum QuestionCommand {
     Request(commands::question::ask::RequestArgs),
     /// Reply to a question or a request on an item
     Reply(commands::question::reply::ReplyArgs),
+}
+
+#[derive(Subcommand)]
+enum CommentCommand {
+    /// Add a comment to an item: what you learn, decide or did, without touching its context
+    Add(commands::comment::add::AddArgs),
+    /// The comments on an item, oldest first
+    List(commands::comment::list::ListArgs),
 }
 
 #[derive(Subcommand)]
@@ -318,6 +329,8 @@ impl Command {
             Self::Step(StepCommand::Edit(args)) => &args.shared,
             Self::Question(QuestionCommand::Ask(args)) => &args.shared,
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
+            Self::Comment(CommentCommand::Add(args)) => &args.shared,
+            Self::Comment(CommentCommand::List(args)) => &args.shared,
             Self::Question(QuestionCommand::Reply(args)) => &args.shared,
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
@@ -460,6 +473,8 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
         Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
+        Command::Comment(CommentCommand::Add(args)) => commands::comment::add::run(args, app, out).await,
+        Command::Comment(CommentCommand::List(args)) => commands::comment::list::run(args, app, out).await,
         Command::Question(QuestionCommand::Reply(args)) => commands::question::reply::run_reply(args, app, out).await,
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,

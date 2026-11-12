@@ -122,6 +122,8 @@ enum RequestBody {
     NewQuestion,
     /// The reply to the target question, which has no choices.
     ReplyToQuestion,
+    /// A comment to add.
+    NewComment,
     /// Sending an item to an agent, one state.
     SendToAgent,
     /// A claim over the shared heap.
@@ -616,6 +618,14 @@ fn endpoints() -> Vec<Endpoint> {
             edit,
             Target::OpenItem,
             RequestBody::NewQuestion,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/comments",
+            edit,
+            Target::OpenItem,
+            RequestBody::NewComment,
             StatusCode::CREATED,
         ),
         row(
@@ -1312,6 +1322,7 @@ impl World {
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
             RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
             RequestBody::ReplyToQuestion => Some(json!({ "reply": { "comment": "Internal" } })),
+            RequestBody::NewComment => Some(json!({ "body": "Use the internal CA." })),
             RequestBody::SendToAgent => Some(json!({ "reach": "one" })),
             RequestBody::Claim => Some(json!({ "heaps": [format!("{}/{}", self.team_slug, self.heap_slug)] })),
             RequestBody::Reached => {

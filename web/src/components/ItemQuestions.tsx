@@ -17,9 +17,9 @@ import { GOAL_LABELS, isClosed } from "./labels";
 import { StuckRow } from "./StuckRow";
 import { useUserName } from "./userName";
 
-const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
+export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const detailsButtonClass = `-ml-1 flex min-h-9 items-center gap-1 self-start rounded-lg px-1 text-sm text-ink-soft hover:text-ink ${focusClass} pointer-coarse:min-h-11`;
-const fieldClass =
+export const fieldClass =
   "field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
 const labelClass = "text-xs font-medium text-ink-soft";
 const pickClass = `group flex min-h-9 items-center gap-2 text-base ${focusClass} pointer-coarse:min-h-11`;
