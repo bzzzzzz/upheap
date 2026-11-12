@@ -103,6 +103,8 @@ pub enum Field {
     State,
     /// The step a new step goes after.
     After,
+    /// A comment's text.
+    Body,
     /// A question's short text.
     Text,
     /// A question's long version.
@@ -154,6 +156,7 @@ impl Field {
             Self::Context => "context",
             Self::State => "state",
             Self::After => "after",
+            Self::Body => "body",
             Self::Text => "text",
             Self::Details => "details",
             Self::Choices => "choices",

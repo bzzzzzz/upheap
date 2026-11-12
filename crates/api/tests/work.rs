@@ -1598,3 +1598,42 @@ async fn a_stuck_item_leaves_waiting_when_it_is_closed() -> Result<()> {
     expect_that!(after["count"], eq(&json!(0)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_run_comments_on_its_own_item_and_not_on_another() -> Result<()> {
+    // Arrange: two items; the run holds the more important one.
+    let w = world().await?;
+    let mine = w.add("Mine", json!({ "need": "critical" })).await?;
+    w.send_turn(&mine).await?;
+    let other = w.add("Other", json!({})).await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let own = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/comments", w.item_path(&mine).await?),
+            None,
+            Some(json!({ "body": "Found the staging certificate." })),
+        )
+        .await?;
+    let wrong_item = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/comments", w.item_path(&other).await?),
+            None,
+            Some(json!({ "body": "Not mine" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(own.status, eq(StatusCode::CREATED));
+    expect_that!(own.body["comments"][0]["number"], eq(&json!(1)));
+    expect_that!(wrong_item.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&wrong_item), some(eq("run_wrong_item")));
+    expect_that!(w.get(&other).await?["comments"], eq(&json!([])));
+    Ok(())
+}

@@ -1,3 +1,4 @@
+use domain::comment::CommentError;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
@@ -56,6 +57,8 @@ pub enum ServiceError {
     Step(#[from] StepError),
     #[error(transparent)]
     Question(#[from] QuestionError),
+    #[error(transparent)]
+    Comment(#[from] CommentError),
     #[error(transparent)]
     Turn(#[from] TurnError),
     /// A run that can't take the write, or a write a run is refused.

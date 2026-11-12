@@ -34,6 +34,7 @@ id_type!(HeapId);
 id_type!(ItemId);
 id_type!(StepId);
 id_type!(QuestionId);
+id_type!(CommentId);
 id_type!(TurnId);
 id_type!(RunId);
 id_type!(TagId);
