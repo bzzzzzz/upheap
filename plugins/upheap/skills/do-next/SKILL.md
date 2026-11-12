@@ -17,7 +17,7 @@ After every session, the item alone should tell the next reader where things sta
 ## How to write
 
 Everything you write into Upheap is read by a person later, often on a phone and with the conversation forgotten:
-contexts, steps, questions. Your replies are read now. Write all of it this way.
+contexts, comments, steps, questions. Your replies are read now. Write all of it this way.
 
 - **Concise.** People skim. Say it once, and cut filler, recaps and hedging.
 - **Main point first.** A title names the thing in a few words. A context opens with what it is and why it
@@ -63,9 +63,9 @@ one they mean, or the highest in progress, and read where it got to before doing
 
 Pass over an item, and say so in a line, when:
 
-- It waits for the person's answer. Tell them the question. If they answer now, record the answer in the item's
-  context and go on with it; the question itself is closed in the Upheap app, unless the guide shows a command
-  for replying.
+- It waits for the person's answer. Tell them the question. If they answer now, record the answer as a comment
+  (`upheap comment add`) and go on with it; the question itself is closed in the Upheap app, unless the guide
+  shows a command for replying.
 - It's been sent on to an agent: `upheap item show` prints a `Turn:` line. An unattended run may take it, so
   leave it, unless the person says to do it here.
 - It's blocked.
@@ -75,7 +75,7 @@ Don't use `upheap work claim`, `work reached` or `work finish`: they are for run
 Nothing to pick: say so, and stop. If items are in progress, name them and say you can continue one.
 
 Then read it: `upheap heap show <heap>` for what the project is and how work is done in it, and
-`upheap item show <key> --heap <heap>` for the item's context, steps, and questions with their answers.
+`upheap item show <key> --heap <heap>` for the item's context, comments, steps, and questions with their answers.
 
 Tell the person in a line or two what you picked and why. Move it to in progress with `upheap item start <key>`,
 a note as well as a task, so the list shows it's being worked on. Then start. Don't wait for a go-ahead, except
@@ -133,8 +133,8 @@ Telling the person how to do it is this session's result for that item.
    an agent can do: find the form, draft the message, look up the phone number.
 2. Tell them in the conversation, briefly, in order.
 3. Record it, so it's there when they get to it: each step as a step of the task, with its details in the step's
-   context (`upheap step add <key> "<title>" --context-file <file>`), or the whole of it in the item's context
-   when it's one action.
+   context (`upheap step add <key> "<title>" --context-file <file>`), or the whole of it as a comment on the item
+   (`upheap comment add <key> --file <file>`) when it's one action.
 4. Move the item back to open. Open a request on it with `upheap question request`, saying what to do in a
    line, so it shows as waiting for them.
 5. If they do it right now and tell you, tick the steps, and close the item with `upheap item done`.
@@ -152,10 +152,12 @@ Telling the person how to do it is this session's result for that item.
 3. **Work through the steps in order.** Tick each as it's finished (`upheap step tick`). Add a step when a new
    part turns up, and drop one that turns out not to be needed (`upheap step drop`). A task with no steps and
    more than one part gets steps first.
-4. **Record as you go,** in the item's context: what's done, where it is (the branch, the pull request, the
-   document, the link), what you decided and why, and what's left. Add to the context, don't replace what the
-   person wrote. Do it at each stopping point, not only at the end: a session can end without warning.
-5. **Ask in the conversation** when a call is the person's, and write the answer into the context. If they can't
+4. **Record as you go,** as comments on the item (`upheap comment add <key> --file <file>`): what's done, where it
+   is (the branch, the pull request, the document, the link), what you decided and why, and what's left. A comment
+   adds to the item without touching what the person wrote. Keep the context for what the item is and "Done when";
+   change it only to correct or restate that. Comment at each stopping point, not only at the end: a session can
+   end without warning.
+5. **Ask in the conversation** when a call is the person's, and record the answer as a comment. If they can't
    answer now, put it on the item with `upheap question ask` and stop work on that part.
 
 ### Where to stop
@@ -163,12 +165,12 @@ Telling the person how to do it is this session's result for that item.
 - **Done:** "Done when" is met, and whatever the heap's context says finishing means has happened. Tick the last
   step and run `upheap item done`.
 - **Your part is done and it waits for a person:** a review, an approval, a merge, a reply. Leave it in progress,
-  write where it stands and the link into the context, and open a request with `upheap question request` for what
-  they need to do.
-- **A good part is done and more is left:** leave it in progress with the steps ticked and the context saying
+  comment where it stands and the link, and open a request with `upheap question request` for what they need to
+  do.
+- **A good part is done and more is left:** leave it in progress with the steps ticked and a comment saying
   what's next. Stop when the session has gone on long enough or the next part needs a fresh start.
 - **It can't go on:** something outside it has to happen first. `upheap item block <key>`, with `--by` when it
-  waits for another item in the heap, and the reason in the context.
+  waits for another item in the heap, and the reason in a comment.
 - **It shouldn't be done at all:** tell the person why. Close it with `upheap item wontdo` only if they agree.
 
 ## 6. Ask first

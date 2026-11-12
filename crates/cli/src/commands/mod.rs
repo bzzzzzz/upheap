@@ -2,6 +2,7 @@
 //! that makes the calls and writes the output.
 
 pub mod auth;
+pub mod comment;
 pub mod guide;
 pub mod heap;
 pub(crate) mod heap_api;
@@ -63,8 +64,9 @@ pub enum UsageError {
         #[source]
         source: std::io::Error,
     },
-    #[error("can't read {path} for --context-file")]
-    UnreadableContextFile {
+    #[error("can't read {path} for {flag}")]
+    UnreadableFile {
+        flag: &'static str,
         path: String,
         #[source]
         source: std::io::Error,

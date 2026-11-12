@@ -121,11 +121,17 @@ pub(crate) async fn read_description(raw: &str, app: &App) -> Result<String, Cli
 
 /// The context a flag gives: the text of the file at `path`, or all of stdin for `-`.
 pub(crate) async fn read_context(path: &str, app: &App) -> Result<String, CliError> {
+    read_text_file(path, "--context-file", app).await
+}
+
+/// The text of the file at `path`, or all of stdin for `-`, which the flag `flag` gave.
+pub(crate) async fn read_text_file(path: &str, flag: &'static str, app: &App) -> Result<String, CliError> {
     if path == "-" {
-        return Ok(app.read_stdin("--context-file").await?);
+        return Ok(app.read_stdin(flag).await?);
     }
     std::fs::read_to_string(path).map_err(|source| {
-        UsageError::UnreadableContextFile {
+        UsageError::UnreadableFile {
+            flag,
             path: path.to_owned(),
             source,
         }
