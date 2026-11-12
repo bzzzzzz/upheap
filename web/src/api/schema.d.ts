@@ -1262,7 +1262,8 @@ export interface paths {
          * Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a
          *     description and no open question; `defined` needs an open task with a description, a step that isn't dropped and no
          *     open question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the
-         *     item's stage becomes the goal, and `turn_reached` is recorded. A miss is `not_reached` and names the first condition
+         *     item's stage becomes the goal, and `turn_reached` is recorded. A turn sent all the way opens the next turn at once,
+         *     recorded as `turn_opened`. A miss is `not_reached` and names the first condition
          *     missed; the run stays live, so the agent can fix the item and say it again.
          */
         post: operations["reached"];
@@ -2668,7 +2669,7 @@ export interface components {
          * @description How far a turn is meant to go.
          *
          *     - `one`: to the next stable state (`goal`), then back to the person.
-         *     - `all_the_way`: on through the stable states until the work is done. Until agents run turns it behaves as `one`.
+         *     - `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and when a run reaches it the next turn opens at once, until the work is done.
          * @enum {string}
          */
         Reach: "one" | "all_the_way";

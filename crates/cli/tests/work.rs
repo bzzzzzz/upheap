@@ -93,6 +93,52 @@ async fn a_script_that_plays_the_agent_takes_a_note_to_with_context() -> Result<
 
 #[gtest]
 #[tokio::test]
+async fn reached_says_so_when_a_turn_sent_all_the_way_goes_on() -> Result<()> {
+    // Arrange: a note sent all the way, in a heap that doesn't prepare.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let note = server
+        .add_item(&ada, HEAP, json!({ "title": "Rotate the certs" }))
+        .await?;
+    let note = key(&note)?.to_owned();
+    let sent = server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{note}/turn"),
+            Some(json!({ "reach": "all_the_way" })),
+        )
+        .await;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    let claim = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claim.stdout.trim().to_owned());
+    let edited = cli
+        .run(&[
+            "item",
+            "edit",
+            &note,
+            "--description",
+            "The certs expire on Friday.",
+            "-q",
+        ])
+        .await;
+
+    // Act
+    let reached = cli.run(&["work", "reached", "--result", "Wrote the context"]).await;
+
+    // Assert
+    expect_that!(sent.is_ok(), eq(true));
+    expect_that!(edited.exited(0), eq(true));
+    expect_that!(reached.exited(0), eq(true));
+    expect_that!(
+        reached.stdout,
+        eq(&format!("Reached: with context. {note} goes on, all the way.\n"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn claim_prints_the_run_and_how_to_use_it() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, note) = with_prepared_note().await?;

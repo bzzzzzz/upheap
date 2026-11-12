@@ -119,7 +119,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   prepare setting did, then when and by whom it ended and how (taken back, or reached) and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
-  with someone editing it, and sending and taking back need no `If-Match`. An item has at most one open turn
+  with someone editing it, and sending and taking back need no `If-Match`. A turn sent all the way still goes one
+  stable state: when a run reaches it, the next turn opens in the same transaction with the same reach, line and
+  opener, so the item never has a moment with the person. An item has at most one open turn
   (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
   so no constraint is needed. A turn is taken back by the person's own request, and implied by starting or closing the
   item (in the same transaction as the change, with its own `turn_taken_back` entry first) and by archiving the heap
@@ -153,7 +155,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
-  stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
+  stage to the goal, unless the person has taken it further meanwhile: it never moves back. For an all-the-way turn
+  it also opens the next one, going to where the item is by then. Each refusal of a run
   has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
   never has to read a message.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or

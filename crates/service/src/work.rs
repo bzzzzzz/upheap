@@ -22,7 +22,7 @@ use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
-use crate::audit::describe_reached;
+use crate::audit::{describe_new_turn, describe_reached};
 use crate::items::{OpenRanking, rank_open_items};
 use crate::{Principal, ServiceError, Services};
 
@@ -193,7 +193,8 @@ impl Services {
     }
 
     /// Says the run `run_id` reached its turn's goal. If the item is at the goal as it is now, the run ends as
-    /// reached, the turn ends as reached and the item's stage becomes the goal. Otherwise it fails with
+    /// reached, the turn ends as reached and the item's stage becomes the goal; for a turn sent all the way, the next
+    /// turn opens in the same transaction. Otherwise it fails with
     /// [`ServiceError::NotReached`], naming the first condition missed, and the run stays live.
     ///
     /// Fails with [`RunError::Over`] when the run has ended or lapsed or its turn was taken back.
@@ -263,6 +264,21 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        // A turn sent all the way goes on: the next one opens under the same lock, so the item is never the
+        // person's in between.
+        let next = turn.follow_on(TurnId::from_uuid(self.new_id(now)), &item, now);
+        if let Some(next) = &next {
+            store::turns::insert_turn(&txn, next).await?;
+            let entry = self.item_audit_entry(
+                &heap,
+                in_run,
+                domain::audit::AuditAction::TurnOpened,
+                &item,
+                describe_new_turn(next),
+                now,
+            );
+            store::audit::insert_audit_entry(&txn, &entry).await?;
+        }
         let view = self.run_view(&txn, ended_run).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
@@ -271,6 +287,7 @@ impl Services {
             item_id = %item.id,
             run_id = %run_id,
             goal = turn.goal.code(),
+            next_goal = next.map_or("none", |next| next.goal.code()),
             user_id = %principal.user_id,
             "turn reached"
         );
