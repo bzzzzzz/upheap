@@ -6,7 +6,7 @@
 use api_types::work::{FinishRequestDto, RunDto, RunEndDto};
 use clap::Args;
 
-use super::{current_run, missing_agents};
+use super::{current_run, end_word, missing_agents};
 use crate::commands::SharedArgs;
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
@@ -46,15 +46,12 @@ pub async fn run(args: FinishArgs, app: &App, out: &mut Output) -> Result<(), Cl
 }
 
 fn ended_text(run: &RunDto) -> String {
-    let mut text = match run.end {
-        Some(RunEndDto::Reached) => "Run ended: reached.".to_owned(),
-        Some(RunEndDto::Asked) => "Run ended: asked.".to_owned(),
-        Some(RunEndDto::Failed) => match run.failure.as_deref() {
-            Some(failure) => format!("Run ended: failed: {}.", failure.trim_end_matches('.')),
-            None => "Run ended: failed.".to_owned(),
-        },
-        Some(RunEndDto::TakenBack) => "Run ended: taken back.".to_owned(),
-        Some(RunEndDto::Unknown) | None => "Run ended.".to_owned(),
+    let mut text = match (run.end, end_word(run.end), run.failure.as_deref()) {
+        (Some(RunEndDto::Failed), Some(word), Some(failure)) => {
+            format!("Run ended: {word}: {}.", failure.trim_end_matches('.'))
+        }
+        (_, Some(word), _) => format!("Run ended: {word}."),
+        (_, None, _) => "Run ended.".to_owned(),
     };
     if let Some(cost) = run.cost_usd {
         text.push_str(&format!(" (${cost:.2})"));

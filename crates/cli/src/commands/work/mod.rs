@@ -1,17 +1,19 @@
 //! The work commands, for the agent's queue and its runs: their args and flows, and what they share.
 //!
 //! `next` and `claim` look for work in some heaps; `reached` and `finish` belong to a run, named by `UPHEAP_RUN`,
-//! which `claim` prints for a script (or, later, `work run`) to export.
+//! which `claim` prints for a script to export, and `run` is the loop that does all of it for an agent tool.
 
+mod brief;
 pub mod claim;
 pub mod finish;
 pub mod next;
 pub mod reached;
+pub mod run;
 
 use api_types::common::KindDto;
 use api_types::me::MeDto;
 use api_types::turns::GoalDto;
-use api_types::work::WorkItemDto;
+use api_types::work::{RunEndDto, WorkItemDto};
 use clap::Args;
 
 use crate::client::{ApiClient, ClientError, NO_QUERY};
@@ -28,6 +30,12 @@ pub struct HeapsArgs {
     pub names: Vec<String>,
 }
 
+/// A heap a command looks for work in: its handle as `team/heap`, and its name as the server gives it.
+pub(super) struct NamedHeap {
+    pub handle: String,
+    pub name: String,
+}
+
 /// The heaps `args` names, each once as `team/heap`, found among the caller's. With none named, the default heap.
 pub(super) async fn resolve_heaps(
     args: &HeapsArgs,
@@ -35,6 +43,17 @@ pub(super) async fn resolve_heaps(
     client: &ApiClient,
     token: &str,
 ) -> Result<Vec<String>, CliError> {
+    let heaps = resolve_named_heaps(args, app, client, token).await?;
+    Ok(heaps.into_iter().map(|heap| heap.handle).collect())
+}
+
+/// [`resolve_heaps`], with each heap's name.
+pub(super) async fn resolve_named_heaps(
+    args: &HeapsArgs,
+    app: &App,
+    client: &ApiClient,
+    token: &str,
+) -> Result<Vec<NamedHeap>, CliError> {
     let typed: Vec<&str> = if args.names.is_empty() {
         vec![app.heap_name(None).ok_or(crate::config::SettingError::NoHeap)?]
     } else {
@@ -43,12 +62,23 @@ pub(super) async fn resolve_heaps(
     // Looked up among the caller's heaps, even when written in full, so a heap that isn't theirs is told apart from
     // an older server without the `/work` routes (which answers `404` for every one).
     let me = client.get::<MeDto>(&["me"], NO_QUERY, token).await?;
-    let mut heaps: Vec<String> = Vec::new();
+    let mut heaps: Vec<NamedHeap> = Vec::new();
     for name in typed {
-        let handle = resolve_heap(HeapName::parse(name)?, &me.value)?.to_string();
-        if !heaps.contains(&handle) {
-            heaps.push(handle);
+        let found = resolve_heap(HeapName::parse(name)?, &me.value)?;
+        let handle = found.to_string();
+        if heaps.iter().any(|heap| heap.handle == handle) {
+            continue;
         }
+        // `resolve_heap` found the heap among these, so its name is always there; the slug is a fallback only.
+        let name = me
+            .value
+            .teams
+            .iter()
+            .filter(|team| team.slug == found.team)
+            .flat_map(|team| &team.heaps)
+            .find(|heap| heap.heap.slug == found.heap)
+            .map_or_else(|| found.heap.clone(), |heap| heap.heap.name.clone());
+        heaps.push(NamedHeap { handle, name });
     }
     Ok(heaps)
 }
@@ -88,6 +118,18 @@ pub(super) const fn goal_phrase(goal: GoalDto) -> &'static str {
         GoalDto::Defined => "defined",
         GoalDto::Done => "done",
         GoalDto::Unknown => "a state this version doesn't know",
+    }
+}
+
+/// How a run ended in a word: `reached`, `asked`, `failed` or `taken back`. `None` while it hasn't ended, and for an
+/// end this version doesn't know.
+pub(super) const fn end_word(end: Option<RunEndDto>) -> Option<&'static str> {
+    match end {
+        Some(RunEndDto::Reached) => Some("reached"),
+        Some(RunEndDto::Asked) => Some("asked"),
+        Some(RunEndDto::Failed) => Some("failed"),
+        Some(RunEndDto::TakenBack) => Some("taken back"),
+        Some(RunEndDto::Unknown) | None => None,
     }
 }
 

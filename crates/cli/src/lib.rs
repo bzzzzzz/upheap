@@ -7,6 +7,7 @@
 //! The binary gathers its environment once ([`Deps::system`]) and calls [`run`]; tests call [`run`] with their own
 //! [`Deps`]: an in-memory token store, a browser that answers the consent page itself, and buffers for the output.
 
+mod agent;
 mod auth;
 mod client;
 mod commands;
@@ -24,6 +25,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use clap::{CommandFactory, Parser, Subcommand};
 use reqwest::Url;
 
+pub use crate::agent::{
+    Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
+};
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 use crate::client::{ApiClient, ClientError};
 use crate::commands::{SharedArgs, UsageError};
@@ -41,6 +45,8 @@ pub struct Deps {
     pub stdin: Box<dyn Read + Send>,
     pub stdout: Box<dyn Write + Send>,
     pub stderr: Box<dyn Write + Send>,
+    /// What `upheap work run` takes from outside: the agent tools, interruptions and waits.
+    pub work: WorkDeps,
 }
 
 /// The environment, read once at startup.
@@ -110,6 +116,7 @@ impl Deps {
             stdin: Box::new(std::io::stdin()),
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
+            work: WorkDeps::system(),
         }
     }
 }
@@ -243,6 +250,8 @@ enum WorkCommand {
     Next(commands::work::next::NextArgs),
     /// Take the next item and start a run on it
     Claim(commands::work::claim::ClaimArgs),
+    /// Work the queue: claim an item, start an agent tool on it, record how the run ended, and go on
+    Run(commands::work::run::RunArgs),
     /// Say the run reached the turn's goal (needs UPHEAP_RUN)
     Reached(commands::work::reached::ReachedArgs),
     /// End the run and record what it cost (needs UPHEAP_RUN)
@@ -314,6 +323,7 @@ impl Command {
             Self::Heap(HeapCommand::Add(args)) => &args.shared,
             Self::Work(WorkCommand::Next(args)) => &args.shared,
             Self::Work(WorkCommand::Claim(args)) => &args.shared,
+            Self::Work(WorkCommand::Run(args)) => &args.shared,
             Self::Work(WorkCommand::Reached(args)) => &args.shared,
             Self::Work(WorkCommand::Finish(args)) => &args.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
@@ -341,6 +351,7 @@ where
         stdin,
         mut stdout,
         mut stderr,
+        work,
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
     let in_run = env.run.is_some();
@@ -372,7 +383,7 @@ where
         command => match load_app(env, tokens, browser, stdin) {
             // Before any request, so a bad run ID is told of once, not as a refusal.
             Ok(app) => match check_run_env(&app.env) {
-                Ok(()) => dispatch(command, &app, &mut out).await,
+                Ok(()) => dispatch(command, &app, work, &mut out).await,
                 Err(err) => Err(err.into()),
             },
             Err(err) => Err(err.into()),
@@ -413,10 +424,11 @@ fn load_app(
         browser,
         stdin: Arc::new(Mutex::new(stdin)),
         config,
+        started: tokio::time::Instant::now(),
     })
 }
 
-async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), CliError> {
+async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     use commands::item::state::{StateVerb, run_block, run_verb};
     use commands::step::state::{StepVerb, run_verb as run_step_verb};
     match command {
@@ -456,6 +468,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
         Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
         Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,
+        Command::Work(WorkCommand::Run(args)) => commands::work::run::run(args, app, work, out).await,
         Command::Work(WorkCommand::Reached(args)) => commands::work::reached::run(args, app, out).await,
         Command::Work(WorkCommand::Finish(args)) => commands::work::finish::run(args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
@@ -492,9 +505,18 @@ pub(crate) struct App {
     /// Shared so a read can run on a blocking thread, as stdin may be a terminal that never ends.
     stdin: Arc<Mutex<Box<dyn Read + Send>>>,
     pub config: ConfigFile,
+    /// When the command started, to tell the time now from the time it started: a loop that lives for hours must
+    /// see its access token go stale.
+    started: tokio::time::Instant,
 }
 
 impl App {
+    /// The time now: when the command started, and how long it has run since.
+    pub fn now(&self) -> jiff::Timestamp {
+        let elapsed = jiff::SignedDuration::try_from(self.started.elapsed()).unwrap_or(jiff::SignedDuration::MAX);
+        self.env.now.checked_add(elapsed).unwrap_or(self.env.now)
+    }
+
     /// All of stdin, read to its end as UTF-8.
     pub async fn read_stdin(&self, flag: &'static str) -> Result<String, UsageError> {
         let stdin = Arc::clone(&self.stdin);
@@ -539,7 +561,7 @@ impl App {
             self.config_dir()?,
             client,
             &server,
-            self.env.now.as_second(),
+            self.now().as_second(),
         )
         .await?;
         Ok(token)

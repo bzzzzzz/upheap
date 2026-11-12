@@ -127,6 +127,12 @@ impl Output {
         writeln!(self.stderr, "{}", defuse(text))
     }
 
+    /// Writes a line to stderr in `tone`, with any control characters in it made harmless first.
+    pub fn note_toned(&mut self, text: &str, tone: Tone) -> std::io::Result<()> {
+        let painted = self.paint(&defuse(text), tone);
+        writeln!(self.stderr, "{painted}")
+    }
+
     /// Writes the server's body to stderr as it came, ending with a newline: a problem, with `--json`. On a
     /// terminal, escaped as [`Output::json`] does.
     pub fn json_note(&mut self, body: &str) -> std::io::Result<()> {

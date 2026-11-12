@@ -29,7 +29,7 @@ sha2.workspace = true
 # Writing the config file whole: a temporary file in the same directory, renamed over it.
 tempfile.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "process", "rt", "signal", "sync", "time"] }
 toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

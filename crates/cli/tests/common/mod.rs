@@ -4,17 +4,25 @@
 //! Each test binary uses a different part of the harness, so unused items are expected.
 #![allow(dead_code)]
 
+use std::future::Future;
 use std::io::Write;
+use std::pin::Pin;
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
 use api::{AppState, CookieSettings};
-use cli::{Browser, Deps, Environment, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
+use cli::{
+    AgentTools, Browser, Deps, Environment, Interrupt, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError,
+    Tool, ToolError, ToolReport, ToolStart, WorkDeps,
+};
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
 use serde_json::{Value, json};
 use service::{ManualClock, RandomSource, Services, Settings, SystemRandom};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// 2027-01-01T12:00:00Z, the server's clock.
 pub const START: i64 = 1_798_804_800_000;
@@ -350,6 +358,11 @@ pub fn query_value(url: &str, name: &str) -> Option<String> {
 pub struct Buffer(Arc<Mutex<Vec<u8>>>);
 
 impl Buffer {
+    /// Everything written so far, left in place: for a test that watches a command that is still running.
+    pub fn contents(&self) -> String {
+        String::from_utf8_lossy(&self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)).into_owned()
+    }
+
     fn take(&self) -> String {
         let mut bytes = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         String::from_utf8_lossy(&std::mem::take(&mut *bytes)).into_owned()
@@ -391,6 +404,9 @@ pub struct TestCli {
     pub env: Environment,
     /// What the CLI reads from stdin; nothing by default.
     pub stdin: Vec<u8>,
+    /// How often `work run` tells the server a run is alive. Long by default, so a run that has said it reached its
+    /// goal is not mistaken for one taken back while its tool is still ending; a test of heartbeats shortens it.
+    pub heartbeat_every: StdDuration,
     browser: Arc<dyn Browser>,
 }
 
@@ -414,6 +430,7 @@ impl TestCli {
             },
             config_dir,
             stdin: Vec::new(),
+            heartbeat_every: StdDuration::from_secs(60),
             browser: Arc::new(NoBrowser),
         })
     }
@@ -439,9 +456,23 @@ impl TestCli {
         outcome
     }
 
-    /// Runs `upheap <args>` with its stdout going to `stdout`. The outcome's `stdout` is empty.
+    /// Runs `upheap <args>` with its stdout going to `stdout`. The outcome's `stdout` is empty. A machine with no
+    /// agent tool.
     pub async fn run_into(&self, args: &[&str], stdout: Box<dyn Write + Send>) -> Outcome {
-        let stderr = Buffer::default();
+        let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+        let work = self.work_deps(&StandIn::not_installed(), no_interrupts);
+        self.run_with(args, stdout, &Buffer::default(), work).await
+    }
+
+    /// [`TestCli::run_into`], with the agent tools, interruptions and waits `work` has, and a `stderr` the test
+    /// keeps hold of. The outcome's `stderr` is what is left in it.
+    pub async fn run_with(
+        &self,
+        args: &[&str],
+        stdout: Box<dyn Write + Send>,
+        stderr: &Buffer,
+        work: WorkDeps,
+    ) -> Outcome {
         let deps = Deps {
             env: self.env.clone(),
             tokens: self.tokens.clone(),
@@ -449,12 +480,57 @@ impl TestCli {
             stdin: Box::new(std::io::Cursor::new(self.stdin.clone())),
             stdout,
             stderr: Box::new(stderr.clone()),
+            work,
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
         Outcome {
             code,
             stdout: String::new(),
             stderr: stderr.take(),
+        }
+    }
+
+    /// What `work run` takes from outside: `tools`, `interrupts`, and waits of a few milliseconds, so a test that
+    /// waits for something does not wait long.
+    pub fn work_deps(&self, tools: &StandIn, interrupts: UnboundedReceiver<Interrupt>) -> WorkDeps {
+        WorkDeps {
+            tools: Box::new(tools.clone()),
+            interrupts: Box::new(move || interrupts),
+            idle_wait: StdDuration::from_millis(20),
+            heartbeat_every: self.heartbeat_every,
+            finish_retry: StdDuration::from_millis(5),
+        }
+    }
+
+    /// Runs `upheap <args>` with `tools` as the agent tool, and nobody interrupting.
+    pub async fn run_work(&self, args: &[&str], tools: &StandIn) -> Outcome {
+        let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+        let (stdout, stderr) = (Buffer::default(), Buffer::default());
+        self.run_work_watched(args, tools, no_interrupts, &stdout, &stderr)
+            .await
+    }
+
+    /// [`TestCli::run_work`], with `interrupts`, `stdout` and `stderr` that the test keeps hold of: it can read what
+    /// the command has printed so far while it runs.
+    pub async fn run_work_watched(
+        &self,
+        args: &[&str],
+        tools: &StandIn,
+        interrupts: UnboundedReceiver<Interrupt>,
+        stdout: &Buffer,
+        stderr: &Buffer,
+    ) -> Outcome {
+        let work = self.work_deps(tools, interrupts);
+        let mut outcome = self.run_with(args, Box::new(stdout.clone()), stderr, work).await;
+        outcome.stdout = stdout.take();
+        outcome
+    }
+
+    /// The hands of an agent on this machine: the same keychain, config and server, to run `upheap` as a run does.
+    pub fn agent(&self) -> Agent {
+        Agent {
+            tokens: self.tokens.clone(),
+            env: self.env.clone(),
         }
     }
 
@@ -485,9 +561,16 @@ pub struct TestKeychain {
     unreadable: Mutex<std::collections::HashSet<String>>,
     /// When set, saving fails, as a locked or full keychain would, and the tokens it was asked to keep are recorded.
     refusing: Mutex<Option<Vec<StoredTokens>>>,
+    /// How many times the tokens were read.
+    loads: AtomicUsize,
 }
 
 impl TestKeychain {
+    /// How many times the tokens were read so far: each command that makes a request reads them at least once.
+    pub fn loads(&self) -> usize {
+        self.loads.load(Ordering::SeqCst)
+    }
+
     /// Puts an entry for `server` that doesn't parse in place of its sign-in.
     pub fn plant_unreadable(&self, server: &str) -> Result<()> {
         self.tokens.delete(server)?;
@@ -518,6 +601,7 @@ impl TestKeychain {
 
 impl TokenStore for TestKeychain {
     fn load(&self, server: &str) -> Result<Option<StoredTokens>, TokenStoreError> {
+        self.loads.fetch_add(1, Ordering::SeqCst);
         if self.unreadable().contains(server) {
             return Err(TokenStoreError::Corrupt {
                 server: server.to_owned(),
@@ -538,6 +622,153 @@ impl TokenStore for TestKeychain {
     fn delete(&self, server: &str) -> Result<(), TokenStoreError> {
         self.unreadable().remove(server);
         self.tokens.delete(server)
+    }
+}
+
+/// Waits, for at most ten seconds, until `condition` holds.
+pub async fn wait_until(what: &str, mut condition: impl FnMut() -> bool) -> Result<()> {
+    let waited = tokio::time::timeout(StdDuration::from_secs(10), async {
+        while !condition() {
+            tokio::time::sleep(StdDuration::from_millis(5)).await;
+        }
+    })
+    .await;
+    anyhow::ensure!(waited.is_ok(), "timed out waiting for {what}");
+    Ok(())
+}
+
+type AgentRun = Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>>;
+
+/// An agent tool for tests: what `script` does with each run plays the agent, usually by running `upheap` through an
+/// [`Agent`]. Keeps what it was started with and counts the runs it was stopped in.
+#[derive(Clone)]
+pub struct StandIn {
+    script: Arc<dyn Fn(ToolStart) -> AgentRun + Send + Sync>,
+    installed: bool,
+    starts: Arc<Mutex<Vec<ToolStart>>>,
+    stopped: Arc<AtomicUsize>,
+}
+
+impl StandIn {
+    /// A tool that plays `script` for each run.
+    pub fn new<F, Fut>(script: F) -> Self
+    where
+        F: Fn(ToolStart) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<ToolReport, ToolError>> + Send + 'static,
+    {
+        Self {
+            script: Arc::new(move |start| Box::pin(script(start))),
+            installed: true,
+            starts: Arc::default(),
+            stopped: Arc::default(),
+        }
+    }
+
+    /// A machine where the tool isn't installed.
+    pub fn not_installed() -> Self {
+        Self {
+            installed: false,
+            ..Self::new(|_| async { Ok(ToolReport::default()) })
+        }
+    }
+
+    /// What each run started it with, oldest first.
+    pub fn starts(&self) -> Vec<ToolStart> {
+        self.starts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// How many runs ended by dropping the tool's future before it was done.
+    pub fn stopped(&self) -> usize {
+        self.stopped.load(Ordering::SeqCst)
+    }
+}
+
+impl AgentTools for StandIn {
+    fn check(&self, tool: Tool) -> Result<(), ToolError> {
+        if self.installed {
+            Ok(())
+        } else {
+            Err(ToolError::NotInstalled { tool })
+        }
+    }
+
+    fn run(&self, start: ToolStart) -> AgentRun {
+        self.starts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(start.clone());
+        let playing = (self.script)(start);
+        let stopped = self.stopped.clone();
+        Box::pin(async move {
+            // Counts the run if the future is dropped before it is done.
+            struct CountIfDropped(Arc<AtomicUsize>, bool);
+            impl Drop for CountIfDropped {
+                fn drop(&mut self) {
+                    if !self.1 {
+                        self.0.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+            }
+            let mut guard = CountIfDropped(stopped, false);
+            let report = playing.await;
+            guard.1 = true;
+            report
+        })
+    }
+}
+
+/// The hands of an agent: runs `upheap` as a run does, with the run, server and heap its tool was started with.
+#[derive(Clone)]
+pub struct Agent {
+    tokens: Arc<TestKeychain>,
+    env: Environment,
+}
+
+impl Agent {
+    /// Runs `upheap <args>` in the run `start` belongs to.
+    pub async fn upheap(&self, start: &ToolStart, args: &[&str]) -> Outcome {
+        self.upheap_with_stdin(start, args, "").await
+    }
+
+    /// [`Agent::upheap`], with `stdin` for a `-` file.
+    pub async fn upheap_with_stdin(&self, start: &ToolStart, args: &[&str], stdin: &str) -> Outcome {
+        let var = |name: &str| {
+            start
+                .env
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+        };
+        let mut env = self.env.clone();
+        env.run = var("UPHEAP_RUN");
+        env.server = var("UPHEAP_SERVER");
+        env.heap = var("UPHEAP_HEAP");
+        let (stdout, stderr) = (Buffer::default(), Buffer::default());
+        let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+        let deps = Deps {
+            env,
+            tokens: self.tokens.clone(),
+            browser: Box::new(NoBrowser),
+            stdin: Box::new(std::io::Cursor::new(stdin.as_bytes().to_vec())),
+            stdout: Box::new(stdout.clone()),
+            stderr: Box::new(stderr.clone()),
+            work: WorkDeps {
+                tools: Box::new(StandIn::not_installed()),
+                interrupts: Box::new(move || no_interrupts),
+                idle_wait: StdDuration::from_millis(1),
+                heartbeat_every: StdDuration::from_millis(1),
+                finish_retry: StdDuration::from_millis(1),
+            },
+        };
+        let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
+        Outcome {
+            code,
+            stdout: stdout.take(),
+            stderr: stderr.take(),
+        }
     }
 }
 

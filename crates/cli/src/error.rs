@@ -8,10 +8,11 @@
 //! | 3 | The request was refused: bad input or a rule, or the CLI's own lookups |
 //! | 4 | Not signed in, not allowed, or not found |
 //! | 5 | The server couldn't be reached or is unavailable |
-//! | 6 | The local setup is broken: unreadable config, no keychain |
+//! | 6 | The local setup is broken: unreadable config, no keychain, no agent tool |
 
 use std::error::Error as _;
 
+use crate::agent::ToolError;
 use crate::auth::login::LoginError;
 use crate::auth::loopback::LoopbackError;
 use crate::auth::{AuthError, TokenStoreError};
@@ -53,6 +54,9 @@ pub enum CliError {
     Auth(#[from] AuthError),
     #[error(transparent)]
     Client(#[from] ClientError),
+    /// The agent tool `work run` starts isn't there, or wouldn't start.
+    #[error(transparent)]
+    Tool(#[from] ToolError),
     #[error(transparent)]
     Login(#[from] LoginError),
     #[error(transparent)]
@@ -72,7 +76,7 @@ impl CliError {
     /// The exit code for the failure's category.
     pub fn exit_code(&self) -> u8 {
         match self {
-            Self::Config(_) | Self::TokenStore(_) => 6,
+            Self::Config(_) | Self::TokenStore(_) | Self::Tool(_) => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
             Self::NoSuchStep { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
             Self::Lookup(
@@ -178,6 +182,9 @@ impl CliError {
             ) => Some(
                 "sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`".to_owned(),
             ),
+            (Self::Tool(ToolError::NotInstalled { tool }), _) => Some(format!(
+                "install Claude Code, or check that `{tool} --version` works in this shell"
+            )),
             (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`".to_owned()),
             (Self::Config(ConfigError::Parse { .. }), _) => {
                 Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file".to_owned())
