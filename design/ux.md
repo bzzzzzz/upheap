@@ -47,7 +47,7 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    switcher.
 3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one with
    its row's play button, `s`, a swipe left or Start in the item; finish it with its row's circle, a swipe right, or
-   Done in the item; each change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone.
+   Done in the item (its main button once started, else under ⋯); each change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone.
    Re-size or re-date in the item and watch it move. Block an item, naming what it waits for; it leaves the list,
    since blocked items are hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
    teammates' changes arrive as the list refetches, and rows animate to their new places.
@@ -167,7 +167,7 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
    touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
    row switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it.
-   Its controls are the phone sheet's (Start, Blocked, Done buttons; S M L XL buttons).
+   It uses the wide screen's layout, with popovers, and the touch cues of The item §16 (▾ always shown, 44 px targets).
 4. Swipe actions on rows work here too, as on a phone.
 
 ### Phone details
@@ -276,15 +276,17 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it,
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
-2. It opens with the kind line under the title ("Task · With context": the icons with their words, and the kind
-   alone when the item is closed), then the state (the likeliest next state as the main
-   button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
-   bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
-   line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
-   it says "Joins the list on 12 March"), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
-   four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description)
-   and the history, collapsed until it's clicked, on every item it opens. On a phone due, tags, parameters and the context are rows of label and value, each opening a
-   sheet; the context saves as its sheet closes.
+2. It opens to read, in this order: the title with the main state button and ⋯ beside it (point 6), a status line, Waits for
+   you when something does (point 12), the fields (point 16), the context (point 17), a task's Steps (point 11),
+   Questions (points 13 and 14) and History, collapsed until it's clicked, on every item it opens. On a phone the
+   main button and ⋯ sit in a bar at the bottom of the sheet instead, the main one wider. The **status line** is one
+   quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
+   alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
+   accent), and for a closed item when it closed, or "It can't be reopened." A blocked item says "Blocked by" and
+   links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. Then the chips:
+   the item's place in the list, "#3" (point 9), and, only when an agent has the item, who has it (point 15). A
+   reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
+   is in ("Up next") and has no rank.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as
    the tag is added, in Add item too.
@@ -292,24 +294,29 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    previous one brought back, so quick changes don't conflict with each other.
 5. Closing it (✕, Escape, or Back) goes back where it was opened from: Back when the app opened it, the list when it
    was opened from a link. Opening another row while one is open replaces it in the history.
-6. The main button is the likeliest next state: Start for open, Done for in progress, Unblock for blocked. The other
-   states are next to it. ⋯ is named More and holds Won't do, Make it a task… and Stage, each only when the server
-   allows it; with none to show, ⋯ is absent. Make it a task asks first, naming the item, since a task can't go
-   back to a note (or to a reminder). A reminder that has arrived also has Make it a task as a button of its own,
-   the main one, before the state buttons. A reminder has an exact Date in place of Due (a sheet with a date field on
-   a phone), which can be moved, also back into the future, and not cleared; it has no steps and no Send to an agent. Stage lists as written and with context, and defined on a task only (a note says "Defined needs
-   a task"); picking one saves silently, like every change in the item.
+6. The main button is the likeliest next state: Start for open, Done for in progress, Unblock for blocked, Make it a task
+   for a reminder that has arrived (its state's own choice then moves into ⋯), Reopen for a closed item while it can
+   be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
+   always there, and holds, each only when the server allows it and in this order: the other state changes, Won't do,
+   Make it a task…, Send to an agent… (point 15), Change blocker… on a blocked item, Copy link, and the Stage choices.
+   Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
+   a popover (a sheet on a phone) and saves on a pick. Copy link confirms with a toast, "Link copied", as the menu has
+   closed by then. Make it a task asks first, naming the item, since a task can't go back to a note (or to a
+   reminder). A reminder has an exact Date in place of Due (point 16), which can be moved, also back into the future,
+   and not cleared; it has no steps and no Send to an agent. Stage lists as written and with context, and defined on
+   a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
-8. A link sign beside the title copies the item's short link, and the key (`k3x9a`) shows in the header. Nothing
-   else has Copy link.
-9. "Why it's #3" shows the contributors with their `share_percent` as bars. Below them, "Held back by" lists what
-   keeps the item from ranking higher: a low need, no due date, unset sizes, in that order and without bars, each
-   taking an editor to its field (a link on a wide screen; a row on a phone, where the due one opens the Due
-   sheet). A reader sees the same lines as text. The item shown first in its list has none, nor does a blocker
-   ranked by what it blocks, nor any item while the list is sorted by something other than priority. The list row
-   doesn't show them.
-10. The item says when it was created and by whom ("Added by Sam 4 days ago"), next to a History link.
+8. The key (`k3x9a`) shows in the header, and Copy link is in ⋯. Nothing else has Copy link.
+9. The rank chip, "#3" in the status line, is a button that opens "Why it's #3": a popover (a sheet on a phone) with
+   the contributors and their `share_percent` as bars. Below them, "Held back by" lists what keeps the item from
+   ranking higher: a low need, no due date, unset sizes, in that order, as lines of text without bars. What can fix
+   it shows itself on the fields (point 16): an unset effort, impact or due date it names is marked there. A low
+   need isn't marked: the need was set on purpose. The item shown first in its list has no held-back lines, nor does
+   a blocker ranked by what it blocks, nor any item while the list is sorted by something other than priority; with
+   nothing to say the chip is plain text, and an item that isn't in the list on screen has no chip. The list row
+   doesn't show any of this.
+10. The item says when it was created and by whom ("Added by Sam 4 days ago"), on the line of History's toggle.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
     checkbox that ticks and unticks it, the title edited in place (Enter or leaving the field saves, Escape or a
@@ -321,41 +328,64 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
     steps and the count to read, with no checkbox to change, no ⋯ and no Add.
 12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the one tinted, outlined
-    block in the item (the accent at a low fill, a 2 px accent border), under the state buttons and above "Why it's
-    #3", the same on the pane, the tablet panel and, inline at the top, the phone sheet. A stuck turn is its first row
-    (see Waiting for me, 7). Then one row per open question, in number order, separated by a thin rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and
-    `· step "<title>"` when it names one, the short text in semibold, "Details ▸" when it has details (opening them
-    in place), then the reply controls. A question without choices has an "Answer" field and Reply, off until the
-    answer has text. With choices it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until
-    something is picked. A request has "Comment, optional" and two buttons, Done and Can't be done, which reply as
-    soon as they are pressed, sharing one row on a phone. On a phone Reply spans the width, and every control is
-    44 px.
-13. After a reply there is no toast: the row leaves Waits for you and joins Questions, the focus goes to the next
-    row's first control, else to the item, and a polite live region says Replied to “<text>”. While it is
-    sending, that row's buttons are off. If it fails the row stays with its picks and comment and the reason shows
-    under it. If someone else replied first, the row leaves and the section says "Someone else replied to “…”
-    meanwhile." until the next reply. In an archived heap a row shows its text and details with no controls. A
-    closed item has no Waits for you: closing withdrew its open questions, which read in Questions as "Withdrawn".
-14. **Questions n**, a closed disclosure just above History, lists the answered questions and the withdrawn ones in
-    number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as written>` and
-    "<who>, <when>" in quiet text, or a muted "Withdrawn". It only reads; changing a reply is later.
-15. **Who has it** is a quiet block under Waits for you and above "Why it's #3", on an open item in an active heap.
-    With no agent it says "With you." and has **Send to an agent**, which opens a form:
-    a popover on a wide screen and a tablet, a sheet on a phone. The form has two choices, "To <where it goes>" (the
-    next stable state: with context, defined or done) and "All the way", or on a defined task the one line "To
-    done"; "A line for the agent (optional)"; Send and Cancel. Send acts at once, closes the form, gives focus to
-    Take back and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back without
-    asking or a second toast. With an agent the block says "With an agent since 14:02" (the time today, else the
-    date as the server words it: "yesterday", "3 Nov"), "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and
-    "Prepared on add" for an item the heap's setting sent. If the item waits for the person it reads "An agent is
-    waiting for your answer, going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons:
-    Retry and Take back are in Waits for you. After Retry it reads "With an agent since …" again and the focus goes
-    to the item. **Take back** asks first, "Take this back from the agent? It stops, and
-    what it changed stays.", inline on a wide screen and in a sheet on a phone, and gives focus to Send to an agent
-    afterwards, with no toast. A failed send or take back says why under the block, and the form keeps its line.
-    Someone else's send first says "Someone already sent this to an agent." and the block shows it. Start, Done and
-    Won't do in the item ask before they take an item back ("An agent has this. Starting it takes it back. Take it
-    back and start it?"), inline beside the state buttons or in a sheet; Blocked and Open don't.
+    block at the top of the item, under the status line (the accent at a low fill, a 2 px accent border), the same on
+    the pane, the tablet panel and the phone sheet. A stuck turn is its first row (see Waiting for me, 7), with Retry
+    and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
+    **Answer ↓** on its right: it scrolls the first open question into view and focuses its first control. The reply
+    controls are not here but in Questions (point 13).
+13. **Questions** is a section under the Steps, shown when the item has any question, under the heading "Questions".
+    The open questions come first, in the same tinted, outlined box, one row each in number order, separated by a thin
+    rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and `· step "<title>"` when it
+    names one, the short text in semibold, "Details ▸" when it has details (opening them in place), then the reply
+    controls. A question without choices has an "Answer" field and Reply, off until the answer has text. With choices
+    it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until something is picked. A request
+    has "Comment, optional" and two buttons, Done and Can't be done, which reply as soon as they are pressed, sharing
+    one row on a phone. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast:
+    the row leaves the box and joins the fold (point 14), the focus goes to the next row's first control, else to the
+    item, and a polite live region says Replied to “<text>”. While it is sending, that row's buttons are off. If it
+    fails the row stays with its picks and comment and the reason shows under it. If someone else replied first, the
+    row leaves and the section says "Someone else replied to “…” meanwhile." until the next reply. In an archived
+    heap a row shows its text and details with no controls. A closed item has no open rows: closing withdrew its open
+    questions, which read in the fold as "Withdrawn".
+14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
+    withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as
+    written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
+    and all are withdrawn. It only reads; changing a reply is later.
+15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context", "Agent ·
+    waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
+    with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
+    "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and "Prepared on add" for an
+    item the heap's setting sent. If the item waits for the person it reads "An agent is waiting for your answer,
+    going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons: Retry and Take back are
+    in Waits for you. **Take back** is in the popover, and asks first, "Take this back from the agent? It stops, and
+    what it changed stays.", inline in the popover and in a sheet on a phone; afterwards the chip is gone and the
+    focus goes to ⋯, with no toast. With no agent there is no chip and nothing says "With you". **Send to an agent…**
+    is in ⋯, when the server allows it, and opens a form: a popover under ⋯ on a wide screen and a tablet, a sheet on
+    a phone. The form has two choices, "To <where it goes>" (the next stable state: with context, defined or done)
+    and "All the way", or on a defined task the one line "To done"; "A line for the agent (optional)"; Send and
+    Cancel. Send acts at once, closes the form, gives focus to the chip and shows a toast, "Sent to an agent, going
+    to: with context.", with Undo, which takes it back without asking or a second toast. A failed send or take back
+    says why in the popover, and the form keeps its line. Someone else's send first says "Someone already sent this
+    to an agent." and the chip shows it. Start, Done and Won't do in the item ask before they take an item back ("An
+    agent has this. Starting it takes it back. Take it back and start it?"), inline under the title or in a sheet;
+    Blocked and Open don't.
+16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
+    columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
+    each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set
+    effort", "Set impact", "Set due" (a parameter "Set <name>") in muted text; when the server's held-back lines
+    (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
+    pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
+    under the value on a wide screen and a tablet, a sheet on a phone: the need's four steps, S M L XL (pressing the
+    picked one clears it), the due choices (staying open while an exact date is chosen), the date, the tags (staying
+    open for several picks) or the parameter's options. A pick saves at once and closes it, and focus goes back to
+    the value. Without `edit` (a reader, an archived heap, a closed item) the values are plain text.
+17. The **context** is the item's description rendered as Markdown (GitHub-flavoured: headings, emphasis, links, code,
+    lists, task lists as disabled checkboxes, quotes, tables), with an Edit button, shown with `edit`. Raw HTML is
+    never rendered and images are never loaded: an image shows as a link. Links open in a new tab. A line break in the
+    text stays one, so plain text written before reads as it did. With none it says "No context yet." and the button
+    reads Add. Edit swaps the text in place for its source, with Save and Cancel (⌘ or Ctrl with Enter saves, Escape
+    cancels without closing the item); on a phone it opens a sheet that saves as it closes. Leaving the item with a
+    changed draft, by closing it or walking on, saves it, so nothing typed is lost.
 
 ## Adding an item
 
@@ -406,7 +436,7 @@ its row, and every item whose agent turn is stuck, with the ways out.
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
    Rows are one column at the app's content width, separated by thin rules; no item pane opens beside the page.
-2. A row is the item's Waits for you row, the same component, with a head line of its own: the kind ("Request",
+2. A row is the item's open-question row in Questions, the same component, with a head line of its own: the kind ("Request",
    "Question", "Question · pick any"), the item's title as an accent, underlined link to the item in its heap, the heap's
    name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
    one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action
@@ -602,7 +632,7 @@ session.
    dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own
    admin role, revoking an invite link, and discarding a typed title.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
-   sheet's state buttons sit in a bar at its bottom; on a wide screen they're the main button plus the others.
+   sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
    title, one-line explanation, a way to add one near the top (a "+ New" button, or a short form when adding takes a
    field or two), rows that turn into a form when edited, and the rarer actions out of the way (a ⋯, or the foot of
