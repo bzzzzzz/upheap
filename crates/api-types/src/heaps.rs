@@ -120,21 +120,25 @@ pub struct HeapPatchDto {
 }
 
 /// New weights for the heap and its parameters, saved together. Leave a weight out to keep it.
-#[derive(Deserialize, ToSchema)]
+#[derive(Default, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = HeapWeightsPatchRequest)]
 pub struct HeapWeightsPatchDto {
     /// 0 to 100.
     #[schema(minimum = 0, maximum = 100)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub need: Option<i64>,
     /// 0 to 100.
     #[schema(minimum = 0, maximum = 100)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub age: Option<i64>,
     /// 0 to 100.
     #[schema(minimum = 0, maximum = 100)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deadline: Option<i64>,
     /// 0 to 100. Value per effort.
     #[schema(minimum = 0, maximum = 100)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<i64>,
     /// Parameters of the heap in use whose weight changes, each listed once.
     #[serde(default)]
@@ -142,7 +146,7 @@ pub struct HeapWeightsPatchDto {
 }
 
 /// A new weight for one parameter, if it is still at `version`.
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ParameterWeightChange)]
 pub struct ParameterWeightChangeDto {
