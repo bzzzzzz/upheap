@@ -6,7 +6,7 @@
 //! [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass their own.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -120,6 +120,8 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         out: Mutex::new(out),
         noted: Mutex::new(Noted::default()),
         live: AtomicUsize::new(0),
+        pressed: AtomicBool::new(false),
+        stopping_noted: AtomicBool::new(false),
         first_error: Mutex::new(None),
         stop,
     };
@@ -278,6 +280,10 @@ struct Shared<'a> {
     noted: Mutex<Noted>,
     /// How many runs are live: claimed and not yet recorded and printed.
     live: AtomicUsize,
+    /// Whether the person has pressed Ctrl-C, so a run claimed after that can still be told about it.
+    pressed: AtomicBool,
+    /// Whether the note that the loop is stopping has been printed, so it is printed once.
+    stopping_noted: AtomicBool,
     /// The error that ended the first worker that failed; the command fails with it once every worker has ended.
     first_error: Mutex<Option<CliError>>,
     stop: watch::Sender<Stop>,
@@ -301,23 +307,40 @@ impl Shared<'_> {
     /// Turns the person's interrupts into the stop signal. Once nobody can interrupt any more, waits for ever: the
     /// workers carry on.
     async fn listen(&self, mut interrupts: UnboundedReceiver<Interrupt>) {
+        // Counted here, not read off the stop signal: a worker's failure raises that too, and the person's first
+        // Ctrl-C is the gentle one whatever came before it.
+        let mut presses = 0_u32;
         while let Some(interrupt) = interrupts.recv().await {
             match interrupt {
-                Interrupt::CtrlC if *self.stop.borrow() == Stop::No => {
-                    self.raise(Stop::AfterRuns);
-                    if self.live.load(Ordering::SeqCst) > 0 {
-                        let text = if self.workers > 1 {
-                            "Stopping after the current runs. Ctrl-C again stops them now."
-                        } else {
-                            "Stopping after this run. Ctrl-C again stops it now."
-                        };
-                        self.note(text);
+                Interrupt::CtrlC => {
+                    presses += 1;
+                    if presses == 1 {
+                        self.raise(Stop::AfterRuns);
+                        self.pressed.store(true, Ordering::SeqCst);
+                        if self.live.load(Ordering::SeqCst) > 0 {
+                            self.note_stopping();
+                        }
+                    } else {
+                        self.raise(Stop::Now);
                     }
                 }
-                Interrupt::CtrlC | Interrupt::Now => self.raise(Stop::Now),
+                Interrupt::Now => self.raise(Stop::Now),
             }
         }
         std::future::pending::<()>().await;
+    }
+
+    /// Says once for the loop that it stops after the live runs, and how to stop them now.
+    fn note_stopping(&self) {
+        if self.stopping_noted.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let text = if self.workers > 1 {
+            "Stopping after the current runs. Ctrl-C again stops them now."
+        } else {
+            "Stopping after this run. Ctrl-C again stops it now."
+        };
+        self.note(text);
     }
 
     /// Moves the stop signal forward to `to`, never back.
@@ -389,7 +412,9 @@ impl Shared<'_> {
         }
         self.raise(Stop::AfterRuns);
         if self.live.load(Ordering::SeqCst) > 0 {
-            self.note(&format!("Stopping after the current runs: {err}"));
+            self.note(&format!(
+                "Stopping after the current runs: {err}. Ctrl-C stops them now."
+            ));
         }
         *first = Some(err);
     }
@@ -405,6 +430,10 @@ impl Shared<'_> {
         lock(&self.noted).idle = None;
         // A run claimed after the stop signal is still worked to its end: abandoning it would leave it to lapse.
         self.live.fetch_add(1, Ordering::SeqCst);
+        // A Ctrl-C that came while this was being claimed found nothing live to say it to.
+        if self.pressed.load(Ordering::SeqCst) {
+            self.note_stopping();
+        }
         let result = self.work_claimed(run).await;
         self.live.fetch_sub(1, Ordering::SeqCst);
         result
@@ -687,8 +716,12 @@ impl Shared<'_> {
     }
 
     /// `14:06  Nothing to do. 1 item waits for you. Asking again in a minute.`, once for each stretch of idling across
-    /// all workers: again only when the number of items that wait for the person changes.
+    /// all workers, and not while a run is live: again only when the number of items that wait for the person changes.
     fn note_idle(&self, waiting: u32) -> std::io::Result<()> {
+        // Idle is only news when nothing is going on: another worker's live run is not "nothing to do".
+        if self.live.load(Ordering::SeqCst) > 0 {
+            return Ok(());
+        }
         {
             let mut noted = lock(&self.noted);
             if noted.idle == Some(waiting) {

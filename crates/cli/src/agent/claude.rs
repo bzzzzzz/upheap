@@ -129,7 +129,7 @@ fn set_up_directory(dir: &Path) -> std::io::Result<()> {
 }
 
 /// How long a tool that was told to stop has to end before it is killed.
-const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+pub(super) const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// The tool's process. Dropped before the tool ended, it stops the tool: asked to end first, so the tool can end
 /// what it started, then killed with its group.
@@ -137,7 +137,8 @@ const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 /// Killing at once would not do: Claude runs each command in a process group of its own and ends them itself when
 /// it is asked to end, but not when it is killed, so a build or a push under way would go on with nobody to end it.
 struct Running {
-    child: tokio::process::Child,
+    /// Only `None` while a stop has taken it to see the tool out.
+    child: Option<tokio::process::Child>,
     /// The process group the tool leads, which `process_group(0)` gave it, until the tool has ended.
     #[cfg(unix)]
     group: Option<rustix::process::Pid>,
@@ -151,13 +152,24 @@ impl Running {
                 .id()
                 .and_then(|id| i32::try_from(id).ok())
                 .and_then(rustix::process::Pid::from_raw),
-            child,
+            child: Some(child),
+        }
+    }
+
+    /// Takes the brief's pipe, and borrows the output pipes.
+    fn pipes(&mut self) -> Pipes<'_> {
+        match self.child.as_mut() {
+            Some(child) => (child.stdin.take(), child.stdout.as_mut(), child.stderr.as_mut()),
+            None => (None, None, None),
         }
     }
 
     /// Waits for the tool to end on its own. After that nothing is left to stop.
     async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
-        let status = self.child.wait().await;
+        let Some(child) = self.child.as_mut() else {
+            return Err(std::io::Error::other("the tool was taken to be stopped"));
+        };
+        let status = child.wait().await;
         #[cfg(unix)]
         {
             self.group = None;
@@ -166,26 +178,72 @@ impl Running {
     }
 }
 
+/// The tool's pipes: the brief's to write, the output's to read.
+type Pipes<'a> = (
+    Option<tokio::process::ChildStdin>,
+    Option<&'a mut tokio::process::ChildStdout>,
+    Option<&'a mut tokio::process::ChildStderr>,
+);
+
+/// A tool that was asked to end and may not have yet. Killed with its group if it is dropped before it is seen out,
+/// which is what happens to one whose waiting task the runtime shut down before it ran.
 #[cfg(unix)]
-impl Drop for Running {
-    fn drop(&mut self) {
-        use rustix::process::{Signal, kill_process_group};
-        let Some(group) = self.group else {
-            return;
-        };
-        // A group that is gone already is what was wanted.
-        let _ = kill_process_group(group, Signal::TERM);
-        // A drop cannot await, so this waits on the thread: a few seconds at most, once, while a run is being
-        // stopped and the loop has nothing else to do.
+struct Stopping {
+    child: tokio::process::Child,
+    group: rustix::process::Pid,
+    ended: bool,
+}
+
+#[cfg(unix)]
+impl Stopping {
+    /// Waits up to `STOP_GRACE` for the tool to end, and kills its group when it has not. Blocks the thread.
+    fn see_out(mut self) {
         let deadline = std::time::Instant::now() + STOP_GRACE;
         while std::time::Instant::now() < deadline {
             if !matches!(self.child.try_wait(), Ok(None)) {
                 // It ended and was reaped, so its group's number may be given to another: nothing more to signal.
+                self.ended = true;
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
-        let _ = kill_process_group(group, Signal::KILL);
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Stopping {
+    fn drop(&mut self) {
+        if !self.ended {
+            // A group that is gone already is what was wanted.
+            let _ = rustix::process::kill_process_group(self.group, rustix::process::Signal::KILL);
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Running {
+    fn drop(&mut self) {
+        use rustix::process::{Signal, kill_process_group};
+        let (Some(group), Some(child)) = (self.group, self.child.take()) else {
+            return;
+        };
+        // A group that is gone already is what was wanted.
+        let _ = kill_process_group(group, Signal::TERM);
+        let stopping = Stopping {
+            child,
+            group,
+            ended: false,
+        };
+        // A drop cannot await, and under a runtime this thread may be the only one, running every other run too: the
+        // wait for the tool to end and the kill after it go to a blocking thread. The runtime waits for it when it
+        // shuts down, so `upheap` does not exit with the tool still running. Outside a runtime there is nothing else
+        // to hold up, and the wait is here.
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                runtime.spawn_blocking(move || stopping.see_out());
+            }
+            Err(_) => stopping.see_out(),
+        }
     }
 }
 
@@ -218,10 +276,9 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         source,
     })?;
     let mut running = Running::new(child);
-    let stdin = running.child.stdin.take();
+    let (stdin, stdout, stderr) = running.pipes();
     // The output pipes stay the child's, read through borrows: were they this function's own, a stop would close
     // them before the tool is asked to end, and what the tool prints on its way out would kill it mid-cleanup.
-    let (stdout, stderr) = (running.child.stdout.as_mut(), running.child.stderr.as_mut());
     let brief = start.brief;
     // Written while the output is read, so a tool that prints before it has read everything cannot stall. A tool that
     // exits without reading its input is not an error here: its exit says what happened.
