@@ -135,11 +135,11 @@ impl WorkDeps {
     }
 }
 
-/// `SIGHUP` is left alone: listening for it would undo `nohup`, which is how a loop is kept going after its terminal
-/// closes.
-///
 /// Forwards Ctrl-C, and on Unix `SIGTERM`, until the receiver is dropped. Listening starts here, not in the spawned
 /// task, so a signal that arrives right away is not missed. Must run inside the runtime.
+///
+/// `SIGHUP` is left alone: listening for it would undo `nohup`, which is how a loop is kept going after its terminal
+/// closes.
 fn listen_for_signals() -> UnboundedReceiver<Interrupt> {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     #[cfg(unix)]
