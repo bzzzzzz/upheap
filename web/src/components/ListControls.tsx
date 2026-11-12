@@ -1,17 +1,20 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-import type { BlockedLayout, HeapRef, Parameter, ParameterList, Size, StateMode } from "../api/client";
+import type { BlockedLayout, HeapRef, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
 import { NEED_LABELS, NEEDS, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import {
   DEFAULT_MODES,
+  DEFAULT_REMINDERS,
   filterCount,
   isBlockedShown,
   joinList,
   MODE_LABELS,
+  REMINDERS_LABELS,
+  REMINDERS_MODES,
   SHOWN_STATES,
   SORT_LABELS,
   SORTS,
@@ -268,6 +271,9 @@ function describeSetting(view: ListSearch, setting: ViewSetting): [string, strin
   if (setting === "blocked_layout") {
     return [STATE_LABELS.blocked, LAYOUT_LABELS[view.blocked_layout ?? "grouped"].toLowerCase()];
   }
+  if (setting === "reminders") {
+    return ["Reminders to come", REMINDERS_LABELS[view.reminders ?? DEFAULT_REMINDERS].toLowerCase()];
+  }
   return [STATE_LABELS[setting], MODE_LABELS[view[setting] ?? DEFAULT_MODES[setting]].toLowerCase()];
 }
 
@@ -319,6 +325,15 @@ function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: Li
         disabled={!blockedShown}
         onChange={(layout: BlockedLayout) =>
           onChange({ ...view, blocked_layout: layout === "grouped" ? undefined : layout })
+        }
+      />
+      <Segmented
+        label="Reminders to come"
+        changed={view.reminders !== undefined}
+        options={REMINDERS_MODES.map((mode) => ({ value: mode, label: REMINDERS_LABELS[mode] }))}
+        value={view.reminders ?? DEFAULT_REMINDERS}
+        onChange={(mode: RemindersMode) =>
+          onChange({ ...view, reminders: mode === DEFAULT_REMINDERS ? undefined : mode })
         }
       />
     </Section>

@@ -126,7 +126,7 @@ impl Services {
     /// The heap with what the caller may do with it. Non-members get [`ServiceError::NotFound`].
     pub async fn load_heap(&self, principal: Principal, heap_id: HeapId) -> Result<HeapView, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
-        load_heap_view(&self.db, access.heap, access.membership.role).await
+        load_heap_view(&self.db, access.heap, access.membership.role, self.now()).await
     }
 
     /// Changes the heap's name, slug, context or prepare setting if it is still at version `expected`. The name and
@@ -171,7 +171,7 @@ impl Services {
             .agents_prepare
             .filter(|prepare| *prepare != current.agents_prepare);
         if name.is_none() && slug.is_none() && context.is_none() && agents_prepare.is_none() {
-            return load_heap_view(&txn, current, role).await;
+            return load_heap_view(&txn, current, role, self.now()).await;
         }
 
         let mut diff = serde_json::Map::new();
@@ -207,12 +207,12 @@ impl Services {
             ..current.clone()
         };
         // Counted before the commit, so a saved change is never reported as failed. Renaming doesn't change it.
-        let open_count = count_heap_open_items(&txn, heap_id).await?;
+        let open_count = count_heap_open_items(&txn, heap_id, self.now()).await?;
         let now = self.now();
         // The heap's row is written once, with the first entry; a second entry for the context joins it.
         let (saved, context_diff) = if diff.is_empty() {
             let Some(context_diff) = context_diff else {
-                return load_heap_view(&txn, current, role).await;
+                return load_heap_view(&txn, current, role, self.now()).await;
             };
             let saved = self
                 .write_heap(
@@ -326,7 +326,7 @@ impl Services {
             heap
         };
 
-        let open_count = count_heap_open_items(&txn, heap_id).await?;
+        let open_count = count_heap_open_items(&txn, heap_id, self.now()).await?;
         let parameters = list_parameters_in_use(&txn, &heap, role).await?;
         if heap_changed || parameters_changed > 0 {
             txn.commit().await.map_err(StoreError::from)?;
@@ -360,11 +360,11 @@ impl Services {
         let current = lock(&txn, heap_id).await?;
         let role = access.membership.role;
         if current.is_archived() == archived {
-            return load_heap_view(&txn, current, role).await;
+            return load_heap_view(&txn, current, role, self.now()).await;
         }
 
         // Counted before the commit, as in `update_heap`. Archiving doesn't change it.
-        let open_count = count_heap_open_items(&txn, heap_id).await?;
+        let open_count = count_heap_open_items(&txn, heap_id, self.now()).await?;
         let now = self.now();
         let changed = Heap {
             archived_at: archived.then_some(now),

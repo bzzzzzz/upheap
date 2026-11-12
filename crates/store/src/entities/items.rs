@@ -18,6 +18,8 @@ pub struct Model {
     pub impact: Option<String>,
     pub due_at: Option<i64>,
     pub due_firm: Option<bool>,
+    /// UTC milliseconds; set for a reminder, and kept when it becomes a task.
+    pub arrives_at: Option<i64>,
     pub created_at: i64,
     pub created_by: Option<String>,
     pub closed_at: Option<i64>,

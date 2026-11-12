@@ -199,7 +199,7 @@ fn views_resolve_by_name_and_say_when_two_share_it() -> googletest::Result<()> {
         json!({
             "id": id, "heap_id": Uuid::new_v4(), "name": name, "created_by": Uuid::new_v4(), "archived_at": null,
             "version": 1, "allowed_actions": [],
-            "view": { "open": "shown", "in_progress": "pinned", "blocked": "hidden", "blocked_layout": "grouped",
+            "view": { "open": "shown", "in_progress": "pinned", "blocked": "hidden", "blocked_layout": "grouped", "reminders": "hidden",
                       "sort": "priority", "sort_parameter": null, "tag": [], "effort": [], "impact": [], "need": [], "param": [] },
         })
     };

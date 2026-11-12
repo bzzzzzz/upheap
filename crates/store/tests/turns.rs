@@ -76,6 +76,7 @@ async fn item(world: &World, key: &str) -> Result<Item> {
         effort: None,
         impact: None,
         due: None,
+        arrives_at: None,
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
     };

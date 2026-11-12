@@ -86,16 +86,16 @@ Until the Agents page exists, a prepared note is found by its mark in the list.
 
 ### Stage 2: the rest of the first set
 
-1. **The Agents page:** the history of results and Your decision (W10).
-2. **Markdown:** contexts, details and comments rendered, and edited as Markdown (W4).
-3. **Putting it right:** changing a reply, "changes asked" at a stable state, closed questions on the item,
-   reopening an item closed as became (W7, W16).
-4. **Reminders:** the kind and its date, Add, reminders to come and search, a due reminder made a task (W12,
-   W15, W17).
-5. **Several heaps:** heap weights, the queue across heaps, the boost for started work, and the heap's total
-   cost (W14, W22).
-6. **The other moves:** a note becoming a step, and a new heap that joins the queue (C10, C11).
-7. **Told apart:** an agent's changes marked in item history and Activity (W21).
+- [ ] 1. **The Agents page:** the history of results and Your decision (W10).
+- [ ] 2. **Markdown:** contexts, details and comments rendered, and edited as Markdown (W4).
+- [ ] 3. **Putting it right:** changing a reply, "changes asked" at a stable state, closed questions on the item,
+    reopening an item closed as became (W7, W16).
+- [x] 4. **Reminders:** the kind and its date, Add, reminders to come and search, a due reminder made a task (W12,
+    W15, W17).
+- [ ] 5. **Several heaps:** heap weights, the queue across heaps, the boost for started work, and the heap's total
+    cost (W14, W22).
+- [ ] 6. **The other moves:** a note becoming a step, and a new heap that joins the queue (C10, C11).
+- [ ] 7. **Told apart:** an agent's changes marked in item history and Activity (W21).
 
 ## Open questions
 

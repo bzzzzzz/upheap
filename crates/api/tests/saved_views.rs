@@ -80,6 +80,7 @@ async fn a_saved_view_spells_out_every_setting_and_the_team_sees_it() -> Result<
             "in_progress": "pinned",
             "blocked": "shown",
             "blocked_layout": "grouped",
+            "reminders": "hidden",
             "sort": "priority",
             "sort_parameter": null,
             "tag": [ops],

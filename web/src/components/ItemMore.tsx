@@ -119,12 +119,45 @@ export function ItemMore({
         </MenuTrigger>
       )}
       <MakeTaskDialog
-        title={item.title}
+        item={item}
         isOpen={confirming}
         onCancel={closeConfirm}
         onConfirm={() => {
           save({ kind: "task" });
           closeConfirm();
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Make it a task as a button of its own, for a reminder that has arrived: turning it into a task is what is likely
+ * next (ux.md, The item §6). Asks first, like the entry in More. Only where the server allows it.
+ */
+export function MakeTaskButton({
+  item,
+  save,
+  className,
+}: {
+  item: Item;
+  save: (patch: ItemPatch) => void;
+  className: string;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  if (!item.allowed_actions.includes("make_task")) return null;
+  return (
+    <>
+      <button type="button" aria-haspopup="dialog" onClick={() => setConfirming(true)} className={className}>
+        Make it a task
+      </button>
+      <MakeTaskDialog
+        item={item}
+        isOpen={confirming}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          save({ kind: "task" });
+          setConfirming(false);
         }}
       />
     </>
@@ -211,14 +244,14 @@ function MoreSheet({
   );
 }
 
-/** Asks before a note becomes a task, naming the item. A centred dialog at every width. */
+/** Asks before a note or a reminder becomes a task, naming the item. A centred dialog at every width. */
 function MakeTaskDialog({
-  title,
+  item,
   isOpen,
   onCancel,
   onConfirm,
 }: {
-  title: string;
+  item: Item;
   isOpen: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -233,10 +266,10 @@ function MakeTaskDialog({
       <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-[22px] text-ink shadow-xl outline-none">
         <Dialog role="alertdialog" aria-describedby={bodyId} className="flex flex-col gap-3.5 outline-none">
           <Heading slot="title" className="text-base font-semibold break-words">
-            Make “{title}” a task?
+            Make “{item.title}” a task?
           </Heading>
           <p id={bodyId} className="text-sm text-ink-soft">
-            A task can't go back to a note.
+            A task can't go back to a {item.kind === "reminder" ? "reminder" : "note"}.
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="button" autoFocus onClick={onCancel} className={compactButtonClass.quiet}>

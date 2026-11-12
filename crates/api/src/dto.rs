@@ -10,6 +10,7 @@ use api_types::common::{
 use api_types::turns::TurnDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
+use domain::item::Kind;
 use domain::turn::goal_for;
 use jiff::tz::TimeZone;
 use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
@@ -32,8 +33,8 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
     let closed_at = item.state.closed_at();
-    // What a turn opened now would go to: for an open item.
-    let next_goal = closed_at.is_none().then(|| goal_for(&item).into());
+    // What a turn opened now would go to: for an open note or task.
+    let next_goal = (closed_at.is_none() && item.kind != Kind::Reminder).then(|| goal_for(&item).into());
     ItemDto {
         id: *item.id.as_uuid(),
         key: item.key.to_string(),
@@ -60,6 +61,11 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 overdue: view.overdue,
             }
         }),
+        // A task that was a reminder keeps its arrival in storage, but it is no longer a reminder to clients.
+        arrives_at: (item.kind == Kind::Reminder)
+            .then_some(item.arrives_at)
+            .flatten()
+            .map(Timestamp::as_millis),
         tags: view.tags.iter().map(ItemTagDto::from).collect(),
         parameters: view.parameters.into_iter().map(to_item_parameter_dto).collect(),
         created_at: item.created_at.as_millis(),

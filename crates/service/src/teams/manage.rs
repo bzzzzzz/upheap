@@ -116,7 +116,7 @@ impl Services {
         for entry in &entries {
             store::audit::insert_audit_entry(&txn, entry).await?;
         }
-        let detail = load_team_detail(&txn, principal, team).await?;
+        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(team_id = %detail.team.id, user_id = %principal.user_id, "team created");
@@ -145,7 +145,7 @@ impl Services {
         let name = patch.name.filter(|name| *name != current.name);
         let slug = patch.slug.filter(|slug| *slug != current.slug);
         if name.is_none() && slug.is_none() {
-            return load_team_detail(&txn, principal, current).await;
+            return load_team_detail(&txn, principal, current, self.now()).await;
         }
         if slug.is_some() {
             current.ensure_shared()?;
@@ -187,7 +187,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, saved).await?;
+        let detail = load_team_detail(&txn, principal, saved, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, user_id = %principal.user_id, "team updated");
@@ -207,7 +207,7 @@ impl Services {
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
         locked.team.ensure_shared()?;
         if locked.find(user_id).is_some() {
-            let detail = load_team_detail(&txn, principal, locked.team).await?;
+            let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
         }
         store::users::find_user(&txn, user_id)
@@ -232,7 +232,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, locked.team).await?;
+        let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, member_id = %user_id, user_id = %principal.user_id, "member added");
@@ -253,7 +253,7 @@ impl Services {
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
         let target = locked.find(user_id).ok_or(ServiceError::NotFound)?;
         if target.role == role {
-            return load_team_detail(&txn, principal, locked.team).await;
+            return load_team_detail(&txn, principal, locked.team, self.now()).await;
         }
         ensure_admin_remains(team_id, &locked.members, user_id, Some(role))?;
 
@@ -269,7 +269,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, locked.team).await?;
+        let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, member_id = %user_id, user_id = %principal.user_id, role = role.code(), "member role changed");

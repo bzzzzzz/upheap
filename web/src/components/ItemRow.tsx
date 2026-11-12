@@ -10,6 +10,7 @@ import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, STAGE_LABELS, STATE_LA
 import { TOUCH, useMedia } from "./media";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { ParameterChips } from "./ParameterPicker";
+import { formatDate } from "./reminders";
 import { TagChips } from "./TagChips";
 
 /**
@@ -141,6 +142,7 @@ export function ItemRow({
               {/* The icons are for the eye; this is what a screen reader hears after the title. */}
               <span className="sr-only">
                 {item.kind === "task" && ", task"}
+                {item.kind === "reminder" && ", reminder"}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
@@ -185,6 +187,80 @@ export function ItemRow({
         {actions && <RowActions item={item} onChangeState={onChangeState} />}
       </motion.div>
     </motion.li>
+  );
+}
+
+/**
+ * A reminder still to come, in the group under the list (ux.md, The list §16): the reminder mark, the title, the date
+ * it joins the list and its tags. No position, state circle or swipe: it isn't in the ranking yet, and opening it is
+ * how its date is changed.
+ */
+export function ComingRow({
+  item,
+  heapRef,
+  selected,
+  itemOpen,
+}: {
+  item: Item;
+  heapRef: HeapRef;
+  selected: boolean;
+  itemOpen: boolean;
+}) {
+  const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      focusRow(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+    }
+  };
+  return (
+    <li className="relative rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent">
+      <div
+        className={`flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
+          selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
+        }`}
+      >
+        <span className="flex w-3.5 shrink-0 justify-center">
+          <KindIcon kind={item.kind} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {item.waits_for_you && (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
+            )}
+            <Link
+              to="/teams/$team/heaps/$heap/items/$item"
+              params={{ ...heapRef, item: item.key }}
+              search={true}
+              replace={itemOpen}
+              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              onKeyDown={onKeyDown}
+              {...{ [ROW_LINK]: item.key }}
+              aria-current={selected ? "true" : undefined}
+              className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
+            >
+              {item.title}
+              <span className="sr-only">
+                , reminder
+                {item.waits_for_you && ", waits for you"}
+              </span>
+            </Link>
+            {item.due && (
+              <span className="rounded-md bg-sunken px-1.5 text-xs text-ink-soft">
+                <span className="sr-only">Joins the list on </span>
+                {formatDate(item.due.date)}
+              </span>
+            )}
+            <TagChips tags={item.tags} />
+          </div>
+        </div>
+        {item.waits_for_you && (
+          <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
+            waits for you
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
 

@@ -17,6 +17,9 @@ pub enum ValidationError {
     PasswordTooLong { max: usize },
     #[error("due date is not a valid calendar date")]
     DueDateInvalid,
+    /// A reminder is added without a date, or its date is cleared.
+    #[error("a reminder needs a date")]
+    ReminderNeedsDate,
     #[error("timestamp is out of range")]
     TimestampOutOfRange,
     #[error("at most {max} tags are allowed")]

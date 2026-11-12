@@ -65,6 +65,32 @@ impl BlockedLayout {
     }
 }
 
+/// Whether the heap's reminders to come are listed, in a group of their own after the others. They have no
+/// position: they are not ranked until their date.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RemindersMode {
+    /// Left out. A search shows them anyway.
+    #[default]
+    Hidden,
+    Shown,
+}
+
+impl RemindersMode {
+    pub const ALL: [Self; 2] = [Self::Hidden, Self::Shown];
+
+    /// Stable code used in storage, audit diffs and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Hidden => "hidden",
+            Self::Shown => "shown",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.code() == code)
+    }
+}
+
 /// What a group of the list is sorted by. Ties keep priority order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKey {
@@ -182,6 +208,7 @@ pub struct ListView {
     pub in_progress: StateMode,
     pub blocked: StateMode,
     pub blocked_layout: BlockedLayout,
+    pub reminders: RemindersMode,
     pub filter: ListFilter,
     pub sort: SortKey,
 }
@@ -194,6 +221,7 @@ impl Default for ListView {
             in_progress: StateMode::Pinned,
             blocked: StateMode::Hidden,
             blocked_layout: BlockedLayout::Grouped,
+            reminders: RemindersMode::Hidden,
             filter: ListFilter::default(),
             sort: SortKey::Priority,
         }
@@ -306,6 +334,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: std::collections::BTreeMap::new(),
         };

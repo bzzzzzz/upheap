@@ -16,6 +16,7 @@ pub struct WaitingDto {
     pub count: u32,
     /// Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
     /// its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
+    /// Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
     pub rows: Vec<WaitingRowDto>,
 }
 

@@ -183,11 +183,13 @@ pub async fn list_items_in_states(
 }
 
 /// How many items each of `heap_ids` has in one of `states`, in one query per [`IN_LIST_CHUNK`] heaps. Heaps with
-/// none are left out.
+/// none are left out. A reminder whose date is after `now` doesn't count (`Item::is_to_come`): it isn't in the list
+/// yet.
 pub async fn count_items_by_heap(
     db: &impl ConnectionTrait,
     heap_ids: &[HeapId],
     states: &[StateKind],
+    now: Timestamp,
 ) -> Result<HashMap<HeapId, u32>, StoreError> {
     let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
     let mut counts = HashMap::with_capacity(ids.len());
@@ -198,6 +200,11 @@ pub async fn count_items_by_heap(
             .column_as(items::Column::Id.count(), "count")
             .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
             .filter(items::Column::State.is_in(states.iter().map(|s| s.code())))
+            .filter(
+                Condition::any()
+                    .add(items::Column::Kind.ne(Kind::Reminder.code()))
+                    .add(items::Column::ArrivesAt.lte(now.as_millis())),
+            )
             .group_by(items::Column::HeapId)
             .into_model::<GroupCount>()
             .all(db)
@@ -463,6 +470,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         impact: Set(item.impact.map(|s| s.code().to_owned())),
         due_at: Set(item.due.map(|d| d.at.as_millis())),
         due_firm: Set(item.due.map(|d| d.firm)),
+        arrives_at: Set(item.arrives_at.map(Timestamp::as_millis)),
         created_at: Set(item.created_at.as_millis()),
         created_by: Set(item.created_by.map(|id| id_to_db(id.as_uuid()))),
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
@@ -501,6 +509,10 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         }),
         _ => return Err(read.corrupt("due_at and due_firm must be set together".to_owned())),
     };
+    let arrives_at = read.optional_timestamp(row.arrives_at)?;
+    if item_kind == Kind::Reminder && (arrives_at.is_none() || due.is_none()) {
+        return Err(read.corrupt("a reminder needs a due and an arrival".to_owned()));
+    }
     let size = |raw: Option<String>| {
         raw.map(|r| Size::from_code(&r).ok_or_else(|| read.corrupt(format!("unknown size {r:?}"))))
             .transpose()
@@ -522,6 +534,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         effort: size(row.effort)?,
         impact: size(row.impact)?,
         due,
+        arrives_at,
         // Filled in by `attach_tags` and `attach_values`; the row alone doesn't hold them.
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),

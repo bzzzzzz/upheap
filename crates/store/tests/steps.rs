@@ -62,6 +62,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId)> {
         effort: None,
         impact: None,
         due: None,
+        arrives_at: None,
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
     };

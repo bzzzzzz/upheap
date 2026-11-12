@@ -12,10 +12,11 @@ import { BlockerSelect } from "./BlockerSelect";
 import { useCopyLink } from "./copyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { ChoiceButtons, FieldLabel } from "./ChoiceButtons";
+import { DateField } from "./DateField";
 import { DuePicker, DueRows } from "./DuePicker";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
-import { ItemMore } from "./ItemMore";
+import { ItemMore, MakeTaskButton } from "./ItemMore";
 import { AnsweredQuestions, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
 import { ItemTurn } from "./ItemTurn";
@@ -31,6 +32,7 @@ import {
   STATE_LABELS,
 } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
+import { formatDate, isToCome } from "./reminders";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { Sheet, SheetChoice } from "./Sheet";
@@ -49,13 +51,15 @@ const CLOSE_SPEED = 600;
  * the list on a tablet, with the list still live beside it, and a sheet from the bottom on a phone. Each change saves
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
- * pane (ux.md, The item §7).
+ * pane (ux.md, The item §7); `listed` is whether the item is a row on screen, a reminder to come included, which
+ * has no `entry`.
  */
 export function ItemPane({
   heapRef,
   itemKey,
   entry,
   section,
+  listed,
   previousKey,
   nextKey,
   onClose,
@@ -64,6 +68,7 @@ export function ItemPane({
   itemKey: string;
   entry: RankedItem | undefined;
   section: string | undefined;
+  listed: boolean;
   previousKey: string | undefined;
   nextKey: string | undefined;
   onClose: () => void;
@@ -130,7 +135,7 @@ export function ItemPane({
             )}
           </h2>
           {/* On a phone the sheet closes and the next row is a tap away, so only the pane walks the list. */}
-          {entry && (
+          {listed && (
             <div className="flex max-sm:hidden">
               {(["Previous item", "Next item"] as const).map((label) => (
                 <WalkLink
@@ -430,14 +435,23 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       ) : (
         <>
           <div id={dueId} className="contents">
-            <DuePicker
-              value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
-              current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
-              disabled={!canEdit}
-              onChange={(due) => {
-                if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
-              }}
-            />
+            {item.kind === "reminder" ? (
+              // A reminder's date is its deadline: an exact date that can be moved but not cleared.
+              <DateField
+                value={item.due?.date ?? null}
+                disabled={!canEdit}
+                onChange={(date) => save({ due: { date, firm: true } })}
+              />
+            ) : (
+              <DuePicker
+                value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
+                current={item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : undefined}
+                disabled={!canEdit}
+                onChange={(due) => {
+                  if (due?.date !== item.due?.date || due?.firm !== item.due?.firm) save({ due });
+                }}
+              />
+            )}
           </div>
 
           <TagPicker
@@ -619,11 +633,18 @@ function FieldRows({
   const sheet = (field: string) => ({ isOpen: open === field, onClose: close, aside: item.title });
 
   const due = item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : null;
+  const reminder = item.kind === "reminder";
   const tags = item.tags.length > 0 ? item.tags.map((tag) => tag.name).join(", ") : null;
 
   return (
     <div className="-mt-2 flex flex-col border-t border-line/60">
-      <FieldRow id={dueRowId} label="Due" value={due} disabled={!canEdit} onOpen={() => setOpen("due")} />
+      <FieldRow
+        id={dueRowId}
+        label={reminder ? "Date" : "Due"}
+        value={reminder ? (item.due ? formatDate(item.due.date) : null) : due}
+        disabled={!canEdit}
+        onOpen={() => setOpen("due")}
+      />
       <FieldRow label="Tags" value={tags} disabled={!canEdit} onOpen={() => setOpen("tags")} />
       {item.parameters.map((current) => {
         const parameter = parameters.data?.parameters.find((p) => p.id === current.parameter_id);
@@ -665,14 +686,25 @@ function FieldRows({
         onOpen={() => setOpen("description")}
       />
 
-      <Sheet title="Due" {...sheet("due")}>
-        <DueRows
-          value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
-          onChange={(value) => {
-            if (value?.date !== item.due?.date || value?.firm !== item.due?.firm) save({ due: value });
-          }}
-          onDone={close}
-        />
+      <Sheet title={reminder ? "Date" : "Due"} {...sheet("due")}>
+        {reminder ? (
+          <div className="pb-2">
+            <DateField
+              wide
+              label="Date"
+              value={item.due?.date ?? null}
+              onChange={(date) => save({ due: { date, firm: true } })}
+            />
+          </div>
+        ) : (
+          <DueRows
+            value={item.due ? { date: item.due.date, firm: item.due.firm } : null}
+            onChange={(value) => {
+              if (value?.date !== item.due?.date || value?.firm !== item.due?.firm) save({ due: value });
+            }}
+            onDone={close}
+          />
+        )}
       </Sheet>
       <Sheet title="Tags" {...sheet("tags")}>
         <div className="pt-1 pb-2">
@@ -818,23 +850,34 @@ function ContextEditor({ context, onSave }: { context: string; onSave: (text: st
  * with their words. Closed items show the kind only, as the server sends no stage for them.
  */
 function KindLine({ item }: { item: Item }) {
+  // A reminder's date goes with its kind; while it's still ahead, a line says what that means.
+  const date = item.kind === "reminder" && item.due ? formatDate(item.due.date) : undefined;
   return (
-    <p className="-mt-2 flex items-center gap-1.5 text-sm text-muted">
-      <span title={KIND_LABELS[item.kind]} className="flex items-center gap-1.5">
-        <KindIcon kind={item.kind} />
-        {KIND_LABELS[item.kind]}
-      </span>
-      {item.stage && (
-        <>
-          {" "}
-          <span aria-hidden="true">·</span>{" "}
-          <span title={STAGE_LABELS[item.stage]} className="flex items-center gap-1.5">
-            <StageIcon stage={item.stage} />
-            {STAGE_LABELS[item.stage]}
-          </span>
-        </>
-      )}
-    </p>
+    <div className="-mt-2 flex flex-col gap-0.5">
+      <p className="flex items-center gap-1.5 text-sm text-muted">
+        <span title={KIND_LABELS[item.kind]} className="flex items-center gap-1.5">
+          <KindIcon kind={item.kind} />
+          {KIND_LABELS[item.kind]}
+        </span>
+        {date && (
+          <>
+            {" "}
+            <span aria-hidden="true">·</span> <time dateTime={item.due?.date}>{date}</time>
+          </>
+        )}
+        {item.stage && (
+          <>
+            {" "}
+            <span aria-hidden="true">·</span>{" "}
+            <span title={STAGE_LABELS[item.stage]} className="flex items-center gap-1.5">
+              <StageIcon stage={item.stage} />
+              {STAGE_LABELS[item.stage]}
+            </span>
+          </>
+        )}
+      </p>
+      {date && isToCome(item) && <p className="text-sm text-ink-soft">Joins the list on {date}</p>}
+    </div>
   );
 }
 
@@ -1003,6 +1046,8 @@ function StateActions({
   const bar = variant === "bar";
   const closed = item.state === "done" || item.state === "wont_do";
   if (bar && closed && !canReopen) return null;
+  // A reminder that has arrived is most likely made a task, or done: Make it a task leads the state buttons.
+  const arrivedReminder = item.kind === "reminder" && !isToCome(item) && item.allowed_actions.includes("make_task");
 
   const button = (state: ItemState, main: boolean, isDisabled = false) => (
     <button
@@ -1023,7 +1068,10 @@ function StateActions({
     const [main, ...others] = NEXT_STATES[item.state];
     actions = (
       <>
-        {[main, ...others].map((state) => button(state, state === main, disabled))}
+        {arrivedReminder && (
+          <MakeTaskButton item={item} save={save} className={bar ? barButtonClass(true) : stateButtonClass(true)} />
+        )}
+        {[main, ...others].map((state) => button(state, state === main && !arrivedReminder, disabled))}
         <ItemMore item={item} variant={bar ? "bar" : "inline"} save={save} />
       </>
     );
@@ -1036,7 +1084,11 @@ function StateActions({
         aria-label="State"
         data-state-bar=""
         className={`sticky bottom-0 z-10 -mx-4 grid gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] ${
-          closed ? "" : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+          closed
+            ? ""
+            : arrivedReminder
+              ? "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
+              : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
         }`}
       >
         {actions}

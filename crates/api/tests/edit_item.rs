@@ -294,7 +294,7 @@ async fn a_kind_or_stage_the_server_doesnt_know_is_refused_naming_the_field() ->
     let item = create(&app, &session, &heap, json!({ "title": "A note" })).await?;
 
     // Act
-    let kind = patch(&app, &session, &item, 1, json!({ "kind": "reminder" })).await?;
+    let kind = patch(&app, &session, &item, 1, json!({ "kind": "habit" })).await?;
     let stage = patch(&app, &session, &item, 1, json!({ "stage": "reviewed" })).await?;
 
     // Assert
@@ -371,7 +371,7 @@ async fn an_unknown_kind_on_create_is_refused_and_adds_nothing() -> Result<()> {
 
     // Act
     let refused = app
-        .create_item(&session, &heap, json!({ "title": "Remind me", "kind": "reminder" }))
+        .create_item(&session, &heap, json!({ "title": "Remind me", "kind": "habit" }))
         .await?;
     let list = app
         .send(

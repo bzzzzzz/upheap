@@ -442,3 +442,46 @@ async fn a_waiting_blocker_ranks_with_what_it_blocks() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_question_on_a_reminder_to_come_waits_after_the_ranked_ones_soonest_date_first() -> Result<()> {
+    // Arrange: two reminders for later, asked about in the opposite order, and an idea that ranks low.
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let later = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Later reminder", "kind": "reminder", "due": { "date": "2027-02-01", "firm": false } }),
+        )
+        .await?;
+    let sooner = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Sooner reminder", "kind": "reminder", "due": { "date": "2027-01-20", "firm": false } }),
+        )
+        .await?;
+    let idea = item(&app, &session, &heap, "Quiet idea", "idea").await?;
+    for reminder in [&later, &sooner] {
+        let key = reminder["key"].as_str().context("key")?;
+        ask_text(&app, &session, &heap, key, "Still needed?").await?;
+    }
+    ask_text(&app, &session, &heap, &idea, "Which?").await?;
+
+    // Act
+    let waiting = waiting(&app, &session).await?;
+
+    // Assert
+    expect_that!(
+        rows(&waiting),
+        elements_are![
+            eq(&("Quiet idea".to_owned(), 1)),
+            eq(&("Sooner reminder".to_owned(), 1)),
+            eq(&("Later reminder".to_owned(), 1))
+        ]
+    );
+    expect_that!(waiting["count"], eq(&json!(3)));
+    Ok(())
+}

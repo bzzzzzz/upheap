@@ -60,7 +60,7 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
             history.body.trim()
         ))?,
         (Mode::Human, history) => {
-            render_item(&item.value, out)?;
+            render_item(&item.value, app.env.now, out)?;
             if let Some(history) = history {
                 render_history(&history.value, out)?;
             }
@@ -69,7 +69,7 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
     Ok(())
 }
 
-fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
+fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::io::Result<()> {
     let head = [vec![
         Cell::toned(item.key.clone(), Tone::Strong),
         Cell::new(item.title.clone()),
@@ -77,7 +77,7 @@ fn render_item(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     for line in out.render_table(&head) {
         out.table_line("", &line)?;
     }
-    let lines = out.render_table(&fields(item));
+    let lines = out.render_table(&fields(item, now));
     for line in &lines {
         out.table_line("", line)?;
     }
@@ -230,10 +230,13 @@ const fn question_state_text(state: QuestionStateDto) -> &'static str {
 }
 
 /// The item's labelled fields, as rows of label and value. Unset sizes, due time, tags and the rest are left out.
-fn fields(item: &ItemDto) -> Vec<Vec<Cell>> {
+fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
     let mut rows = vec![vec![Cell::new("Kind"), Cell::new(kind_text(item.kind))]];
     if let Some(stage) = item.stage {
         rows.push(vec![Cell::new("Stage"), Cell::new(stage_text(stage))]);
+    }
+    if let Some(due) = item.due.as_ref().filter(|_| super::add::is_to_come(item, now)) {
+        rows.push(vec![Cell::new("Joins list"), Cell::new(due.date.clone())]);
     }
     let state = if item.with_agent {
         format!("{} · with an agent", state_text(item.state))
@@ -342,6 +345,7 @@ fn kind_text(kind: KindDto) -> &'static str {
     match kind {
         KindDto::Note => "note",
         KindDto::Task => "task",
+        KindDto::Reminder => "reminder",
         KindDto::Unknown => "unknown",
     }
 }

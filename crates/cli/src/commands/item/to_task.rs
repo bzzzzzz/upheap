@@ -1,4 +1,4 @@
-//! `upheap item to-task <item>`: make a note a task, in place.
+//! `upheap item to-task <item>`: make a note or a reminder a task, in place.
 //!
 //! The server owns the rule that a task never goes back. The CLI only notices an item that is already a task, which
 //! it has in hand from the read that gives it the version, and then makes no write.
