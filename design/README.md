@@ -11,15 +11,11 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [operations.md](operations.md) | Running production: the Cloud Run and Neon setup, deploying, the one-time cloud setup, rolling back, cautions | The deployment changes |
 | [ux.md](ux.md) | The web app's UX: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, what comes later | A principle, a layout or a behaviour changes |
 | [../web/e2e/CLAUDE.md](../web/e2e/CLAUDE.md) | The rules the Playwright tests follow so they don't race the app: what to wait for after a save, what not to assert, how to reproduce a flake | A flake teaches a rule, or the tests' setup changes |
-| [work/README.md](work/README.md) | The tracker: the tracks in flight. What's next and ideas are notes in Upheap | A track starts or ends. One line |
-| [work/work-with-agents.md](work/work-with-agents.md) | Work with agents: context, tasks with steps, reminders, questions and the agent loop. What it is and its progress | A piece is done, until it's built |
-| [work/work-with-agents-design.md](work/work-with-agents-design.md) | Work with agents, the design: commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
-| [work/side-tasks.md](work/side-tasks.md) | Side tasks: small pieces that run beside the tracks in flight, each with when it's done | A piece is done, until all are |
-| [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | A piece is done, or the plan changes, until it's built |
+| [work/work-with-agents.md](work/work-with-agents.md) | Work with agents, the design: context, tasks with steps, reminders, questions and the agent loop. Commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
+| [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes, the design: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | The design changes, until it's built |
 
-`work/` holds what's in flight: the tracker, and a doc per track of work, with its design in a second file when
-that is long, deleted once it's built. Everything
-beside it is permanent.
+`work/` holds the designs of unbuilt work, each deleted once it's built. Plans, progress and ideas are in Upheap.
+Everything beside it is permanent.
 
 The web app's mockups live outside the repository, in the "Upheap layouts" canvas. ux.md names a board where it
 relies on one.
