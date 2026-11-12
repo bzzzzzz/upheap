@@ -53,6 +53,7 @@ mod processes {
             brief: "The brief\nin two lines\n".to_owned(),
             env: vec![("UPHEAP_RUN".to_owned(), "the-run".to_owned())],
             dir: None,
+            allow: vec![],
         }
     }
 
@@ -159,6 +160,35 @@ mod processes {
             std::fs::read_to_string(&args)?,
             contains_substring("--disallowedTools\nBash(upheap auth:*)")
         )
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn extra_allow_rules_are_values_of_allowed_tools() -> googletest::Result<()> {
+        // Arrange: the script records its arguments, one a line.
+        let dir = tempfile::tempdir()?;
+        let args = dir.path().join("args");
+        let body = format!(
+            "printf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"is_error\":false}}'",
+            args.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+
+        // Act
+        let report = tools
+            .run(ToolStart {
+                allow: vec!["mcp__claude_ai_Claude_Docs".to_owned()],
+                ..start(Access::Do)
+            })
+            .await;
+
+        // Assert
+        verify_that!(report?.failure, none())?;
+        let seen = std::fs::read_to_string(&args)?;
+        let lines: Vec<&str> = seen.lines().collect();
+        let tool_rules = lines.iter().position(|line| *line == "--allowedTools");
+        let rule = lines.iter().position(|line| *line == "mcp__claude_ai_Claude_Docs");
+        verify_that!(tool_rules.zip(rule).map(|(first, rule)| first < rule), some(eq(true)))
     }
 
     #[gtest]

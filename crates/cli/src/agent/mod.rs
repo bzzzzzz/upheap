@@ -54,6 +54,9 @@ pub struct ToolStart {
     /// A directory for the tool to make, set up for itself and run in: one that doesn't exist yet. `None` to run
     /// in the directory `work run` was started in, as it is.
     pub dir: Option<PathBuf>,
+    /// Allow rules the person added for this run's access (`--allow` and the turn's own flag), in the tool's syntax,
+    /// on top of the tool's own. Already checked to be one rule each.
+    pub allow: Vec<String>,
 }
 
 /// What the tool reported when it ended.

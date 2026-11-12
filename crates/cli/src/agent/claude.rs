@@ -31,7 +31,10 @@ pub(super) enum Exit {
 /// In a directory made for the run (`own_directory`), both get [`IN_OWN_DIRECTORY`] too: any command, edit and read.
 /// The rules go on the command line because Claude ignores the allow rules of a settings file in a directory nobody
 /// has trusted, which a new directory never is.
-pub(super) fn arguments(access: Access, own_directory: bool) -> Vec<&'static str> {
+///
+/// The person's own `allow` rules come right after all of these, as more values of `--allowedTools`, in the order
+/// given. The deny of `upheap auth` stays after them, and Claude's deny wins over any allow.
+pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -> Vec<&str> {
     let mut arguments = vec![
         "-p",
         "--output-format",
@@ -52,6 +55,9 @@ pub(super) fn arguments(access: Access, own_directory: bool) -> Vec<&'static str
     }
     if own_directory {
         arguments.extend(IN_OWN_DIRECTORY);
+    }
+    arguments.extend(allow.iter().map(String::as_str));
+    if own_directory {
         arguments.extend(["--disallowedTools", "Bash(upheap auth:*)"]);
     }
     arguments
@@ -312,7 +318,7 @@ impl Drop for Running {
 /// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
 pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
-    command.args(arguments(start.access, start.dir.is_some()));
+    command.args(arguments(start.access, start.dir.is_some(), &start.allow));
     if let Some(dir) = start.dir {
         let made = dir.clone();
         let set_up = tokio::task::spawn_blocking(move || set_up_directory(&made)).await;
@@ -396,7 +402,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_preparing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Prepare, false),
+            arguments(Access::Prepare, false, &[]),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -427,7 +433,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_doing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Do, false),
+            arguments(Access::Do, false, &[]),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -463,12 +469,47 @@ mod tests {
             "Bash(upheap auth:*)",
         ];
         for access in [Access::Prepare, Access::Do] {
-            let narrow = arguments(access, false);
-            let arguments = arguments(access, true);
+            let narrow = arguments(access, false, &[]);
+            let arguments = arguments(access, true, &[]);
 
             // The wide rules follow the narrow ones, so they are still values of `--allowedTools`.
             expect_that!(arguments[..narrow.len()], eq(&narrow[..]));
             expect_that!(arguments[narrow.len()..], eq(&wide[..]));
+        }
+    }
+
+    #[gtest]
+    fn extra_allow_rules_follow_the_fixed_ones_for_either_access() {
+        let extra = ["mcp__x".to_owned(), "Bash(npm:*)".to_owned()];
+        for access in [Access::Prepare, Access::Do] {
+            let mut expected = arguments(access, false, &[]);
+            expected.extend(["mcp__x", "Bash(npm:*)"]);
+
+            expect_that!(arguments(access, false, &extra), eq(&expected));
+        }
+    }
+
+    #[gtest]
+    fn in_its_own_directory_extra_rules_come_before_the_auth_deny() {
+        let extra = ["mcp__x".to_owned(), "Bash(npm:*)".to_owned()];
+        for access in [Access::Prepare, Access::Do] {
+            let narrow = arguments(access, false, &[]);
+            let arguments = arguments(access, true, &extra);
+
+            let tail = [
+                "Bash",
+                "Read",
+                "Edit",
+                "Write",
+                "WebFetch",
+                "WebSearch",
+                "mcp__x",
+                "Bash(npm:*)",
+                "--disallowedTools",
+                "Bash(upheap auth:*)",
+            ];
+            expect_that!(arguments[..narrow.len()], eq(&narrow[..]));
+            expect_that!(arguments[narrow.len()..], eq(&tail[..]));
         }
     }
 

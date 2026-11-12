@@ -672,7 +672,10 @@ section is how it maps onto this API.
    there: a run then begins from nothing and can't see another run's files, and what it needs to carry on is in
    the item's comments and on the remote. There the tool is allowed any command, edit and read, passed on its
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
-   wide for now, so in such a directory the limits above don't hold. With `--instructions` the brief also
+   wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
+   `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after
+   Upheap's own and before the `upheap auth` deny, so a tool the runner's instructions ask for can be allowed for
+   the loop without loosening every session on the machine. With `--instructions` the brief also
    carries the runner's own instructions, between Upheap's and the heap's context: a heap's context is shared by
    everyone who works the heap and says what the work is, and how it is done is for the one who does it, so each
    runner keeps that in a file of its own and it wins over the context on how. The tool runs in its own process
