@@ -137,8 +137,8 @@ Telling the person how to do it is this session's result for that item.
    when it's one action.
 4. Move the item back to open. Open a request on it with `upheap question request`, saying what to do in a
    line, so it shows as waiting for them.
-5. If they do it right now and tell you, tick the steps, reply Done to the request with `upheap question reply`, if the guide
-   shows it, and close the item with `upheap item done`.
+5. If they do it right now and tell you, tick the steps, reply Done to the request with `upheap question reply`
+   if the guide shows it, and close the item with `upheap item done`.
 
 ### Doing it
 
