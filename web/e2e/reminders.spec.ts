@@ -93,6 +93,17 @@ test("Filters › Show lists the reminders to come in a group of their own, soon
   // No position on a reminder to come.
   await expect(group.getByLabel(/^Position/)).toHaveCount(0);
 
+  // The item pane's ↑ ↓ walk the group too (a phone's sheet has none).
+  if (!isPhone(page)) {
+    await group.getByRole("link", { name: /^Sooner one/ }).click();
+    const pane = itemPane(page);
+    await pane.getByRole("link", { name: "Next item" }).click();
+    await expect(pane.getByLabel("Title", { exact: true })).toHaveValue("Later one");
+    await expect(pane.getByRole("link", { name: "Next item" })).toHaveAttribute("aria-disabled", "true");
+    await expect(pane.getByRole("link", { name: "Previous item" })).not.toHaveAttribute("aria-disabled", "true");
+    await pane.getByRole("button", { name: "Close" }).click();
+  }
+
   // The setting is a chip, and taking it off hides the group.
   await page
     .getByRole("group", { name: "Filters on" })

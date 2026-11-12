@@ -69,17 +69,18 @@ export function HeapPage({
   }, [closeItem]);
 
   const place = itemKey && list.data ? placeOf(list.data, itemKey) : undefined;
-  // The rows on screen, top to bottom, for the pane's ↑ ↓.
-  const onScreen = list.data ? everyEntry(shownSections(list.data, search)) : [];
-  const index = onScreen.findIndex((entry) => entry.item.key === itemKey);
+  // The rows on screen, top to bottom, the reminders to come last, for the pane's ↑ ↓.
+  const onScreen = list.data ? rowsOnScreen(shownSections(list.data, search)) : [];
+  const index = onScreen.findIndex((item) => item.key === itemKey);
   const pane = itemKey && closeItem && (
     <ItemPane
       heapRef={heapRef}
       itemKey={itemKey}
       entry={place?.entry}
       section={place?.section}
-      previousKey={index > 0 ? onScreen[index - 1]?.item.key : undefined}
-      nextKey={index >= 0 ? onScreen[index + 1]?.item.key : undefined}
+      listed={index >= 0}
+      previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
+      nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
       onClose={closeItem}
     />
   );
@@ -347,6 +348,12 @@ function shownSections(list: RankedList, search: string) {
     coming: list.reminders.filter((item) => matchesSearch({ item }, search)),
   };
 }
+
+/** The items of the sections shown, in the order the rows are on screen. */
+const rowsOnScreen = (sections: ReturnType<typeof shownSections>) => [
+  ...everyEntry(sections).map((entry) => entry.item),
+  ...sections.coming,
+];
 
 const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => [
   ...list.pinned,

@@ -108,7 +108,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   question, across heaps: one query for them (joined to their items), then one ranking per heap that has any, the
   same inputs and policy the heap's list ranks by (`RankedItem.score`, blocker inheritance included), and the users
   who asked. Rows are ordered by the item's score in its own heap, highest first, then heap name, the item's
-  position and the question number; heap weights, when they come, multiply the score. It returns at most 500 rows,
+  position and the question number; heap weights, when they come, multiply the score. A question on a reminder to
+  come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most 500 rows,
   with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
@@ -247,7 +248,8 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    measurements call for it.
 2. Each factor (need, age, deadline proximity, value per effort, each custom parameter) produces a weighted
    component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
-   `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item, and the score combines them. The formula is a named version (`FormulaVersion::V2`) behind one
+   `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item.
+   The score combines them. The formula is a named version (`FormulaVersion::V2`) behind one
    function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
    explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
    `domain::ranking` explains the current formula.
@@ -306,9 +308,10 @@ a fixed time.
    can say "6 of 14" or offer the next item without a second request. The view's defaults (in progress pinned,
    blocked hidden) are the server's, so every client starts from the same list. Archived parameters and options are
    accepted in filters and sorts, so a saved view keeps working after an option is archived.
-4. **Reminders to come** are not ranked: `rank_open_items` splits them off (`Item::is_to_come`), so no list, queue or
-   Waiting for me sees them, and every open count leaves them out (`count_items_by_heap` takes the time to compare
-   with). They are not hidden from search: the list's `reminders` setting adds them to the response as a group of
+4. **Reminders to come** are not ranked: `rank_open_items` splits them off (`Item::is_to_come`) at the server's
+   clock, not at the time a list ranks at, so a reminder whose date comes while a list is open joins it on the next
+   fetch. No list or queue sees them, and every open count leaves them out (`count_items_by_heap` takes the time to
+   compare with). Waiting for me keeps a question on one, after the ranked rows and by the reminder's date. They are not hidden from search: the list's `reminders` setting adds them to the response as a group of
    their own, soonest first and filtered like the rest, and a client that searches asks for it. The client still
    searches the text itself.
 5. The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text, which

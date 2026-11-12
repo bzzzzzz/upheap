@@ -51,13 +51,15 @@ const CLOSE_SPEED = 600;
  * the list on a tablet, with the list still live beside it, and a sheet from the bottom on a phone. Each change saves
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
- * pane (ux.md, The item §7).
+ * pane (ux.md, The item §7); `listed` is whether the item is a row on screen, a reminder to come included, which has no
+ * `entry`.
  */
 export function ItemPane({
   heapRef,
   itemKey,
   entry,
   section,
+  listed,
   previousKey,
   nextKey,
   onClose,
@@ -66,6 +68,7 @@ export function ItemPane({
   itemKey: string;
   entry: RankedItem | undefined;
   section: string | undefined;
+  listed: boolean;
   previousKey: string | undefined;
   nextKey: string | undefined;
   onClose: () => void;
@@ -132,7 +135,7 @@ export function ItemPane({
             )}
           </h2>
           {/* On a phone the sheet closes and the next row is a tap away, so only the pane walks the list. */}
-          {entry && (
+          {listed && (
             <div className="flex max-sm:hidden">
               {(["Previous item", "Next item"] as const).map((label) => (
                 <WalkLink

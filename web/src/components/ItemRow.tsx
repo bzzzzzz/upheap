@@ -225,6 +225,9 @@ export function ComingRow({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {item.waits_for_you && (
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
+            )}
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
               params={{ ...heapRef, item: item.key }}
@@ -237,7 +240,10 @@ export function ComingRow({
               className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
             >
               {item.title}
-              <span className="sr-only">, reminder</span>
+              <span className="sr-only">
+                , reminder
+                {item.waits_for_you && ", waits for you"}
+              </span>
             </Link>
             {item.due && (
               <span className="rounded-md bg-sunken px-1.5 text-xs text-ink-soft">
@@ -248,6 +254,11 @@ export function ComingRow({
             <TagChips tags={item.tags} />
           </div>
         </div>
+        {item.waits_for_you && (
+          <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
+            waits for you
+          </span>
+        )}
       </div>
     </li>
   );
