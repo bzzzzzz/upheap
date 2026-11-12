@@ -35,7 +35,7 @@ const rowQuestion = (item: Item, state: ItemState) =>
 /**
  * Wraps the list's `ChangeState` so a state change of an item an agent has asks first (ux.md, The list): a dialog on a
  * wide screen and a sheet on a phone, naming the item. Everything that changes a state from the list goes through it,
- * the circle, the swipes, the hover buttons, ⋯ and `x`. Cancel puts a swiped row back, through the change's `onError`,
+ * play, the done buttons, the swipes, `x` and `s`. Cancel puts a swiped row back, through the change's `onError`,
  * and gives the focus to the row's link. Render `confirm` once, anywhere.
  */
 export function useConfirmAgentStateChange(change: ChangeState): { onChangeState: ChangeState; confirm: ReactNode } {

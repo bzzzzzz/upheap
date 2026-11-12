@@ -1,24 +1,9 @@
-import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
-import type { Locator, Page } from "@playwright/test";
+import { addItem, drag, expect, itemPane, openItem, row, test } from "./fixtures";
 
 // Gestures for a finger (design/ux.md, Phone details), on the phone and tablet projects, where the pointer is coarse.
 test.beforeEach(({ isMobile }) => {
   test.skip(!isMobile, "Swipes and drags are for touch screens.");
 });
-
-/** Drags from the middle of `target` by `dx`, `dy`, in steps, as a finger would. */
-async function drag(page: Page, target: Locator, dx: number, dy: number) {
-  // Waits until it's still, as the phone's sheet slides up as it opens.
-  await target.click({ trial: true });
-  const box = await target.boundingBox();
-  if (!box) throw new Error("Nothing to drag");
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + dx, y + dy, { steps: 12 });
-  await page.mouse.up();
-}
 
 test("a row swipes right to mark it done, and left for its other states", async ({ page }) => {
   await addItem(page, "Water the plants");

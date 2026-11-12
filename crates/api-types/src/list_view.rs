@@ -96,8 +96,9 @@ impl From<RemindersMode> for RemindersModeDto {
     }
 }
 
-/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
-/// `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
+/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `need` (most needed first),
+/// `effort` (smallest first), `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its
+/// first option first).
 /// Items without the value come last.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -105,6 +106,7 @@ impl From<RemindersMode> for RemindersModeDto {
 pub enum SortDto {
     Priority,
     Due,
+    Need,
     Effort,
     Impact,
     Parameter,
@@ -117,6 +119,7 @@ impl SortDto {
         match (self, parameter) {
             (Self::Priority, None) => Ok(SortKey::Priority),
             (Self::Due, None) => Ok(SortKey::Due),
+            (Self::Need, None) => Ok(SortKey::Need),
             (Self::Effort, None) => Ok(SortKey::Effort),
             (Self::Impact, None) => Ok(SortKey::Impact),
             (Self::Parameter, Some(parameter)) => Ok(SortKey::Parameter(parameter)),
@@ -130,6 +133,7 @@ impl From<SortKey> for SortDto {
         match sort {
             SortKey::Priority => Self::Priority,
             SortKey::Due => Self::Due,
+            SortKey::Need => Self::Need,
             SortKey::Effort => Self::Effort,
             SortKey::Impact => Self::Impact,
             SortKey::Parameter(_) => Self::Parameter,
