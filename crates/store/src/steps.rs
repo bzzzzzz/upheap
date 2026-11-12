@@ -154,10 +154,7 @@ struct StateCount {
 
 impl sea_orm::FromQueryResult for StateCount {
     fn from_query_result(row: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
-        // As in `GroupCount`: the local build's proxy types a small count as a 32-bit integer.
-        let count = row
-            .try_get::<i64>(pre, "count")
-            .or_else(|_| row.try_get::<i32>(pre, "count").map(i64::from))?;
+        let count = row.try_get::<i64>(pre, "count")?;
         Ok(Self {
             group_key: row.try_get(pre, "group_key")?,
             state: row.try_get(pre, "state")?,

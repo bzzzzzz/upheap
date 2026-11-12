@@ -40,7 +40,6 @@ pub enum ApiError {
     /// A state-changing request came without the CSRF header.
     CsrfHeaderMissing,
     /// The `Authorization` header holds no bearer token, or one that is unknown, expired or revoked.
-    #[cfg(feature = "accounts")]
     BearerRejected,
     NoSuchRoute,
     /// A service error caused by one query parameter or body field, which the problem names as its `field`.
@@ -128,7 +127,6 @@ fn classify(err: &ApiError) -> Classified {
             "State-changing requests need the X-CSRF-Protection header",
             Category::Caller,
         ),
-        #[cfg(feature = "accounts")]
         ApiError::BearerRejected => simple(
             StatusCode::UNAUTHORIZED,
             "unauthenticated",
@@ -481,7 +479,6 @@ impl IntoResponse for ApiError {
             Json(body),
         )
             .into_response();
-        #[cfg(feature = "accounts")]
         if matches!(self, ApiError::BearerRejected) {
             // RFC 6750 §3: says how to authenticate, and why this token didn't.
             response.headers_mut().insert(

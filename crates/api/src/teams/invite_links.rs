@@ -1,5 +1,4 @@
-//! A team's invite links: making, listing and revoking them. The local build has one team of one person and nobody
-//! to invite, so it leaves these out (the `accounts` feature).
+//! A team's invite links: making, listing and revoking them.
 
 use api_types::common::UserRefDto;
 use api_types::invite_links::{InviteLinkActionDto, InviteLinkDto, InviteLinkListDto, InviteLinkStateDto};

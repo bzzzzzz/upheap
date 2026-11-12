@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use api::{AppState, Authentication, CookieSettings};
+use api::{AppState, CookieSettings};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -110,7 +110,7 @@ impl TestApp {
         Ok(Self {
             router: api::router(AppState {
                 services: services.clone(),
-                authentication: Authentication::Sessions(test_cookies()),
+                cookies: test_cookies(),
             }),
             services,
             clock,
@@ -125,32 +125,12 @@ impl TestApp {
         TestApp {
             router: api::router(AppState {
                 services: services.clone(),
-                authentication: Authentication::Sessions(test_cookies()),
+                cookies: test_cookies(),
             }),
             services,
             clock: self.clock.clone(),
             db: self.db.clone(),
         }
-    }
-
-    /// The local build's setup: one user, made on start, who is every request's caller.
-    pub async fn start_local() -> Result<Self> {
-        init_tracing();
-        let db = store::testing::fresh_database().await?;
-        let clock = Arc::new(ManualClock::new(
-            Timestamp::from_millis(START).context("start in range")?,
-        ));
-        let services = Services::new(db.clone(), clock.clone(), Settings::default());
-        let local_user = services.open_local_user().await?;
-        Ok(Self {
-            router: api::router(AppState {
-                services: services.clone(),
-                authentication: Authentication::LocalUser(local_user),
-            }),
-            services,
-            clock,
-            db,
-        })
     }
 
     /// How many questions wait for the user with `user_id`, and how many rows the list holds when it is capped at

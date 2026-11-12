@@ -7,7 +7,6 @@ members = [
     "crates/api-types",
     "crates/api",
     "crates/server",
-    "crates/local",
     "crates/cli",
 ]
 
@@ -21,15 +20,13 @@ publish = false
 [workspace.dependencies]
 domain = { path = "crates/domain" }
 store = { path = "crates/store", default-features = false }
-# Without their default features, so the local build can leave accounts out; `server` turns them on.
-service = { path = "crates/service", default-features = false }
-api = { path = "crates/api", default-features = false }
+service = { path = "crates/service" }
+api = { path = "crates/api" }
 api-types = { path = "crates/api-types" }
 
 anyhow = "1"
 argon2 = "0.5"
-async-trait = "0.1"
-# Without `tokio` and `http1`, which only `server` needs (`axum::serve`), so the Router also builds for wasm.
+# Without `tokio` and `http1`: `server` and the CLI's tests add them, to serve with `axum::serve`.
 axum = { version = "0.8", default-features = false, features = ["form", "json", "macros", "matched-path", "original-uri", "query", "tower-log", "tracing"] }
 base64 = "0.22"
 # The CLI's command line.
@@ -42,7 +39,6 @@ getrandom = "0.3"
 googletest = "0.14"
 http-body-util = "0.1"
 jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
-js-sys = "0.3"
 # The CLI's refresh token: the Windows credential manager, or the Secret Service on Linux and the BSDs over zbus,
 # which is pure Rust, so building needs no libdbus. On macOS the CLI runs the system's `security` tool instead.
 keyring = "4"
@@ -65,20 +61,18 @@ serde_urlencoded = "0.7"
 sha2 = "0.10"
 tempfile = "3"
 thiserror = "2"
-# Only what every user needs: `server` adds the multi-threaded runtime, signals and networking, which the local build
-# (wasm) can't have.
+# Only what every user needs: each binary and test suite adds the runtime flavour, signals, networking and timers it
+# uses.
 tokio = { version = "1", features = ["rt"] }
 toml = "0.8"
 tower = "0.5"
-# `api` adds `trace` and `timeout` with its `trace-and-timeout` feature; the browser can't run them.
+# `api` adds `trace` and `timeout`.
 tower-http = { version = "0.6", features = ["request-id", "util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = { version = "5", features = ["uuid"] }
 utoipa-axum = "0.2"
 uuid = { version = "1", features = ["v7", "serde"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 # Opens the browser for `upheap auth login`.
 webbrowser = "1"
 # The machine's hostname, which `upheap auth login` names the sign-in with.
@@ -95,18 +89,6 @@ expect_used = "warn"
 lto = "thin"
 codegen-units = 1
 strip = true
-
-# Request handling and storage aren't hot loops, so they are built for size: the static web build ships them as
-# WebAssembly, under a size budget (architecture.md, Local build, Build and publish). The server's release build takes
-# the same setting, which costs it little. Ranking in `domain` stays at full speed.
-[profile.release.package.api]
-opt-level = "s"
-[profile.release.package.api-types]
-opt-level = "s"
-[profile.release.package.service]
-opt-level = "s"
-[profile.release.package.store]
-opt-level = "s"
 
 # argon2 is unusably slow unoptimised; sign-in in debug builds would take seconds.
 [profile.dev.package.argon2]

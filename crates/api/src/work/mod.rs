@@ -1,6 +1,6 @@
 //! The agent's queue and its runs: what to work on next, claiming it, and how a run ends.
 //!
-//! These routes are for a build that has agents. An agent writes to its item with the `Upheap-Run` header, which the
+//! An agent writes to its item with the `Upheap-Run` header, which the
 //! extractor reads (`extract.rs`).
 
 use api_types::waiting::ItemHeapDto;

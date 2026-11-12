@@ -10,7 +10,6 @@ use utoipa_axum::routes;
 use crate::audit::{format_cursor, parse_cursor};
 use crate::error::Problem;
 use crate::extract::{ApiQuery, ClientTimeZone, CurrentUser, TimeZoneHeader};
-use crate::oauth::require_accounts;
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -58,7 +57,6 @@ async fn get_history(
     ClientTimeZone(tz): ClientTimeZone,
     ApiQuery(query): ApiQuery<AccountHistoryQueryDto>,
 ) -> Result<Json<AccountHistoryDto>, ApiError> {
-    require_accounts(&state)?;
     let after = query.cursor.as_deref().map(parse_cursor).transpose()?;
     let page = state
         .services

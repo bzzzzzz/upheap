@@ -1,5 +1,4 @@
-//! Changing teams: creating and renaming them, and their members and roles. The local build's one team is made with
-//! its user and nobody else can join, so it leaves these out (the `accounts` feature).
+//! Changing teams: creating and renaming them, and their members and roles.
 
 use api_types::teams::{AddMemberDto, CreateNamedDto, MemberPatchDto, TeamDto, TeamPatchDto};
 use axum::Json;
@@ -57,7 +56,7 @@ async fn create_team(
         .services
         .create_team(principal, to_name(&body)?, to_slug(&body)?)
         .await?;
-    Ok((StatusCode::CREATED, Json(to_team_dto(detail, &state.authentication))))
+    Ok((StatusCode::CREATED, Json(to_team_dto(detail))))
 }
 
 /// Renames the team or changes its slug. Admins only; send the team's `version` in `If-Match`.
@@ -81,7 +80,7 @@ pub(super) async fn update_team(
         .services
         .update_team(path.principal, path.team_id, to_team_patch(&body)?, expected)
         .await?;
-    Ok(Json(to_team_dto(detail, &state.authentication)))
+    Ok(Json(to_team_dto(detail)))
 }
 
 /// Adds an existing user to the team as a member. Admins only. Answers `200` with the team unchanged when they are
@@ -109,7 +108,7 @@ async fn add_member(
         MemberAdded::Added => StatusCode::CREATED,
         MemberAdded::AlreadyMember => StatusCode::OK,
     };
-    Ok((status, Json(to_team_dto(detail, &state.authentication))))
+    Ok((status, Json(to_team_dto(detail))))
 }
 
 /// Makes a member an admin, or an admin a member. Admins only.
@@ -130,7 +129,7 @@ async fn update_member(
         .services
         .change_member_role(path.principal, path.team_id, path.user_id, body.role.into())
         .await?;
-    Ok(Json(to_team_dto(detail, &state.authentication)))
+    Ok(Json(to_team_dto(detail)))
 }
 
 /// Takes a user out of the team. Admins only. Removing someone who isn't a member succeeds.

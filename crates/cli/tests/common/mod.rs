@@ -9,7 +9,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use api::{AppState, Authentication, CookieSettings};
+use api::{AppState, CookieSettings};
 use cli::{Browser, Deps, Environment, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
@@ -119,10 +119,10 @@ impl TestServer {
         .with_random(random);
         let router = api::router(AppState {
             services,
-            authentication: Authentication::Sessions(CookieSettings {
+            cookies: CookieSettings {
                 secure: false,
                 max_age: std::time::Duration::from_secs(3600),
-            }),
+            },
         });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);

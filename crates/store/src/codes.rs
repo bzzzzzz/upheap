@@ -75,11 +75,8 @@ pub(crate) struct GroupCount {
 impl sea_orm::FromQueryResult for GroupCount {
     fn from_query_result(row: &sea_orm::QueryResult, pre: &str) -> Result<Self, sea_orm::DbErr> {
         let group_key = row.try_get(pre, "group_key")?;
-        // sqlx returns `COUNT` as a 64-bit integer on every backend. The local build's proxy types an expression
-        // from its value, as a 32-bit integer while it fits, and SeaORM won't read that as `i64`.
-        let count = row
-            .try_get::<i64>(pre, "count")
-            .or_else(|_| row.try_get::<i32>(pre, "count").map(i64::from))?;
+        // sqlx returns `COUNT` as a 64-bit integer on every backend.
+        let count = row.try_get::<i64>(pre, "count")?;
         Ok(Self {
             group_key,
             count: u32::try_from(count).unwrap_or(u32::MAX),

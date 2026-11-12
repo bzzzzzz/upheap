@@ -15,8 +15,6 @@ mod migration;
 pub mod oauth;
 pub mod parameters;
 pub mod password_resets;
-#[cfg(feature = "proxy")]
-pub mod proxy;
 pub mod questions;
 pub mod runs;
 pub mod saved_views;

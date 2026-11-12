@@ -2,18 +2,12 @@
 //!
 //! Every use case takes the caller's [`Principal`], checks the permission it needs before anything else, runs
 //! in one transaction, and records its audit entry in that same transaction.
-//!
-//! The `accounts` feature (on by default) adds what only a shared server needs: registration, sign-in and
-//! sessions, team management and user lookup. The local build leaves it out and has one user,
-//! [`Services::open_local_user`].
 
 mod access;
-#[cfg(feature = "accounts")]
 pub mod account_history;
 pub mod across_heaps;
 mod audit;
 pub mod audit_log;
-#[cfg(feature = "accounts")]
 pub mod auth;
 mod clock;
 mod error;
@@ -22,10 +16,8 @@ pub mod heaps;
 pub mod items;
 pub mod me;
 mod moves;
-#[cfg(feature = "accounts")]
 pub mod oauth;
 pub mod parameters;
-#[cfg(feature = "accounts")]
 pub mod password_reset;
 mod personal;
 pub mod questions;
@@ -35,7 +27,6 @@ pub mod steps;
 pub mod tags;
 pub mod teams;
 pub mod turns;
-#[cfg(feature = "accounts")]
 pub mod users;
 pub mod waiting;
 pub mod work;
@@ -61,8 +52,7 @@ pub struct Principal {
     pub run: Option<RunId>,
 }
 
-/// Deployment settings the use cases depend on. All of them are about accounts, so the local build takes the
-/// defaults.
+/// Deployment settings the use cases depend on. All of them are about accounts.
 #[derive(Clone, Debug)]
 pub struct Settings {
     /// Whether anyone can create a local account.
@@ -91,8 +81,6 @@ pub struct Services {
     clock: Arc<dyn Clock>,
     /// Randomness for item keys.
     random: Arc<dyn RandomSource>,
-    // Only accounts read the settings.
-    #[cfg_attr(not(feature = "accounts"), allow(dead_code))]
     settings: Arc<Settings>,
     /// Counts IDs made in the same millisecond, so they still sort in the order they were made.
     id_context: Arc<Mutex<uuid::ContextV7>>,

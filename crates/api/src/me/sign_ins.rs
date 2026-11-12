@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 use crate::error::Problem;
 use crate::extract::{ApiPath, ClientTimeZone, CurrentUser, TimeZoneHeader};
-use crate::oauth::require_accounts;
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -60,7 +59,6 @@ async fn list_sign_ins(
     CurrentUser(principal): CurrentUser,
     ClientTimeZone(tz): ClientTimeZone,
 ) -> Result<Json<ClientSignInListDto>, ApiError> {
-    require_accounts(&state)?;
     let sign_ins = state.services.list_sign_ins(principal).await?;
     let as_of = state.services.now();
     Ok(Json(ClientSignInListDto {
@@ -85,7 +83,6 @@ async fn end_sign_in(
     CurrentUser(principal): CurrentUser,
     ApiPath(SignInParams { id }): ApiPath<SignInParams>,
 ) -> Result<StatusCode, ApiError> {
-    require_accounts(&state)?;
     state
         .services
         .end_sign_in(principal, TokenFamilyId::from_uuid(id))

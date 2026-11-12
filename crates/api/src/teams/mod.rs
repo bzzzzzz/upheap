@@ -1,9 +1,7 @@
 //! Teams: reading them and adding heaps to them. Changing teams and their members is in `manage`, and their invite
-//! links in `invite_links`; both need accounts.
+//! links in `invite_links`.
 
-#[cfg(feature = "accounts")]
 mod invite_links;
-#[cfg(feature = "accounts")]
 mod manage;
 
 use api_types::heaps::HeapDto;
@@ -12,7 +10,6 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use domain::handle::Handle;
-use domain::permission::TeamAction;
 use domain::text::Name;
 use domain::validation::Field;
 use service::ServiceError;
@@ -24,18 +21,15 @@ use crate::error::Problem;
 use crate::extract::ApiJson;
 use crate::heaps::to_heap_dto;
 use crate::paths::{TeamParams, TeamPath};
-use crate::{ApiError, AppState, Authentication};
+use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     // `GET` and `PATCH` share a path, so they are registered together.
-    #[cfg(feature = "accounts")]
-    let routes = OpenApiRouter::new()
+    OpenApiRouter::new()
         .routes(routes!(get_team, manage::update_team))
         .merge(manage::routes())
-        .merge(invite_links::routes());
-    #[cfg(not(feature = "accounts"))]
-    let routes = OpenApiRouter::new().routes(routes!(get_team));
-    routes.routes(routes!(create_heap))
+        .merge(invite_links::routes())
+        .routes(routes!(create_heap))
 }
 
 fn to_member_dto(view: MemberView) -> MemberDto {
@@ -50,17 +44,7 @@ fn to_member_dto(view: MemberView) -> MemberDto {
     }
 }
 
-/// The team as `authentication`'s caller sees it. The local user has no one to add and only the one team, so
-/// creating heaps is the only team action offered, and no member actions are.
-pub(crate) fn to_team_dto(mut detail: TeamDetail, authentication: &Authentication) -> TeamDto {
-    if authentication.is_single_user() {
-        detail
-            .allowed_actions
-            .retain(|action| matches!(action, TeamAction::CreateHeap));
-        for member in &mut detail.members {
-            member.allowed_actions.clear();
-        }
-    }
+pub(crate) fn to_team_dto(detail: TeamDetail) -> TeamDto {
     TeamDto {
         id: *detail.team.id.as_uuid(),
         slug: detail.team.slug.to_string(),
@@ -94,7 +78,7 @@ pub(crate) fn to_slug(body: &CreateNamedDto) -> Result<Option<Handle>, ServiceEr
     responses((status = 200, body = TeamDto), (status = 404, body = Problem)))]
 async fn get_team(State(state): State<AppState>, path: TeamPath) -> Result<Json<TeamDto>, ApiError> {
     let detail = state.services.load_team(path.principal, path.team_id).await?;
-    Ok(Json(to_team_dto(detail, &state.authentication)))
+    Ok(Json(to_team_dto(detail)))
 }
 
 /// Adds a heap to the team. Admins only.

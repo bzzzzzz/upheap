@@ -1,5 +1,4 @@
-//! Opening an invite link, joining a team through it and creating an account through it, by the link's token. The
-//! local build has no teams to join, so it leaves these out (the `accounts` feature).
+//! Opening an invite link, joining a team through it and creating an account through it, by the link's token.
 
 use api_types::auth::RegisterRequest;
 use api_types::invite_links::{
@@ -21,7 +20,7 @@ use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::auth::{cookie_settings, signed_in_with};
+use crate::auth::signed_in_with;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, MaybeUser, SessionUser};
 use crate::teams::to_team_dto;
@@ -112,7 +111,7 @@ async fn join_by_invite(
         MemberAdded::Added => StatusCode::CREATED,
         MemberAdded::AlreadyMember => StatusCode::OK,
     };
-    Ok((status, Json(to_team_dto(detail, &state.authentication))))
+    Ok((status, Json(to_team_dto(detail))))
 }
 
 /// Creates an account through the link, and joins its team as a member in the same act: the account, its personal
@@ -140,11 +139,11 @@ async fn register_by_invite(
         display_name: &body.display_name,
         password: &body.password,
     };
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     let (grant, detail) = state.services.register_through_invite(&token, registration).await?;
     let answer = InviteRegistrationDto {
         user: UserDto::from(&grant.user),
-        team: to_team_dto(detail, &state.authentication),
+        team: to_team_dto(detail),
     };
     Ok(signed_in_with(StatusCode::CREATED, &grant, cookies, answer))
 }

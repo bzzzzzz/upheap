@@ -3,15 +3,8 @@
 //! The request and response types are in `api_types`, which clients share. Handlers translate HTTP to use-case
 //! calls and back; they never check permissions or compute anything about items themselves. Errors become
 //! `application/problem+json` in one place, [`error::ApiError`].
-//!
-//! Features, both on by default:
-//! - `accounts`: registration, sign-in and session cookies, OAuth and bearer tokens for the CLI, team management and
-//!   user lookup. Without it, every request is the local build's one user ([`Authentication::LocalUser`]).
-//! - `trace-and-timeout`: the request span and the 30-second timeout. They need `Instant::now()` and tokio's timer,
-//!   which the browser lacks, so the local build keeps only the request IDs.
 
 mod audit;
-#[cfg(feature = "accounts")]
 mod auth;
 mod dto;
 mod due_choices;
@@ -19,14 +12,11 @@ mod error;
 mod extract;
 mod health;
 mod heaps;
-#[cfg(feature = "accounts")]
 mod invites;
 mod items;
 mod me;
-#[cfg(feature = "accounts")]
 mod oauth;
 mod parameters;
-#[cfg(feature = "accounts")]
 mod password_resets;
 mod paths;
 mod questions;
@@ -34,28 +24,21 @@ mod request_id;
 mod steps;
 mod tags;
 mod teams;
-#[cfg(feature = "agents")]
 mod turns;
-#[cfg(feature = "accounts")]
 mod users;
 mod views;
-#[cfg(feature = "agents")]
 mod work;
 
-#[cfg(feature = "accounts")]
 use std::time::Duration;
 
 use api_types::list_view::{BlockedLayoutDto, SortDto, StateModeDto};
 use axum::Router;
-#[cfg(feature = "trace-and-timeout")]
 use axum::extract::{MatchedPath, Request};
 use axum::middleware;
-use service::{Principal, Services};
+use service::Services;
 use tower::ServiceBuilder;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
-#[cfg(feature = "trace-and-timeout")]
 use tower_http::timeout::TimeoutLayer;
-#[cfg(feature = "trace-and-timeout")]
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
@@ -67,31 +50,12 @@ pub use error::ApiError;
 #[derive(Clone)]
 pub struct AppState {
     pub services: Services,
-    pub authentication: Authentication,
-}
-
-/// How a request's caller is found.
-#[derive(Clone, Debug)]
-pub enum Authentication {
-    /// From the session cookie, which signing in sets as these settings say, or from an OAuth access token in an
-    /// `Authorization: Bearer` header.
-    #[cfg(feature = "accounts")]
-    Sessions(CookieSettings),
-    /// Always this user, without asking: the local build's one user, from [`Services::open_local_user`]. There is
-    /// no signing in, so the routes for it answer `404`.
-    LocalUser(Principal),
-}
-
-impl Authentication {
-    /// The local build's one user: no one else to add, one team, and no signing in or out. `allowed_actions` leave
-    /// out what that rules out.
-    pub(crate) const fn is_single_user(&self) -> bool {
-        matches!(self, Self::LocalUser(_))
-    }
+    /// How signing in sets the session cookie. The caller is found from that cookie, or from an OAuth access token
+    /// in an `Authorization: Bearer` header.
+    pub cookies: CookieSettings,
 }
 
 /// How the session cookie is issued.
-#[cfg(feature = "accounts")]
 #[derive(Clone, Debug)]
 pub struct CookieSettings {
     /// Adds the `Secure` attribute. On unless the server is reached over plain HTTP.
@@ -137,14 +101,12 @@ impl utoipa::Modify for SessionCookieScheme {
 
 /// Routes that take `SessionUser`, the cookie only: the bearer scheme is not added to them. Beside the OAuth prefix,
 /// which is skipped the same way.
-#[cfg(feature = "accounts")]
 const SESSION_ONLY_PATHS: &[&str] = &["/api/v1/invites/{token}/join", "/api/v1/me/password"];
 
 /// Declares the bearer scheme, and offers it beside the session cookie wherever an operation takes the cookie,
 /// since [`extract::CurrentUser`] takes either. The OAuth operations are left as they say: approving an
 /// authorization request takes only the cookie, and so do the paths in [`SESSION_ONLY_PATHS`]. Run on the finished
 /// document, as the paths come from the routers.
-#[cfg(feature = "accounts")]
 fn add_bearer_scheme(openapi: &mut utoipa::openapi::OpenApi) {
     use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityRequirement};
     let components = openapi.components.get_or_insert_with(Default::default);
@@ -177,7 +139,6 @@ fn add_bearer_scheme(openapi: &mut utoipa::openapi::OpenApi) {
 
 fn api_router() -> OpenApiRouter<AppState> {
     let v1 = OpenApiRouter::new();
-    #[cfg(feature = "accounts")]
     let v1 = v1
         .merge(auth::routes())
         .merge(oauth::authorize_routes())
@@ -187,8 +148,6 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::sign_ins::routes())
         .merge(me::password::routes())
         .merge(me::history::routes());
-    // Turns, the agent's queue and its runs are for a build that has agents.
-    #[cfg(feature = "agents")]
     let v1 = v1.merge(turns::routes()).merge(work::routes());
     let v1 = v1
         .merge(me::routes())
@@ -206,7 +165,6 @@ fn api_router() -> OpenApiRouter<AppState> {
         .layer(middleware::from_fn(extract::require_csrf_header));
     // After the CSRF layer: a client's token requests carry no cookie, so a forged one would have nothing to borrow,
     // and OAuth clients don't send the header.
-    #[cfg(feature = "accounts")]
     let v1 = v1.merge(oauth::token_routes());
     OpenApiRouter::with_openapi(ApiDoc::openapi()).nest("/api/v1", v1)
 }
@@ -217,23 +175,15 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
 }
 
 fn split_api_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
-    #[cfg_attr(not(feature = "accounts"), allow(unused_mut))]
     let (api, mut spec) = api_router().split_for_parts();
-    #[cfg(feature = "accounts")]
     add_bearer_scheme(&mut spec);
     (api, spec)
 }
 
-/// The API and health routes with request IDs applied, and tracing and timeouts with `trace-and-timeout`.
+/// The API and health routes with request IDs, tracing and the request timeout applied.
 pub fn router(state: AppState) -> Router {
     let (api, spec) = split_api_router();
     let spec_json = serde_json::to_string(&spec).unwrap_or_default();
-    #[cfg(not(feature = "trace-and-timeout"))]
-    let observed = ServiceBuilder::new()
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-        .layer(PropagateRequestIdLayer::x_request_id())
-        .layer(middleware::from_fn(request_id::scope_request_id));
-    #[cfg(feature = "trace-and-timeout")]
     let observed = ServiceBuilder::new()
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| {

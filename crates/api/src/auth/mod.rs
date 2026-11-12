@@ -12,7 +12,7 @@ use utoipa_axum::routes;
 
 use crate::error::Problem;
 use crate::extract::{ApiJson, clear_session_cookie, session_cookie, session_token};
-use crate::{ApiError, AppState, Authentication, CookieSettings};
+use crate::{ApiError, AppState, CookieSettings};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -38,7 +38,7 @@ async fn register(
         display_name: &body.display_name,
         password: &body.password,
     };
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     let grant = state.services.register(registration).await?;
     Ok(signed_in(StatusCode::CREATED, &grant, cookies))
 }
@@ -57,7 +57,7 @@ async fn register(
             headers(("Retry-After" = i64, description = "Seconds until the account may try again"))),
     ))]
 async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInRequest>) -> Result<Response, ApiError> {
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     let grant = state.services.sign_in(&body.login, &body.password).await?;
     Ok(signed_in(StatusCode::OK, &grant, cookies))
 }
@@ -68,7 +68,7 @@ async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInReq
 /// with `POST /oauth/revoke`.
 #[utoipa::path(post, path = "/auth/logout", tag = "auth", responses((status = 204, description = "Signed out")))]
 async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     if let Some(token) = session_token(&headers) {
         state.services.sign_out(&token).await?;
     }
@@ -77,14 +77,6 @@ async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<R
         [(header::SET_COOKIE, clear_session_cookie(cookies))],
     )
         .into_response())
-}
-
-/// How to set the session cookie. A server whose one user needs no signing in has no such routes.
-pub(crate) fn cookie_settings(state: &AppState) -> Result<&CookieSettings, ApiError> {
-    match &state.authentication {
-        Authentication::Sessions(cookies) => Ok(cookies),
-        Authentication::LocalUser(_) => Err(ApiError::NoSuchRoute),
-    }
 }
 
 fn signed_in(status: StatusCode, grant: &SessionGrant, cookies: &CookieSettings) -> Response {

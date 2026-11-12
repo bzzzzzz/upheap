@@ -81,7 +81,7 @@ pub struct WaitingItemDto {
     pub key: String,
     pub title: String,
     pub kind: KindDto,
-    /// `null` in a build without the stage (the static, single-user one).
+    /// How far the item has been prepared.
     pub stage: Option<StageDto>,
     /// The item's open turn, if an agent was sent it and it hasn't been taken back.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema

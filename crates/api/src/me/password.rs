@@ -8,7 +8,7 @@ use service::ServiceError;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::auth::{cookie_settings, signed_in_with};
+use crate::auth::signed_in_with;
 use crate::error::Problem;
 use crate::extract::{ApiJson, SessionUser, session_token};
 use crate::{ApiError, AppState};
@@ -45,7 +45,7 @@ async fn change_password(
     headers: HeaderMap,
     ApiJson(body): ApiJson<ChangePasswordRequestDto>,
 ) -> Result<Response, ApiError> {
-    let cookies = cookie_settings(&state)?;
+    let cookies = &state.cookies;
     // `SessionUser` found this cookie valid, so a missing one only means the session ended in between.
     let session = session_token(&headers).ok_or(ServiceError::Unauthenticated)?;
     let changed = state

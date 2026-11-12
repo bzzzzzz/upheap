@@ -10,7 +10,6 @@ use api_types::common::{
 use api_types::turns::TurnDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
-use domain::permission::ItemAction;
 use domain::turn::goal_for;
 use jiff::tz::TimeZone;
 use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
@@ -33,8 +32,8 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
     let closed_at = item.state.closed_at();
-    // What a turn opened now would go to: for an open item, in a build that has agents.
-    let next_goal = (cfg!(feature = "agents") && closed_at.is_none()).then(|| goal_for(&item).into());
+    // What a turn opened now would go to: for an open item.
+    let next_goal = closed_at.is_none().then(|| goal_for(&item).into());
     ItemDto {
         id: *item.id.as_uuid(),
         key: item.key.to_string(),
@@ -42,13 +41,9 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         title: item.title.as_str().to_owned(),
         description: item.description.map(|d| d.as_str().to_owned()),
         kind: item.kind.into(),
-        // The stage is shown while the item is open, and only in a build that has agents.
-        stage: (cfg!(feature = "agents") && closed_at.is_none()).then(|| item.stage.into()),
-        stage_choices: if cfg!(feature = "agents") {
-            view.stage_choices.into_iter().map(StageDto::from).collect()
-        } else {
-            Vec::new()
-        },
+        // The stage is shown while the item is open.
+        stage: closed_at.is_none().then(|| item.stage.into()),
+        stage_choices: view.stage_choices.into_iter().map(StageDto::from).collect(),
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         need: item.need.into(),
@@ -92,19 +87,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         next_goal,
         with_agent: view.with_agent,
         version: item.version.get(),
-        // Sending an item to an agent, taking it back and retrying it are offered only in a build that has agents.
-        allowed_actions: view
-            .allowed_actions
-            .into_iter()
-            .filter(|action| {
-                cfg!(feature = "agents")
-                    || !matches!(
-                        action,
-                        ItemAction::SendToAgent | ItemAction::TakeBack | ItemAction::Retry
-                    )
-            })
-            .map(ItemActionDto::from)
-            .collect(),
+        allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }
 }
 
