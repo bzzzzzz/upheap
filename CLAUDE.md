@@ -31,33 +31,28 @@ Rules for the docs:
 1. **One home per fact.** What code or a generated file states, no doc repeats: endpoints are in `openapi.json`,
    error codes in `crates/api/src/error.rs`, the schema in the migrations, configuration in README.md. Docs explain
    mechanisms and reasons, and link to the rest.
-2. **Status lives in `design/work/` and in Upheap,** as state, not history.
-   [design/work/README.md](design/work/README.md) is the tracker: the tracks in flight, a line each. A track's
-   line is its link and what it is, never its progress: no stage, piece or "next" there, so pieces of different
-   tracks don't conflict over the tracker. Each track's progress is in its own doc only. What's next outside a
-   track, and ideas, are notes in Upheap, in the heap each fits, which ranks them; nothing in the repository lists
-   them. Nothing lists what's built: the code and product.md say that, and the pull
-   requests are the history.
-3. **A track's doc is temporary.** `design/work/<track>.md` holds one piece of work while it's built: what it is,
-   its progress, its design, its open questions and its ideas. A long design goes in a file of its own beside it,
-   `<track>-design.md`, so the track's doc stays short and is only status. Nothing outside `work/` links into
-   either but CLAUDE.md and the index: code and the permanent docs cite the permanent doc that holds a mechanism,
-   or nothing until one does. Once built, the mechanisms worth keeping move into architecture.md or the module
-   docs, what passes rule 4 into product.md and decisions.md, the ideas left over into notes in the heap, and the
-   files go. Git remembers them.
+2. **Plans, status and ideas live in Upheap; `design/work/` holds designs.** A piece of work to do is a task in
+   Upheap, in the heap it fits, with when it's done and what it waits for; an idea, an open question or a thought
+   for later is a note there. Upheap ranks them and holds their state. Nothing in the repository lists them, and
+   nothing lists what's built: the code and product.md say that, and the pull requests are the history.
+3. **A design for unbuilt work is temporary.** `design/work/<name>.md` holds the design of a feature or change
+   while it's built: what it is, why, and how it works. Nothing outside `work/` links into it but CLAUDE.md and the
+   index: code and the permanent docs cite the permanent doc that holds a mechanism, or nothing until one does.
+   Once built, the mechanisms worth keeping move into architecture.md or the module docs, what passes rule 4 into
+   product.md and decisions.md, and the file goes. Git remembers it.
 4. **product.md and decisions.md hold the core only.** product.md takes a promise to a user, stated as an outcome,
    that only a product change could break: not how a screen behaves, an edge case or an error state. decisions.md
    takes a choice that had a real alternative someone would propose again, is costly to reverse, and has a reason
    the code can't show: not a name, a label, wording, or anything one pull request can undo. The rest belongs in
-   the track's doc, ux.md, architecture.md, a code comment or the pull request's description. When in doubt, leave
+   a design in `design/work/`, ux.md, architecture.md, a code comment or the pull request's description. When in doubt, leave
    it out, and name every entry added to either doc in the pull request's description.
 
 When asked to write a "doc", write it as a Markdown file in `design/`, or in `design/work/` for unbuilt work, and
-add it to `design/README.md`, and to the tracker when it's a track, not as an external document (Claude Docs,
+add it to `design/README.md`, not as an external document (Claude Docs,
 Notion, Google Docs).
 
-Never add what's next, an idea, or a follow-up to the tracker or another file in `design/work/`. Add it as a note
-in Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command
+Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `design/work/`.
+Add it to Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command
 is installed and signed in. When it can't, name the follow-up in your reply and in the pull request's description,
 so the owner can add it.
 

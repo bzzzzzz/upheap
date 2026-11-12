@@ -8,52 +8,12 @@ repeats, and the checked ones where removing them is cheap. It changes no behavi
 section; it serves General §2 of the [engineering principles](../engineering-principles.md#general), one source of
 truth.
 
-## Progress
+## Pieces
 
-Six pieces, a pull request each. Every one is a refactor with no change in behaviour: `openapi.json`, the stored
-codes and every test's expectations stay as they are. Piece 3 builds on piece 1. The others depend on nothing and
-can go at any time. Pieces 1 and 3 come first, since they close the places the compiler doesn't check. Piece 6 is
-optional and goes last.
-
-- [ ] 1. **One declaration per coded enum in `domain`.** A `coded_enum!` macro beside `id_type!` takes each variant
-   with its stable code once and generates the enum, `ALL`, `code` and `from_code`, and nothing else. Every enum
-   with a hand-written `ALL` moves to it (17 today), and `AuditAction` and `EntityType` take `code` in place of
-   `as_str`.
-   Done when: `domain` has no hand-written `ALL` array or code `match`; one test pins every code string of every
-   enum, so a stored code can't change unnoticed; the suites pass on SQLite, MySQL and Postgres.
-- [ ] 2. **Labels live on the domain enum.** `label()` on `Size`, `Kind`, `Stage`, `StateKind`, `StepState`, `Role`,
-   `QuestionKind`, `Reach`, `Goal`, `TurnSource` and `TakeBackWhy`, each a plain `match` as `Need::label()` is. The
-   eleven functions of `service::audit_log` that name a value (`describe_state` to `describe_role`) go. The CLI
-   and the API's enum types are not touched.
-   Done when: no value's name is written in `service`, and the audit API tests pass unchanged.
-- [ ] 3. **Audit fields as a type.** An `AuditField` enum in `domain::audit`, declared with `coded_enum!`: the
-   field's stored code and its place in the order (the declaration order). `service::audit` writes diffs keyed by
-   it, and `service::audit_log` reads them back through `from_code`, with two exhaustive `match`es: a field's
-   label, by field and entity type, and how its value reads. `FIELD_ORDER`, `UNSHOWN_FIELDS` and the two `match`es
-   on strings go. A stored key no version declares is shown as it is today, and so are the per-parameter changes
-   under `parameters`, whose keys are parameter IDs.
-   Done when: no audit field name is a string literal outside the declaration; a field added without a label or
-   without saying how its value reads fails the build; the audit API tests pass unchanged.
-- [ ] 4. **One answer for what the caller may do with an item.** `allowed_item_actions`, `allowed_stage_choices` and
-   `allowed_step_actions` are called together at four places in `service::items`. One function in
-   `domain::permission` returns the three as one value, and `ItemView` holds that value.
-   Done when: a new per-item allowance is added in `domain::permission` and the DTO conversion, and nowhere in
-   `service::items`.
-- [ ] 5. **Schema types without the alias list.** `gen:api` runs openapi-typescript with `--root-types
-   --root-types-no-schema-prefix`, so `schema.d.ts` exports every schema under its own name. The aliases in
-   `web/src/api/client.ts` go (64 today), and those that rename a schema (`ItemPatch` for `ItemPatchRequest`) take
-   the schema's name. `client.ts` keeps the client, `ApiProblem`, `HeapRef` and `ListViewQuery`.
-   Done when: a new response type reaches a component with no edit to `client.ts`, and the type check and the
-   lint pass in both build modes.
-- [ ] 6. **Queries split by resource. Optional.** `web/src/api/queries.ts` (1,062 lines, 53 hooks) becomes a
-   directory with a file per resource and one for the query keys, which the invalidations share. It removes no
-   repeated fact: the reason is the file's size, so it's worth doing only while the file keeps growing.
-   Done when: no file there is over about 250 lines, hooks are imported from their resource's file, and the
-   Playwright suites pass in both build modes.
-
-The pull request that builds the last piece dissolves this doc: the macro is explained in its module doc, What
-stays moves to architecture.md if it's still worth saying, the ideas become notes in Upheap, and the
-file goes.
+Each refactor is a task in Upheap, tagged `refactor`, with when it's done and what it waits for. None changes
+behaviour: `openapi.json`, the stored codes and every test's expectations stay as they are. Once they're built,
+this doc goes: the macro is explained in its module doc, and What stays moves to architecture.md if it's still
+worth saying.
 
 ## Design
 
@@ -111,15 +71,15 @@ Hand-written files outside tests, docs and generated ones.
 | A new response type the web app uses | an alias in `client.ts`, shared by every feature | nothing |
 
 The gain in files is small, and for an audited field it's one file more. The gain is in what the compiler checks:
-after pieces 1 and 3, no place where an enum value or an audit field is written can be forgotten and still build.
+once enums and audit fields are declared with the macro, no place where an enum value or an audit field is written can be forgotten and still build.
 
 ### The macro
 
 One `macro_rules!` macro, `coded_enum!`, in `domain` beside `id_type!`.
 
 1. **Why not strum.** Its derives name a code after its variant, so renaming a variant would rename a stored code.
-   The codes are stored in rows and audit diffs for good, so each is written out beside its variant, and the test
-   of piece 1 pins them. It's also one dependency fewer (General §6).
+   The codes are stored in rows and audit diffs for good, so each is written out beside its variant, and a test
+   pins them. It's also one dependency fewer (General §6).
 2. **Why it generates codes only.** It exists for what a `match` can't check: that `ALL` holds every variant. A
    label written as a `match` on the enum already fails the build when a variant is missing, so labels stay plain
    functions, and the macro stays small enough to read in one look.
@@ -147,28 +107,10 @@ Looked at and left, because the edit is the check or the rule.
 7. **The CLI's command list in `crates/cli/src/lib.rs`.** A command is named three times in one file, each an
    exhaustive `match`.
 8. **The CLI's own wording.** `item show` prints `nice to have` where the web app prints `Nice to have`. Sharing
-   the label would change the CLI's output, which is a product change and not a refactor. See Ideas.
+   the label would change the CLI's output, which is a product change and not a refactor.
 
 ### Testing
 
-No piece adds behaviour, so the existing suites are the test, with one guard added: the code-pinning test of
-piece 1. Every Rust piece is also checked by `openapi.json` not changing. Pieces 5 and 6 are checked by the type
+No piece adds behaviour, so the existing suites are the test, with one guard added: the test that pins every
+code. Every Rust piece is also checked by `openapi.json` not changing. The web app's pieces are checked by the type
 check, the lint and Playwright in both build modes.
-
-## Open questions
-
-1. **Do the web app's labels come from the server?** `labels.ts` repeats the wording `domain` holds. API,
-   Responses §1 says labels are the server's, and in the same sentence lets a client hold headings for a code, so
-   the principles don't settle it. `labels.ts` is one file, typed as `Record<Need, string>`, so a missing value
-   fails the type check. Moving the labels means a vocabulary endpoint in the manner of `GET /due-choices`: each
-   enum's values in order, with label and hint, read once. That removes a file from every new value and adds a
-   query every label waits for. Recommended: leave it, and revisit if the two wordings ever drift. It is not a
-   piece above.
-
-## Ideas
-
-- **One wording in the CLI.** The API's enum types forward `label()`, and the CLI prints the server's capitalised
-  wording in place of its own `kind_text` and siblings. It changes the CLI's output and its tests.
-- **A lint for value names.** A test that fails when a label string of `domain` appears in another Rust crate.
-- **Query keys from the path.** With queries split, each key could be derived from the API path it reads, so an
-  invalidation can't name a key nothing uses.
