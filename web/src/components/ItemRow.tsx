@@ -86,10 +86,10 @@ export function ItemRow({
   const { item, contributors } = entry;
   const canChangeState = item.allowed_actions.includes("change_state");
   const onMarkDone = () => onChangeState(item, "done");
-  const onStart = () => onChangeState(item, "in_progress");
-  // From the keyboard, the focus follows the row into In progress. A failed or cancelled start forgets it, so a later
-  // start from elsewhere doesn't pull the focus into the list.
-  const onStartFromKeyboard = () => {
+  // The focus follows the row into In progress, whether `s` or play started it: the row remounts there, and the focus
+  // would fall to the page. A failed or cancelled start forgets it, so a later start from elsewhere doesn't pull the
+  // focus into the list.
+  const onStart = () => {
     refocusAfterStart = item.key;
     onChangeState(item, "in_progress", () => (refocusAfterStart = undefined));
   };
@@ -109,7 +109,7 @@ export function ItemRow({
       onMarkDone();
     } else if (event.key === "s" && canChangeState && startable) {
       event.preventDefault();
-      onStartFromKeyboard();
+      onStart();
     }
   };
 
@@ -506,11 +506,11 @@ function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
   );
 }
 
-/** The key of the item `s` just started, so its row gets the focus back once it has moved (see below). */
+/** The key of the item `s` or play just started, so its row gets the focus back once it has moved (see below). */
 let refocusAfterStart: string | undefined;
 
 /**
- * Gives the focus back to the row `s` started. Starting moves the row to another section, so it remounts and the
+ * Gives the focus back to the row `s` or play started. Starting moves the row to another section, so it remounts and the
  * focus falls to the page. Call it with the list, so it runs after the render that shows the item in progress.
  */
 export function useRefocusStartedRow(list: RankedList | undefined) {

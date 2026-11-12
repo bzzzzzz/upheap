@@ -153,10 +153,7 @@ test("a tag in a row filters the list, a second tag adds to it, and the same tag
   await expect(row(page, "Plain thing")).toHaveCount(0);
   // Pressing a tag never opens the item.
   await expect(page).not.toHaveURL(/\/items\//);
-  await expect(database.getByRole("button", { name: "Remove filter tag infra" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(database.getByRole("button", { name: "Filter by tag infra" })).toHaveAttribute("aria-pressed", "true");
 
   // The filter keeps items with any of its tags, so a second tag adds its items.
   await database.getByRole("button", { name: "Filter by tag docs" }).click();
@@ -165,9 +162,9 @@ test("a tag in a row filters the list, a second tag adds to it, and the same tag
   await expect(on).toContainText("2 of 3");
 
   // The same tag again takes it off.
-  await database.getByRole("button", { name: "Remove filter tag infra" }).click();
+  await database.getByRole("button", { name: "Filter by tag infra" }).click();
   await expect(database.getByRole("button", { name: "Filter by tag infra" })).toHaveAttribute("aria-pressed", "false");
-  await database.getByRole("button", { name: "Remove filter tag docs" }).click();
+  await database.getByRole("button", { name: "Filter by tag docs" }).click();
   await expect(row(page, "Plain thing")).toBeVisible();
   await expect(on).toHaveCount(0);
 });
@@ -202,12 +199,9 @@ test("a parameter chip in a row filters the list by its option, and again takes 
   await expect(row(page, "No energy set")).toHaveCount(0);
   // Pressing a chip never opens the item.
   await expect(page).not.toHaveURL(/\/items\//);
-  await expect(deep.getByRole("button", { name: "Remove filter Energy: High" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(deep.getByRole("button", { name: "Filter by Energy: High" })).toHaveAttribute("aria-pressed", "true");
 
-  await deep.getByRole("button", { name: "Remove filter Energy: High" }).click();
+  await deep.getByRole("button", { name: "Filter by Energy: High" }).click();
   await expect(row(page, "No energy set")).toBeVisible();
   await expect(on).toHaveCount(0);
 });

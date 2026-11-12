@@ -219,7 +219,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
    (an open or blocked item) and `x` marks done; `N` and `/` stay. Tab goes play, done, then the row's link, then
-   its tags.
+   its tags and parameter chips.
 5. On a touch screen, swiping a row right marks it done; swiping left offers In progress and Blocked.
 6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
    Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they

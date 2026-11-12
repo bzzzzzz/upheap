@@ -838,7 +838,7 @@ Marks: a task shows a checklist icon before the title (a note shows none, and th
        No words on the row; a screen reader hears them. The step count joins after the stage icon.
        A task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
        The end of the row says "with an agent" or "waits for you", and nothing when it's the person's.
-States: the state circle and the swipes work as today. On an item an agent holds they ask first, since
+States: the row's play and done buttons and the swipes work as today. On an item an agent holds they ask first, since
         changing its state takes it back and that can't be undone.
 Next likely action: open the item.
 ```
