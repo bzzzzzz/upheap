@@ -15,5 +15,4 @@ In flight. Each track's doc holds its progress.
 
 ## Next and ideas
 
-What's next outside a track, and ideas, are notes in the Upheap heap `bzzzz/upheap-development-planning`, which
-ranks them.
+What's next outside a track, and ideas, are notes in Upheap, in the heap each fits, which ranks them.

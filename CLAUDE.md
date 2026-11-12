@@ -36,8 +36,8 @@ Rules for the docs:
    [design/work/README.md](design/work/README.md) is the tracker: the tracks in flight, a line each. A track's
    line is its link and what it is, never its progress: no stage, piece or "next" there, so pieces of different
    tracks don't conflict over the tracker. Each track's progress is in its own doc only. What's next outside a
-   track, and ideas, are notes in the Upheap heap `bzzzz/upheap-development-planning`, which ranks them; nothing
-   in the repository lists them. Nothing lists what's built: the code and product.md say that, and the pull
+   track, and ideas, are notes in Upheap, in the heap each fits, which ranks them; nothing in the repository lists
+   them. Nothing lists what's built: the code and product.md say that, and the pull
    requests are the history.
 3. **A track's doc is temporary.** `design/work/<track>.md` holds one piece of work while it's built: what it is,
    its progress, its design, its open questions and its ideas. A long design goes in a file of its own beside it,
@@ -58,9 +58,9 @@ add it to `design/README.md`, and to the tracker when it's a track, not as an ex
 Notion, Google Docs).
 
 Never add what's next, an idea, or a follow-up to the tracker or another file in `design/work/`. Add it as a note
-to the Upheap heap `bzzzz/upheap-development-planning`, with `/upheap:add`, when this workspace can use Upheap: the
-`upheap` command is installed and `upheap heap list` shows that heap. When it can't, name the follow-up in your
-reply and in the pull request's description, so the owner can add it.
+in Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command
+is installed and signed in. When it can't, name the follow-up in your reply and in the pull request's description,
+so the owner can add it.
 
 ## Interface changes
 
