@@ -100,41 +100,70 @@ fn last_line(text: &str) -> Option<&str> {
     text.lines().rev().map(str::trim).find(|line| !line.is_empty())
 }
 
-/// Kills the tool's whole process group when dropped before the tool ended: the tool and everything it started, a
-/// build or a push under way included. Killing the tool alone would leave those running with nobody to end them.
-#[cfg(unix)]
-struct GroupGuard(Option<rustix::process::Pid>);
+/// How long a tool that was told to stop has to end before it is killed.
+const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
-#[cfg(unix)]
-impl GroupGuard {
-    /// The group `child` leads, which `process_group(0)` gave it: its number is the child's own.
-    fn of(child: &tokio::process::Child) -> Self {
-        Self(
-            child
+/// The tool's process. Dropped before the tool ended, it stops the tool: asked to end first, so the tool can end
+/// what it started, then killed with its group.
+///
+/// Killing at once would not do: Claude runs each command in a process group of its own and ends them itself when
+/// it is asked to end, but not when it is killed, so a build or a push under way would go on with nobody to end it.
+struct Running {
+    child: tokio::process::Child,
+    /// The process group the tool leads, which `process_group(0)` gave it, until the tool has ended.
+    #[cfg(unix)]
+    group: Option<rustix::process::Pid>,
+}
+
+impl Running {
+    fn new(child: tokio::process::Child) -> Self {
+        Self {
+            #[cfg(unix)]
+            group: child
                 .id()
                 .and_then(|id| i32::try_from(id).ok())
                 .and_then(rustix::process::Pid::from_raw),
-        )
+            child,
+        }
     }
 
-    fn disarm(&mut self) {
-        self.0 = None;
+    /// Waits for the tool to end on its own. After that nothing is left to stop.
+    async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        let status = self.child.wait().await;
+        #[cfg(unix)]
+        {
+            self.group = None;
+        }
+        status
     }
 }
 
 #[cfg(unix)]
-impl Drop for GroupGuard {
+impl Drop for Running {
     fn drop(&mut self) {
-        if let Some(group) = self.0 {
-            // A group that is gone already is what was wanted.
-            let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+        use rustix::process::{Signal, kill_process_group};
+        let Some(group) = self.group else {
+            return;
+        };
+        // A group that is gone already is what was wanted.
+        let _ = kill_process_group(group, Signal::TERM);
+        // A drop cannot await, so this waits on the thread: a few seconds at most, once, while a run is being
+        // stopped and the loop has nothing else to do.
+        let deadline = std::time::Instant::now() + STOP_GRACE;
+        while std::time::Instant::now() < deadline {
+            if !matches!(self.child.try_wait(), Ok(None)) {
+                // It ended and was reaped, so its group's number may be given to another: nothing more to signal.
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
+        let _ = kill_process_group(group, Signal::KILL);
     }
 }
 
 /// Starts `program` as Claude with `start`'s access, writes the brief to its stdin and closes it, and reads it to its
 /// end. The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not
-/// it. Dropping the future kills the process and everything it started.
+/// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
 pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
     command
@@ -147,14 +176,15 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         .kill_on_drop(true);
     #[cfg(unix)]
     command.process_group(0);
-    let mut child = command.spawn().map_err(|source| ToolError::WouldNotStart {
+    let child = command.spawn().map_err(|source| ToolError::WouldNotStart {
         tool: Tool::Claude,
         source,
     })?;
-    #[cfg(unix)]
-    let mut group = GroupGuard::of(&child);
-    let stdin = child.stdin.take();
-    let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
+    let mut running = Running::new(child);
+    let stdin = running.child.stdin.take();
+    // The output pipes stay the child's, read through borrows: were they this function's own, a stop would close
+    // them before the tool is asked to end, and what the tool prints on its way out would kill it mid-cleanup.
+    let (stdout, stderr) = (running.child.stdout.as_mut(), running.child.stderr.as_mut());
     let brief = start.brief;
     // Written while the output is read, so a tool that prints before it has read everything cannot stall. A tool that
     // exits without reading its input is not an error here: its exit says what happened.
@@ -165,11 +195,7 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         }
     };
     let (_, stdout, stderr) = tokio::join!(write, read_to_end(stdout), read_to_end(stderr));
-    let waited = child.wait().await;
-    // It ended on its own: nothing is left to stop, and its group's number may be given to another.
-    #[cfg(unix)]
-    group.disarm();
-    let exit = match waited {
+    let exit = match running.wait().await {
         Ok(status) => status.code().map_or(Exit::Signal, Exit::Code),
         Err(source) => {
             return Ok(ToolReport {

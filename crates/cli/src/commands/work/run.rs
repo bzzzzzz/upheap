@@ -136,11 +136,12 @@ fn after_failure(err: &CliError, once: bool) -> AfterFailure {
     }
 }
 
-/// Whether a failure to read a claimed item would repeat for every item: the server is out of reach, the sign-in is
-/// gone, or the setup on this machine is broken.
-fn fails_every_run(err: &CliError) -> bool {
-    let unauthorized = matches!(err.problem_status(), Some(401));
-    unauthorized || matches!(err, CliError::Auth(_)) || matches!(err.exit_code(), 5 | 6)
+/// Whether a failure to read a claimed item is about that item alone: the server answered that it, or its heap, is
+/// not there or not the caller's. Every other failure (the server out of reach or broken, the sign-in gone, an
+/// answer that can't be read) would meet the next item too, and going on would fail run after run until every turn
+/// in the queue is stuck.
+fn is_about_the_item(err: &CliError) -> bool {
+    matches!(err.problem_status(), Some(403 | 404))
 }
 
 /// Whether the failure is the server being out of reach or unavailable (exit code 5).
@@ -254,12 +255,12 @@ impl RunLoop<'_> {
                     failure: Some(format!("Couldn't read the item before starting: {err}")),
                 };
                 self.finish_and_print(out, &run, &request).await?;
-                // Something about this one item, such as its having moved to another heap since the claim: the
-                // next item may be fine. What would fail every run ends the loop.
-                return if fails_every_run(&err) {
-                    Err(err)
-                } else {
+                // An item that is gone, such as one moved to another heap since the claim, is that item's trouble:
+                // the next may be fine. Anything else would fail every run, so it ends the loop.
+                return if is_about_the_item(&err) {
                     Ok(Next::Again)
+                } else {
+                    Err(err)
                 };
             }
         };
@@ -598,6 +599,31 @@ mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    fn refused(status: u16) -> CliError {
+        CliError::Client(ClientError::Problem {
+            problem: Box::new(api_types::problem::Problem {
+                code: "some_code".to_owned(),
+                title: "Refused".to_owned(),
+                status,
+                field: None,
+                hint: None,
+                item_key: None,
+                request_id: None,
+            }),
+            body: String::new(),
+        })
+    }
+
+    #[gtest]
+    fn only_an_item_that_is_gone_lets_the_loop_go_on_after_a_failed_read() {
+        expect_that!(is_about_the_item(&refused(404)), eq(true));
+        expect_that!(is_about_the_item(&refused(403)), eq(true));
+        expect_that!(is_about_the_item(&refused(401)), eq(false));
+        expect_that!(is_about_the_item(&refused(500)), eq(false));
+        expect_that!(is_about_the_item(&unreachable_error()), eq(false));
+        expect_that!(is_about_the_item(&CliError::NoAgents), eq(false));
+    }
 
     fn unreachable_error() -> CliError {
         // The cheapest `reqwest::Error` to make: a request to an address that isn't one.

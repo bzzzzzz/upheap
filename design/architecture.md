@@ -645,8 +645,10 @@ section is how it maps onto this API.
    the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
    person's own Claude settings, since Upheap keeps no tool list of its own. The tool runs in its own process
    group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
-   the loop, the second stops the tool with everything it started (the whole group is killed), and the run counts as failed
-   unless it had asked a question. `SIGTERM` and a closed terminal do what the second Ctrl-C does. The loop reads
+   the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
+   to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and
+   ends them only when asked, not when killed. `SIGTERM` does what the second Ctrl-C does; `SIGHUP` is left
+   alone, so `nohup` keeps a loop going. The loop reads
    the wall clock for every request, not the time it started, so a loop that lives for hours, through the machine's
    sleep, refreshes its access token like any command.
 8. **A newer server's values.** A new enum value is additive

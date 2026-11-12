@@ -158,4 +158,38 @@ mod processes {
         verify_that!(finished.exists(), eq(false))?;
         verify_that!(left_behind.exists(), eq(false))
     }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_stopped_tool_is_asked_to_end_first_so_it_can_end_what_it_started() -> googletest::Result<()> {
+        // Arrange: a script that, like Claude, cleans up when it is asked to end, and never ends on its own.
+        let dir = tempfile::tempdir()?;
+        let started = dir.path().join("started");
+        let cleaned = dir.path().join("cleaned");
+        let body = format!(
+            "trap 'echo cleaned > \"{}\"; exit 0' TERM\necho started > '{}'\nwhile true; do sleep 0.05; done",
+            cleaned.display(),
+            started.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+        let mut running = tools.run(start(Access::Do));
+
+        // Act: poll it until the script has started, then drop it. The drop returns once the script has ended.
+        let waited = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::select! {
+                _ = &mut running => {}
+                () = async {
+                    while !started.exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                } => {}
+            }
+        })
+        .await;
+        drop(running);
+
+        // Assert
+        verify_that!(waited.is_ok(), eq(true))?;
+        verify_that!(cleaned.exists(), eq(true))
+    }
 }

@@ -102,8 +102,7 @@ pub trait AgentTools: Send + Sync {
 pub enum Interrupt {
     /// The person pressed Ctrl-C. The first one stops the loop after the current run, the second stops the run.
     CtrlC,
-    /// Stop at once, as a second Ctrl-C does: the process was asked to end (`SIGTERM`), or its terminal closed
-    /// (`SIGHUP`).
+    /// Stop at once, as a second Ctrl-C does: the process was asked to end (`SIGTERM`).
     Now,
 }
 
@@ -136,25 +135,23 @@ impl WorkDeps {
     }
 }
 
-/// Forwards Ctrl-C, and on Unix `SIGTERM` and `SIGHUP`, until the receiver is dropped. Listening starts here, not in the spawned
+/// `SIGHUP` is left alone: listening for it would undo `nohup`, which is how a loop is kept going after its terminal
+/// closes.
+///
+/// Forwards Ctrl-C, and on Unix `SIGTERM`, until the receiver is dropped. Listening starts here, not in the spawned
 /// task, so a signal that arrives right away is not missed. Must run inside the runtime.
 fn listen_for_signals() -> UnboundedReceiver<Interrupt> {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
-        if let (Ok(mut ctrl_c), Ok(mut terminate), Ok(mut hangup)) = (
-            signal(SignalKind::interrupt()),
-            signal(SignalKind::terminate()),
-            signal(SignalKind::hangup()),
-        ) {
+        if let (Ok(mut ctrl_c), Ok(mut terminate)) = (signal(SignalKind::interrupt()), signal(SignalKind::terminate()))
+        {
             tokio::spawn(async move {
                 loop {
                     let interrupt = tokio::select! {
                         _ = ctrl_c.recv() => Interrupt::CtrlC,
                         _ = terminate.recv() => Interrupt::Now,
-                        // The terminal closed. The tool is in a group of its own and would not hear of it.
-                        _ = hangup.recv() => Interrupt::Now,
                     };
                     if sender.send(interrupt).is_err() {
                         return;
