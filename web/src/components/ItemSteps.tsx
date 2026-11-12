@@ -103,6 +103,9 @@ function StepRow({
   // elsewhere never swaps a draft out from under the typing.
   const [editingContext, setEditingContext] = useState(false);
   const contextField = useRef<HTMLTextAreaElement>(null);
+  // Counts the context's saves, so only the latest one closes the field: an earlier save landing while a later one
+  // is in flight (and may fail) must not take its draft away.
+  const contextSaves = useRef(0);
   // Set by Edit, so focus goes into the field once it is there.
   const focusContext = useRef(false);
   useEffect(() => {
@@ -244,9 +247,13 @@ function StepRow({
               }}
               onBlur={(e) => {
                 const field = e.currentTarget;
+                const save = ++contextSaves.current;
                 void saveContext(field.value).then((landed) => {
-                  // Back to the rendered text, unless the save failed or the person came back to the field meanwhile.
-                  if (landed && document.activeElement !== field) setEditingContext(false);
+                  // Back to the rendered text, unless the save failed, a later one is on its way, or the person came
+                  // back to the field meanwhile.
+                  if (landed && save === contextSaves.current && document.activeElement !== field) {
+                    setEditingContext(false);
+                  }
                 });
               }}
               className="field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base"

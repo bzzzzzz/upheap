@@ -847,11 +847,12 @@ test("a step's context edit that fails to save stays in the field, and Escape ne
   await steps.getByRole("button", { name: "Show context" }).click();
   await steps.getByRole("button", { name: "Edit step context" }).click();
   const field = steps.getByRole("textbox", { name: "Step context" });
-  await field.fill("New text");
+  await field.fill("New");
+  // Escape leaves the draft and the item open: typing goes on in the same field.
   await field.press("Escape");
-  await expect(field).toBeFocused();
+  await page.keyboard.type(" text");
   await expect(field).toHaveValue("New text");
-  await expect(itemPane(page)).toBeVisible();
+  await expect(page).toHaveURL(/\/items\//);
 
   // The save is refused: the field stays, with the draft, and the reason shows.
   await page.route(/\/steps\/\d+$/, (route) =>

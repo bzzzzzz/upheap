@@ -201,7 +201,7 @@ test("General has no Context card, and Context is a tab between General and Tags
   await expect(tabs.getByRole("link")).toHaveText(["General", "Context", "Tags", "Parameters", "Ranking"]);
   // Every tab fits the width, on a phone too, down to a 375 px one: none hides past the edge of the bar.
   if (test.info().project.name === "phone") await page.setViewportSize({ width: 375, height: 667 });
-  expect(await tabs.evaluate((nav) => nav.scrollWidth <= nav.clientWidth)).toBe(true);
+  await expect.poll(() => tabs.evaluate((nav) => nav.scrollWidth <= nav.clientWidth)).toBe(true);
   await goTo(page, "Context");
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/context$`));
   await expect(tabs.getByRole("link", { name: "Context" })).toHaveAttribute("aria-current", "page");

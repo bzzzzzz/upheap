@@ -350,7 +350,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     steps and the count to read, with no checkbox to change, no ⋯ and no Add. A step's context opens rendered as
     Markdown text (see Toolkit), for everyone, and the chevron shows only when there is one, or the step can be edited.
     An editor sees a small Edit button under the text ("Edit step context"), which swaps it for the field with the
-    source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text. An
+    source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text once the save has landed;
+    a failed save keeps the field and its draft, and Escape there does nothing, so a draft isn't lost to a stray key. An
     editor opening a step with no context gets the field at once. A refetch doesn't touch what is typed.
 12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the summary at the top of
     the item, under the status line, a tinted, outlined block (the accent at a low fill, a 2 px accent border) like the
