@@ -4,7 +4,7 @@
 use api_types::common::{DueInputDto, ItemDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
-use api_types::parameters::{OptionDto, ParameterDto, ParameterListDto};
+use api_types::parameters::{ArchivedOptionDto, OptionDto, ParameterDto, ParameterListDto};
 use api_types::tags::{TagDto, TagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
 use domain::step::StepNumber;
@@ -437,6 +437,14 @@ pub fn find_parameter<'p>(
         })
 }
 
+/// The archived parameter that `name` names, by name ignoring case, or by ID. The first match wins.
+pub fn find_archived_parameter<'p>(name: &str, parameters: &'p ParameterListDto) -> Option<&'p ParameterDto> {
+    parameters
+        .archived
+        .iter()
+        .find(|parameter| is_named(name, &parameter.name, parameter.id))
+}
+
 /// The option in use of `parameter` that `name` names, by label ignoring case, or by ID.
 pub fn find_option<'p>(
     name: &str,
@@ -453,6 +461,14 @@ pub fn find_option<'p>(
             heap: heap.to_string(),
             known: parameter.options.iter().map(|o| o.label.clone()).collect(),
         })
+}
+
+/// The archived option of `parameter` that `name` names, by label ignoring case, or by ID. The first match wins.
+pub fn find_archived_option<'p>(name: &str, parameter: &'p ParameterDto) -> Option<&'p ArchivedOptionDto> {
+    parameter
+        .archived_options
+        .iter()
+        .find(|option| is_named(name, &option.label, option.id))
 }
 
 fn is_named(typed: &str, name: &str, id: Uuid) -> bool {

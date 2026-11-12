@@ -41,7 +41,7 @@ The design docs are indexed in [design/README.md](design/README.md).
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
   items with the web app's filters and saved views, add, show, edit and move items between states, list, add and edit
-  tags, list a heap's parameters and set them on items, play the agent: ask for the next item, claim it, and end
+  tags, set up a heap's parameters and options, and set them on items, play the agent: ask for the next item, claim it, and end
   the run (`work`), and print a guide to every command for an agent to read first.
 
 Not yet: OIDC sign-in and invitations.
@@ -156,6 +156,8 @@ UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  #
 UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
 cargo run -p cli -- tag add infra --description "Servers and the network"
 cargo run -p cli -- parameter list                              # a heap's parameters and their options
+cargo run -p cli -- parameter add Area --option Backend --option Frontend  # an admin adds one; --weight, --tag; edit and archive too
+cargo run -p cli -- parameter option archive Area Backend --replace-with Frontend  # open items with it move to the other
 cargo run -p cli -- item edit k3x9a --parameter Area=Backend    # set one; --no-parameter Area clears it
 cargo run -p cli -- guide show                                  # every command and its flags in one read, with instructions for agents
 cargo run -p cli -- auth logout

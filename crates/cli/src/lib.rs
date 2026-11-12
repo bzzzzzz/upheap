@@ -216,6 +216,25 @@ enum TagCommand {
 enum ParameterCommand {
     /// The heap's parameters and their options
     List(commands::parameter::list::ListArgs),
+    /// Add a parameter to the heap
+    Add(commands::parameter::add::AddArgs),
+    /// Change a parameter's name, weight, tags or option order
+    Edit(commands::parameter::edit::EditArgs),
+    /// Archive a parameter no open item has a value for
+    Archive(commands::parameter::archive::ArchiveArgs),
+    /// A parameter's options
+    #[command(subcommand)]
+    Option(ParameterOptionCommand),
+}
+
+#[derive(Subcommand)]
+enum ParameterOptionCommand {
+    /// Add an option as the lowest priority
+    Add(commands::parameter::option::add::AddArgs),
+    /// Relabel an option
+    Edit(commands::parameter::option::edit::EditArgs),
+    /// Archive an option, moving open items to another
+    Archive(commands::parameter::option::archive::ArchiveArgs),
 }
 
 #[derive(Subcommand)]
@@ -284,6 +303,12 @@ impl Command {
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
             Self::Parameter(ParameterCommand::List(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Add(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Edit(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Archive(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => &args.shared,
+            Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Edit(args))) => &args.shared,
+            Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Archive(args))) => &args.shared,
             Self::Heap(HeapCommand::Add(args)) => &args.shared,
             Self::Work(WorkCommand::Next(args)) => &args.shared,
             Self::Work(WorkCommand::Claim(args)) => &args.shared,
@@ -413,6 +438,18 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
         Command::Parameter(ParameterCommand::List(args)) => commands::parameter::list::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::Add(args)) => commands::parameter::add::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::Edit(args)) => commands::parameter::edit::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::Archive(args)) => commands::parameter::archive::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => {
+            commands::parameter::option::add::run(args, app, out).await
+        }
+        Command::Parameter(ParameterCommand::Option(ParameterOptionCommand::Edit(args))) => {
+            commands::parameter::option::edit::run(args, app, out).await
+        }
+        Command::Parameter(ParameterCommand::Option(ParameterOptionCommand::Archive(args))) => {
+            commands::parameter::option::archive::run(args, app, out).await
+        }
         Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
         Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
         Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,

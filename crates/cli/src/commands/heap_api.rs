@@ -50,6 +50,32 @@ impl HeapApi<'_> {
             .await?)
     }
 
+    /// `POST` of `body` to `resource` under the heap, which is at `version`.
+    pub async fn post_at_version<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, CliError> {
+        Ok(self
+            .client
+            .post_at_version(&self.path(resource), body, version, self.token)
+            .await?)
+    }
+
+    /// `PUT` of `body` to `resource` under the heap, which is at `version`.
+    pub async fn put<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, CliError> {
+        Ok(self
+            .client
+            .put_at_version(&self.path(resource), body, version, self.token)
+            .await?)
+    }
+
     /// The path of `resource` under the heap.
     pub fn path<'p>(&'p self, resource: &[&'p str]) -> Vec<&'p str> {
         let mut path = vec!["teams", self.heap.team.as_str(), "heaps", self.heap.heap.as_str()];
