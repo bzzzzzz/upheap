@@ -1,5 +1,5 @@
 // Smoke test of the local build's backend in Node: the wasm from src/local/backend (npm run build:backend) on
-// in-memory SQLite-wasm, through the same SQLite side the worker uses. CI runs it; it exits non-zero on a failure.
+// in-memory SQLite-wasm, through the same SQLite side the worker uses. It exits non-zero on a failure.
 //
 //   node scripts/local-smoke.ts
 import assert from "node:assert/strict";
