@@ -310,3 +310,141 @@ async fn item_add_with_an_unknown_option_lists_the_parameters_options_and_adds_n
     expect_that!(item_count(&server, &ada).await?, eq(3));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn item_add_takes_the_context_from_a_file_and_the_steps_in_order() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let dir = tempfile::tempdir()?;
+    let file = dir.path().join("context.md");
+    std::fs::write(&file, "Why\n\nHow it goes\n")?;
+    let file = file.to_str().context("a utf-8 path")?;
+
+    // Act
+    let added = cli
+        .run(&[
+            "item",
+            "add",
+            "Rotate certs",
+            "--task",
+            "--context-file",
+            file,
+            "--step",
+            "Order",
+            "--step",
+            "Install",
+        ])
+        .await;
+
+    // Assert
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(added.stderr, eq(""));
+    expect_that!(added.stdout, starts_with("Added task \"Rotate certs\" ("));
+    expect_that!(added.stdout, contains_substring(") with 2 steps, now "));
+    let new_key = added_key(&added.stdout).context("a key in the output")?;
+    let item = server.read_item(&ada, HEAP, new_key).await?;
+    expect_that!(item["kind"], eq("task"));
+    expect_that!(item["description"], eq("Why\n\nHow it goes"));
+    expect_that!(item["steps"][0]["title"], eq("Order"));
+    expect_that!(item["steps"][1]["title"], eq("Install"));
+    expect_that!(item["steps"].as_array().map(Vec::len), some(eq(2)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_reads_the_context_from_stdin_for_a_note() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    cli.stdin = b"line one\nline two\n".to_vec();
+
+    let added = cli.run(&["item", "add", "Noted", "--context-file", "-", "-q"]).await;
+
+    expect_that!(added.exited(0), eq(true));
+    let item = server.read_item(&ada, HEAP, added.stdout.trim()).await?;
+    expect_that!(item["kind"], eq("note"));
+    expect_that!(item["description"], eq("line one\nline two"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_json_prints_the_item_with_its_steps_and_quiet_the_key() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let json = cli
+        .run(&[
+            "item",
+            "add",
+            "Json task",
+            "--task",
+            "--step",
+            "A",
+            "--step",
+            "B",
+            "--json",
+        ])
+        .await;
+    let quiet = cli
+        .run(&["item", "add", "Quiet task", "--task", "--step", "A", "-q"])
+        .await;
+
+    // Assert
+    expect_that!(json.exited(0), eq(true));
+    let item: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(item["title"], eq("Json task"));
+    expect_that!(item["steps"][0]["title"], eq("A"));
+    expect_that!(item["steps"][1]["title"], eq("B"));
+    expect_that!(quiet.exited(0), eq(true));
+    let quiet_key = quiet.stdout.strip_suffix('\n').context("a line")?;
+    expect_that!(quiet_key.len(), eq(5));
+    expect_that!(
+        server.read_item(&ada, HEAP, quiet_key).await?["steps"]
+            .as_array()
+            .map(Vec::len),
+        some(eq(1))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_refuses_bad_step_and_context_flags_before_any_request() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let long = "x".repeat(301);
+    let mut many = vec!["item", "add", "Too many", "--task"];
+    for _ in 0..101 {
+        many.extend(["--step", "s"]);
+    }
+
+    // Act
+    let without_task = cli.run(&["item", "add", "No task", "--step", "A"]).await;
+    let with_description = cli
+        .run(&["item", "add", "Both", "--description", "d", "--context-file", "f.md"])
+        .await;
+    let too_long = cli.run(&["item", "add", "Long", "--task", "--step", &long]).await;
+    let blank = cli.run(&["item", "add", "Blank", "--task", "--step", " "]).await;
+    let too_many = cli.run(&many).await;
+
+    // Assert
+    expect_that!(without_task.exited(2), eq(true));
+    expect_that!(with_description.exited(2), eq(true));
+    expect_that!(too_long.exited(2), eq(true));
+    expect_that!(too_long.stderr, contains_substring("--step"));
+    expect_that!(blank.exited(2), eq(true));
+    expect_that!(too_many.exited(2), eq(true));
+    expect_that!(too_many.stderr, contains_substring("at most 100 steps"));
+    expect_that!(item_count(&server, &ada).await?, eq(3));
+    Ok(())
+}

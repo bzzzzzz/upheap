@@ -71,6 +71,8 @@ pub enum UsageError {
     },
     #[error("`{step}` is a step of another item than `{item}`; name a step of {item}, or just its number")]
     StepInOtherItem { step: String, item: String },
+    #[error("{given} --step flags is too many: a task has at most {max} steps")]
+    TooManySteps { given: usize, max: usize },
     #[error("UPHEAP_RUN isn't a run ID")]
     BadRunEnv,
     #[error("work claim starts a run; unset UPHEAP_RUN first")]

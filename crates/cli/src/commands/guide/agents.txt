@@ -30,8 +30,9 @@ Exit codes
 Long text
 - Anything longer than a line goes in from a file: write the file, then pass it with --context-file (an item's,
   a step's or a heap's context) or --details-file (a question's long version). `-` in place of the file reads stdin.
-- `upheap item add` takes a title and a short --description only: add the item, then give it its context with
-  `upheap item edit` and --context-file.
+- `upheap item add` takes the context with --context-file too, and a task's steps with --step, so a task with its
+  context and steps is one call. If a step fails, the item stays added with the steps before it, and the output
+  names its key: add the rest with `upheap step add`, don't add the item again.
 
 The usual order of work
 1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
@@ -51,10 +52,7 @@ The usual order of work
    for them, and their answer reads back in `upheap item show`.
 
 Example
-  upheap item add "Rotate the staging certs" --need expected --effort s --task -q    # prints the key, say k3x9a
-  upheap item edit k3x9a --context-file context.md
-  upheap step add k3x9a "Order the new certificate"
-  upheap step add k3x9a "Install it in staging"
+  upheap item add "Rotate the staging certs" --effort s --task --context-file context.md --step "Order the new certificate" --step "Install it in staging" -q    # prints the key, say k3x9a
   upheap question ask k3x9a "Which CA do we use?" --choice "Internal" --choice "Let's Encrypt"
   upheap item start k3x9a
   upheap step tick k3x9a.1
