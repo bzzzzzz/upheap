@@ -721,7 +721,13 @@ joining the queue; and need being settled for everything made from a note.
    `result` (the agent's last message), `subtype` and `is_error` (how it ended) and `total_cost_usd`.
    `--permission-mode dontAsk` with `--allowedTools "Bash(upheap:*)"` lets the agent run only `upheap`: any
    other command is refused without a prompt, the run carries on, and the refusal is listed in
-   `permission_denials`. `--max-budget-usd` stops a run that costs more, exiting 1 with `subtype`
+   `permission_denials`. `work run` gives the tool two sets of flags. To prepare an item (`with_context`,
+   `defined`): `--permission-mode dontAsk --allowedTools "Bash(upheap:*)" Read Grep Glob WebFetch WebSearch`, so it
+   can run `upheap`, read files under the directory `work run` was started in and use the web, and nothing else. To
+   do a task (`done`): `--permission-mode acceptEdits --allowedTools "Bash(upheap:*)"`, so edits are accepted,
+   `upheap` is always allowed, and every other command follows the allow rules in the person's own and the
+   project's Claude settings; what they don't allow is refused without a prompt and the run carries on.
+   `--max-budget-usd` stops a run that costs more, exiting 1 with `subtype`
    `error_max_budget_usd`. `--no-session-persistence` keeps runs out of the person's session list. Exit 0 with
    `is_error` false is a run that ended; anything else is a failed run, with its cost still reported.
 2. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.

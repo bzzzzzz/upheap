@@ -635,7 +635,19 @@ section is how it maps onto this API.
    itself was closed to its next build: a dialog after every upgrade and every rebuild, which a command run by a
    script or an agent waits on for ever. An entry `security` made stays open to `security`. The cost: any program
    running as the user can read it the same way, without a dialog.
-7. **A newer server's values.** A new enum value is additive
+7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
+   heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
+   standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
+   sends a heartbeat every 5 minutes, six chances inside the 30 minutes after which a run lapses, and stops the tool
+   when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
+   only if the tool itself failed, why: the server decides whether the run reached its goal, asked, or failed, and
+   the loop never works that out. The tool gets what its goal needs and nothing more: to prepare an item it may run
+   `upheap`, read files and use the web; to do a task it may also edit files, and every other command follows the
+   person's own Claude settings, since Upheap keeps no tool list of its own. The tool runs in its own process
+   group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
+   the loop, the second stops the tool and counts the run as failed. The loop reads the clock as the time it started
+   plus the time elapsed, so a loop that lives for hours refreshes its access token like any command.
+8. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
    (`deserialize_with`), and `Factor` (contributors), `HeldBackGap`, `ClosedGroup` and the audit log's `AuditAction`
