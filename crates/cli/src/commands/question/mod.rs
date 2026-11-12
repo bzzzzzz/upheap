@@ -9,7 +9,6 @@ use serde::Serialize;
 use crate::CliError;
 use crate::client::{ClientError, Fetched};
 use crate::commands::heap_api::{HeapApi, is_not_found};
-use crate::error::QuestionRefusal;
 
 impl HeapApi<'_> {
     /// `POST` of `body` to the questions of the item with `key`, which the user typed as `typed`. A `404` is the item
@@ -43,8 +42,9 @@ impl HeapApi<'_> {
 
 impl HeapApi<'_> {
     /// `PATCH` of `body` to question `number` of the item with `key`, which is at `version`. A `404` is the question
-    /// not being there. A closed item or withdrawn question is the question taking no reply, which reopening the item
-    /// doesn't change, so it has no reopen hint. A stale or answered refusal names the item as `team/heap/key`.
+    /// not being there. A withdrawn question (`item_closed`, `question_withdrawn`) is reported as the server sent it,
+    /// problem body included, with no reopen hint: reopening doesn't bring it back. A stale or answered refusal names
+    /// the item as `team/heap/key`.
     pub async fn patch_question(
         &self,
         key: &str,
@@ -67,10 +67,7 @@ impl HeapApi<'_> {
             Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => {
                 Err(self.no_such_question(key, number))
             }
-            Err(source @ ClientError::Problem { .. }) if is_withdrawn(&source) => Err(CliError::QuestionRefused {
-                name: format!("{key}.q{number}"),
-                refusal: QuestionRefusal::Withdrawn,
-            }),
+            Err(source @ ClientError::Problem { .. }) if is_withdrawn(&source) => Err(CliError::Client(source)),
             Err(source @ ClientError::Problem { .. }) if is_refused_reply(&source) => Err(CliError::ItemRefused {
                 name: format!("{}/{key}", self.heap),
                 source,

@@ -628,7 +628,7 @@ async fn question_reply_on_a_closed_item_or_after_reopening_says_the_question_wa
         expect_that!(run.exited(3), eq(true));
         expect_that!(
             run.stderr,
-            contains_substring(format!("{name} was withdrawn when its item closed"))
+            contains_substring(format!("{name} was withdrawn, so there is nothing to reply to"))
         );
         expect_that!(run.stderr, not(contains_substring("reopen")));
     }

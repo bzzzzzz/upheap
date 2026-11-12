@@ -3,8 +3,8 @@
 //! The CLI reads the item first, for the question's version and its choices, which it needs to turn what was typed
 //! into the indices the API takes. The server owns every other rule: how many picks, whether a comment is needed,
 //! an open question on an open item. Repeating a command is safe: a question answered already with this very reply
-//! is said to be, and makes no write. Another reply is refused, since it would be lost, and so is a question that
-//! closing its item withdrew.
+//! is said to be, and makes no write. Another reply is refused, since it would be lost, and so is a withdrawn
+//! question.
 
 use api_types::common::{QuestionDto, QuestionStateDto};
 use api_types::questions::{QuestionPatchDto, ReplyDto};

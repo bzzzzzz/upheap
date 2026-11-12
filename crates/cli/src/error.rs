@@ -44,7 +44,7 @@ pub enum CliError {
     /// The item a command named has no question by the number it gave.
     #[error("no question `{name}` in {heap}")]
     NoSuchQuestion { name: String, heap: String },
-    /// A question that takes no reply from this command: it was withdrawn when its item closed, or it is answered
+    /// A question that, by the item just read, takes no reply from this command: it was withdrawn, or it is answered
     /// already with another reply.
     #[error("{}", .refusal.message(.name))]
     QuestionRefused { name: String, refusal: QuestionRefusal },
@@ -78,7 +78,7 @@ pub enum CliError {
 /// Why a question takes no reply.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuestionRefusal {
-    /// Closing its item took it back unanswered. Reopening the item doesn't bring it back.
+    /// It was taken back unanswered: its item closed, or its agent's turn was taken back. Nothing brings it back.
     Withdrawn,
     /// It has another reply, and a reply can't be changed here.
     AnsweredDifferently,
@@ -88,7 +88,7 @@ impl QuestionRefusal {
     fn message(self, name: &str) -> String {
         match self {
             Self::Withdrawn => {
-                format!("{name} was withdrawn when its item closed, so there is nothing to reply to")
+                format!("{name} was withdrawn, so there is nothing to reply to")
             }
             Self::AnsweredDifferently => {
                 format!("{name} is answered already with another reply, which can't be changed here")
