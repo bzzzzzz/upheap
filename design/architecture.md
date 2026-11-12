@@ -659,10 +659,11 @@ section is how it maps onto this API.
    the loop never works that out. The tool gets what its goal needs and nothing more: to prepare an item it may run
    the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
    person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names a new
-   directory for each run and the tool makes it, with its own instructions and settings (for Claude, `CLAUDE.md`
-   and `.claude/settings.json`), and starts there: a run then begins from nothing and can't see another run's
-   files, and what it needs to carry on is in the item's comments and on the remote. Those settings are wide for
-   now (any command), so in such a directory the limits above don't hold. The tool runs in its own process
+   directory for each run and the tool makes it, with its own instructions (for Claude, `CLAUDE.md`), and starts
+   there: a run then begins from nothing and can't see another run's files, and what it needs to carry on is in
+   the item's comments and on the remote. There the tool is allowed any command, edit and read, passed on its
+   command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
+   wide for now, so in such a directory the limits above don't hold. The tool runs in its own process
    group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
    the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
    to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and

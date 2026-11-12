@@ -28,9 +28,10 @@ pub(super) enum Exit {
 /// machine) and use the web. `Do` may run `upheap` and has file edits accepted; every
 /// other command follows the allow rules in the person's own and the project's Claude settings.
 ///
-/// Those settings add to both: in a directory [`set_up_directory`] made, they allow nearly everything, whatever the
-/// access.
-pub(super) fn arguments(access: Access) -> Vec<&'static str> {
+/// In a directory made for the run (`own_directory`), both get [`IN_OWN_DIRECTORY`] too: any command, edit and read.
+/// The rules go on the command line because Claude ignores the allow rules of a settings file in a directory nobody
+/// has trusted, which a new directory never is.
+pub(super) fn arguments(access: Access, own_directory: bool) -> Vec<&'static str> {
     let mut arguments = vec![
         "-p",
         "--output-format",
@@ -49,8 +50,17 @@ pub(super) fn arguments(access: Access) -> Vec<&'static str> {
             arguments.extend(UPHEAP_COMMANDS);
         }
     }
+    if own_directory {
+        arguments.extend(IN_OWN_DIRECTORY);
+        arguments.extend(["--disallowedTools", "Bash(upheap auth:*)"]);
+    }
     arguments
 }
+
+/// What a run may do in a directory made for it, as allow rules: nearly everything. A run there has to clone and
+/// build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused, for the
+/// reason [`UPHEAP_COMMANDS`] leaves it out.
+const IN_OWN_DIRECTORY: [&str; 6] = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
 
 /// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached. Not all
 /// of `upheap`: text an agent reads could talk it into `upheap auth logout`, which the server has no say in.
@@ -107,23 +117,15 @@ fn last_line(text: &str) -> Option<&str> {
 /// What Claude reads as its instructions in a run's own directory.
 const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
 
-/// Claude's settings in a run's own directory. They allow any command, edit and read: a run in a new directory has
-/// to clone and build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused,
-/// for the reason [`UPHEAP_COMMANDS`] leaves it out.
-const WORKSPACE_SETTINGS: &str = include_str!("claude/workspace-settings.json");
-
-/// Makes `dir`, which must not exist yet, with what Claude reads from the directory it starts in: `CLAUDE.md` and
-/// `.claude/settings.json`. Makes the directories above it too.
+/// Makes `dir`, which must not exist yet, with what Claude reads from the directory it starts in: `CLAUDE.md`. Makes
+/// the directories above it too.
 fn set_up_directory(dir: &Path) -> std::io::Result<()> {
     if let Some(root) = dir.parent() {
         std::fs::create_dir_all(root)?;
     }
     // Not `create_dir_all`: a directory that is there already is someone else's, and its files are not written over.
     std::fs::create_dir(dir)?;
-    std::fs::write(dir.join("CLAUDE.md"), WORKSPACE_INSTRUCTIONS)?;
-    let settings = dir.join(".claude");
-    std::fs::create_dir(&settings)?;
-    std::fs::write(settings.join("settings.json"), WORKSPACE_SETTINGS)
+    std::fs::write(dir.join("CLAUDE.md"), WORKSPACE_INSTRUCTIONS)
 }
 
 /// How long a tool that was told to stop has to end before it is killed.
@@ -193,6 +195,7 @@ impl Drop for Running {
 /// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
 pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
+    command.args(arguments(start.access, start.dir.is_some()));
     if let Some(dir) = start.dir {
         let made = dir.clone();
         let set_up = tokio::task::spawn_blocking(move || set_up_directory(&made)).await;
@@ -202,7 +205,6 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         command.current_dir(dir);
     }
     command
-        .args(arguments(start.access))
         .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env("PATH", path_with_this_binary_first())
         .stdin(Stdio::piped())
@@ -278,7 +280,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_preparing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Prepare),
+            arguments(Access::Prepare, false),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -309,7 +311,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_doing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Do),
+            arguments(Access::Do, false),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -330,6 +332,28 @@ mod tests {
                 "Bash(upheap parameter list:*)",
             ])
         );
+    }
+
+    #[gtest]
+    fn in_its_own_directory_either_access_may_do_anything_but_upheap_auth() {
+        let wide = [
+            "Bash",
+            "Read",
+            "Edit",
+            "Write",
+            "WebFetch",
+            "WebSearch",
+            "--disallowedTools",
+            "Bash(upheap auth:*)",
+        ];
+        for access in [Access::Prepare, Access::Do] {
+            let narrow = arguments(access, false);
+            let arguments = arguments(access, true);
+
+            // The wide rules follow the narrow ones, so they are still values of `--allowedTools`.
+            expect_that!(arguments[..narrow.len()], eq(&narrow[..]));
+            expect_that!(arguments[narrow.len()..], eq(&wide[..]));
+        }
     }
 
     /// A row of the table: a name, the exit, stdout and stderr, and the cost and failure they make.
