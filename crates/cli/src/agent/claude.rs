@@ -27,6 +27,9 @@ pub(super) enum Exit {
 /// `Prepare` may run `upheap`, read files under the directory it runs in (a bare `Read` would allow any path on the
 /// machine) and use the web. `Do` may run `upheap` and has file edits accepted; every
 /// other command follows the allow rules in the person's own and the project's Claude settings.
+///
+/// Those settings add to both: in a directory [`set_up_directory`] made, they allow nearly everything, whatever the
+/// access.
 pub(super) fn arguments(access: Access) -> Vec<&'static str> {
     let mut arguments = vec![
         "-p",
@@ -101,6 +104,28 @@ fn last_line(text: &str) -> Option<&str> {
     text.lines().rev().map(str::trim).find(|line| !line.is_empty())
 }
 
+/// What Claude reads as its instructions in a run's own directory.
+const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
+
+/// Claude's settings in a run's own directory. They allow any command, edit and read: a run in a new directory has
+/// to clone and build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused,
+/// for the reason [`UPHEAP_COMMANDS`] leaves it out.
+const WORKSPACE_SETTINGS: &str = include_str!("claude/workspace-settings.json");
+
+/// Makes `dir`, which must not exist yet, with what Claude reads from the directory it starts in: `CLAUDE.md` and
+/// `.claude/settings.json`. Makes the directories above it too.
+fn set_up_directory(dir: &Path) -> std::io::Result<()> {
+    if let Some(root) = dir.parent() {
+        std::fs::create_dir_all(root)?;
+    }
+    // Not `create_dir_all`: a directory that is there already is someone else's, and its files are not written over.
+    std::fs::create_dir(dir)?;
+    std::fs::write(dir.join("CLAUDE.md"), WORKSPACE_INSTRUCTIONS)?;
+    let settings = dir.join(".claude");
+    std::fs::create_dir(&settings)?;
+    std::fs::write(settings.join("settings.json"), WORKSPACE_SETTINGS)
+}
+
 /// How long a tool that was told to stop has to end before it is killed.
 const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
@@ -162,11 +187,20 @@ impl Drop for Running {
     }
 }
 
-/// Starts `program` as Claude with `start`'s access, writes the brief to its stdin and closes it, and reads it to its
+/// Starts `program` as Claude with `start`'s access, in `start`'s directory when it names one, which is made and set
+/// up first, writes the brief to its stdin and closes it, and reads it to its
 /// end. The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not
 /// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
 pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
+    if let Some(dir) = start.dir {
+        let made = dir.clone();
+        let set_up = tokio::task::spawn_blocking(move || set_up_directory(&made)).await;
+        if let Err(source) = set_up.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked))) {
+            return Err(ToolError::NoDirectory { dir, source });
+        }
+        command.current_dir(dir);
+    }
     command
         .args(arguments(start.access))
         .envs(start.env.iter().map(|(name, value)| (name, value)))

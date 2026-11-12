@@ -5,6 +5,7 @@
 //! (it reached its goal, it asked, or it failed); the loop only reports what the tool did. The tool sits behind
 //! [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass their own.
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use api_types::common::ItemDto;
@@ -17,7 +18,7 @@ use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
-use crate::agent::{AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps};
+use crate::agent::{AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
@@ -42,6 +43,10 @@ pub struct RunArgs {
     /// Do one run, or nothing when there is nothing to do, and exit
     #[arg(long)]
     pub once: bool,
+    /// Start each run in a new directory under this one, made with the tool's instructions and settings for working
+    /// there. Left out, every run starts in this directory, as it is
+    #[arg(long, value_name = "DIR")]
+    pub root: Option<PathBuf>,
     #[command(flatten)]
     pub shared: SharedArgs,
 }
@@ -51,6 +56,9 @@ pub struct RunArgs {
 /// when nothing is left to do. Ctrl-C once stops the loop after the current run, twice stops the run too. `--quiet`
 /// prints the key of each item worked, `--json` each run as the server records its end. Exit 0 when stopped or
 /// `--once` is done, and 5 when the server can't be reached with `--once`. Refused inside a run.
+///
+/// With `--root`, each run gets a directory of its own under it, named by the item's key and the run's ID, which the
+/// tool sets up and starts in. Nothing removes them: what a run left there is the person's to look at and clear.
 pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     if app.env.run.is_some() {
         return Err(UsageError::RunInRun.into());
@@ -60,6 +68,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let token = app.access_token(&client).await?;
     let heaps = resolve_named_heaps(&args.heaps, app, &client, &token).await?;
     work.tools.check(args.tool)?;
+    let root = args.root.as_deref().map(make_root).transpose()?;
     if out.mode() == Mode::Human {
         out.line(&header(&heaps, args.tool, args.once))?;
     }
@@ -76,6 +85,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         tool: args.tool,
         heaps: heaps.into_iter().map(|heap| heap.handle).collect(),
         once: args.once,
+        root,
         tools,
         interrupts: interrupts(),
         idle_wait,
@@ -105,6 +115,13 @@ fn join_names(names: &[&str]) -> String {
         [only] => (*only).to_owned(),
         [first @ .., last] => format!("{} and {last}", first.join(", ")),
     }
+}
+
+/// The name of a run's own directory: `k3x9a-<run id>`, so a person finds an item's runs by its key and no two runs
+/// share one. The key comes from the server, so only its letters and digits are used: it can't name another path.
+fn directory_name(run: &RunDto) -> String {
+    let key: String = run.item.key.chars().filter(char::is_ascii_alphanumeric).collect();
+    format!("{key}-{}", run.id)
 }
 
 /// What the loop does next.
@@ -167,6 +184,8 @@ struct RunLoop<'a> {
     /// The heaps the queue is over, each as `team/heap`.
     heaps: Vec<String>,
     once: bool,
+    /// Where each run's own directory is made; `None` when runs start in this directory.
+    root: Option<PathBuf>,
     tools: Box<dyn AgentTools>,
     interrupts: UnboundedReceiver<Interrupt>,
     idle_wait: Duration,
@@ -283,6 +302,7 @@ impl RunLoop<'_> {
                 ("UPHEAP_SERVER".to_owned(), self.server.to_string()),
                 ("UPHEAP_HEAP".to_owned(), handle.to_string()),
             ],
+            dir: self.root.as_ref().map(|root| root.join(directory_name(&run))),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
         let driven = self.drive_tool(out, &run, start).await;

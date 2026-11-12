@@ -224,6 +224,9 @@ impl CliError {
             (Self::Tool(ToolError::NotInstalled { tool }), _) => Some(format!(
                 "install Claude Code, or check that `{tool} --version` works in this shell"
             )),
+            (Self::Tool(ToolError::NoDirectory { .. }), _) => {
+                Some("check that `--root` names a directory you can write to".to_owned())
+            }
             (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`".to_owned()),
             (Self::Config(ConfigError::Parse { .. }), _) => {
                 Some("if a newer `upheap` wrote it, upgrade this one; otherwise fix or remove the file".to_owned())
