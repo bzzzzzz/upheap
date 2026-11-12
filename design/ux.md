@@ -353,11 +353,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text once the save has landed;
     a failed save keeps the field and its draft, and Escape there does nothing, so a draft isn't lost to a stray key. An
     editor opening a step with no context gets the field at once. A refetch doesn't touch what is typed.
-12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the summary at the top of
+12. **Waits for you**, while the item is open and has open questions, a stuck agent turn or a gone blocker, is the summary at the top of
     the item, under the status line, a tinted, outlined block (the accent at a low fill, a 2 px accent border) like the
     open-questions box in Questions, the same on
-    the pane, the tablet panel and the phone sheet. A stuck turn is its first row (see Waiting for me, 7), with Retry
-    and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
+    the pane, the tablet panel and the phone sheet. A gone blocker is its first row (see Waiting for me, 8), with
+    Unblock; a stuck turn comes next (see Waiting for me, 7), with Retry and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
     **Answer ↓** on its right: it scrolls the first open question into view and focuses its first control. The reply
     controls are not here but in Questions (point 13).
 13. **Questions** is a section under the Steps, shown when the item has any question, under the heading "Questions".
@@ -481,7 +481,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 ## Waiting for me
 
 The page at `/waiting`: every open question on an open item in the person's active heaps, answered in
-its row, and every item whose agent turn is stuck, with the ways out.
+its row, every item whose agent turn is stuck, and every blocked item whose blocker is gone, with the ways out.
 
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
@@ -503,7 +503,7 @@ its row, and every item whose agent turn is stuck, with the ways out.
 5. On a phone every control is 44 px, Reply spans the width, and Done and Can't be done share a row at half the width
    each.
 6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
-   from agents and teammates show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
+   from agents and teammates, and work whose blocker was closed, show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
    "Showing the 500 most important of n."
 7. **A stuck row** is an item whose agent turn failed three runs in a row, so the agents' queue skips it. It is ranked
    among the question rows by the same order, before that item's questions, and counts in the heading and the
@@ -516,6 +516,16 @@ its row, and every item whose agent turn is stuck, with the ways out.
    someone else took the turn back or retried it first, the row leaves and a note at the top says "Someone else
    changed this meanwhile." A reply draft in another row survives a stuck row leaving. On a phone both buttons are
    44 px, sharing a row.
+8. **A blocker row** is a blocked item whose blocker was closed as won't do, or moved to another heap
+   ([architecture.md](architecture.md#cycle-detection-and-locking) §3): it stays blocked, hidden from the list, until
+   the person moves it on. It is ranked and counted as a stuck row is. Its head line reads "Blocker closed · <item> ·
+   <heap> · <team>", or "Blocker moved · …" after a move; under it "Waits for “<blocker>”, closed as won't do" (or
+   "moved to <heap>"), the blocker's title a link to it, in the heap it is in now. Then **Unblock**, the primary
+   button, which moves the item to open at once, and **Open**, which opens the item to close it or pick another
+   blocker; closing it comes back here. Unblock makes the row leave as Retry does, and the live region says
+   "Unblocked “<title>”."; if the item changed first, the note says "Someone else changed this meanwhile." In the item's
+   Waits for you the same row has Unblock only, as the item is open already. A reader sees the row without Unblock. On
+   a phone both buttons are 44 px, sharing a row.
 
 ## Closed
 

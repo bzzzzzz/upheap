@@ -627,8 +627,8 @@ export interface paths {
          * Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's
          *     `version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.
          *     Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
-         *     the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked, as
-         *     do the items that waited for it. Moving an item to the heap it is in succeeds and changes nothing. The response
+         *     the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The
+         *     items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an item to the heap it is in succeeds and changes nothing. The response
          *     is the item in its new heap, so its old path stops working.
          */
         post: operations["move_item"];

@@ -2947,7 +2947,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's\n`version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.\nTags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of\nthe same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked, as\ndo the items that waited for it. Moving an item to the heap it is in succeeds and changes nothing. The response\nis the item in its new heap, so its old path stops working.",
+        "summary": "Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's\n`version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.\nTags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of\nthe same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The\nitems that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an item to the heap it is in succeeds and changes nothing. The response\nis the item in its new heap, so its old path stops working.",
         "operationId": "move_item",
         "parameters": [
           {

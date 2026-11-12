@@ -308,10 +308,17 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
         rows.push(vec![Cell::new("Tags"), Cell::new(super::common::tags_text(item))]);
     }
     if let Some(blocker) = &item.blocked_by {
+        // A blocker moved away is named with the heap it is in now, where its key is.
+        let moved = item
+            .blocker_gone
+            .as_ref()
+            .and_then(|gone| gone.moved_to.as_ref())
+            .map(|heap| format!(", in {}", heap.name))
+            .unwrap_or_default();
         rows.push(vec![
             Cell::new("Blocked by"),
             Cell::new(format!(
-                "{}  {} ({})",
+                "{}  {} ({}{moved})",
                 blocker.key,
                 blocker.title,
                 state_text(blocker.state)
