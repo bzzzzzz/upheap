@@ -136,6 +136,13 @@ fn after_failure(err: &CliError, once: bool) -> AfterFailure {
     }
 }
 
+/// Whether a failure to read a claimed item would repeat for every item: the server is out of reach, the sign-in is
+/// gone, or the setup on this machine is broken.
+fn fails_every_run(err: &CliError) -> bool {
+    let unauthorized = matches!(err.problem_status(), Some(401));
+    unauthorized || matches!(err, CliError::Auth(_)) || matches!(err.exit_code(), 5 | 6)
+}
+
 /// Whether the failure is the server being out of reach or unavailable (exit code 5).
 fn is_unreachable(err: &CliError) -> bool {
     err.exit_code() == 5
@@ -247,7 +254,13 @@ impl RunLoop<'_> {
                     failure: Some(format!("Couldn't read the item before starting: {err}")),
                 };
                 self.finish_and_print(out, &run, &request).await?;
-                return Err(err);
+                // Something about this one item, such as its having moved to another heap since the claim: the
+                // next item may be fine. What would fail every run ends the loop.
+                return if fails_every_run(&err) {
+                    Err(err)
+                } else {
+                    Ok(Next::Again)
+                };
             }
         };
         let brief = build_brief(&BriefParts {
@@ -523,6 +536,8 @@ impl RunLoop<'_> {
         if std::mem::replace(&mut self.unreachable_noted, true) {
             return;
         }
+        // So the idle line is said again once the server is back, and this note isn't the last word.
+        self.idle_noted = None;
         let now = self.local_time(self.app.now().as_millisecond());
         // Nowhere left to say it if stderr is gone.
         let _ = out.note(&format!("{now}  Can't reach the server. Trying again in a minute."));

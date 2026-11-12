@@ -121,13 +121,16 @@ mod processes {
 
     #[gtest]
     #[tokio::test]
-    async fn dropping_the_future_kills_the_script() -> googletest::Result<()> {
-        // Arrange: the script says it started, waits a moment, and would say it finished.
+    async fn dropping_the_future_kills_the_script_and_what_it_started() -> googletest::Result<()> {
+        // Arrange: the script starts a process of its own that would leave a file behind, says it started, waits a
+        // moment, and would say it finished.
         let dir = tempfile::tempdir()?;
         let started = dir.path().join("started");
         let finished = dir.path().join("finished");
+        let left_behind = dir.path().join("left-behind");
         let body = format!(
-            "echo started > '{}'\nsleep 0.4\necho finished > '{}'",
+            "(sleep 0.4; echo alive > '{}') &\necho started > '{}'\nsleep 0.4\necho finished > '{}'",
+            left_behind.display(),
             started.display(),
             finished.display()
         );
@@ -152,6 +155,7 @@ mod processes {
         // Assert
         verify_that!(waited.is_ok(), eq(true))?;
         verify_that!(started.exists(), eq(true))?;
-        verify_that!(finished.exists(), eq(false))
+        verify_that!(finished.exists(), eq(false))?;
+        verify_that!(left_behind.exists(), eq(false))
     }
 }

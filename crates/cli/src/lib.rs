@@ -35,6 +35,9 @@ use crate::config::{ConfigError, ConfigFile, SettingError};
 pub use crate::error::CliError;
 use crate::output::{Mode, Output};
 
+/// Tells the time now.
+pub type Clock = Arc<dyn Fn() -> jiff::Timestamp + Send + Sync>;
+
 /// Everything a run of the CLI takes from outside: the environment, where tokens are kept, the browser, stdin, and
 /// the two output streams.
 pub struct Deps {
@@ -45,6 +48,8 @@ pub struct Deps {
     pub stdin: Box<dyn Read + Send>,
     pub stdout: Box<dyn Write + Send>,
     pub stderr: Box<dyn Write + Send>,
+    /// The time now. Read whenever a token's freshness is judged or a time is printed in a command that runs long.
+    pub clock: Clock,
     /// What `upheap work run` takes from outside: the agent tools, interruptions and waits.
     pub work: WorkDeps,
 }
@@ -116,6 +121,7 @@ impl Deps {
             stdin: Box::new(std::io::stdin()),
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
+            clock: Arc::new(jiff::Timestamp::now),
             work: WorkDeps::system(),
         }
     }
@@ -351,6 +357,7 @@ where
         stdin,
         mut stdout,
         mut stderr,
+        clock,
         work,
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
@@ -380,7 +387,7 @@ where
         Command::Guide(GuideCommand::Show(_)) => {
             commands::guide::show::run(&Cli::command(), &mut out).map_err(CliError::from)
         }
-        command => match load_app(env, tokens, browser, stdin) {
+        command => match load_app(env, tokens, browser, stdin, clock) {
             // Before any request, so a bad run ID is told of once, not as a refusal.
             Ok(app) => match check_run_env(&app.env) {
                 Ok(()) => dispatch(command, &app, work, &mut out).await,
@@ -413,6 +420,7 @@ fn load_app(
     tokens: Arc<dyn TokenStore>,
     browser: Box<dyn Browser>,
     stdin: Box<dyn Read + Send>,
+    clock: Clock,
 ) -> Result<App, ConfigError> {
     let config = match &env.config_dir {
         Some(dir) => config::load_config(dir)?,
@@ -424,7 +432,7 @@ fn load_app(
         browser,
         stdin: Arc::new(Mutex::new(stdin)),
         config,
-        started: tokio::time::Instant::now(),
+        clock,
     })
 }
 
@@ -505,16 +513,15 @@ pub(crate) struct App {
     /// Shared so a read can run on a blocking thread, as stdin may be a terminal that never ends.
     stdin: Arc<Mutex<Box<dyn Read + Send>>>,
     pub config: ConfigFile,
-    /// When the command started, to tell the time now from the time it started: a loop that lives for hours must
-    /// see its access token go stale.
-    started: tokio::time::Instant,
+    /// The time now, as opposed to `env.now`, when the command started: a loop that lives for hours must see its
+    /// access token go stale. The wall clock, not time elapsed, which stands still while the machine sleeps.
+    clock: Clock,
 }
 
 impl App {
-    /// The time now: when the command started, and how long it has run since.
+    /// The time now.
     pub fn now(&self) -> jiff::Timestamp {
-        let elapsed = jiff::SignedDuration::try_from(self.started.elapsed()).unwrap_or(jiff::SignedDuration::MAX);
-        self.env.now.checked_add(elapsed).unwrap_or(self.env.now)
+        (self.clock)()
     }
 
     /// All of stdin, read to its end as UTF-8.

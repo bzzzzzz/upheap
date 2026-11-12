@@ -150,6 +150,11 @@ impl CliError {
         }
     }
 
+    /// The HTTP status the server refused with, when the failure is a refusal.
+    pub(crate) fn problem_status(&self) -> Option<u16> {
+        self.problem().map(|problem| problem.status)
+    }
+
     fn problem(&self) -> Option<&api_types::problem::Problem> {
         match self {
             Self::Client(ClientError::Problem { problem, .. })

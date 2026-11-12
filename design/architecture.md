@@ -642,11 +642,13 @@ section is how it maps onto this API.
    when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
    only if the tool itself failed, why: the server decides whether the run reached its goal, asked, or failed, and
    the loop never works that out. The tool gets what its goal needs and nothing more: to prepare an item it may run
-   `upheap`, read files and use the web; to do a task it may also edit files, and every other command follows the
+   the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
    person's own Claude settings, since Upheap keeps no tool list of its own. The tool runs in its own process
    group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
-   the loop, the second stops the tool and counts the run as failed. The loop reads the clock as the time it started
-   plus the time elapsed, so a loop that lives for hours refreshes its access token like any command.
+   the loop, the second stops the tool with everything it started (the whole group is killed), and the run counts as failed
+   unless it had asked a question. `SIGTERM` and a closed terminal do what the second Ctrl-C does. The loop reads
+   the wall clock for every request, not the time it started, so a loop that lives for hours, through the machine's
+   sleep, refreshes its access token like any command.
 8. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
    still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know

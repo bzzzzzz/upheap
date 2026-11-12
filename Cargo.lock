@@ -880,6 +880,7 @@ dependencies = [
  "keyring",
  "owo-colors",
  "reqwest",
+ "rustix",
  "serde",
  "serde_json",
  "serde_urlencoded",

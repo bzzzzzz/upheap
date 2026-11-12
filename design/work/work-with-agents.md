@@ -722,13 +722,17 @@ joining the queue; and need being settled for everything made from a note.
    `--permission-mode dontAsk` with `--allowedTools "Bash(upheap:*)"` lets the agent run only `upheap`: any
    other command is refused without a prompt, the run carries on, and the refusal is listed in
    `permission_denials`. `work run` gives the tool two sets of flags. To prepare an item (`with_context`,
-   `defined`): `--permission-mode dontAsk --allowedTools "Bash(upheap:*)" Read Grep Glob WebFetch WebSearch`, so it
+   `defined`): `--permission-mode dontAsk --allowedTools <upheap rules> "Read(./**)" "Grep(./**)" "Glob(./**)" WebFetch
+   WebSearch`, where the upheap rules name the commands a run uses (`Bash(upheap item:*)`, `step`, `question`,
+   `work reached`, `guide`, and the read-only `heap`, `tag` and `parameter` ones) and leave out `auth`, so it
    can run `upheap`, read files under the directory `work run` was started in and use the web, and nothing else. To
-   do a task (`done`): `--permission-mode acceptEdits --allowedTools "Bash(upheap:*)"`, so edits are accepted,
-   `upheap` is always allowed, and every other command follows the allow rules in the person's own and the
+   do a task (`done`): `--permission-mode acceptEdits --allowedTools <upheap rules>`, so edits are accepted,
+   those `upheap` commands are always allowed, and every other command follows the allow rules in the person's own and the
    project's Claude settings; what they don't allow is refused without a prompt and the run carries on.
    `--max-budget-usd` stops a run that costs more, exiting 1 with `subtype`
-   `error_max_budget_usd`. `--no-session-persistence` keeps runs out of the person's session list. Exit 0 with
+   `error_max_budget_usd`. `--no-session-persistence` keeps runs out of the person's session list. Checked
+   with 2.1.322: `Read(./**)` allows a file under the start directory and refuses `/etc/hosts`, where a bare `Read`
+   allows any path; a heredoc on a command's stdin passes a prefix rule; that version has no Grep tool. Exit 0 with
    `is_error` false is a run that ended; anything else is a failed run, with its cost still reported.
 2. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.
 

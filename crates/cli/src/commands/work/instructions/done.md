@@ -8,7 +8,8 @@ Before anything, read the questions under the item: they say where this task sta
   change the work, and ask for review again.
 - A request to review, replied "Done", and the task is still open: the work is approved. Finish it the way the
   heap's context says finishing means (merge, publish), if that is still to do. Then ask:
-  `upheap question request <key> "Nothing is left: mark <key> done"`, and stop.
+  `upheap question request <key> "Nothing is left: mark <key> done"`, and stop. If that request is there too
+  and has its reply, nothing is left for you: stop without asking again. Only the person can close the task.
 - No such request: do the work, below.
 
 Doing the work

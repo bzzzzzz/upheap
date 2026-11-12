@@ -171,8 +171,8 @@ The server address and default heap are kept in `config.toml` under the platform
 request is made inside that run: it may write the item's context, steps and questions, make a note or a reminder a
 task and start it, on the run's own item only, and is refused anything else with exit 3. `work run` starts `claude`
 on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an item (give it its
-context, or make it a defined task), `claude` may run `upheap`, read files under that directory and use the web, and
-nothing else. To do a task, it may also edit files, and run what your own and the project's Claude settings allow.
+context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not `auth`), read files under that directory and use
+the web, and nothing else. To do a task, it may also edit files, and run what your own and the project's Claude settings allow.
 Exit codes: 0 done, 2 bad command line, 3 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup
 broken (no keychain, or no agent tool), 1 anything else.
 

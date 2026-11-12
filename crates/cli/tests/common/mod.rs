@@ -480,6 +480,7 @@ impl TestCli {
             stdin: Box::new(std::io::Cursor::new(self.stdin.clone())),
             stdout,
             stderr: Box::new(stderr.clone()),
+            clock: Arc::new(jiff::Timestamp::now),
             work,
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
@@ -755,6 +756,7 @@ impl Agent {
             stdin: Box::new(std::io::Cursor::new(stdin.as_bytes().to_vec())),
             stdout: Box::new(stdout.clone()),
             stderr: Box::new(stderr.clone()),
+            clock: Arc::new(jiff::Timestamp::now),
             work: WorkDeps {
                 tools: Box::new(StandIn::not_installed()),
                 interrupts: Box::new(move || no_interrupts),

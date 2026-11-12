@@ -24,7 +24,8 @@ pub(super) enum Exit {
 /// The arguments `claude` starts with: print the answer as one JSON object and read the prompt from stdin, keep the
 /// run out of the person's sessions, and refuse (not ask about) what isn't allowed, since no one is there to ask.
 ///
-/// `Prepare` may run `upheap`, read files and use the web. `Do` may run `upheap` and has file edits accepted; every
+/// `Prepare` may run `upheap`, read files under the directory it runs in (a bare `Read` would allow any path on the
+/// machine) and use the web. `Do` may run `upheap` and has file edits accepted; every
 /// other command follows the allow rules in the person's own and the project's Claude settings.
 pub(super) fn arguments(access: Access) -> Vec<&'static str> {
     let mut arguments = vec![
@@ -35,20 +36,32 @@ pub(super) fn arguments(access: Access) -> Vec<&'static str> {
         "--permission-mode",
     ];
     match access {
-        Access::Prepare => arguments.extend([
-            "dontAsk",
-            "--allowedTools",
-            "Bash(upheap:*)",
-            "Read",
-            "Grep",
-            "Glob",
-            "WebFetch",
-            "WebSearch",
-        ]),
-        Access::Do => arguments.extend(["acceptEdits", "--allowedTools", "Bash(upheap:*)"]),
+        Access::Prepare => {
+            arguments.extend(["dontAsk", "--allowedTools"]);
+            arguments.extend(UPHEAP_COMMANDS);
+            arguments.extend(["Read(./**)", "Grep(./**)", "Glob(./**)", "WebFetch", "WebSearch"]);
+        }
+        Access::Do => {
+            arguments.extend(["acceptEdits", "--allowedTools"]);
+            arguments.extend(UPHEAP_COMMANDS);
+        }
     }
     arguments
 }
+
+/// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached. Not all
+/// of `upheap`: text an agent reads could talk it into `upheap auth logout`, which the server has no say in.
+const UPHEAP_COMMANDS: [&str; 9] = [
+    "Bash(upheap item:*)",
+    "Bash(upheap step:*)",
+    "Bash(upheap question:*)",
+    "Bash(upheap work reached:*)",
+    "Bash(upheap guide:*)",
+    "Bash(upheap heap show:*)",
+    "Bash(upheap heap list:*)",
+    "Bash(upheap tag list:*)",
+    "Bash(upheap parameter list:*)",
+];
 
 /// What the tool's exit and output say: its cost, whether it failed, and its last message.
 ///
@@ -87,9 +100,41 @@ fn last_line(text: &str) -> Option<&str> {
     text.lines().rev().map(str::trim).find(|line| !line.is_empty())
 }
 
+/// Kills the tool's whole process group when dropped before the tool ended: the tool and everything it started, a
+/// build or a push under way included. Killing the tool alone would leave those running with nobody to end them.
+#[cfg(unix)]
+struct GroupGuard(Option<rustix::process::Pid>);
+
+#[cfg(unix)]
+impl GroupGuard {
+    /// The group `child` leads, which `process_group(0)` gave it: its number is the child's own.
+    fn of(child: &tokio::process::Child) -> Self {
+        Self(
+            child
+                .id()
+                .and_then(|id| i32::try_from(id).ok())
+                .and_then(rustix::process::Pid::from_raw),
+        )
+    }
+
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        if let Some(group) = self.0 {
+            // A group that is gone already is what was wanted.
+            let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+        }
+    }
+}
+
 /// Starts `program` as Claude with `start`'s access, writes the brief to its stdin and closes it, and reads it to its
 /// end. The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not
-/// it. Dropping the future kills the process.
+/// it. Dropping the future kills the process and everything it started.
 pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
     command
@@ -106,6 +151,8 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         tool: Tool::Claude,
         source,
     })?;
+    #[cfg(unix)]
+    let mut group = GroupGuard::of(&child);
     let stdin = child.stdin.take();
     let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
     let brief = start.brief;
@@ -118,7 +165,11 @@ pub(super) async fn run(program: PathBuf, start: ToolStart) -> Result<ToolReport
         }
     };
     let (_, stdout, stderr) = tokio::join!(write, read_to_end(stdout), read_to_end(stderr));
-    let exit = match child.wait().await {
+    let waited = child.wait().await;
+    // It ended on its own: nothing is left to stop, and its group's number may be given to another.
+    #[cfg(unix)]
+    group.disarm();
+    let exit = match waited {
         Ok(status) => status.code().map_or(Exit::Signal, Exit::Code),
         Err(source) => {
             return Ok(ToolReport {
@@ -175,10 +226,18 @@ mod tests {
                 "--permission-mode",
                 "dontAsk",
                 "--allowedTools",
-                "Bash(upheap:*)",
-                "Read",
-                "Grep",
-                "Glob",
+                "Bash(upheap item:*)",
+                "Bash(upheap step:*)",
+                "Bash(upheap question:*)",
+                "Bash(upheap work reached:*)",
+                "Bash(upheap guide:*)",
+                "Bash(upheap heap show:*)",
+                "Bash(upheap heap list:*)",
+                "Bash(upheap tag list:*)",
+                "Bash(upheap parameter list:*)",
+                "Read(./**)",
+                "Grep(./**)",
+                "Glob(./**)",
                 "WebFetch",
                 "WebSearch",
             ])
@@ -197,7 +256,15 @@ mod tests {
                 "--permission-mode",
                 "acceptEdits",
                 "--allowedTools",
-                "Bash(upheap:*)",
+                "Bash(upheap item:*)",
+                "Bash(upheap step:*)",
+                "Bash(upheap question:*)",
+                "Bash(upheap work reached:*)",
+                "Bash(upheap guide:*)",
+                "Bash(upheap heap show:*)",
+                "Bash(upheap heap list:*)",
+                "Bash(upheap tag list:*)",
+                "Bash(upheap parameter list:*)",
             ])
         );
     }

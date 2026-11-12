@@ -37,6 +37,9 @@ uuid.workspace = true
 webbrowser.workspace = true
 whoami.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
 # Everywhere but macOS, where the keychain is reached through the system's `security` tool (auth/security_tool.rs).
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 keyring.workspace = true
