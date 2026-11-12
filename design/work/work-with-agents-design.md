@@ -703,7 +703,7 @@ joining the queue; and need being settled for everything made from a note.
    per heap. The top of every heap gets attention, and one number moves a heap. It assumes scores from
    different heaps can be compared as they are, which holds while heaps keep similar factor weights; a heap
    with unusual weights or many custom parameters will sit higher or lower than it should, and its heap weight
-   is the correction. This is also the mechanism for the view across heaps in the tracker's Next list.
+   is the correction. This is also the mechanism for the view across heaps (a note in the Upheap heap).
 7. **One blocker per item,** as today, not several. Chains cover the cases an agent produces, and several
    blockers change the ranking's inheritance.
 8. **Reached is checked against the table,** not taken from the agent. A rule decides whether a turn ended.
