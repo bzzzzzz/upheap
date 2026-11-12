@@ -134,21 +134,26 @@ async fn editing_a_view_needs_its_current_version_and_is_audited() -> Result<()>
             &session,
             &path,
             &saved.body["version"],
-            json!({ "name": "Due soon", "view": { "sort": "due" } }),
+            json!({ "name": "Most needed", "view": { "sort": "need" } }),
         )
         .await?;
     let stale = app
         .patch(&session, &path, &saved.body["version"], json!({ "name": "Late" }))
         .await?;
     let unchanged = app
-        .patch(&session, &path, &edited.body["version"], json!({ "name": "Due soon" }))
+        .patch(
+            &session,
+            &path,
+            &edited.body["version"],
+            json!({ "name": "Most needed" }),
+        )
         .await?;
     let audit = app.audit_entries(&id).await?;
 
     // Assert
     expect_that!(edited.status, eq(StatusCode::OK));
-    expect_that!(edited.body["name"], eq(&json!("Due soon")));
-    expect_that!(edited.body["view"]["sort"], eq(&json!("due")));
+    expect_that!(edited.body["name"], eq(&json!("Most needed")));
+    expect_that!(edited.body["view"]["sort"], eq(&json!("need")));
     expect_that!(edited.body["version"], eq(&json!(2)));
     expect_that!(stale.status, eq(StatusCode::CONFLICT));
     expect_that!(stale.body["code"], eq(&json!("version_conflict")));
@@ -161,10 +166,10 @@ async fn editing_a_view_needs_its_current_version_and_is_audited() -> Result<()>
     );
     expect_that!(
         audit[1].1["name"],
-        eq(&json!({ "before": "Ready", "after": "Due soon" }))
+        eq(&json!({ "before": "Ready", "after": "Most needed" }))
     );
     expect_that!(audit[1].1["list_view"]["before"]["sort"], eq(&json!("priority")));
-    expect_that!(audit[1].1["list_view"]["after"]["sort"], eq(&json!("due")));
+    expect_that!(audit[1].1["list_view"]["after"]["sort"], eq(&json!("need")));
     Ok(())
 }
 

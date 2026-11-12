@@ -1,16 +1,15 @@
 import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
 
 // One step ahead in the list and the item (design/ux.md, The list and The item), with a mouse: the
-// rows' hover actions don't show on a touch screen, which swipes instead.
+// rows' play and done buttons, shown on hover, don't show on a touch screen, which swipes instead.
 test.beforeEach(({ isMobile }) => {
-  test.skip(isMobile, "Hover actions and the pane's ↑ ↓ are for a wide screen with a mouse.");
+  test.skip(isMobile, "The done button and the pane's ↑ ↓ are for a wide screen with a mouse.");
 });
 
-test("a hovered row starts its item, and Done offers to start the next one", async ({ page }) => {
+test("the play button starts an item, and Done offers to start the next one", async ({ page }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
 
-  await row(page, "Quick win").hover();
   await row(page, "Quick win").getByRole("button", { name: "Start Quick win" }).click();
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
   // Once it has moved up into In progress.
@@ -24,6 +23,7 @@ test("a hovered row starts its item, and Done offers to start the next one", asy
 
   // With Slog under way, finishing something else offers nothing more.
   await addItem(page, "Water the plants");
+  await row(page, "Water the plants").getByRole("button", { name: "Start Water the plants" }).hover();
   await row(page, "Water the plants").getByRole("button", { name: "Mark Water the plants done" }).click();
   await expect(page.getByRole("status").filter({ hasText: "“Water the plants” is done." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
@@ -36,16 +36,44 @@ test("a hovered row starts its item, and Done offers to start the next one", asy
   await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
   await filters.getByRole("button", { name: "Close" }).click();
   await expect(row(page, "Slog")).toHaveCount(0);
+  await row(page, "Tidy up").getByRole("button", { name: "Start Tidy up" }).hover();
   await row(page, "Tidy up").getByRole("button", { name: "Mark Tidy up done" }).click();
   await expect(page.getByRole("status").filter({ hasText: "“Tidy up” is done." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
   await page.getByRole("group", { name: "Filters on" }).getByRole("button", { name: "Remove filter Effort S" }).click();
+});
 
-  // ⋯ has the other states.
-  await row(page, "Slog").hover();
-  await row(page, "Slog").getByRole("button", { name: "More for Slog" }).click();
-  await page.getByRole("menuitem", { name: "Won't do" }).click();
-  await expect(row(page, "Slog")).toHaveCount(0);
+test("hovering or focusing the play button shows the done button beside it, and s starts a focused row", async ({
+  page,
+}) => {
+  await addItem(page, "Quick win");
+  await addItem(page, "Slog");
+  const quick = row(page, "Quick win");
+  const done = quick.getByRole("button", { name: "Mark Quick win done" });
+  const play = quick.getByRole("button", { name: "Start Quick win" });
+  const slot = done.locator("..");
+
+  // Hidden until the play button is hovered, but still in the layout.
+  await expect(slot).toHaveCSS("opacity", "0");
+  await play.hover();
+  await expect(slot).toHaveCSS("opacity", "1");
+
+  // Tab order: play, done, then the row link.
+  await page.mouse.move(0, 0);
+  await play.focus();
+  await page.keyboard.press("Tab");
+  await expect(done).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(quick.getByRole("link", { name: "Quick win", exact: true })).toBeFocused();
+
+  // s starts the focused row, and the focus stays on it.
+  await page.keyboard.press("s");
+  await expect(page.getByRole("status").filter({ hasText: "“Quick win” is in progress." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
+  // The row moves up into In progress, and the focus follows it.
+  await expect(
+    page.getByRole("region", { name: "In progress" }).getByRole("link", { name: "Quick win", exact: true }),
+  ).toBeFocused();
 });
 
 test("the item pane walks the list, and the link sign by its title copies the link", async ({ page, heapPath }) => {

@@ -1,14 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Bot, Ellipsis } from "lucide-react";
+import { Bot } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
-import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { Button, Menu, MenuTrigger } from "react-aria-components";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import type { HeapRef, Item, ItemState, RankedItem } from "../api/client";
+import type { HeapRef, Item, ItemState, RankedItem, RankedList } from "../api/client";
 import { KindIcon, StageIcon } from "./kindIcons";
-import { changeLabel, isClosed, NEXT_STATES, SIZE_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
+import { STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
-import { MenuEntry, MenuPopover } from "./Menu";
 import { ParameterChips } from "./ParameterPicker";
 import { formatDate } from "./reminders";
 import { TagChips } from "./TagChips";
@@ -18,6 +16,17 @@ import { TagChips } from "./TagChips";
  * come back from a swipe.
  */
 export type ChangeState = (item: Item, state: ItemState, onError?: () => void) => void;
+
+/**
+ * The list's tag and parameter filters as a row's chips use them: what is on, and how a chip turns its own value on
+ * or off (ux.md, The list).
+ */
+export type RowFilters = {
+  tags: ReadonlySet<string>;
+  options: ReadonlySet<string>;
+  toggleTag: (tagId: string) => void;
+  toggleOption: (optionId: string) => void;
+};
 
 /** How far a row slides left to show its two actions, and how far right marks it done. */
 const ACTIONS_WIDTH = 176;
@@ -48,13 +57,14 @@ export function rowOf(key: string) {
 }
 
 /**
- * One ranked item, for reading and ordering (ux.md, The list): the state circle, the position, the title, the due
- * chip and tags, and below them why it ranks where it does. The whole row opens the item; editing happens there.
+ * One ranked item, for reading and ordering (ux.md, The list): the main button, the title, the due chip and tags, and
+ * below them why it ranks where it does. The whole row opens the item; editing happens there. A tag filters the list.
  * `selected` marks the open item's row, and `itemOpen` makes opening another one replace it in the history, so Back
  * still closes the item instead of stepping through every row looked at.
  *
- * With a finger, a row swipes (ux.md, The list §5): right marks it done, left shows two other states to pick.
- * With a mouse, hovering an open row shows Start and ⋯ for the other states (ux.md, The list §9).
+ * The main button starts an open or blocked item and marks an in-progress one done. With a mouse, hovering or focusing
+ * the play button also shows a done button beside it. With a finger, a row swipes (ux.md, The list): right marks it
+ * done, left shows two other states to pick.
  */
 export function ItemRow({
   entry,
@@ -62,6 +72,7 @@ export function ItemRow({
   selected,
   itemOpen,
   compact = false,
+  filters,
   onChangeState,
 }: {
   entry: RankedItem;
@@ -69,26 +80,36 @@ export function ItemRow({
   selected: boolean;
   itemOpen: boolean;
   compact?: boolean;
+  filters: RowFilters;
   onChangeState: ChangeState;
 }) {
-  const { item, position, contributors } = entry;
-  const canMarkDone = item.allowed_actions.includes("change_state");
+  const { item, contributors } = entry;
+  const canChangeState = item.allowed_actions.includes("change_state");
   const onMarkDone = () => onChangeState(item, "done");
+  // The focus follows the row into In progress, whether `s` or play started it: the row remounts there, and the focus
+  // would fall to the page. A failed or cancelled start forgets it, so a later start from elsewhere doesn't pull the
+  // focus into the list.
+  const onStart = () => {
+    refocusAfterStart = item.key;
+    onChangeState(item, "in_progress", () => (refocusAfterStart = undefined));
+  };
+  const startable = item.state === "open" || item.state === "blocked";
   const touch = useMedia(TOUCH);
-  // On a touch screen a swipe does what the hover actions do.
-  const actions = canMarkDone && !touch && !isClosed(item.state);
-  const swipe = useSwipe(canMarkDone && touch, (state, onError) => onChangeState(item, state, onError));
+  const swipe = useSwipe(canChangeState && touch, (state, onError) => onChangeState(item, state, onError));
 
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       focusRow(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
-    } else if (event.key === "x" && canMarkDone) {
+    } else if (event.key === "x" && canChangeState) {
       event.preventDefault();
       // The row goes away, so the next one takes the focus.
       focusRow(event.currentTarget, 1);
       onMarkDone();
+    } else if (event.key === "s" && canChangeState && startable) {
+      event.preventDefault();
+      onStart();
     }
   };
 
@@ -106,11 +127,24 @@ export function ItemRow({
         {...swipe.dragProps}
         className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
-        } ${actions ? (item.state === "open" ? "pr-22" : "pr-11") : ""}`}
+        }`}
       >
-        <StateCircle item={item} disabled={!canMarkDone} onPress={onMarkDone} />
-        <span className="w-5 shrink-0 text-right text-sm text-muted tabular-nums" aria-label={`Position ${position}`}>
-          {position}
+        {/* Fixed slots, so titles line up whether or not the item can be changed. Done sits beside play with a
+            mouse only: a touch screen swipes right instead. */}
+        <span className="group/start flex shrink-0 items-center gap-3">
+          <span className="size-6 shrink-0">
+            {canChangeState &&
+              (startable ? (
+                <StartButton item={item} onPress={onStart} />
+              ) : (
+                item.state === "in_progress" && <DoneCircle item={item} onPress={onMarkDone} />
+              ))}
+          </span>
+          {!touch && (
+            <span className="relative z-10 w-5 shrink-0 opacity-0 group-focus-within/start:opacity-100 group-hover/start:opacity-100">
+              {canChangeState && startable && <DoneButton item={item} onPress={onMarkDone} />}
+            </span>
+          )}
         </span>
         {/* A fixed slot, so titles line up whether or not the item is a task. */}
         <span className="flex w-3.5 shrink-0 justify-center">
@@ -124,7 +158,7 @@ export function ItemRow({
             )}
             {/* The same slot says an agent has the item, with a mark: the two never show together. */}
             {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-ink-soft sm:hidden" />}
-            {/* The link covers the whole row, under the state circle. */}
+            {/* The link covers the whole row, under the buttons and tags. */}
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
               params={{ ...heapRef, item: item.key }}
@@ -143,6 +177,7 @@ export function ItemRow({
               <span className="sr-only">
                 {item.kind === "task" && ", task"}
                 {item.kind === "reminder" && ", reminder"}
+                {item.state === "blocked" && ", blocked"}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
@@ -156,24 +191,25 @@ export function ItemRow({
               </span>
             )}
             {item.due && <DueChip due={item.due} />}
-            <TagChips tags={item.tags} />
-            <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />
+            <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />
+            <ParameterChips
+              parameters={item.parameters}
+              active={filters.options}
+              onToggle={filters.toggleOption}
+              className="hidden lg:inline-flex"
+            />
           </div>
           {!compact && contributors.length > 0 && (
             <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
           )}
           {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
-          <ParameterChips parameters={item.parameters} className="mt-1 flex lg:hidden" />
+          <ParameterChips
+            parameters={item.parameters}
+            active={filters.options}
+            onToggle={filters.toggleOption}
+            className="mt-1 flex lg:hidden"
+          />
         </div>
-        {(item.effort || item.impact) && (
-          <span className="hidden shrink-0 text-xs text-ink-soft tabular-nums sm:inline">
-            <span className="sr-only">Effort </span>
-            {item.effort ? SIZE_LABELS[item.effort] : "–"}
-            <span aria-hidden="true"> · </span>
-            <span className="sr-only">, impact </span>
-            {item.impact ? SIZE_LABELS[item.impact] : "–"}
-          </span>
-        )}
         {item.waits_for_you && (
           <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
             waits for you
@@ -184,7 +220,6 @@ export function ItemRow({
             with an agent
           </span>
         )}
-        {actions && <RowActions item={item} onChangeState={onChangeState} />}
       </motion.div>
     </motion.li>
   );
@@ -192,19 +227,21 @@ export function ItemRow({
 
 /**
  * A reminder still to come, in the group under the list (ux.md, The list §16): the reminder mark, the title, the date
- * it joins the list and its tags. No position, state circle or swipe: it isn't in the ranking yet, and opening it is
- * how its date is changed.
+ * it joins the list and its tags. No state button or swipe: it isn't in the ranking yet, and opening it is how its date
+ * is changed.
  */
 export function ComingRow({
   item,
   heapRef,
   selected,
   itemOpen,
+  filters,
 }: {
   item: Item;
   heapRef: HeapRef;
   selected: boolean;
   itemOpen: boolean;
+  filters: RowFilters;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -251,7 +288,7 @@ export function ComingRow({
                 {formatDate(item.due.date)}
               </span>
             )}
-            <TagChips tags={item.tags} />
+            <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />
           </div>
         </div>
         {item.waits_for_you && (
@@ -360,53 +397,6 @@ function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPic
   );
 }
 
-/**
- * What a hovered row offers besides its circle: Start for an open item, and ⋯ for the other states. Over the row's
- * right edge, in room the row keeps for them, so they never cover the title or the sizes. Shown while the row is
- * hovered, has the focus (so the keyboard reaches them too) or has its menu open. ⋯ lists the states in the pane's
- * order (NEXT_STATES), less Done, which is the circle's, then Won't do.
- */
-function RowActions({ item, onChangeState }: { item: Item; onChangeState: ChangeState }) {
-  const start = item.state === "open";
-  const next = isClosed(item.state) ? [] : NEXT_STATES[item.state as keyof typeof NEXT_STATES];
-  const more = [...next, "wont_do" as const].filter((state) => state !== "done" && !(start && state === "in_progress"));
-  return (
-    <div className="absolute inset-y-0 right-0 z-10 flex items-center gap-0.5 bg-inherit pr-1.5 pl-2 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100">
-      {start && (
-        <button
-          type="button"
-          onClick={() => onChangeState(item, "in_progress")}
-          aria-label={`Start ${item.title}`}
-          className="h-8 rounded-lg px-2.5 text-xs font-medium text-ink-soft hover:bg-canvas hover:text-ink"
-        >
-          Start
-        </button>
-      )}
-      <MenuTrigger>
-        <Button
-          aria-label={`More for ${item.title}`}
-          className="flex size-8 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-canvas data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
-        >
-          <Ellipsis aria-hidden="true" className="size-4" />
-        </Button>
-        <MenuPopover placement="bottom end">
-          <Menu
-            aria-label={`More for ${item.title}`}
-            className="outline-none"
-            onAction={(key) => onChangeState(item, key as ItemState)}
-          >
-            {more.map((state) => (
-              <MenuEntry key={state} id={state}>
-                {changeLabel(item.state, state)}
-              </MenuEntry>
-            ))}
-          </Menu>
-        </MenuPopover>
-      </MenuTrigger>
-    </div>
-  );
-}
-
 /** A due time as the server labels it. Only an exact due time says "Due", and only it can be overdue. */
 export function DueChip({ due }: { due: NonNullable<Item["due"]> }) {
   return (
@@ -423,37 +413,57 @@ export function DueChip({ due }: { due: NonNullable<Item["due"]> }) {
   );
 }
 
+const BUTTON =
+  "group relative z-10 -m-2 flex size-10 shrink-0 items-center justify-center rounded-full p-2 text-muted pointer-coarse:-m-2.5 pointer-coarse:size-11 pointer-coarse:p-2.5";
+
 /**
- * The state at a glance, and the one-tap way to mark an item done: an empty circle for open, half filled for in
- * progress, dashed for blocked. Above the row's link, so a tap on it doesn't open the item.
+ * The one-tap way to start an open or blocked item: a circle with a play mark, dashed when the item is blocked, as the
+ * row's one sign that it waits on something. Above the row's link, so a tap on it doesn't open the item.
  */
-function StateCircle({ item, disabled, onPress }: { item: Item; disabled: boolean; onPress: () => void }) {
+function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
   return (
     <button
       type="button"
-      disabled={disabled}
+      onClick={onPress}
+      aria-label={`Start ${item.title}`}
+      title="Start"
+      className={`${BUTTON} hover:text-accent`}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+        <circle
+          cx="12"
+          cy="12"
+          r="9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeDasharray={item.state === "blocked" ? "3 3" : undefined}
+        />
+        <path
+          d="M10 8.5v7l5.5-3.5z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+/** The one-tap way to mark an in-progress item done: a half-filled circle, with a check showing on hover. */
+function DoneCircle({ item, onPress }: { item: Item; onPress: () => void }) {
+  return (
+    <button
+      type="button"
       onClick={onPress}
       aria-label={`Mark ${item.title} done`}
       title="Mark done"
-      className="group relative z-10 -m-2 flex size-10 shrink-0 items-center justify-center rounded-full p-2 text-muted hover:text-done disabled:cursor-default disabled:opacity-50"
+      className={`${BUTTON} hover:text-done`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
-        {item.state === "in_progress" ? (
-          <>
-            <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" strokeWidth="2" />
-            <path d="M12 3a9 9 0 0 1 0 18z" fill="var(--accent)" />
-          </>
-        ) : (
-          <circle
-            cx="12"
-            cy="12"
-            r="9"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray={item.state === "blocked" ? "3 3" : undefined}
-          />
-        )}
+        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" strokeWidth="2" />
+        <path d="M12 3a9 9 0 0 1 0 18z" fill="var(--accent)" />
         <path
           d="m8 12.5 2.5 2.5 5.5-5.5"
           fill="none"
@@ -461,9 +471,57 @@ function StateCircle({ item, disabled, onPress }: { item: Item; disabled: boolea
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="opacity-0 group-enabled:group-hover:opacity-100"
+          className="opacity-0 group-hover:opacity-100"
         />
       </svg>
     </button>
   );
+}
+
+/**
+ * A small circle with a check beside the play button, for marking an open or blocked item done with a mouse. Its
+ * slot is hidden until the play button is hovered or focused, and it can be tabbed to either way.
+ */
+function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-label={`Mark ${item.title} done`}
+      title="Mark done"
+      className="relative z-10 flex size-5 items-center justify-center rounded-full text-done hover:bg-done/15"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path
+          d="m8 12.5 2.5 2.5 5.5-5.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+/** The key of the item `s` or play just started, so its row gets the focus back once it has moved (see below). */
+let refocusAfterStart: string | undefined;
+
+/**
+ * Gives the focus back to the row `s` or play started. Starting moves the row to another section, so it remounts and the
+ * focus falls to the page. Call it with the list, so it runs after the render that shows the item in progress.
+ */
+export function useRefocusStartedRow(list: RankedList | undefined) {
+  useEffect(() => {
+    const key = refocusAfterStart;
+    if (key === undefined || !list) return;
+    const entry = [...list.pinned, ...list.ranked, ...list.blocked].find((e) => e.item.key === key);
+    if (entry?.item.state !== "in_progress") return;
+    refocusAfterStart = undefined;
+    // The row that had the focus may still be on screen for its exit animation: the new one takes over from it.
+    const focused = document.activeElement;
+    if (focused === document.body || focused?.getAttribute(ROW_LINK) === key) focusRowOf(key);
+  }, [list]);
 }
