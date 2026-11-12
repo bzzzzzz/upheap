@@ -32,8 +32,8 @@ export function blockerGoneWord(gone: BlockerGone) {
 }
 
 /**
- * A blocked item whose blocker was closed as won't do, or moved to another heap: it stays blocked and waits for the
- * person to move it on (ux.md, Waiting for me). Shown on the Waiting for me page and in the item's Waits for you,
+ * A blocked item whose blocker was closed as won't do, moved to another heap, or closed as done without freeing it:
+ * it stays blocked and waits for the person to move it on (ux.md, Waiting for me). Shown on the Waiting for me page and in the item's Waits for you,
  * with "Waits for “<blocker>”, closed as won't do", the blocker's title opening it, and Unblock, which moves the item
  * to open at once. `open`, on the page, adds Open, which opens the item to close it or pick another blocker; in the
  * item it would open what is already open. `line` is the row's own first line.

@@ -375,6 +375,38 @@ async fn closing_a_blocker_as_wont_do_makes_what_it_blocks_wait_for_the_person()
 
 #[gtest]
 #[tokio::test]
+async fn a_reminder_to_come_whose_blocker_is_gone_waits_after_the_ranked_rows() -> Result<()> {
+    // Arrange: a reminder for later and a plain item, both blocked by the same item.
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let blocker = titled(&app, &session, &heap, "Pick a host").await?;
+    let reminder = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Renew the domain", "kind": "reminder", "due": { "date": "2099-01-20", "firm": false } }),
+        )
+        .await?;
+    let reminder = block(&app, &session, &reminder, &blocker).await?;
+    let item = titled(&app, &session, &heap, "Ship the feed").await?;
+    let item = block(&app, &session, &item, &blocker).await?;
+
+    // Act
+    let closed = patch(&app, &session, &blocker, json!({ "state": "wont_do" })).await?;
+    let waiting = waiting(&app, &session).await?;
+
+    // Assert: both wait, the reminder after the ranked item, and both count.
+    expect_that!(closed.status, eq(StatusCode::OK));
+    expect_that!(waiting["count"], eq(&json!(2)));
+    expect_that!(waiting["rows"][0]["kind"], eq(&json!("blocker_gone")));
+    expect_that!(waiting["rows"][0]["item"]["id"], eq(&json!(id(&item)?)));
+    expect_that!(waiting["rows"][1]["kind"], eq(&json!("blocker_gone")));
+    expect_that!(waiting["rows"][1]["item"]["id"], eq(&json!(id(&reminder)?)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn unblocking_an_item_whose_blocker_is_gone_stops_it_waiting() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

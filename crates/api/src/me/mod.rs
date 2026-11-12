@@ -161,8 +161,8 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
 }
 
 /// What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
-/// stuck, and the blocked items whose blocker was closed as won't do or moved to another heap, in the active heaps of
-/// their teams, one row each, most important first. Rows are ordered by the item's
+/// stuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved
+/// to another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
 /// ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
 /// position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
 /// for now.

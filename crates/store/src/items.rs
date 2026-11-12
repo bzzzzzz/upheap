@@ -140,7 +140,7 @@ pub async fn list_blockers(
     Ok(summaries)
 }
 
-/// Every blocked item of `heap_ids` with a blocker picked, oldest first, with its tags and values. With
+/// Every blocked item of `heap_ids` with a blocker picked, oldest first, without its tags and values. With
 /// [`list_blockers`] it finds the items whose blocker is gone ([`Item::blocker_gone`]). A heap blocks tens of items,
 /// so reading them all for Waiting for me and the agents' queue is cheap; a team with thousands would want the
 /// blocker's state in this query instead.
@@ -163,8 +163,6 @@ pub async fn list_blocked_items_with_blocker(
             items.push(to_item(row)?);
         }
     }
-    attach_tags(db, &mut items).await?;
-    attach_values(db, &mut items).await?;
     Ok(items)
 }
 

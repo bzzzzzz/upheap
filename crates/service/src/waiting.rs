@@ -138,8 +138,9 @@ impl Services {
     /// The open questions on open items, the items whose agent turn is stuck, and the blocked items whose blocker is
     /// gone, in the active heaps of the caller's teams, ordered by the score of their item in its own heap, highest
     /// first (every heap weighs the same for now), then by heap (by name), the item's position in its heap, a stuck or
-    /// gone-blocker row before the item's questions, and the question's number. Scores are those the heap's list ranks by right now. A question on a reminder to come has no
-    /// score: its row comes after the ranked ones, by the reminder's date, soonest first.
+    /// gone-blocker row before the item's questions, and the question's number. Scores are those the heap's list
+    /// ranks by right now. A reminder to come has no score: its rows come after the ranked ones, by the reminder's
+    /// date, soonest first.
     ///
     /// Ranking costs one pass over a heap's open items, so only heaps with something waiting are ranked. Any member
     /// may ask; nobody sees a heap outside their teams.
@@ -250,10 +251,29 @@ impl Services {
                 });
             }
             for (blocked, blocker, how) in mine_gone {
-                // An item changed since it was read is taken as the ranking read it, which is later.
+                // An item changed since it was read is taken as the ranking read it, which is later: it waits only if
+                // it is still blocked by the same gone blocker.
+                let still_gone = |item: &Item| item.blocker_gone(&blocker).is_some();
+                // A reminder to come has no rank, but it waits all the same, after the ranked rows like its questions.
+                if let Some(item) = to_come_by_id.get(&blocked.id) {
+                    if still_gone(item) {
+                        candidates.push(Candidate {
+                            heap_index,
+                            score: 0.0,
+                            position: 0,
+                            to_come_until: item.arrives_at,
+                            item: (*item).clone(),
+                            subject: CandidateSubject::BlockerGone(blocker, how),
+                        });
+                    }
+                    continue;
+                }
                 let (Some(item), Some(&(score, position))) = (by_id.get(&blocked.id), ranks.get(&blocked.id)) else {
                     continue;
                 };
+                if !still_gone(item) {
+                    continue;
+                }
                 candidates.push(Candidate {
                     heap_index,
                     score,

@@ -289,8 +289,8 @@ export interface paths {
         };
         /**
          * What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
-         *     stuck, and the blocked items whose blocker was closed as won't do or moved to another heap, in the active heaps of
-         *     their teams, one row each, most important first. Rows are ordered by the item's
+         *     stuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved
+         *     to another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
          *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
          *     position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
          *     for now.
@@ -628,8 +628,9 @@ export interface paths {
          *     `version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.
          *     Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
          *     the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The
-         *     items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an item to the heap it is in succeeds and changes nothing. The response
-         *     is the item in its new heap, so its old path stops working.
+         *     items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an
+         *     item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path
+         *     stops working.
          */
         post: operations["move_item"];
         delete?: never;

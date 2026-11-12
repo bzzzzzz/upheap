@@ -516,7 +516,8 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
    someone else took the turn back or retried it first, the row leaves and a note at the top says "Someone else
    changed this meanwhile." A reply draft in another row survives a stuck row leaving. On a phone both buttons are
    44 px, sharing a row.
-8. **A blocker row** is a blocked item whose blocker was closed as won't do, or moved to another heap
+8. **A blocker row** is a blocked item whose blocker was closed as won't do, moved to another heap, or closed as done
+   without freeing it (it was blocked before that rule, or its blocker had moved away)
    ([architecture.md](architecture.md#cycle-detection-and-locking) §3): it stays blocked, hidden from the list, until
    the person moves it on. It is ranked and counted as a stuck row is. Its head line reads "Blocker closed · <item> ·
    <heap> · <team>", or "Blocker moved · …" after a move; under it "Waits for “<blocker>”, closed as won't do" (or
