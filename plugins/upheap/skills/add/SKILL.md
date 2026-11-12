@@ -129,6 +129,10 @@ A person who asks for a task usually has a definition in mind. Get it written do
 4. Add steps only when the parts are known, from the person or plainly from the context: `upheap step add` for each.
    Don't invent a breakdown to have one.
 
+When the guide shows `--context-file` and `--step` on `upheap item add`, add the task in one call with its context
+and the steps known so far (`--task --context-file <file> --step "..." --step "..."`), instead of steps 1, 2 and 4
+as separate calls. Otherwise do it as above.
+
 ### Asking
 
 Ask in the conversation, briefly, the fewest questions that settle it, and update the item with each answer. If the

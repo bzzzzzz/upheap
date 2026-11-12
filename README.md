@@ -137,6 +137,7 @@ cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item add "Order the new certificate" --task -q    # added as a task; -q prints its key
+cargo run -p cli -- item add "Rotate certs" --task --context-file context.md --step "Order it" --step "Install it"
 cargo run -p cli -- item add "Renew the domain" --reminder 2027-03-12   # out of the list until that date
 cargo run -p cli -- item list --reminders shown                  # adds the reminders to come, in a group of their own
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
