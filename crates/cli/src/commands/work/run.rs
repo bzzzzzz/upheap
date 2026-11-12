@@ -1,4 +1,4 @@
-//! `upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>]`: the agent loop.
+//! `upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>] [--allow <RULE>]...`: the agent loop.
 //!
 //! It claims the next item of the queue, starts the agent tool on it with a brief, keeps the claim alive, records
 //! how the run ended and what it cost, and waits when there is nothing to do. The server decides how a run ended
@@ -22,7 +22,7 @@ use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
-use crate::agent::{AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
+use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
@@ -58,8 +58,55 @@ pub struct RunArgs {
     /// them after Upheap's own rules and before the heap's context. Read once, when the loop starts
     #[arg(long, value_name = "FILE")]
     pub instructions: Option<PathBuf>,
+    /// An extra allow rule for the agent tool in every run, in the tool's own syntax, such as
+    /// mcp__claude_ai_Claude_Docs or Bash(npm:*). Repeat it for several
+    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    pub allow: Vec<String>,
+    /// An extra allow rule only in runs that prepare an item (to with context or defined). Repeat it for several
+    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    pub allow_prepare: Vec<String>,
+    /// An extra allow rule only in runs that do a task (to done). Repeat it for several
+    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    pub allow_do: Vec<String>,
     #[command(flatten)]
     pub shared: SharedArgs,
+}
+
+/// Checks one allow rule as clap reads it. Claude's `--allowedTools` splits a value on commas and spaces, so a rule
+/// holding either would become several rules, or none. Each rule gets its own flag instead. The rule is not trimmed.
+/// A rule starting with `-` would reach `claude` as a flag of its own, not as a rule, so it is refused too.
+fn parse_allow_rule(raw: &str) -> Result<String, String> {
+    if raw.is_empty() {
+        Err("an allow rule can't be empty".to_owned())
+    } else if raw.starts_with('-') {
+        Err("an allow rule can't start with -".to_owned())
+    } else if raw.contains(',') || raw.contains(char::is_whitespace) {
+        Err("an allow rule can't hold a comma or whitespace: give each rule its own flag".to_owned())
+    } else {
+        Ok(raw.to_owned())
+    }
+}
+
+/// The runner's extra allow rules, from `--allow`, `--allow-prepare` and `--allow-do`.
+#[derive(Debug, Default)]
+struct AllowRules {
+    /// For every run.
+    every: Vec<String>,
+    /// For runs that prepare an item only.
+    prepare: Vec<String>,
+    /// For runs that do a task only.
+    doing: Vec<String>,
+}
+
+impl AllowRules {
+    /// The rules for a run with `access`: those for every run, then those for its access, each in the order given.
+    fn for_access(&self, access: Access) -> Vec<String> {
+        let own = match access {
+            Access::Prepare => &self.prepare,
+            Access::Do => &self.doing,
+        };
+        self.every.iter().chain(own).cloned().collect()
+    }
 }
 
 /// Works the queue until stopped: claims an item, starts the tool on it, and records how the run ended. Prints a line
@@ -112,6 +159,11 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         workers: args.workers,
         root,
         instructions,
+        allow: AllowRules {
+            every: args.allow,
+            prepare: args.allow_prepare,
+            doing: args.allow_do,
+        },
         tools,
         idle_wait,
         heartbeat_every,
@@ -270,6 +322,8 @@ struct Shared<'a> {
     root: Option<PathBuf>,
     /// The runner's own instructions, for every run's brief.
     instructions: Option<String>,
+    /// The runner's extra allow rules, which each run's tool is started with.
+    allow: AllowRules,
     tools: Box<dyn AgentTools>,
     idle_wait: Duration,
     heartbeat_every: Duration,
@@ -509,6 +563,7 @@ impl Shared<'_> {
                 ("UPHEAP_HEAP".to_owned(), handle.to_string()),
             ],
             dir: self.root.as_ref().map(|root| root.join(directory_name(&run))),
+            allow: self.allow.for_access(goal.access()),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
         let driven = self.drive_tool(&run, start).await;

@@ -1135,6 +1135,176 @@ async fn with_instructions_every_run_is_told_them_before_the_heap() -> Result<()
     Ok(())
 }
 
+/// `--allow A --allow B --allow-prepare P --allow-do D`.
+const ALLOW_FLAGS: &[&str] = &[
+    "--allow",
+    "A",
+    "--allow",
+    "B",
+    "--allow-prepare",
+    "P",
+    "--allow-do",
+    "D",
+];
+
+#[gtest]
+#[tokio::test]
+async fn allow_rules_reach_a_prepare_run_with_allow_prepare_but_not_allow_do() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(&[ONCE, ALLOW_FLAGS].concat(), &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(starts[0].access, eq(Access::Prepare));
+    expect_that!(
+        starts[0].allow,
+        eq(&vec!["A".to_owned(), "B".to_owned(), "P".to_owned()])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn allow_rules_reach_a_do_run_with_allow_do_but_not_allow_prepare() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let _task = defined_task_with_go_ahead(&server, &ada).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(&[ONCE, ALLOW_FLAGS].concat(), &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(starts[0].access, eq(Access::Do));
+    expect_that!(
+        starts[0].allow,
+        eq(&vec!["A".to_owned(), "B".to_owned(), "D".to_owned()])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn allow_rules_reach_runs_with_a_root_too() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+    let (root_args, _root) = workers_in_a_root(1)?;
+    let args = with_args(
+        ONCE,
+        &[root_args, ALLOW_FLAGS.iter().map(|arg| (*arg).to_owned()).collect()].concat(),
+    );
+
+    // Act
+    let outcome = run_work_bounded(&cli, &args, &tool).await?;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(starts[0].dir, some(anything()));
+    expect_that!(
+        starts[0].allow,
+        eq(&vec!["A".to_owned(), "B".to_owned(), "P".to_owned()])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn without_allow_flags_a_run_gets_no_extra_rules() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(starts[0].allow, is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_bad_allow_rule_is_refused_before_any_request() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+    let cases = [
+        ("", "an allow rule can't be empty"),
+        (
+            "Read,Edit",
+            "an allow rule can't hold a comma or whitespace: give each rule its own flag",
+        ),
+        (
+            "Bash(npm run:*)",
+            "an allow rule can't hold a comma or whitespace: give each rule its own flag",
+        ),
+        (
+            "Read\tEdit",
+            "an allow rule can't hold a comma or whitespace: give each rule its own flag",
+        ),
+    ];
+
+    for flag in ["--allow", "--allow-prepare", "--allow-do"] {
+        for (rule, message) in cases {
+            // Act
+            let outcome = cli.run_work(&[ONCE, &[flag, rule]].concat(), &tool).await;
+            let next = cli.run(&["work", "next", "--quiet"]).await;
+
+            // Assert
+            expect_that!(outcome.exited(2), eq(true), "{flag} {rule:?}");
+            expect_that!(outcome.stderr, contains_substring(message), "{flag} {rule:?}");
+            expect_that!(tool.starts().len(), eq(0), "{flag} {rule:?}");
+            expect_that!(next.stdout.trim().is_empty(), eq(false), "{flag} {rule:?}");
+        }
+        // A rule that would reach claude as a flag of its own.
+        let dash = format!("{flag}=--permission-mode");
+        let outcome = cli.run_work(&[ONCE, &[dash.as_str()]].concat(), &tool).await;
+        expect_that!(outcome.exited(2), eq(true), "{dash}");
+        expect_that!(
+            outcome.stderr,
+            contains_substring("an allow rule can't start with -"),
+            "{dash}"
+        );
+        expect_that!(tool.starts().len(), eq(0), "{dash}");
+        let next = cli.run(&["work", "next", "--quiet"]).await;
+        expect_that!(next.stdout.trim().is_empty(), eq(false), "{dash}");
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_allow_flags_are_in_the_help() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+
+    // Act
+    let help = cli.run(&["work", "run", "--help"]).await;
+
+    // Assert
+    expect_that!(help.stdout, contains_substring("--allow <RULE>"));
+    expect_that!(help.stdout, contains_substring("--allow-prepare <RULE>"));
+    expect_that!(help.stdout, contains_substring("--allow-do <RULE>"));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn instructions_that_cannot_be_read_are_exit_6_and_nothing_is_claimed() -> Result<()> {

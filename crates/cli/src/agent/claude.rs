@@ -31,7 +31,11 @@ pub(super) enum Exit {
 /// In a directory made for the run (`own_directory`), both get [`IN_OWN_DIRECTORY`] too: any command, edit and read.
 /// The rules go on the command line because Claude ignores the allow rules of a settings file in a directory nobody
 /// has trusted, which a new directory never is.
-pub(super) fn arguments(access: Access, own_directory: bool) -> Vec<&'static str> {
+///
+/// The person's own `allow` rules come right after all of these, as more values of `--allowedTools`, in the order
+/// given. `upheap auth` is denied last, in every run: a rule of the person's (or their own settings) may allow `Bash`
+/// wholesale, and Claude's deny wins over any allow.
+pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -> Vec<&str> {
     let mut arguments = vec![
         "-p",
         "--output-format",
@@ -52,14 +56,15 @@ pub(super) fn arguments(access: Access, own_directory: bool) -> Vec<&'static str
     }
     if own_directory {
         arguments.extend(IN_OWN_DIRECTORY);
-        arguments.extend(["--disallowedTools", "Bash(upheap auth:*)"]);
     }
+    arguments.extend(allow.iter().map(String::as_str));
+    arguments.extend(["--disallowedTools", "Bash(upheap auth:*)"]);
     arguments
 }
 
 /// What a run may do in a directory made for it, as allow rules: nearly everything. A run there has to clone and
-/// build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused, for the
-/// reason [`UPHEAP_COMMANDS`] leaves it out.
+/// build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused by the deny
+/// every run gets, for the reason [`UPHEAP_COMMANDS`] leaves it out.
 const IN_OWN_DIRECTORY: [&str; 6] = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
 
 /// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached. Not all
@@ -312,7 +317,7 @@ impl Drop for Running {
 /// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
 pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
-    command.args(arguments(start.access, start.dir.is_some()));
+    command.args(arguments(start.access, start.dir.is_some(), &start.allow));
     if let Some(dir) = start.dir {
         let made = dir.clone();
         let set_up = tokio::task::spawn_blocking(move || set_up_directory(&made)).await;
@@ -396,7 +401,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_preparing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Prepare, false),
+            arguments(Access::Prepare, false, &[]),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -420,6 +425,8 @@ mod tests {
                 "Glob(./**)",
                 "WebFetch",
                 "WebSearch",
+                "--disallowedTools",
+                "Bash(upheap auth:*)",
             ])
         );
     }
@@ -427,7 +434,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_doing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Do, false),
+            arguments(Access::Do, false, &[]),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -446,29 +453,53 @@ mod tests {
                 "Bash(upheap heap list:*)",
                 "Bash(upheap tag list:*)",
                 "Bash(upheap parameter list:*)",
+                "--disallowedTools",
+                "Bash(upheap auth:*)",
             ])
         );
     }
 
+    const AUTH_DENY: [&str; 2] = ["--disallowedTools", "Bash(upheap auth:*)"];
+
+    /// The arguments for `access` outside its own directory and with no rules of the person's, up to the deny.
+    fn narrow(access: Access) -> Vec<&'static str> {
+        let mut narrow = arguments(access, false, &[]);
+        narrow.truncate(narrow.len() - AUTH_DENY.len());
+        narrow
+    }
+
     #[gtest]
     fn in_its_own_directory_either_access_may_do_anything_but_upheap_auth() {
-        let wide = [
-            "Bash",
-            "Read",
-            "Edit",
-            "Write",
-            "WebFetch",
-            "WebSearch",
-            "--disallowedTools",
-            "Bash(upheap auth:*)",
-        ];
+        let wide = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
         for access in [Access::Prepare, Access::Do] {
-            let narrow = arguments(access, false);
-            let arguments = arguments(access, true);
+            let narrow = narrow(access);
+            let expected = [&narrow[..], &wide, &AUTH_DENY].concat();
 
             // The wide rules follow the narrow ones, so they are still values of `--allowedTools`.
-            expect_that!(arguments[..narrow.len()], eq(&narrow[..]));
-            expect_that!(arguments[narrow.len()..], eq(&wide[..]));
+            expect_that!(arguments(access, true, &[]), eq(&expected));
+        }
+    }
+
+    #[gtest]
+    fn extra_allow_rules_follow_the_fixed_ones_and_upheap_auth_is_still_denied_after_them() {
+        let extra = ["mcp__x".to_owned(), "Bash".to_owned()];
+        for access in [Access::Prepare, Access::Do] {
+            let narrow = narrow(access);
+            let expected = [&narrow[..], &["mcp__x", "Bash"], &AUTH_DENY].concat();
+
+            expect_that!(arguments(access, false, &extra), eq(&expected));
+        }
+    }
+
+    #[gtest]
+    fn in_its_own_directory_extra_rules_come_after_the_wide_ones_and_before_the_auth_deny() {
+        let extra = ["mcp__x".to_owned(), "Bash(npm:*)".to_owned()];
+        let wide = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
+        for access in [Access::Prepare, Access::Do] {
+            let narrow = narrow(access);
+            let expected = [&narrow[..], &wide, &["mcp__x", "Bash(npm:*)"], &AUTH_DENY].concat();
+
+            expect_that!(arguments(access, true, &extra), eq(&expected));
         }
     }
 
