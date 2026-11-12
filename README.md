@@ -150,6 +150,7 @@ cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
+cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file
 cargo run -p cli -- work next                                    # what an agent would work on next, without taking it
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
 cargo run -p cli -- work run --tool claude                       # the agent loop: claim, start claude on the item, record the run, repeat; Ctrl-C stops it

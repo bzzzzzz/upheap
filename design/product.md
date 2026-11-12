@@ -246,7 +246,7 @@ The main view and the answer to "what should I work on?"
 3. The user can configure which non-closed states are pinned, shown, or hidden. Shown blocked items can be mixed in
    with the other items in the current sort order, or listed as a separate group sorted by priority.
 4. Each item shows its biggest score contributors (Priority §9).
-5. The user can instead sort by any single parameter that has an order (for example deadline, effort, impact, or a
+5. The user can instead sort by any single parameter that has an order (for example deadline, need, effort, impact, or a
    custom parameter).
 6. The user can search items by text and filter by state, tag, and parameter values. Filtering preserves the relative
    priority order of matching items.

@@ -47,6 +47,16 @@ pub struct StepName {
     pub number: u32,
 }
 
+/// A question as the user named it: an item and the question's number, as `k3x9a.q2`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuestionName {
+    /// The item part as typed, which messages name the item by.
+    pub item_typed: String,
+    pub item: ItemName,
+    /// The question's number: a positive integer.
+    pub number: u32,
+}
+
 /// A due time as the user typed it for `--due`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DueWhen {
@@ -64,6 +74,18 @@ pub enum LookupError {
     MalformedItem { name: String },
     #[error("`{name}` isn't a step: give its item and number, such as k3x9a.3")]
     MalformedStep { name: String },
+    #[error("`{name}` isn't a question: give its item and number, such as k3x9a.q2")]
+    MalformedQuestion { name: String },
+    #[error("{question} has no choice `{typed}`; its choices: {}", known.join(", "))]
+    UnknownChoice {
+        question: String,
+        typed: String,
+        known: Vec<String>,
+    },
+    #[error("{question} takes a pick: give --pick with one of: {}", known.join(", "))]
+    NoPickGiven { question: String, known: Vec<String> },
+    #[error("{question} takes a free-text reply: give --comment, not --pick")]
+    NoChoicesToPick { question: String },
     #[error("`{typed}` isn't a due time: give a date, YYYY-MM-DD, or one of: {}", known.join(", "))]
     UnknownDueChoice { typed: String, known: Vec<String> },
     #[error("you have no heap `{name}`; `upheap heap list` lists yours")]
@@ -203,26 +225,87 @@ impl ItemName {
     }
 }
 
+/// Reads `<item><separator><number>`: `<item>` is anything [`ItemName::parse`] takes and `<number>` a positive
+/// integer. It splits at the last separator after the last `/`, since a link's host and path may hold dots before
+/// the key, and a key never does. Returns the item as typed, the item and the number; `None` when malformed.
+fn split_numbered(raw: &str, separator: &str) -> Option<(String, ItemName, u32)> {
+    let tail_start = raw.rfind('/').map_or(0, |slash| slash + 1);
+    let (key, number) = raw[tail_start..].rsplit_once(separator)?;
+    let number = StepNumber::parse(number)
+        .map(StepNumber::get)
+        .filter(|_| !key.contains('.'))?;
+    let item_typed = format!("{}{key}", &raw[..tail_start]);
+    let item = ItemName::parse(&item_typed).ok()?;
+    Some((item_typed, item, number))
+}
+
 impl StepName {
-    /// Reads `<item>.<number>`, where `<item>` is anything [`ItemName::parse`] takes and `<number>` a positive
-    /// integer. It splits at the last `.` after the last `/`, since a link's host and path may hold dots before the
-    /// key, and a key never does.
+    /// Reads `<item>.<number>`; see [`split_numbered`].
     pub fn parse(raw: &str) -> Result<Self, LookupError> {
-        let malformed = || LookupError::MalformedStep { name: raw.to_owned() };
-        let tail_start = raw.rfind('/').map_or(0, |slash| slash + 1);
-        let (key, number) = raw[tail_start..].rsplit_once('.').ok_or_else(malformed)?;
-        let number = StepNumber::parse(number)
-            .map(StepNumber::get)
-            .filter(|_| !key.contains('.'))
-            .ok_or_else(malformed)?;
-        let item_typed = format!("{}{key}", &raw[..tail_start]);
-        let item = ItemName::parse(&item_typed).map_err(|_| malformed())?;
+        let (item_typed, item, number) =
+            split_numbered(raw, ".").ok_or_else(|| LookupError::MalformedStep { name: raw.to_owned() })?;
         Ok(Self {
             item_typed,
             item,
             number,
         })
     }
+}
+
+impl QuestionName {
+    /// Reads `<item>.q<number>`; see [`split_numbered`].
+    pub fn parse(raw: &str) -> Result<Self, LookupError> {
+        let (item_typed, item, number) =
+            split_numbered(raw, ".q").ok_or_else(|| LookupError::MalformedQuestion { name: raw.to_owned() })?;
+        Ok(Self {
+            item_typed,
+            item,
+            number,
+        })
+    }
+}
+
+/// The 0-based indices into `choices` of what `typed` picks, for `question` (named in errors, as `k3x9a.q2`). Each
+/// is a choice's label ignoring case, trimmed, or else a 1-based number; a label wins over a number. A choice picked
+/// twice counts once, at its first place. The server owns whether one pick or many are allowed.
+pub fn match_choices(question: &str, typed: &[String], choices: &[String]) -> Result<Vec<u32>, LookupError> {
+    match (choices.is_empty(), typed.is_empty()) {
+        (true, true) => return Ok(Vec::new()),
+        (true, false) => {
+            return Err(LookupError::NoChoicesToPick {
+                question: question.to_owned(),
+            });
+        }
+        (false, true) => {
+            return Err(LookupError::NoPickGiven {
+                question: question.to_owned(),
+                known: choices.to_vec(),
+            });
+        }
+        (false, false) => {}
+    }
+    let mut picked: Vec<u32> = Vec::new();
+    for raw in typed {
+        let wanted = raw.trim().to_lowercase();
+        let by_label = (0u32..)
+            .zip(choices)
+            .find(|(_, choice)| choice.to_lowercase() == wanted)
+            .map(|(index, _)| index);
+        let by_number = wanted
+            .parse::<usize>()
+            .ok()
+            .filter(|number| (1..=choices.len()).contains(number))
+            .and_then(|number| u32::try_from(number - 1).ok());
+        let index = by_label.or(by_number).ok_or_else(|| LookupError::UnknownChoice {
+            question: question.to_owned(),
+            typed: raw.clone(),
+            known: choices.to_vec(),
+        })?;
+        if !picked.contains(&index) {
+            picked.push(index);
+        }
+    }
+    Ok(picked)
 }
 
 impl DueWhen {

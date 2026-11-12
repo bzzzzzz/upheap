@@ -98,6 +98,8 @@ pub enum SortKey {
     Priority,
     /// Soonest due first; items without a due time last.
     Due,
+    /// Most needed first; ties keep priority order.
+    Need,
     /// Smallest effort first; items without an effort last.
     Effort,
     /// Largest impact first; items without an impact last.
@@ -108,7 +110,7 @@ pub enum SortKey {
 
 impl SortKey {
     /// The keys that need no parameter.
-    pub const FIXED: [Self; 4] = [Self::Priority, Self::Due, Self::Effort, Self::Impact];
+    pub const FIXED: [Self; 5] = [Self::Priority, Self::Due, Self::Need, Self::Effort, Self::Impact];
 
     /// Stable code used in storage, audit diffs and the API. Never renamed. A parameter sort also stores the
     /// parameter, see [`Self::parameter`].
@@ -116,6 +118,7 @@ impl SortKey {
         match self {
             Self::Priority => "priority",
             Self::Due => "due",
+            Self::Need => "need",
             Self::Effort => "effort",
             Self::Impact => "impact",
             Self::Parameter(_) => "parameter",
@@ -126,7 +129,7 @@ impl SortKey {
     pub const fn parameter(self) -> Option<ParameterId> {
         match self {
             Self::Parameter(parameter) => Some(parameter),
-            Self::Priority | Self::Due | Self::Effort | Self::Impact => None,
+            Self::Priority | Self::Due | Self::Need | Self::Effort | Self::Impact => None,
         }
     }
 
@@ -285,6 +288,7 @@ fn compare(key: SortKey, parameter: Option<&Parameter>, a: &Item, b: &Item) -> O
     match key {
         SortKey::Priority => Ordering::Equal,
         SortKey::Due => missing_last(a.due.map(|d| d.at), b.due.map(|d| d.at), Ord::cmp),
+        SortKey::Need => b.need.cmp(&a.need),
         SortKey::Effort => missing_last(a.effort, b.effort, Ord::cmp),
         SortKey::Impact => missing_last(a.impact, b.impact, |a, b| b.cmp(a)),
         SortKey::Parameter(_) => {
@@ -531,6 +535,27 @@ mod tests {
         expect_that!(
             sorted(&by(SortKey::Effort), &items),
             elements_are![eq(&3), eq(&1), eq(&4), eq(&2)]
+        );
+    }
+
+    #[gtest]
+    fn sorting_by_need_puts_the_most_needed_first_and_ties_keep_priority_order() {
+        let needing = |n, need| {
+            let mut item = item(n);
+            item.need = need;
+            item
+        };
+        let items = [
+            needing(1, Need::Idea),
+            needing(2, Need::Expected),
+            needing(3, Need::Critical),
+            needing(4, Need::Expected),
+            needing(5, Need::NiceToHave),
+        ];
+
+        expect_that!(
+            sorted(&by(SortKey::Need), &items),
+            elements_are![eq(&3), eq(&2), eq(&4), eq(&5), eq(&1)]
         );
     }
 

@@ -77,10 +77,11 @@ export const withoutViewChanges = (search: ListSearch): ListSearch => ({
 });
 
 /** The sorts that need no parameter. Sorting by a parameter is offered once per parameter. */
-export const SORTS: readonly Exclude<ListSort, "parameter">[] = ["priority", "due", "effort", "impact"];
+export const SORTS: readonly Exclude<ListSort, "parameter">[] = ["priority", "due", "need", "effort", "impact"];
 export const SORT_LABELS: Record<Exclude<ListSort, "parameter">, string> = {
   priority: "Priority",
   due: "Due soonest",
+  need: "Most needed",
   effort: "Smallest effort",
   impact: "Largest impact",
 };
@@ -143,6 +144,12 @@ const ids = (raw: unknown) => joinList([...new Set(splitList(list(raw)))].sort()
 export const splitList = (raw: string | undefined): string[] => (raw ? raw.split(",").filter(Boolean) : []);
 export const joinList = (values: readonly string[]): string | undefined =>
   values.length > 0 ? values.join(",") : undefined;
+
+/** Toggles `value` in a comma-separated list param. */
+export const toggled = (raw: string | undefined, value: string) => {
+  const values = splitList(raw);
+  return joinList(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
+};
 
 /** The API query for a view from [`parseListSearch`]. */
 export function toListQuery(search: ListSearch): ListViewQuery {

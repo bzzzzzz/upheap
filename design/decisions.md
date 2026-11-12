@@ -293,8 +293,8 @@ The Playwright golden paths run at three widths.
 **Context.** The first list put effort, impact, due and state controls in every row. On a phone a row was five lines
 tall, and the list read as a form rather than a ranking.
 
-**Decision.** A row is for reading, ordering and changing state: the state circle, a swipe, and on hover Start and
-⋯. Everything else is edited in the item, which opens over or beside the list.
+**Decision.** A row is for reading, ordering and changing state: the play button or the done circle, a swipe, and
+with a mouse a done button beside play. Everything else is edited in the item, which opens over or beside the list.
 
 **Instead of.** Inline editing of every field in the list, which the requirements first asked for.
 

@@ -45,11 +45,11 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    opens. The admin adds a heap, adds each teammate (who must have an account; invitations come later), and makes a
    second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
    switcher.
-3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one from
-   the item or by swiping its row left; finish it with the state circle, a swipe right, or Done in the item; each
-   change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone. Re-size or re-date in the
-   item and watch it move. Block an item, naming what it waits for; it leaves the list, since blocked items are
-   hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
+3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one with
+   its row's play button, `s`, a swipe left or Start in the item; finish it with its row's circle, a swipe right, or
+   Done in the item; each change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone.
+   Re-size or re-date in the item and watch it move. Block an item, naming what it waits for; it leaves the list,
+   since blocked items are hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
    teammates' changes arrive as the list refetches, and rows animate to their new places.
 4. **Weekly review** (weekly). Closed: reopen what was closed by mistake, within its week, which is also the fix for
    a missed Undo (recovery). Back in the list, close what won't happen as Won't do and re-size the rest. A reload
@@ -163,8 +163,8 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
    list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels;
    the account sits at the bottom.
-2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows,
-   including the effort and impact sizes, at touch sizes (44 px targets).
+2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows at
+   touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
    row switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it.
    Its controls are the phone sheet's (Start, Blocked, Done buttons; S M L XL buttons).
@@ -198,9 +198,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 ## The list
 
-1. A row is one or two lines: a state circle, the position, the title, the due chip and tags, and below them the
-   server's contributors ("Due this week · small effort"). On a wide screen the effort and impact sizes sit at the
-   right edge. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
+1. A row is one or two lines: the main button (point 3), the kind icon, the title, the due chip and tags, and below
+   them the server's contributors ("Due this week · small effort"). A row shows no position and no sizes: the order
+   is the list's, and the contributors say why. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
    line up), and an item with context or defined has a page or a clipboard icon after it. The row shows no words for
    them; a screen reader hears them after the title ("Rotate the certs, task, defined"). A task with steps shows how
    many are ticked, small and muted, after the stage icon (`2/5`), and a screen reader hears ", 2 of 5 steps ticked"
@@ -209,13 +209,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
-3. The state circle marks the item done in one tap. An undo toast follows every state change from the list: bottom
+3. The main button, at the start of the row, acts in one tap. On an open or blocked row it is a play button that
+   starts the item; a blocked row's circle is dashed, and a screen reader hears ", blocked" after the title. With a mouse, hovering or focusing it shows a done button, a small circle with a check, beside it;
+   a touch screen has no done button and swipes instead (point 5). On an in-progress row the main button is a
+   half-filled circle that marks the item done. Without permission to change the state, the buttons are absent and
+   the slot stays empty. An undo toast follows every state change from the list: bottom
    centre, above the tabs on a phone, gone after a few seconds. Changes made in the item save silently and have no
    undo. The toast sits over the open item, so Sent to an agent can offer Undo from inside a phone's sheet; the
    Add dialog and the other sheets stay above it.
-4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `x` marks
-   done; `N` and `/` stay.
-5. On a phone, swiping a row right marks it done; swiping left offers In progress and Blocked.
+4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
+   (an open or blocked item) and `x` marks done; `N` and `/` stay. Tab goes play, done, then the row's link, then
+   its tags and parameter chips.
+5. On a touch screen, swiping a row right marks it done; swiping left offers In progress and Blocked.
 6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
    Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they
    return, "Save as view…" goes in the Filters panel.
@@ -229,7 +234,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    sort other than Priority too ("Filters and sort, 1 on"). The list updates live behind the panel.
 8. Under the toolbar a chip takes off each filter ("Need: Critical") or changed setting ("Blocked: shown"), with
    "6 of 14" while filters are on and Reset all. Reset all keeps the sort and the search.
-9. On hover, an open row adds one quiet button, Start, and ⋯ for the other states. Nothing else sits on the rows.
+9. Rows have no hover actions besides the done button beside play (point 3). The other states (Blocked, Won't do,
+   Back to open) are in the item.
 10. After Done, the toast offers Undo. Only when nothing else in the heap is in progress does it also offer "Start
     next: \<the top open item\>"; if something else is already in progress, the user is carrying on with it, and the
     offer would be noise.
@@ -244,18 +250,27 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     not the agent's. On a phone a small robot mark before the title stands for it. A screen reader hears ", with an
     agent" after the title. Who has an item never changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
-    agent has “Rotate the certs”. Marking it done takes it back from the agent." The circle, a swipe, `x`, the
-    hover Start and ⋯ (Start, Won't do) go through the one ask, which is a dialog on a wide screen and a sheet on a
-    phone, with "Take back and mark done", "Take back and start" or "Take back and close", and Cancel. Cancel
+    agent has “Rotate the certs”. Marking it done takes it back from the agent." The play and done buttons, the
+    in-progress circle, a swipe, `x` and `s` go through the one ask, which is a dialog on a wide screen and a sheet
+    on a phone, with "Take back and mark done" or "Take back and start", and Cancel. Cancel
     puts a swiped row back and gives focus to the row. Blocked and Open don't ask. The change's Undo toast
     restores the state only: the turn stays taken back.
 16. A reminder before its date is not in the ranked list, and nothing counts it. **Reminders to come** in Filters ›
     Show (Hidden by default, a chip when Shown) adds a group of that name under the list, after Blocked: a row has
-    the reminder mark, the title, the date it joins ("12 March") and the tags, and no position, circle or swipe.
+    the reminder mark, the title, the date it joins ("12 March") and the tags, and no state button or swipe.
     They are in date order, soonest first, and the filters narrow them like the rest. A row opens the item, where
     the date can be changed. With no reminders to come the group isn't there. While text is in the search box the
     page asks for them whatever the setting says, so the search finds a reminder with a wrong date; they show in
     that group, and clearing the search puts the list back as it was.
+
+17. A tag in a row filters the list. Clicking it adds the tag to the tag filter (items with any of its tags), and
+    clicking it again takes it off; the usual chip under the toolbar follows. While a tag is in the filter, its chips
+    in every row are outlined in the accent. A parameter chip ("Energy: Low") does the same with its option: it joins
+    the parameter filter, and is outlined in violet while it's on. Tags and parameters on the item, Waiting for me and
+    the closed list are plain text, and so is a chip of an archived parameter.
+18. Sort by offers Priority, Due soonest, Most needed, Smallest effort and Largest impact, then each custom parameter
+    that has an order. Most needed lists Critical first, then Expected, Nice to have and Idea; items of the same
+    need keep priority order.
 
 ## The item
 
@@ -268,7 +283,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
    it says "Joins the list on 12 March"), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
    four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description)
-   and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
+   and the history, collapsed until it's clicked, on every item it opens. On a phone due, tags, parameters and the context are rows of label and value, each opening a
    sheet; the context saves as its sheet closes.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as

@@ -388,6 +388,46 @@ async fn grouped_blocked_items_stay_in_priority_order_whatever_the_sort() -> Res
 
 #[gtest]
 #[tokio::test]
+async fn sorting_by_need_lists_the_most_needed_first() -> Result<()> {
+    // Arrange: added from least to most needed, so the order comes from the sort.
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    add(&app, &session, &heap, json!({ "title": "Idea", "need": "idea" })).await?;
+    add(
+        &app,
+        &session,
+        &heap,
+        json!({ "title": "Nice", "need": "nice_to_have" }),
+    )
+    .await?;
+    add(
+        &app,
+        &session,
+        &heap,
+        json!({ "title": "Critical", "need": "critical" }),
+    )
+    .await?;
+    add(
+        &app,
+        &session,
+        &heap,
+        json!({ "title": "Expected", "need": "expected" }),
+    )
+    .await?;
+
+    // Act
+    let response = list(&app, &session, &heap, "sort=need").await?;
+
+    // Assert
+    expect_that!(
+        titles(&response.body["ranked"]),
+        elements_are![eq("Critical"), eq("Expected"), eq("Nice"), eq("Idea")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn sorting_by_effort_and_by_impact_puts_unset_values_last() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
