@@ -74,6 +74,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::QuestionAsked
         | AuditAction::QuestionAnswered
         | AuditAction::QuestionWithdrawn
+        | AuditAction::CommentAdded
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
         | AuditAction::TurnReached
@@ -115,6 +116,8 @@ pub enum ItemAction {
     AddStep,
     /// Ask a question or make a request on an open item.
     AskQuestion,
+    /// Add a comment, on an open or a closed item.
+    Comment,
     /// Send an open item that no agent has to an agent.
     SendToAgent,
     /// Take an open item back from the agent that has it.
@@ -143,6 +146,7 @@ pub fn allowed_item_actions(
             Kind::Task => actions.push(ItemAction::AddStep),
         }
         actions.push(ItemAction::AskQuestion);
+        actions.push(ItemAction::Comment);
         if has_open_turn && stuck {
             actions.push(ItemAction::Retry);
         }
@@ -154,9 +158,9 @@ pub fn allowed_item_actions(
         return actions;
     }
     if item.can_reopen(now) {
-        return vec![ItemAction::Reopen];
+        return vec![ItemAction::Reopen, ItemAction::Comment];
     }
-    Vec::new()
+    vec![ItemAction::Comment]
 }
 
 /// The stages `role` may set on `item` in `heap` now: none unless they may edit it.
@@ -849,6 +853,42 @@ mod tests {
             reply(&item(Kind::Task, false), &heap(true), QuestionState::Open),
             is_empty()
         );
+    }
+
+    #[gtest]
+    fn a_comment_is_added_on_open_and_closed_items_but_not_in_an_archived_heap() {
+        let now = Timestamp::EPOCH;
+        let actions = |item: &Item, heap: &Heap| allowed_item_actions(item, heap, Role::Member, false, false, now);
+
+        expect_that!(
+            actions(&item(Kind::Note, false), &heap(false)),
+            contains(eq(&ItemAction::Comment))
+        );
+        expect_that!(
+            actions(&item(Kind::Task, false), &heap(false)),
+            contains(eq(&ItemAction::Comment))
+        );
+        expect_that!(
+            actions(&item(Kind::Reminder, false), &heap(false)),
+            contains(eq(&ItemAction::Comment))
+        );
+        expect_that!(
+            actions(&item(Kind::Task, true), &heap(false)),
+            elements_are![eq(&ItemAction::Reopen), eq(&ItemAction::Comment)]
+        );
+        let long_closed = allowed_item_actions(
+            &item(Kind::Task, true),
+            &heap(false),
+            Role::Member,
+            false,
+            false,
+            Timestamp::EPOCH
+                .checked_add(crate::time::Duration::from_days(30))
+                .expect("in range"),
+        );
+        expect_that!(long_closed, elements_are![eq(&ItemAction::Comment)]);
+        expect_that!(actions(&item(Kind::Task, false), &heap(true)), is_empty());
+        expect_that!(actions(&item(Kind::Task, true), &heap(true)), is_empty());
     }
 
     #[gtest]

@@ -3,6 +3,7 @@
 //! The types themselves are in `api_types`, with their conversions from domain types; these need `service`, which
 //! that crate doesn't depend on, or the request's time and timezone.
 
+use api_types::comments::CommentDto;
 use api_types::common::{
     ContributorDto, DueDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto, ItemParameterDto, ItemRefDto,
     ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
@@ -13,7 +14,7 @@ use domain::due::{describe_ago, describe_date, describe_due, describe_since, gro
 use domain::item::Kind;
 use domain::turn::goal_for;
 use jiff::tz::TimeZone;
-use service::items::{ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
+use service::items::{CommentView, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
 use utoipa::IntoParams;
 
 fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
@@ -88,6 +89,12 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .map(|question| to_question_dto(question, as_of, tz))
                 .collect()
         }),
+        comments: view.comments.map(|comments| {
+            comments
+                .into_iter()
+                .map(|comment| to_comment_dto(comment, as_of, tz))
+                .collect()
+        }),
         waits_for_you: view.waits_for_you,
         turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
         next_goal,
@@ -135,6 +142,17 @@ pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZon
         withdrawn_by: view.withdrawn_by.as_ref().map(UserRefDto::from),
         version: question.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(Into::into).collect(),
+    }
+}
+
+pub(crate) fn to_comment_dto(view: CommentView, as_of: Timestamp, tz: &TimeZone) -> CommentDto {
+    let comment = view.comment;
+    CommentDto {
+        number: comment.number.get(),
+        body: comment.body.as_str().to_owned(),
+        created_by: view.created_by.as_ref().map(UserRefDto::from),
+        created_at: comment.created_at.as_millis(),
+        created_label: describe_since(comment.created_at, as_of, tz),
     }
 }
 

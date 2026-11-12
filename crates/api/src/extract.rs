@@ -39,6 +39,7 @@ const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/steps"),
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}/steps/{step}"),
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/questions"),
+    (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/comments"),
     (Method::POST, "/work/runs/{run}/heartbeat"),
     (Method::POST, "/work/runs/{run}/reached"),
     (Method::POST, "/work/runs/{run}/finish"),

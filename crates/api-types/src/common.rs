@@ -19,6 +19,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::comments::CommentDto;
 use crate::turns::{GoalDto, TurnDto};
 
 /// Effort or impact.
@@ -252,6 +253,8 @@ pub enum ItemActionDto {
     AddStep,
     /// Ask a question or make a request on the item. Offered for an open item the caller may edit.
     AskQuestion,
+    /// Add a comment to the item, on `POST …/comments`. Offered for an open or a closed item the caller may edit.
+    Comment,
     /// Send the item to an agent, on `POST …/turn`. Offered for an open note or task the caller may edit that no
     /// agent has; a reminder must become a task first.
     SendToAgent,
@@ -273,6 +276,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::MakeTask => Self::MakeTask,
             ItemAction::AddStep => Self::AddStep,
             ItemAction::AskQuestion => Self::AskQuestion,
+            ItemAction::Comment => Self::Comment,
             ItemAction::SendToAgent => Self::SendToAgent,
             ItemAction::TakeBack => Self::TakeBack,
             ItemAction::Retry => Self::Retry,
@@ -743,6 +747,9 @@ pub struct ItemDto {
     /// The item's questions and requests in number order, answered ones included. `null` in the ranked list and the
     /// closed list: read the item for its questions.
     pub questions: Option<Vec<QuestionDto>>,
+    /// The item's comments in number order, oldest first. `null` in the ranked list and the closed list: read the
+    /// item for its comments.
+    pub comments: Option<Vec<CommentDto>>,
     /// Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the
     /// caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
     /// and in an archived heap.

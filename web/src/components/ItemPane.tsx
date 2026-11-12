@@ -13,6 +13,7 @@ import { ItemContext } from "./ItemContext";
 import { ItemFieldList } from "./ItemFieldList";
 import { itemProblem } from "./itemProblems";
 import { ItemActions } from "./ItemMore";
+import { ItemComments } from "./ItemComments";
 import { ItemQuestions, useItemWaits, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
@@ -344,6 +345,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       <ContextDraft.Provider value={setFlushDraft}>
         <ItemContext item={item} canEdit={canEdit} onSave={saveContext} />
       </ContextDraft.Provider>
+
+      <ItemComments heapRef={heapRef} item={item} />
 
       <ItemSteps heapRef={heapRef} item={item} />
 

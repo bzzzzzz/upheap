@@ -277,7 +277,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it,
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens to read, in this order: the title with the main state button and ⋯ beside it (point 6), a status line, Waits for
-   you when something does (point 12), the fields (point 16), the context (point 17), a task's Steps (point 11),
+   you when something does (point 12), the fields (point 16), the context (point 17), the comments (point 18), a task's Steps (point 11),
    Questions (points 13 and 14) and History, collapsed until it's clicked, on every item it opens. On a phone the
    main button and ⋯ sit in a bar at the bottom of the sheet instead, the main one wider. The **status line** is one
    quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
@@ -398,6 +398,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     save it; either way a toast says the context for that item wasn't saved, and why. When the item can no longer be edited (closed
     elsewhere, an archived heap, a changed role) the draft stays as read-only text that can be selected, with "This item
     can't be edited any more; your text wasn't saved." and a Close button.
+
+18. **Comments n**, under the context at every width and always open (not a disclosure, not a sheet row), before
+    the Steps, lists the item's comments oldest first with a thin rule between them. Each is a quiet
+    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it as plain
+    text with its line breaks kept; a comment is never edited or deleted, so a row has no controls. The heading is
+    "Comments 3", or just "Comments" when there are none. Under the list, where the server offers `comment` (also on
+    a closed item), is the field "Add a comment" that grows with its text, and a Comment button, off until the field
+    has text and while it is sending; on a phone the button spans the width and is 44 px, on wider screens it is at
+    the right. Nothing is optimistic: the comment shows from the server's answer, the field clears, the focus stays
+    in it and a polite live region says "Comment added". If it fails, the field keeps its text and the reason shows
+    under it. What is typed lives apart from the item, so another edit saving or a refetch doesn't touch it. Where
+    `comment` isn't offered (an archived heap) the comments read with no field, and with none the section is absent.
 
 ## Adding an item
 

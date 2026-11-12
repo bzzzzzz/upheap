@@ -6,6 +6,7 @@
 
 mod audit;
 mod auth;
+mod comments;
 mod dto;
 mod due_choices;
 mod error;
@@ -82,7 +83,7 @@ pub struct CookieSettings {
         (name = "views", description = "A heap's saved views"),
         (name = "parameters", description = "A heap's custom parameters and their options"),
         (name = "audit", description = "The history of a heap or a team"),
-        (name = "work", description = "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps and ask questions, on the run's own item only. Every other write is refused, with a code that starts with `run_`."),
+        (name = "work", description = "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps, ask questions and add comments, on the run's own item only. Every other write is refused, with a code that starts with `run_`."),
     )
 )]
 struct ApiDoc;
@@ -154,6 +155,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(due_choices::routes())
         .merge(items::routes())
         .merge(questions::routes())
+        .merge(comments::routes())
         .merge(steps::routes())
         .merge(tags::routes())
         .merge(teams::routes())

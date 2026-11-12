@@ -359,6 +359,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
         (AuditAction::QuestionAnswered, _) => ("answered a question on", true),
         (AuditAction::QuestionWithdrawn, _) => ("withdrew a question on", true),
+        (AuditAction::CommentAdded, _) => ("commented on", true),
         (AuditAction::TurnOpened, _) => ("opened a turn on", true),
         (AuditAction::TurnTakenBack, _) => ("took back a turn on", true),
         (AuditAction::TurnReached, _) => ("reached the goal of a turn on", true),
@@ -403,6 +404,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::QuestionAsked
         | AuditAction::QuestionAnswered
         | AuditAction::QuestionWithdrawn
+        | AuditAction::CommentAdded
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
         | AuditAction::TurnRetried
@@ -436,7 +438,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 47] = [
+const FIELD_ORDER: [&str; 49] = [
     "step",
     "step_title",
     "step_context",
@@ -448,6 +450,8 @@ const FIELD_ORDER: [&str; 47] = [
     "question_choices",
     "question_many",
     "question_step",
+    "comment",
+    "comment_text",
     "reply",
     "reply_comment",
     "reach",
@@ -590,6 +594,8 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "question_choices" => "Choices",
         "question_many" => "Pick any",
         "question_step" => "Step",
+        "comment" => "Comment",
+        "comment_text" => "Comment text",
         "reply" => "Reply",
         "reply_comment" => "Comment",
         "reach" => "Reach",
@@ -644,6 +650,8 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
         // A question is named by its number, as `q2`, after its item's key.
         "question" => format!("q{}", value.as_u64()?),
+        // A comment is named the same way, as `c3`.
+        "comment" => format!("c{}", value.as_u64()?),
         "reach" => describe_reach(Reach::from_code(value.as_str()?)?).to_owned(),
         "goal" => describe_goal(Goal::from_code(value.as_str()?)?).to_owned(),
         "source" => describe_turn_source(TurnSource::from_code(value.as_str()?)?).to_owned(),
