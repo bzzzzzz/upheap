@@ -14,7 +14,9 @@ Talk to the person here, in the conversation: questions, choices, what you're ab
 has to outlast the conversation: the item's state, its context, its steps, its comments, and anything still waiting
 for them. After every session, the item alone should tell the next reader where things stand.
 
-The context says what the item is and what done looks like; comments record what happened since. Where this skill
+The context says what the item is and what done looks like; comments record what happened since. Progress,
+findings and decisions go in comments, never into the context. The context is rewritten only when the item's
+definition changed. Where this skill
 says to add a comment, use `upheap comment add` when the guide shows it. An older tool has no comments: add to the
 end of the item's context instead, and keep what's already there.
 
@@ -160,7 +162,8 @@ Telling the person how to do it is this session's result for that item.
 4. **Record as you go,** as comments on the item (`upheap comment add <key> --file <file>`): what's done, where it
    is (the branch, the pull request, the document, the link), what you decided and why, and what's left. A comment
    adds to the item without touching what the person wrote. Keep the context for what the item is and "Done when";
-   change it only to correct or restate that. Comment at each stopping point, not only at the end: a session can
+   rewrite it only when the task's definition did change: the work or what done looks like turned out different
+   from what it says. Then say in a comment what changed and why. Comment at each stopping point, not only at the end: a session can
    end without warning.
 5. **Ask in the conversation** when a call is the person's, and record the answer as a comment. If they can't
    answer now, put it on the item with `upheap question ask` and stop work on that part.
