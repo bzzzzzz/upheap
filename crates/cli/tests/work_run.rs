@@ -1312,7 +1312,7 @@ async fn a_worker_that_fails_lets_the_other_run_end_claims_nothing_new_and_fails
     released?;
     expect_that!(outcome.exited(6), eq(true));
     expect_that!(outcome.stderr, contains_substring("Stopping after the current runs: "));
-    expect_that!(outcome.stderr, contains_substring("Ctrl-C stops them now."));
+    expect_that!(outcome.stderr, contains_substring("Ctrl-C twice stops them now."));
     expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(1));
     expect_that!(lines_with(&outcome.stdout, "failed").len(), eq(1));
     expect_that!(tool.starts().len(), eq(2));

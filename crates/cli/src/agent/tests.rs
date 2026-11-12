@@ -320,4 +320,56 @@ mod processes {
         }
         Ok(())
     }
+
+    #[gtest]
+    #[tokio::test]
+    async fn settled_waits_until_a_stopped_tool_that_ignores_the_request_is_gone() -> googletest::Result<()> {
+        // Arrange: a script that ignores being asked to end, noting its process number, and is running.
+        let dir = tempfile::tempdir()?;
+        let pid_file = dir.path().join("pid");
+        let body = format!(
+            "trap '' TERM\necho $$ > '{}'\nwhile true; do sleep 0.05; done",
+            pid_file.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+        let mut running = Box::pin(tools.run(start(Access::Do)));
+        let started = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::select! {
+                _ = &mut running => {}
+                () = async {
+                    while !pid_file.exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                } => {}
+            }
+        })
+        .await;
+        let pid = std::fs::read_to_string(&pid_file)?.trim().to_owned();
+
+        // Act: stop it, and wait for it to settle.
+        drop(running);
+        let before = std::time::Instant::now();
+        let settled = tokio::time::timeout(Duration::from_secs(10), tools.settled()).await;
+        let took = before.elapsed();
+        let alive = std::process::Command::new("kill")
+            .args(["-0", &pid])
+            .output()
+            .is_ok_and(|o| o.status.success());
+
+        // Assert: it waited for the kill after the grace, and the process is gone.
+        verify_that!(started.is_ok(), eq(true))?;
+        verify_that!(settled.is_ok(), eq(true))?;
+        verify_that!(took, ge(claude::STOP_GRACE / 2))?;
+        verify_that!(alive, eq(false))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn settled_with_nothing_stopped_returns_at_once() -> googletest::Result<()> {
+        let tools = SystemTools::new();
+
+        let settled = tokio::time::timeout(Duration::from_millis(500), tools.settled()).await;
+
+        verify_that!(settled.is_ok(), eq(true))
+    }
 }
