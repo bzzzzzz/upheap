@@ -229,6 +229,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Turn(TurnError::NeedsNoteOrTask { .. }) => {
             simple(StatusCode::CONFLICT, "turn_needs_note_or_task", Category::Conflict)
         }
+        ServiceError::Turn(TurnError::Blocked { .. }) => {
+            simple(StatusCode::CONFLICT, "turn_item_blocked", Category::Conflict)
+        }
         ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
         ServiceError::Run(RunError::CostRecorded) => {
             simple(StatusCode::CONFLICT, "run_cost_recorded", Category::Conflict)

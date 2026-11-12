@@ -23,15 +23,15 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 
 /// Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
 /// item. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no
-/// `If-Match`, and the item's `version` doesn't change. An item with an open question, or a blocked one, may be
-/// sent: the turn opens, and the item waits or is blocked as before.
+/// `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
+/// and the item waits as before. A blocked item can't be sent until it is unblocked.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/turn", tag = "items", security(("session" = [])),
     params(ItemParams, TimeZoneHeader), request_body = SendToAgentDto,
     responses(
         (status = 201, body = ItemDto),
         (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`heap_archived`, `item_closed` or `turn_open` (an agent already has the item)", body = Problem),
+        (status = 409, description = "`heap_archived`, `item_closed`, `turn_item_blocked` (unblock the item first) or `turn_open` (an agent already has the item)", body = Problem),
         (status = 422, description = "Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know", body = Problem),
     ))]
 async fn send_to_agent(

@@ -642,10 +642,9 @@ async fn the_goal_is_the_next_stable_state_of_the_item() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn an_item_with_an_open_question_or_blocked_may_be_sent_and_stays_so() -> Result<()> {
+async fn an_item_with_an_open_question_may_be_sent_and_stays_waiting() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = note().await?;
-    let blocked = add(&app, &session, &heap, "Blocked").await?;
     app.send(
         Method::POST,
         &format!("{}/questions", item_path(&app, &heap, &key).await?),
@@ -653,20 +652,41 @@ async fn an_item_with_an_open_question_or_blocked_may_be_sent_and_stays_so() -> 
         Some(json!({ "kind": "question", "text": "Which CA?" })),
     )
     .await?;
-    patch_item(&app, &session, &heap, &blocked, json!({ "state": "blocked" })).await?;
 
     // Act
     let waiting = send(&app, &session, &heap, &key, json!({ "reach": "one" })).await?;
-    let held = send(&app, &session, &heap, &blocked, json!({ "reach": "one" })).await?;
 
     // Assert
     expect_that!(waiting.status, eq(StatusCode::CREATED));
     expect_that!(waiting.body["waits_for_you"], eq(&json!(true)));
     expect_that!(waiting.body["with_agent"], eq(&json!(false)));
     expect_that!(waiting.body["turn"].is_object(), eq(true));
-    expect_that!(held.status, eq(StatusCode::CREATED));
-    expect_that!(held.body["state"], eq(&json!("blocked")));
-    expect_that!(held.body["with_agent"], eq(&json!(true)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_blocked_item_is_refused_a_send_until_it_is_unblocked() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let blocked = patch_item(&app, &session, &heap, &key, json!({ "state": "blocked" })).await?;
+
+    // Act
+    let refused = send(&app, &session, &heap, &key, json!({ "reach": "one" })).await?;
+    let read = get(&app, &session, &heap, &key).await?;
+    let audit = audit_actions(&app, &read).await?;
+    patch_item(&app, &session, &heap, &key, json!({ "state": "open" })).await?;
+    let unblocked = get(&app, &session, &heap, &key).await?;
+    let sent = send(&app, &session, &heap, &key, json!({ "reach": "one" })).await?;
+
+    // Assert
+    expect_that!(actions(&blocked.body), not(contains(eq(&"send_to_agent"))));
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("turn_item_blocked")));
+    expect_that!(read["turn"], eq(&Value::Null));
+    expect_that!(audit, not(contains(eq("turn_opened"))));
+    expect_that!(actions(&unblocked), contains(eq(&"send_to_agent")));
+    expect_that!(sent.status, eq(StatusCode::CREATED));
     Ok(())
 }
 

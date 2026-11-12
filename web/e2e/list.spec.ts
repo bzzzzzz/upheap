@@ -1,9 +1,9 @@
 import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
 
-// One step ahead in the list and the item (design/ux.md, The list and The item), with a mouse: the
-// rows' play and done buttons, shown on hover, don't show on a touch screen, which swipes instead.
+// One step ahead in the list and the item (design/ux.md, The list and The item), with a mouse: the rows' state
+// button and Done, quiet until the row is hovered, and a phone swipes instead.
 test.beforeEach(({ isMobile }) => {
-  test.skip(isMobile, "The done button and the pane's ↑ ↓ are for a wide screen with a mouse.");
+  test.skip(isMobile, "The quiet-until-hover buttons and the pane's ↑ ↓ are for a wide screen with a mouse.");
 });
 
 test("the play button starts an item, and Done offers to start the next one", async ({ page }) => {
@@ -23,7 +23,6 @@ test("the play button starts an item, and Done offers to start the next one", as
 
   // With Slog under way, finishing something else offers nothing more.
   await addItem(page, "Water the plants");
-  await row(page, "Water the plants").getByRole("button", { name: "Start Water the plants" }).hover();
   await row(page, "Water the plants").getByRole("button", { name: "Mark Water the plants done" }).click();
   await expect(page.getByRole("status").filter({ hasText: "“Water the plants” is done." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
@@ -36,33 +35,37 @@ test("the play button starts an item, and Done offers to start the next one", as
   await filters.getByRole("group", { name: "Effort" }).getByRole("button", { name: "S", exact: true }).click();
   await filters.getByRole("button", { name: "Close" }).click();
   await expect(row(page, "Slog")).toHaveCount(0);
-  await row(page, "Tidy up").getByRole("button", { name: "Start Tidy up" }).hover();
   await row(page, "Tidy up").getByRole("button", { name: "Mark Tidy up done" }).click();
   await expect(page.getByRole("status").filter({ hasText: "“Tidy up” is done." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Start next/ })).toHaveCount(0);
   await page.getByRole("group", { name: "Filters on" }).getByRole("button", { name: "Remove filter Effort S" }).click();
 });
 
-test("hovering or focusing the play button shows the done button beside it, and s starts a focused row", async ({
-  page,
-}) => {
+test("Done and the robot are quiet until the row is hovered, and s starts a focused row", async ({ page }) => {
   await addItem(page, "Quick win");
   await addItem(page, "Slog");
   const quick = row(page, "Quick win");
   const done = quick.getByRole("button", { name: "Mark Quick win done" });
   const play = quick.getByRole("button", { name: "Start Quick win" });
-  const slot = done.locator("..");
+  const robot = quick.getByRole("button", { name: "Send Quick win to an agent" });
 
-  // Hidden until the play button is hovered, but still in the layout.
-  await expect(slot).toHaveCSS("opacity", "0");
-  await play.hover();
-  await expect(slot).toHaveCSS("opacity", "1");
+  // Always there, but muted until the row is hovered.
+  await page.mouse.move(0, 0);
+  const quiet = await done.evaluate((el) => getComputedStyle(el).color);
+  await expect(done).toBeVisible();
+  await expect(robot).toBeVisible();
+  await expect(robot).toHaveCSS("color", quiet);
+  await quick.hover();
+  await expect(done).not.toHaveCSS("color", quiet);
+  await expect(robot).not.toHaveCSS("color", quiet);
 
-  // Tab order: play, done, then the row link.
+  // Tab order: the state button, Done, the robot, then the row link.
   await page.mouse.move(0, 0);
   await play.focus();
   await page.keyboard.press("Tab");
   await expect(done).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(robot).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(quick.getByRole("link", { name: "Quick win", exact: true })).toBeFocused();
 
@@ -124,4 +127,15 @@ test("filters show as chips with what they leave out, and each chip takes its fi
   await on.getByRole("button", { name: "Remove filter Effort S" }).click();
   await expect(on).toHaveCount(0);
   await expect(row(page, "Slog")).toBeVisible();
+});
+
+test("an in-progress row's Pause puts it back to open", async ({ page }) => {
+  await addItem(page, "Quick win");
+  await row(page, "Quick win").getByRole("button", { name: "Start Quick win" }).click();
+  await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
+
+  await row(page, "Quick win").getByRole("button", { name: "Pause Quick win" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "“Quick win” is open." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "In progress" })).toHaveCount(0);
+  await expect(row(page, "Quick win").getByRole("button", { name: "Start Quick win" })).toBeVisible();
 });

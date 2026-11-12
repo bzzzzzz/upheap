@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { HeapRef, Item, RankedItem } from "../api/client";
 import { chipClass } from "./buttons";
-import { AgentChip } from "./ItemTurn";
+import { AgentChip, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import { KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { PopoverSheet } from "./PopoverSheet";
@@ -21,7 +21,7 @@ const dot = (
  * What the item is and where it stands, under its title at every width (ux.md, The item §2): one quiet line that may
  * wrap. The kind and stage with their icons, a reminder's date, the state and, for a closed item, when it closed, or
  * who blocks a blocked one, with a link to that item. Then the chips: the item's place in the list, which opens why,
- * and, when an agent has the item, who has it. A reminder that is still ahead says when it joins the list under the
+ * and, who has the item when an agent does, or the button that sends it to one when none does. A reminder that is still ahead says when it joins the list under the
  * line. Closed items show the kind only, as the server sends no stage for them.
  */
 export function StatusLine({
@@ -40,6 +40,17 @@ export function StatusLine({
   const date = item.kind === "reminder" && item.due ? formatDate(item.due.date) : undefined;
   const closed = item.state === "done" || item.state === "wont_do";
   const blocker = item.state === "blocked" ? item.blocked_by : null;
+  const focusAfterRender = useFocusAfterRender();
+  // Set by a send, until the item shows the agent's chip, which then takes the focus: the send button goes away with the
+  // send, so the focus is kept here.
+  const [sent, setSent] = useState(0);
+  const focused = useRef(0);
+  const hasTurn = item.turn != null;
+  useEffect(() => {
+    if (sent === focused.current || !hasTurn) return;
+    focused.current = sent;
+    focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]"));
+  }, [sent, hasTurn, focusAfterRender]);
   return (
     <div className="flex flex-col gap-1">
       <div
@@ -99,6 +110,7 @@ export function StatusLine({
         )}
         {entry && <RankChip entry={entry} />}
         <AgentChip heapRef={heapRef} item={item} onTakenBack={onTakenBack} />
+        <SendToAgentButton heapRef={heapRef} item={item} onSent={() => setSent((n) => n + 1)} />
       </div>
       {date && isToCome(item) && <p className="text-sm text-ink-soft">Joins the list on {date}</p>}
     </div>

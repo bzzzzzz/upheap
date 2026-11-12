@@ -190,37 +190,45 @@ it. On a tablet it is a popover beside the rail.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
-1. A row dragged right past about 100 px slides away and marks the item done; dragged left, it stays open on two
-   buttons, In progress and Blocked (Open in place of the state it's in), until one is picked or the row is tapped.
-   Each is followed by the undo toast. A tap just after a drag doesn't open the item.
+1. A row dragged right past about 100 px slides away and marks the item done; dragged left, it stays open on
+   buttons, Agent (when the row's robot would show, The list point 3), In progress and Blocked (Open in place of the
+   state it's in), until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't open the item.
 2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
    springs it back.
 
 ## The list
 
-1. A row is one or two lines: the main button (point 3), the kind icon, the title, the due chip and tags, and below
-   them the server's contributors ("Due this week · small effort"). A row shows no position and no sizes: the order
-   is the list's, and the contributors say why. A task has a checklist icon in a fixed slot before the title (a note leaves the slot empty, so titles
-   line up), and an item with context or defined has a page or a clipboard icon after it. The row shows no words for
-   them; a screen reader hears them after the title ("Rotate the certs, task, defined"). A task with steps shows how
-   many are ticked, small and muted, after the stage icon (`2/5`), and a screen reader hears ", 2 of 5 steps ticked"
-   after the title. Dropped steps don't count, and a task without an open or ticked step shows nothing. A reminder
-   has a calendar-clock icon in the same slot, and a screen reader hears ", reminder".
+1. A row is one or two lines: three buttons (point 3), the title, the due chip and tags, and below them the server's
+   contributors ("Due this week · small effort"), then, at the end, the kind and stage icons. A row shows no position
+   and no sizes: the order is the list's, and the contributors say why. A task has a checklist icon, and a reminder a
+   calendar-clock icon, in a fixed slot at the end of the row (a note leaves the slot empty, so the icons line up),
+   and an item with context or defined has a page or a clipboard icon in the slot after it. The row shows no words
+   for them; a screen reader hears them after the title ("Rotate the certs, task, defined"). A task with steps shows
+   how many are ticked, small and muted, after the title (`2/5`), and a screen reader hears ", 2 of 5 steps ticked"
+   after the title. Dropped steps don't count, and a task without an open or ticked step shows nothing.
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
-3. The main button, at the start of the row, acts in one tap. On an open or blocked row it is a play button that
-   starts the item; a blocked row's circle is dashed, and a screen reader hears ", blocked" after the title. With a mouse, hovering or focusing it shows a done button, a small circle with a check, beside it;
-   a touch screen has no done button and swipes instead (point 5). On an in-progress row the main button is a
-   half-filled circle that marks the item done. Without permission to change the state, the buttons are absent and
-   the slot stays empty. An undo toast follows every state change from the list: bottom
-   centre, above the tabs on a phone, gone after a few seconds. Changes made in the item save silently and have no
-   undo. The toast sits over the open item, so Sent to an agent can offer Undo from inside a phone's sheet; the
-   Add dialog and the other sheets stay above it.
+3. A row starts with three fixed slots, from a tablet up, so titles line up; a slot the person can't use stays
+   empty. First the **state button**: Start (a play circle) on an open row, Unblock (an amber closed padlock in a
+   circle, drawn open while the row is hovered or focused, and always with a finger) on a blocked row, Pause (an
+   accent circle, lightly filled, with two bars) on an in-progress row. Start moves the item to in progress; Unblock
+   and Pause move it to open. A screen reader hears ", blocked" after a blocked row's title. Second **Done**, a circle
+   with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
+   no line, when the server allows it and no agent has the item; a filled robot mark in the accent when an agent has
+   it, with a small accent dot when it waits for the person; empty otherwise (a reminder, a blocked item, a reader).
+   With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
+   always in full colour. A quick send shows the toast "Sent to an agent, going to: with context." with Undo (The item
+   point 15), gives focus to the row, and a failed one says why in a toast. A phone shows the state button only (44 px)
+   and swipes instead (point 5). Without permission to change the state, the buttons are absent and the slots stay
+   empty. An undo toast follows every state change from the list: bottom centre, above the tabs on a phone, gone after
+   a few seconds. Changes made in the item save silently and have no undo. The toast sits over the open item, so Sent
+   to an agent can offer Undo from inside a phone's sheet; the Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
-   (an open or blocked item) and `x` marks done; `N` and `/` stay. Tab goes play, done, then the row's link, then
-   its tags and parameter chips.
-5. On a touch screen, swiping a row right marks it done; swiping left offers In progress and Blocked.
+   (an open or blocked item), `x` marks done and `a` sends one step to an agent, where the robot button shows; `N`
+   and `/` stay. Tab goes the state button, Done, the robot, then the row's link, then its tags and parameter chips.
+5. On a touch screen, swiping a row right marks it done; swiping left offers Agent (where the robot button would
+   show, sending one step at once as the button does), In progress and Blocked.
 6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
    Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they
    return, "Save as view…" goes in the Filters panel.
@@ -234,24 +242,25 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    sort other than Priority too ("Filters and sort, 1 on"). The list updates live behind the panel.
 8. Under the toolbar a chip takes off each filter ("Need: Critical") or changed setting ("Blocked: shown"), with
    "6 of 14" while filters are on and Reset all. Reset all keeps the sort and the search.
-9. Rows have no hover actions besides the done button beside play (point 3). The other states (Blocked, Won't do,
-   Back to open) are in the item.
+9. Rows have no hover actions besides the colour of Done and the robot (point 3). The other states (Blocked, Won't
+   do) are in the item.
 10. After Done, the toast offers Undo. Only when nothing else in the heap is in progress does it also offer "Start
     next: \<the top open item\>"; if something else is already in progress, the user is carrying on with it, and the
     offer would be noise.
 11. Active filters and changed view settings show as the removable chips of point 8, so the user always sees why the
     list is short.
 12. The hidden-items note offers the fix: "3 blocked items are hidden. Show them."
-13. An open item with an open question says **waits for you** at the end of its row, small, semibold and in the accent.
-    On a phone, where the end of the row is tight, a small accent dot before the title stands for it. A screen reader
-    hears ", waits for you" after the title on every width. The closed list never shows it.
-14. An open item an agent has says **with an agent** at the end of its row, small, in the quiet ink and at normal
-    weight, where "waits for you" would be: the two never show together, as an item that waits for the person is
-    not the agent's. On a phone a small robot mark before the title stands for it. A screen reader hears ", with an
-    agent" after the title. Who has an item never changes its place. The closed list never shows it.
+13. An open item with an open question says **waits for you** at the end of its row, small, semibold and in the accent,
+    before the kind and stage icons. On a phone, where the end of the row is tight, a small accent dot before the
+    title stands for it. A screen reader hears ", waits for you" after the title on every width. The closed list never
+    shows it.
+14. An open item an agent has shows the robot mark in its slot (point 3), with a dot while it waits for the person: an
+    item that waits for the person is not the agent's, and says so in words (point 13). On a phone a small robot mark
+    before the title stands for it. A screen reader hears ", with an agent" after the title. Who has an item never
+    changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
-    agent has “Rotate the certs”. Marking it done takes it back from the agent." The play and done buttons, the
-    in-progress circle, a swipe, `x` and `s` go through the one ask, which is a dialog on a wide screen and a sheet
+    agent has “Rotate the certs”. Marking it done takes it back from the agent." The state button, Done, a
+    swipe, `x` and `s` go through the one ask, which is a dialog on a wide screen and a sheet
     on a phone, with "Take back and mark done" or "Take back and start", and Cancel. Cancel
     puts a swiped row back and gives focus to the row. Blocked and Open don't ask. The change's Undo toast
     restores the state only: the turn stays taken back.
@@ -284,7 +293,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
    accent), and for a closed item when it closed, or "It can't be reopened." A blocked item says "Blocked by" and
    links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. Then the chips:
-   the item's place in the list, "#3" (point 9), and, only when an agent has the item, who has it (point 15). A
+   the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
+   one when none does (point 15). A
    reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
    is in ("Up next") and has no rank.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
@@ -298,12 +308,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    for a reminder that has arrived (its state's own choice then moves into ⋯), Reopen for a closed item while it can
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    always there, and holds, each only when the server allows it and in this order: the other state changes, Won't do,
-   Make it a task…, Send to an agent… (point 15), Change blocker… on a blocked item, Copy link, and the Stage choices.
+   Make it a task…, Change blocker… on a blocked item, Copy link, and the Stage choices.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Copy link confirms with a toast, "Link copied", as the menu has
    closed by then. Make it a task asks first, naming the item, since a task can't go back to a note (or to a
    reminder). A reminder has an exact Date in place of Due (point 16), which can be moved, also back into the future,
-   and not cleared; it has no steps and no Send to an agent. Stage lists as written and with context, and defined on
+   and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
@@ -360,12 +370,16 @@ written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N
     going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons: Retry and Take back are
     in Waits for you. **Take back** is in the popover, and asks first, "Take this back from the agent? It stops, and
     what it changed stays.", inline in the popover and in a sheet on a phone; afterwards the chip is gone and the
-    focus goes to ⋯, with no toast. With no agent there is no chip and nothing says "With you". **Send to an agent…**
-    is in ⋯, when the server allows it, and opens a form: a popover under ⋯ on a wide screen and a tablet, a sheet on
+    focus goes to ⋯, with no toast. With no agent there is no chip and nothing says "With you". Before an agent has the
+    item, the same place holds the **Send to an agent** button (a robot and those words, in the chip's style), shown
+    when the server allows it: not on a reminder, a closed item, in an archived heap, or on a **blocked item**, which
+    can't be sent until it is unblocked (the server refuses it: "This item is blocked. Unblock it before sending it to
+    an agent."). It opens a form: a popover under the button on a wide screen and a tablet, a sheet on
     a phone. The form has two choices, "To <where it goes>" (the next stable state: with context, defined or done)
     and "All the way", or on a defined task the one line "To done"; "A line for the agent (optional)"; Send and
-    Cancel. Send acts at once, closes the form, gives focus to the chip and shows a toast, "Sent to an agent, going
-    to: with context.", with Undo, which takes it back without asking or a second toast. A failed send or take back
+    Cancel. Cancel returns focus to the button. Send acts at once, closes the form, gives focus to the chip that
+    replaces the button and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back
+    without asking or a second toast. The list row's robot sends the same way but for one step with no line, and shows the same toast. A failed send or take back
     says why in the popover, and the form keeps its line. Someone else's send first says "Someone already sent this
     to an agent." and the chip shows it. Start, Done and Won't do in the item ask before they take an item back ("An
     agent has this. Starting it takes it back. Take it back and start it?"), inline under the title or in a sheet;

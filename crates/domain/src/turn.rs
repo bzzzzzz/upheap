@@ -215,6 +215,9 @@ pub enum TurnError {
     /// A go-ahead on a reminder. It must become a task first.
     #[error("item {item_id} is a reminder; make it a task before sending it to an agent")]
     NeedsNoteOrTask { item_id: ItemId },
+    /// A go-ahead on a blocked item. It must be unblocked first.
+    #[error("item {item_id} is blocked; unblock it before sending it to an agent")]
+    Blocked { item_id: ItemId },
 }
 
 impl Turn {

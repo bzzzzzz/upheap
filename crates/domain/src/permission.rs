@@ -3,7 +3,7 @@
 use crate::audit::AuditAction;
 use crate::heap::Heap;
 use crate::invite_link::InviteLink;
-use crate::item::{Item, Kind, Stage};
+use crate::item::{Item, Kind, Stage, StateKind};
 use crate::parameter::Parameter;
 use crate::question::QuestionState;
 use crate::saved_view::SavedView;
@@ -152,7 +152,7 @@ pub fn allowed_item_actions(
         }
         if has_open_turn {
             actions.push(ItemAction::TakeBack);
-        } else if item.kind != Kind::Reminder {
+        } else if item.kind != Kind::Reminder && item.state.kind() != StateKind::Blocked {
             actions.push(ItemAction::SendToAgent);
         }
         return actions;
@@ -787,6 +787,27 @@ mod tests {
             eq((false, false))
         );
         expect_that!(actions(&item(Kind::Task, false), &heap(true), true), eq((false, false)));
+    }
+
+    #[gtest]
+    fn a_blocked_item_is_not_offered_to_an_agent_until_it_is_unblocked() {
+        use crate::item::ItemState;
+        let now = Timestamp::EPOCH;
+        let mut task = item(Kind::Task, false);
+        let sendable = |item: &Item, has_turn| {
+            let actions = allowed_item_actions(item, &heap(false), Role::Member, has_turn, false, now);
+            (
+                actions.contains(&ItemAction::SendToAgent),
+                actions.contains(&ItemAction::TakeBack),
+            )
+        };
+
+        expect_that!(sendable(&task, false), eq((true, false)));
+        task.state = ItemState::Blocked { by: None };
+        expect_that!(sendable(&task, false), eq((false, false)));
+        expect_that!(sendable(&task, true), eq((false, true)));
+        task.state = ItemState::Open;
+        expect_that!(sendable(&task, false), eq((true, false)));
     }
 
     #[gtest]

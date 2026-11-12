@@ -3751,7 +3751,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole\nitem. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no\n`If-Match`, and the item's `version` doesn't change. An item with an open question, or a blocked one, may be\nsent: the turn opens, and the item waits or is blocked as before.",
+        "summary": "Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole\nitem. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no\n`If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,\nand the item waits as before. A blocked item can't be sent until it is unblocked.",
         "operationId": "send_to_agent",
         "parameters": [
           {
@@ -3839,7 +3839,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`, `item_closed` or `turn_open` (an agent already has the item)",
+            "description": "`heap_archived`, `item_closed`, `turn_item_blocked` (unblock the item first) or `turn_open` (an agent already has the item)",
             "content": {
               "application/json": {
                 "schema": {

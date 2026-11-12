@@ -19,6 +19,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   too_many_comments: "An item has at most 200 comments.",
   question_answered: "Someone else replied to this question meanwhile.",
   question_withdrawn: "This question was withdrawn.",
+  turn_item_blocked: "This item is blocked. Unblock it before sending it to an agent.",
   turn_open: "Someone already sent this to an agent.",
   turn_not_stuck: "Someone else changed this meanwhile.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",

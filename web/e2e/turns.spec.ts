@@ -9,6 +9,7 @@ import {
   goTo,
   isPhone,
   itemPane,
+  drag,
   markDoneFromList,
   moreEntry,
   openHistory,
@@ -50,10 +51,28 @@ const heldRow = (page: Page, title: string): Locator =>
 const chip = (page: Page): Locator => itemPane(page).getByRole("button", { name: /^Who has it: / });
 const who = (page: Page): Locator => page.getByRole("dialog", { name: "Who has it", exact: true });
 
-/** Opens the send form from ⋯. */
-async function sendFromMore(page: Page) {
-  await moreEntry(page, await openMore(page), "Send to an agent…").click();
+/** The button in the status line that opens the send form, before an agent has the item. */
+const sendButton = (page: Page): Locator =>
+  itemPane(page).getByRole("button", { name: "Send to an agent", exact: true });
+
+/** Opens the send form from the status line. */
+async function openSendForm(page: Page) {
+  await sendButton(page).click();
   await expect(sendForm(page)).toBeVisible();
+}
+
+/** The row's robot button, which sends the item one step at once, and its title in the name. */
+const robot = (page: Page, title: string): Locator =>
+  row(page, title).getByRole("button", { name: `Send ${title} to an agent` });
+
+/** Puts an item in `state` through the API. */
+async function setState(page: Page, item: string, state: string) {
+  const current = await (await page.request.get(item)).json();
+  const changed = await page.request.patch(item, {
+    headers: { ...headers, "If-Match": `"${current.version}"` },
+    data: { state },
+  });
+  expect(changed.ok()).toBe(true);
 }
 
 /** The form or the question the block opens. */
@@ -74,7 +93,7 @@ test("sending from the item with a line shows who has it, in the item and in the
   await open(page, heapPath, key, "Rotate the certs");
 
   await expect(chip(page)).toHaveCount(0);
-  await sendFromMore(page);
+  await openSendForm(page);
   const form = sendForm(page);
   await expect(form.getByRole("radio", { name: "To with context" })).toBeChecked();
   await expect(form.getByRole("radio", { name: "All the way" })).not.toBeChecked();
@@ -92,11 +111,10 @@ test("sending from the item with a line shows who has it, in the item and in the
   await expect(who(page)).toContainText("“Use the new CA.”");
   await who(page).getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Sent to an agent, going to: with context." })).toBeVisible();
-  // The row says it too: in words from a tablet up, and in its name for a screen reader at every width.
+  // The row says it too: with a robot mark from a tablet up, and in its name for a screen reader at every width.
   await expect(heldRow(page, "Rotate the certs")).toBeVisible();
-  if (!isPhone(page)) {
-    await expect(heldRow(page, "Rotate the certs").getByText("with an agent", { exact: true })).toBeVisible();
-  }
+  await expect(heldRow(page, "Rotate the certs").locator("svg.lucide-bot:visible")).toHaveCount(1);
+  await expect(robot(page, "Rotate the certs")).toHaveCount(0);
 
   await page
     .getByRole("status")
@@ -104,6 +122,7 @@ test("sending from the item with a line shows who has it, in the item and in the
     .getByRole("button", { name: "Undo", exact: true })
     .click();
   await expect(chip(page)).toHaveCount(0);
+  await expect(sendButton(page)).toBeVisible();
   await expect(row(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   // Undo is a take back, which the history keeps.
@@ -115,7 +134,7 @@ test("sending from the item with a line shows who has it, in the item and in the
 test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");
-  await sendFromMore(page);
+  await openSendForm(page);
   await sendForm(page).locator("label").filter({ hasText: "All the way" }).click();
   await expect(sendForm(page).getByRole("radio", { name: "All the way" })).toBeChecked();
   await sendForm(page).getByRole("button", { name: "Send", exact: true }).click();
@@ -132,7 +151,7 @@ test("all the way is offered and shown, and a defined task has one way to go", a
   });
   expect(made.ok()).toBe(true);
   await open(page, heapPath, defined.key, "Ship it");
-  await sendFromMore(page);
+  await openSendForm(page);
   await expect(sendForm(page)).toContainText("To done");
   await expect(sendForm(page).getByRole("radio")).toHaveCount(0);
   await sendForm(page).getByRole("button", { name: "Send", exact: true }).click();
@@ -299,13 +318,15 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   const sent = await seed(page, heapPath, "Rotate the certs", true);
   const plain = await seed(page, heapPath, "Plain note");
   await page.goto(heapPath);
-  await expect(heldRow(page, "Rotate the certs").locator("svg.lucide-bot")).toBeVisible();
-  await expect(row(page, "Plain note").locator("svg.lucide-bot")).toHaveCount(0);
-  // The words are for wider screens.
-  await expect(heldRow(page, "Rotate the certs").getByText("with an agent", { exact: true })).toBeHidden();
+  await expect(heldRow(page, "Rotate the certs").locator("svg.lucide-bot:visible")).toHaveCount(1);
+  await expect(row(page, "Plain note").locator("svg.lucide-bot:visible")).toHaveCount(0);
+  // The state button is the only one at the start of the row, and a finger can use it.
+  await expect(row(page, "Plain note").getByRole("button")).toHaveCount(1);
+  await expectTouchSize(row(page, "Plain note").getByRole("button", { name: "Start Plain note" }));
 
   await open(page, heapPath, plain.key, "Plain note");
-  await sendFromMore(page);
+  await expectTouchSize(sendButton(page));
+  await openSendForm(page);
   const form = sendForm(page);
   // A sheet, from the bottom of the screen: its padding is all that is below the form.
   const sheet = await form.boundingBox();
@@ -316,9 +337,7 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   await expectTouchSize(form.getByRole("button", { name: "Send", exact: true }));
   await expectTouchSize(form.getByRole("button", { name: "Cancel", exact: true }));
   await form.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(
-    itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More" }),
-  ).toBeFocused();
+  await expect(sendButton(page)).toBeFocused();
 
   await open(page, heapPath, sent.key, "Rotate the certs");
   await expectTouchSize(chip(page));
@@ -347,4 +366,74 @@ test("the item in an archived heap shows no agent chip", async ({ page, heapPath
   // Archiving took the turn back.
   const item = await (await page.request.get(`/api/v1${heapPath}/items/${key}`)).json();
   expect(item.turn).toBeNull();
+});
+
+test("the row's robot sends one step at once, and Undo takes it back", async ({ page, heapPath }) => {
+  test.skip(isPhone(page), "A phone's rows swipe to Agent instead.");
+  await seed(page, heapPath, "Rotate the certs");
+  await page.goto(heapPath);
+
+  await robot(page, "Rotate the certs").click();
+  // The toast is the response's: where the turn is going.
+  const toast = page.getByRole("status").filter({ hasText: "Sent to an agent, going to: with context." });
+  await expect(toast).toBeVisible();
+  // The robot button becomes the mark once the list shows the turn, and the row keeps the focus.
+  await expect(heldRow(page, "Rotate the certs")).toBeVisible();
+  await expect(robot(page, "Rotate the certs")).toHaveCount(0);
+  await expect(heldRow(page, "Rotate the certs").getByRole("link")).toBeFocused();
+
+  await toast.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(robot(page, "Rotate the certs")).toBeVisible();
+  await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
+});
+
+test("a focused row sends one step with a", async ({ page, heapPath, isMobile }) => {
+  test.skip(isMobile, "Keys are for a wide screen.");
+  await seed(page, heapPath, "Rotate the certs");
+  await page.goto(heapPath);
+
+  await row(page, "Rotate the certs").getByRole("link").focus();
+  await page.keyboard.press("a");
+  await expect(page.getByRole("status").filter({ hasText: "Sent to an agent, going to: with context." })).toBeVisible();
+  await expect(heldRow(page, "Rotate the certs")).toBeVisible();
+});
+
+test("a phone's row swipes left to Agent, which sends one step at once", async ({ page, heapPath }) => {
+  test.skip(!isPhone(page), "Phone only.");
+  await seed(page, heapPath, "Rotate the certs");
+  await page.goto(heapPath);
+
+  await drag(page, row(page, "Rotate the certs"), -150, 0);
+  await row(page, "Rotate the certs").getByRole("button", { name: "Agent", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Sent to an agent, going to: with context." })).toBeVisible();
+  await expect(heldRow(page, "Rotate the certs")).toBeVisible();
+});
+
+test("a blocked item has Unblock in its row, no robot and no Send button, and can't be sent", async ({
+  page,
+  heapPath,
+}) => {
+  const { key, item } = await seed(page, heapPath, "Rotate the certs");
+  await setState(page, item, "blocked");
+  // Blocked items are hidden from the list unless it shows them.
+  await page.goto(`${heapPath}?blocked=shown`);
+
+  // The first button is the state button.
+  const unblock = row(page, "Rotate the certs").getByRole("button", { name: "Unblock Rotate the certs" });
+  await expect(row(page, "Rotate the certs").getByRole("button").first()).toHaveAccessibleName(
+    "Unblock Rotate the certs",
+  );
+  await expect(robot(page, "Rotate the certs")).toHaveCount(0);
+  await open(page, heapPath, key, "Rotate the certs");
+  await expect(itemPane(page).getByRole("group", { name: "Status" })).toContainText("Blocked");
+  await expect(sendButton(page)).toHaveCount(0);
+  // The server refuses it too.
+  const refused = await page.request.post(`${item}/turn`, { headers, data: { reach: "one" } });
+  expect(refused.status()).toBe(409);
+  expect((await refused.json()).code).toBe("turn_item_blocked");
+
+  await page.goto(`${heapPath}?blocked=shown`);
+  await unblock.click();
+  await expect(page.getByRole("status").filter({ hasText: "“Rotate the certs” is open." })).toBeVisible();
+  if (!isPhone(page)) await expect(robot(page, "Rotate the certs")).toBeVisible();
 });

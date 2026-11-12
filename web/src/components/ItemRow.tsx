@@ -4,12 +4,14 @@ import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { HeapRef, Item, ItemState, RankedItem, RankedList } from "../api/client";
+import { useSendWithUndo } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import { STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
 import { formatDate } from "./reminders";
 import { TagChips } from "./TagChips";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
  * Changes an item's state from the list, and says so with an undo toast. `onError` runs if it fails, for a row to
@@ -28,8 +30,8 @@ export type RowFilters = {
   toggleOption: (optionId: string) => void;
 };
 
-/** How far a row slides left to show its two actions, and how far right marks it done. */
-const ACTIONS_WIDTH = 176;
+/** How wide one of a row's swipe actions is, and how far right a swipe marks the item done. */
+const ACTION_WIDTH = 88;
 const DONE_DISTANCE = 96;
 
 /** What marks a row's link, for moving between rows with the arrow keys. */
@@ -62,9 +64,11 @@ export function rowOf(key: string) {
  * `selected` marks the open item's row, and `itemOpen` makes opening another one replace it in the history, so Back
  * still closes the item instead of stepping through every row looked at.
  *
- * The main button starts an open or blocked item and marks an in-progress one done. With a mouse, hovering or focusing
- * the play button also shows a done button beside it. With a finger, a row swipes (ux.md, The list): right marks it
- * done, left shows two other states to pick.
+ * Three fixed buttons start the row (ux.md, The list §3): the state button (Start, Unblock or Pause), Done, and the
+ * robot, which sends the item to an agent one step at once, or marks that an agent has it. Done and the robot are quiet
+ * until the row is hovered or focused, with a mouse. A phone shows the state button only, and swipes instead (ux.md,
+ * The list): right marks the row done, left shows the other states and Agent to pick. The kind and stage icons end the
+ * row.
  */
 export function ItemRow({
   entry,
@@ -85,6 +89,15 @@ export function ItemRow({
 }) {
   const { item, contributors } = entry;
   const canChangeState = item.allowed_actions.includes("change_state");
+  const canSend = !item.turn && item.allowed_actions.includes("send_to_agent");
+  const { sendWithUndo, pending: sending } = useSendWithUndo(heapRef);
+  const focusAfterRender = useFocusAfterRender();
+  // One step at once, with no line. The robot turns into a mark once the list shows the turn, so the focus goes to the
+  // row's link. Undo moves nothing.
+  const onSend = () =>
+    void sendWithUndo(item, "one", null).then((saved) => {
+      if (saved) focusAfterRender(() => rowOf(item.key));
+    });
   const onMarkDone = () => onChangeState(item, "done");
   // The focus follows the row into In progress, whether `s` or play started it: the row remounts there, and the focus
   // would fall to the page. A failed or cancelled start forgets it, so a later start from elsewhere doesn't pull the
@@ -93,9 +106,12 @@ export function ItemRow({
     refocusAfterStart = item.key;
     onChangeState(item, "in_progress", () => (refocusAfterStart = undefined));
   };
+  const onOpen = () => onChangeState(item, "open");
   const startable = item.state === "open" || item.state === "blocked";
   const touch = useMedia(TOUCH);
-  const swipe = useSwipe(canChangeState && touch, (state, onError) => onChangeState(item, state, onError));
+  const swipe = useSwipe(canChangeState && touch, ACTION_WIDTH * (canSend ? 3 : 2), (state, onError) =>
+    onChangeState(item, state, onError),
+  );
 
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -110,6 +126,9 @@ export function ItemRow({
     } else if (event.key === "s" && canChangeState && startable) {
       event.preventDefault();
       onStart();
+    } else if (event.key === "a" && canSend && !sending) {
+      event.preventDefault();
+      onSend();
     }
   };
 
@@ -122,33 +141,47 @@ export function ItemRow({
       transition={{ duration: 0.25 }}
       className="relative overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
     >
-      {swipe.showActions && <SwipeActions item={item} open={swipe.open} onPick={swipe.pick} />}
+      {swipe.showActions && (
+        <SwipeActions
+          item={item}
+          open={swipe.open}
+          canSend={canSend}
+          onPick={swipe.pick}
+          onSend={() => {
+            swipe.close();
+            onSend();
+          }}
+        />
+      )}
       <motion.div
         {...swipe.dragProps}
         className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
         }`}
       >
-        {/* Fixed slots, so titles line up whether or not the item can be changed. Done sits beside play with a
-            mouse only: a touch screen swipes right instead. */}
-        <span className="group/start flex shrink-0 items-center gap-3">
+        {/* Three fixed slots, so titles line up whether or not the item can be changed or sent. A phone keeps the state
+            button: it swipes instead. */}
+        <span className="flex shrink-0 items-center gap-3 pointer-coarse:gap-5 max-sm:gap-0">
           <span className="size-6 shrink-0">
             {canChangeState &&
-              (startable ? (
+              (item.state === "open" ? (
                 <StartButton item={item} onPress={onStart} />
+              ) : item.state === "blocked" ? (
+                <UnblockButton item={item} onPress={onOpen} />
               ) : (
-                item.state === "in_progress" && <DoneCircle item={item} onPress={onMarkDone} />
+                item.state === "in_progress" && <PauseButton item={item} onPress={onOpen} />
               ))}
           </span>
-          {!touch && (
-            <span className="relative z-10 w-5 shrink-0 opacity-0 group-focus-within/start:opacity-100 group-hover/start:opacity-100">
-              {canChangeState && startable && <DoneButton item={item} onPress={onMarkDone} />}
-            </span>
-          )}
-        </span>
-        {/* A fixed slot, so titles line up whether or not the item is a task. */}
-        <span className="flex w-3.5 shrink-0 justify-center">
-          <KindIcon kind={item.kind} />
+          <span className="size-6 shrink-0 max-sm:hidden">
+            {canChangeState && <DoneButton item={item} onPress={onMarkDone} />}
+          </span>
+          <span className="relative size-6 shrink-0 max-sm:hidden">
+            {item.turn ? (
+              <RobotMark waits={item.waits_for_you} />
+            ) : (
+              canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
+            )}
+          </span>
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -184,7 +217,6 @@ export function ItemRow({
                 {item.with_agent && ", with an agent"}
               </span>
             </Link>
-            <StageIcon stage={item.stage} />
             {item.step_progress && (
               <span aria-hidden="true" className="text-xs text-muted tabular-nums">
                 {item.step_progress.ticked}/{item.step_progress.total}
@@ -215,11 +247,15 @@ export function ItemRow({
             waits for you
           </span>
         )}
-        {item.with_agent && (
-          <span aria-hidden="true" className="hidden shrink-0 text-xs text-ink-soft sm:inline">
-            with an agent
+        {/* Quiet marks at the end, in fixed slots so they line up: the kind (a note has none) and the stage. */}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="flex w-3.5 justify-center">
+            <KindIcon kind={item.kind} />
           </span>
-        )}
+          <span className="flex w-3.5 justify-center">
+            <StageIcon stage={item.stage} />
+          </span>
+        </span>
       </motion.div>
     </motion.li>
   );
@@ -305,7 +341,7 @@ export function ComingRow({
  * The row's swipe: dragged right past `DONE_DISTANCE` it slides away and marks the item done; dragged left it stays
  * open on its actions until one is picked or the row is tapped. A tap right after a drag doesn't open the item.
  */
-function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => void) => void) {
+function useSwipe(enabled: boolean, actionsWidth: number, change: (state: ItemState, onError: () => void) => void) {
   const x = useMotionValue(0);
   const [open, setOpen] = useState(false);
   // The actions are drawn only while the row moves or is open, so their colours never edge a row at rest.
@@ -322,9 +358,9 @@ function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => vo
     if (info.offset.x > DONE_DISTANCE) {
       const width = (event.target as HTMLElement | null)?.closest("li")?.offsetWidth ?? 400;
       void animate(x, width, { duration: 0.2 }).then(() => change("done", close));
-    } else if (info.offset.x < -ACTIONS_WIDTH / 3 || (open && info.offset.x < 0)) {
+    } else if (info.offset.x < -actionsWidth / 3 || (open && info.offset.x < 0)) {
       setOpen(true);
-      void settle(-ACTIONS_WIDTH);
+      void settle(-actionsWidth);
     } else {
       close();
     }
@@ -343,6 +379,7 @@ function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => vo
     enabled,
     open,
     showActions: enabled && (moving || open),
+    close,
     pick: (state: ItemState) => {
       close();
       change(state, close);
@@ -352,7 +389,7 @@ function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => vo
           style: { x, touchAction: "pan-y" },
           drag: "x" as const,
           dragDirectionLock: true,
-          dragConstraints: { left: -ACTIONS_WIDTH, right: 0 },
+          dragConstraints: { left: -actionsWidth, right: 0 },
           dragElastic: { left: 0.1, right: 0.7 },
           dragMomentum: false,
           onDragStart: () => {
@@ -368,13 +405,26 @@ function useSwipe(enabled: boolean, change: (state: ItemState, onError: () => vo
 
 /**
  * What a swipe shows under the row: Done on the left, for a swipe right; on the right, the two states besides open
- * and done, with Open in place of the one the item is in already.
+ * and done, with Open in place of the one the item is in already, and Agent when the item can be sent.
  */
-function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPick: (state: ItemState) => void }) {
+function SwipeActions({
+  item,
+  open,
+  canSend,
+  onPick,
+  onSend,
+}: {
+  item: Item;
+  open: boolean;
+  canSend: boolean;
+  onPick: (state: ItemState) => void;
+  onSend: () => void;
+}) {
   const states: ItemState[] = [
     item.state === "in_progress" ? "open" : "in_progress",
     item.state === "blocked" ? "open" : "blocked",
   ];
+  const actionClass = `text-sm font-semibold text-canvas`;
   return (
     <div className="absolute inset-0 flex">
       <div aria-hidden="true" className="flex flex-1 items-center bg-done pl-5 text-sm font-semibold text-canvas">
@@ -382,12 +432,23 @@ function SwipeActions({ item, open, onPick }: { item: Item; open: boolean; onPic
       </div>
       {/* Out of the tab order and hidden from screen readers until the row is open; the item pane has them too. */}
       <div inert={!open} className="flex flex-1 justify-end">
+        {canSend && (
+          <button
+            type="button"
+            onClick={onSend}
+            style={{ width: ACTION_WIDTH }}
+            className={`${actionClass} bg-ink-soft`}
+          >
+            Agent
+          </button>
+        )}
         {states.map((state) => (
           <button
             key={state}
             type="button"
             onClick={() => onPick(state)}
-            className={`w-[88px] text-sm font-semibold text-canvas ${state === "blocked" ? "bg-overdue-ink" : "bg-accent"}`}
+            style={{ width: ACTION_WIDTH }}
+            className={`${actionClass} ${state === "blocked" ? "bg-overdue-ink" : "bg-accent"}`}
           >
             {STATE_LABELS[state]}
           </button>
@@ -413,13 +474,18 @@ export function DueChip({ due }: { due: NonNullable<Item["due"]> }) {
   );
 }
 
-const BUTTON =
-  "group relative z-10 -m-2 flex size-10 shrink-0 items-center justify-center rounded-full p-2 text-muted pointer-coarse:-m-2.5 pointer-coarse:size-11 pointer-coarse:p-2.5";
-
 /**
- * The one-tap way to start an open or blocked item: a circle with a play mark, dashed when the item is blocked, as the
- * row's one sign that it waits on something. Above the row's link, so a tap on it doesn't open the item.
+ * A slot's button: a 22 px mark with a hit area bigger than the slot, 44 px to a finger. Above the row's link, so a tap
+ * on it doesn't open the item.
  */
+const BUTTON =
+  "relative z-10 -m-1 flex size-8 shrink-0 items-center justify-center rounded-full p-1 pointer-coarse:-m-2.5 pointer-coarse:size-11 pointer-coarse:p-2.5";
+
+/** Muted until the row is hovered or has focus within, then lit; a finger has no hover, so it is always lit. */
+const DONE_QUIET = "text-muted group-hover/row:text-done group-focus-within/row:text-done pointer-coarse:text-done";
+const ROBOT_QUIET = "text-muted group-hover/row:text-ink group-focus-within/row:text-ink pointer-coarse:text-ink";
+
+/** The way to start an open item: a circle with a play mark. */
 function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
   return (
     <button
@@ -427,18 +493,10 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
       onClick={onPress}
       aria-label={`Start ${item.title}`}
       title="Start"
-      className={`${BUTTON} hover:text-accent`}
+      className={`${BUTTON} text-ink hover:text-accent`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
-        <circle
-          cx="12"
-          cy="12"
-          r="9"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeDasharray={item.state === "blocked" ? "3 3" : undefined}
-        />
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <path
           d="M10 8.5v7l5.5-3.5z"
           fill="currentColor"
@@ -451,37 +509,64 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
   );
 }
 
-/** The one-tap way to mark an in-progress item done: a half-filled circle, with a check showing on hover. */
-function DoneCircle({ item, onPress }: { item: Item; onPress: () => void }) {
+/**
+ * The way to unblock a blocked item, to open: a closed padlock in a circle, the row's one sign that it waits on
+ * something. It is drawn open while the row is hovered or focused, and always with a finger.
+ */
+function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
+  const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";
+  const closes = "group-hover/row:hidden group-focus-within/row:hidden pointer-coarse:hidden";
   return (
     <button
       type="button"
       onClick={onPress}
-      aria-label={`Mark ${item.title} done`}
-      title="Mark done"
-      className={`${BUTTON} hover:text-done`}
+      aria-label={`Unblock ${item.title}`}
+      title="Unblock"
+      className={`${BUTTON} text-accent-ink`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
-        <circle cx="12" cy="12" r="9" fill="none" stroke="var(--accent)" strokeWidth="2" />
-        <path d="M12 3a9 9 0 0 1 0 18z" fill="var(--accent)" />
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+        <rect x="8.5" y="11.5" width="7" height="5" rx="1" fill="currentColor" />
         <path
-          d="m8 12.5 2.5 2.5 5.5-5.5"
+          d="M10 11.5V10a2 2 0 0 1 4 0v1.5"
           fill="none"
-          stroke="var(--done)"
-          strokeWidth="2"
+          stroke="currentColor"
+          strokeWidth="1.5"
           strokeLinecap="round"
-          strokeLinejoin="round"
-          className="opacity-0 group-hover:opacity-100"
+          className={closes}
+        />
+        <path
+          d="M10 11.5V10a2 2 0 0 1 3.7-1"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          className={opens}
         />
       </svg>
     </button>
   );
 }
 
-/**
- * A small circle with a check beside the play button, for marking an open or blocked item done with a mouse. Its
- * slot is hidden until the play button is hovered or focused, and it can be tabbed to either way.
- */
+/** The way to put an in-progress item back to open: an accent circle, lightly filled, with two pause bars. */
+function PauseButton({ item, onPress }: { item: Item; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-label={`Pause ${item.title}`}
+      title="Back to open"
+      className={`${BUTTON} text-accent`}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+        <circle cx="12" cy="12" r="9" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="2" />
+        <path d="M10 9v6M14 9v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
+
+/** A circle with a check, for marking an item done. Quiet until the row is hovered or focused, with a mouse. */
 function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
   return (
     <button
@@ -489,9 +574,9 @@ function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
       onClick={onPress}
       aria-label={`Mark ${item.title} done`}
       title="Mark done"
-      className="relative z-10 flex size-5 items-center justify-center rounded-full text-done hover:bg-done/15"
+      className={`${BUTTON} ${DONE_QUIET} hover:bg-done/15`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <path
           d="m8 12.5 2.5 2.5 5.5-5.5"
@@ -503,6 +588,35 @@ function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
         />
       </svg>
     </button>
+  );
+}
+
+/** The way to send an item to an agent, one step at once. Quiet until the row is hovered or focused, with a mouse. */
+function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolean; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      disabled={disabled}
+      aria-label={`Send ${item.title} to an agent`}
+      title="Send to an agent"
+      className={`${BUTTON} ${ROBOT_QUIET} hover:bg-sunken disabled:opacity-40`}
+    >
+      <Bot aria-hidden="true" className="size-5" />
+    </button>
+  );
+}
+
+/**
+ * Says an agent has the item: a filled robot in the accent colour, with a dot when the agent waits for the person. Not
+ * a button; the row's link says the same in words.
+ */
+function RobotMark({ waits }: { waits: boolean }) {
+  return (
+    <span aria-hidden="true" className="relative flex size-6 items-center justify-center text-accent">
+      <Bot className="size-5 fill-accent/25" />
+      {waits && <span className="absolute top-0 right-0 size-2 rounded-full bg-accent" />}
+    </span>
   );
 }
 
