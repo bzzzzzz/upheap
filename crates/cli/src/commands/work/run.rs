@@ -47,6 +47,10 @@ pub struct RunArgs {
     /// there. Left out, every run starts in this directory, as it is
     #[arg(long, value_name = "DIR")]
     pub root: Option<PathBuf>,
+    /// A file with your own instructions for every run: how you want work done on this machine. Each run is told
+    /// them after Upheap's own rules and before the heap's context. Read once, when the loop starts
+    #[arg(long, value_name = "FILE")]
+    pub instructions: Option<PathBuf>,
     #[command(flatten)]
     pub shared: SharedArgs,
 }
@@ -69,6 +73,10 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let heaps = resolve_named_heaps(&args.heaps, app, &client, &token).await?;
     work.tools.check(args.tool)?;
     let root = args.root.as_deref().map(make_root).transpose()?;
+    let instructions = match args.instructions {
+        Some(path) => Some(read_instructions(path).await?),
+        None => None,
+    };
     if out.mode() == Mode::Human {
         out.line(&header(&heaps, args.tool, args.once))?;
     }
@@ -86,6 +94,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         heaps: heaps.into_iter().map(|heap| heap.handle).collect(),
         once: args.once,
         root,
+        instructions,
         tools,
         interrupts: interrupts(),
         idle_wait,
@@ -176,6 +185,23 @@ enum Driven {
     Stopped,
 }
 
+/// The text of the file `--instructions` names. Read before the first claim, so a file that can't be read fails
+/// before any item is taken.
+async fn read_instructions(path: PathBuf) -> Result<String, CliError> {
+    let read = {
+        let path = path.clone();
+        tokio::task::spawn_blocking(move || std::fs::read_to_string(path)).await
+    };
+    match read {
+        Ok(Ok(text)) => Ok(text),
+        Ok(Err(source)) => Err(CliError::NoInstructions { path, source }),
+        Err(join) => Err(CliError::NoInstructions {
+            path,
+            source: std::io::Error::other(join),
+        }),
+    }
+}
+
 /// The loop's context: what it works on, how, and what it has said so far.
 struct RunLoop<'a> {
     app: &'a App,
@@ -186,6 +212,8 @@ struct RunLoop<'a> {
     once: bool,
     /// Where each run's own directory is made; `None` when runs start in this directory.
     root: Option<PathBuf>,
+    /// The runner's own instructions, for every run's brief.
+    instructions: Option<String>,
     tools: Box<dyn AgentTools>,
     interrupts: UnboundedReceiver<Interrupt>,
     idle_wait: Duration,
@@ -285,6 +313,7 @@ impl RunLoop<'_> {
         };
         let brief = build_brief(&BriefParts {
             goal,
+            runner_instructions: self.instructions.as_deref(),
             heap_name: &run.item.heap.name,
             heap_handle: &handle.to_string(),
             heap_context: heap.context.as_deref(),

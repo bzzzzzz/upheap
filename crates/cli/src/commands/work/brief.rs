@@ -1,5 +1,5 @@
-//! The brief a run hands the agent tool: the instructions for the run's goal, the heap's context, the item as
-//! `item show` prints it, and what this run is. A plain function over plain values, so it is tested without a server.
+//! The brief a run hands the agent tool: the instructions for the run's goal, the runner's own when `work run` was
+//! given some, the heap's context, the item as `item show` prints it, and what this run is. A plain function over plain values, so it is tested without a server.
 
 use api_types::turns::GoalDto;
 
@@ -57,6 +57,8 @@ impl KnownGoal {
 /// What a brief is made of.
 pub(super) struct BriefParts<'a> {
     pub goal: KnownGoal,
+    /// What the person running the loop wrote for every run of theirs, from `work run --instructions`.
+    pub runner_instructions: Option<&'a str>,
     pub heap_name: &'a str,
     /// The heap as `team/heap`.
     pub heap_handle: &'a str,
@@ -79,8 +81,14 @@ pub(super) fn build_brief(parts: &BriefParts<'_>) -> String {
         .map(str::trim)
         .filter(|context| !context.is_empty())
         .unwrap_or("This heap has no context.");
+    let runner = parts
+        .runner_instructions
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(|text| format!("{RUNNER_INTRO}\n\n{text}\n\n"))
+        .unwrap_or_default();
     let mut brief = format!(
-        "{common}\n\n{goal}\n\n# The heap: {name} ({handle})\n\n{context}\n\n# The item\n\n{item}\n\n# This run\n\nGoal: {phrase}.\n",
+        "{common}\n\n{goal}\n\n{runner}# The heap: {name} ({handle})\n\n{context}\n\n# The item\n\n{item}\n\n# This run\n\nGoal: {phrase}.\n",
         common = COMMON.trim_end(),
         goal = parts.goal.instructions().trim_end(),
         name = parts.heap_name,
@@ -96,6 +104,13 @@ pub(super) fn build_brief(parts: &BriefParts<'_>) -> String {
     }
     brief
 }
+
+/// What comes before the runner's instructions in a brief. The heap's context is shared by everyone who works the
+/// heap, and these are one runner's own, so on how the work is done they come first.
+const RUNNER_INTRO: &str = "# The runner's instructions
+
+The person who runs this loop wrote what follows, for every run on this machine: how they want work done here. Follow
+it. Where it and the heap's context disagree on how to do the work, it wins. The rules above still hold.";
 
 /// `This turn has had 2 runs before this one; 1 in a row failed. Read what is already written and carry on from it.`
 fn earlier_runs(before: u32, failed: u32) -> String {
@@ -121,6 +136,7 @@ mod tests {
     fn parts(goal: KnownGoal) -> BriefParts<'static> {
         BriefParts {
             goal,
+            runner_instructions: None,
             heap_name: "Work",
             heap_handle: "ada/work",
             heap_context: Some("Our infra lives in the ops repo.\n"),
@@ -146,6 +162,39 @@ mod tests {
         expect_that!(order.len(), eq(2));
         expect_that!(order.is_sorted(), eq(true));
         expect_that!(brief, ends_with("Goal: with context.\n"));
+    }
+
+    #[gtest]
+    fn the_runners_instructions_come_after_upheaps_and_before_the_heap() {
+        let mut with = parts(KnownGoal::Done);
+        with.runner_instructions = Some("\nFor code changes, use the implement skill.\n\n");
+
+        let brief = build_brief(&with);
+
+        expect_that!(
+            brief,
+            contains_substring(
+                "Where it and the heap's context disagree on how to do the work, it wins. The rules above still \
+                 hold.\n\nFor code changes, use the implement skill.\n\n# The heap: Work (ada/work)\n"
+            )
+        );
+        expect_that!(
+            brief.find("A run here always ends with a request.") < brief.find("# The runner's instructions"),
+            eq(true)
+        );
+    }
+
+    #[gtest]
+    fn without_runner_instructions_or_with_blank_ones_the_brief_has_no_part_for_them() {
+        let mut blank = parts(KnownGoal::Done);
+        blank.runner_instructions = Some(" \n");
+
+        for parts in [parts(KnownGoal::Done), blank] {
+            expect_that!(
+                build_brief(&parts),
+                not(contains_substring("The runner's instructions"))
+            );
+        }
     }
 
     #[gtest]

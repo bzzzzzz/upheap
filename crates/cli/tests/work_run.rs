@@ -806,6 +806,66 @@ async fn a_root_that_cannot_be_made_is_exit_6_and_nothing_is_claimed() -> Result
 
 #[gtest]
 #[tokio::test]
+async fn with_instructions_every_run_is_told_them_before_the_heap() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let dir = tempfile::tempdir()?;
+    let file = dir.path().join("how-i-work.md");
+    std::fs::write(&file, "Use the implement skill for code changes.\n")?;
+    let file_arg = file.to_string_lossy().into_owned();
+    let tool = idle_agent(None);
+
+    // Act
+    let with = cli
+        .run_work(&[ONCE, &["--instructions", &file_arg]].concat(), &tool)
+        .await;
+    let without = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(with.exited(0), eq(true));
+    expect_that!(without.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(2));
+    let told = starts[0].brief.find("Use the implement skill for code changes.");
+    expect_that!(told, some(anything()));
+    expect_that!(told < starts[0].brief.find("# The heap:"), eq(true));
+    expect_that!(starts[1].brief, not(contains_substring("The runner's instructions")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn instructions_that_cannot_be_read_are_exit_6_and_nothing_is_claimed() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let dir = tempfile::tempdir()?;
+    let missing = dir.path().join("not-there.md").to_string_lossy().into_owned();
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--instructions", &missing]].concat(), &tool)
+        .await;
+    let next = cli.run(&["work", "next"]).await;
+
+    // Assert
+    expect_that!(outcome.exited(6), eq(true));
+    expect_that!(
+        outcome.stderr,
+        starts_with(format!("error: couldn't read the instructions at {missing}").as_str())
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_substring("hint: check that `--instructions` names a text file you can read")
+    );
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(next.stdout, not(contains_substring("started")));
+    expect_that!(next.stdout, contains_substring(note.as_str()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_tool_that_is_not_installed_is_exit_6_and_nothing_is_claimed() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, note) = with_prepared_note().await?;
