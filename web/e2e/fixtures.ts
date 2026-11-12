@@ -48,16 +48,24 @@ export async function registerThroughApi(page: Page) {
   return user;
 }
 
-/** The list row of the item titled `title`. */
+/**
+ * The list row of the item titled `title`. The row's link is named by the title and then what a screen reader hears
+ * after it (", task", ", blocked", ", with an agent"), so those may follow.
+ */
 export const row = (page: Page, title: string): Locator =>
-  page.getByRole("listitem").filter({ has: page.getByRole("link", { name: title, exact: true }) });
+  page.getByRole("listitem").filter({ has: page.getByRole("link", { name: rowLinkName(title) }) });
+
+/** The name of a row's link: the title, then what a screen reader hears after it, which Chrome starts with a space. */
+const rowLinkName = (title: string) => new RegExp(`^${escapeRegExp(title)}(\\s*, .+)?$`);
 
 /** The open item: a pane beside the list, a panel over it or a sheet, by the width. */
 export const itemPane = (page: Page): Locator => page.getByRole("region", { name: "Item", exact: true });
 
 /** Opens the item titled `title` from its row. */
 export async function openItem(page: Page, title: string) {
-  await row(page, title).getByRole("link", { name: title, exact: true }).click();
+  await row(page, title)
+    .getByRole("link", { name: rowLinkName(title) })
+    .click();
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
 }
 
