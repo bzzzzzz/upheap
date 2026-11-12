@@ -297,7 +297,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
     <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
       <h3 className="text-xs font-semibold text-muted">Questions</h3>
       {waits.open.length > 0 && (
-        <div className="rounded-xl border-2 border-accent bg-accent/10 p-3">
+        <div role="group" aria-label="Open questions" className="rounded-xl border-2 border-accent bg-accent/10 p-3">
           <ul id={waits.listId} className="flex flex-col divide-y divide-accent/30">
             {waits.open.map((question) => (
               <QuestionRow

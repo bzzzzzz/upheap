@@ -1,5 +1,5 @@
-// Questions on an item (ux.md, The item §12 to §14): answered in the item's "Waits for you" section, and read back in
-// the folded "Questions n". Nothing in the web app asks one, so they are seeded through the API, as another member or
+// Questions on an item (ux.md, The item): "Waits for you" at the top says how many wait, they are answered in the
+// Questions section under the Steps, and read back in its fold, "N answered". Nothing in the web app asks one, so they are seeded through the API, as another member or
 // an agent would. Server build only.
 import type { Page } from "@playwright/test";
 
@@ -40,11 +40,14 @@ async function itemWithQuestions(page: Page, heapPath: string, title: string, qu
   return item;
 }
 
-const waits = (page: Page) => itemPane(page).getByRole("region", { name: "Waits for you", exact: true });
+/** The block at the top that says how many questions wait. */
+const topWaits = (page: Page) => itemPane(page).getByRole("region", { name: "Waits for you", exact: true });
+/** The outlined box in Questions that holds the open questions with their reply controls. */
+const waits = (page: Page) => itemPane(page).getByRole("group", { name: "Open questions", exact: true });
 const answered = (page: Page) =>
   itemPane(page)
     .locator("details")
-    .filter({ hasText: /^Questions \d/ });
+    .filter({ hasText: /^\d+ (answered|closed)/ });
 
 /** The item's questions as the API has them, by number. */
 async function questionsOf(page: Page, item: string) {
@@ -60,10 +63,12 @@ test("a question without choices is answered with text, and then reads in Questi
   ]);
 
   const section = waits(page);
-  await expect(section.getByRole("heading", { name: "Waits for you" })).toBeVisible();
+  // At the top it says how many wait, and Answer takes the first control to the first question.
+  await expect(topWaits(page)).toContainText("2 questions wait for you");
+  await expect(topWaits(page)).toHaveCSS("border-top-width", "2px");
   await expect(section.getByRole("listitem")).toHaveCount(2);
-  // Above "Why it's #N" and the rest, and tinted: the one outlined block.
-  await expect(section).toHaveCSS("border-top-width", "2px");
+  await topWaits(page).getByRole("button", { name: "Answer ↓" }).click();
+  await expect(section.getByLabel("Answer").first()).toBeFocused();
 
   const first = section.getByRole("listitem").filter({ hasText: "Which CA do we use?" });
   const answer = first.getByLabel("Answer");
@@ -88,7 +93,7 @@ test("a question without choices is answered with text, and then reads in Questi
 
   // It reads in the folded Questions, in number order, with the reply and who made it.
   const folded = answered(page);
-  await expect(folded.locator("summary")).toHaveText("Questions 1");
+  await expect(folded.locator("summary")).toHaveText("1 answered");
   await folded.locator("summary").click();
   await expect(folded).toContainText("Which CA do we use?");
   await expect(folded).toContainText("→ Let's Encrypt");
@@ -99,7 +104,7 @@ test("a question without choices is answered with text, and then reads in Questi
   await section.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(section).toHaveCount(0);
   await expect(itemPane(page)).toBeFocused();
-  await expect(folded.locator("summary")).toHaveText("Questions 2");
+  await expect(folded.locator("summary")).toHaveText("2 answered");
 
   // After a reload nothing has come back, and the server has both replies.
   await page.reload();
@@ -252,11 +257,13 @@ test("the section is absent without open questions, and closing the item withdra
 
   // Closing the item withdraws the question: it leaves Waits for you, and it reads, withdrawn, in Questions.
   await changeState(page, "Start");
+  // Starting makes Done the main button; wait for that, as the helper looks for the label once.
+  await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
   await changeState(page, "Done");
   await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Reopen");
   await expect(waits(page)).toHaveCount(0);
   const folded = answered(page);
-  await expect(folded.locator("summary")).toHaveText("Questions 1");
+  await expect(folded.locator("summary")).toHaveText("1 closed");
   await folded.locator("summary").click();
   await expect(folded).toContainText("Which CA do we use?");
   await expect(folded).toContainText("Withdrawn");
@@ -265,7 +272,7 @@ test("the section is absent without open questions, and closing the item withdra
   // Reopening doesn't bring it back: it stays withdrawn, and the item waits for nobody.
   await changeState(page, "Reopen");
   await expect(waits(page)).toHaveCount(0);
-  await expect(answered(page).locator("summary")).toHaveText("Questions 1");
+  await expect(answered(page).locator("summary")).toHaveText("1 closed");
   await answered(page).locator("summary").click();
   await expect(answered(page)).toContainText("Withdrawn");
 });

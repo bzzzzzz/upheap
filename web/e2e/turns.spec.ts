@@ -10,7 +10,9 @@ import {
   isPhone,
   itemPane,
   markDoneFromList,
+  moreEntry,
   openHistory,
+  openMore,
   PASSWORD,
   row,
   test,
@@ -44,7 +46,15 @@ const heldRow = (page: Page, title: string): Locator =>
     .getByRole("listitem")
     .filter({ has: page.getByRole("link", { name: new RegExp(`^${title}\\s*, with an agent$`) }) });
 
-const who = (page: Page): Locator => itemPane(page).getByRole("region", { name: "Who has it", exact: true });
+/** The agent chip in the status line, which opens Who has it. */
+const chip = (page: Page): Locator => itemPane(page).getByRole("button", { name: /^Who has it: / });
+const who = (page: Page): Locator => page.getByRole("dialog", { name: "Who has it", exact: true });
+
+/** Opens the send form from ⋯. */
+async function sendFromMore(page: Page) {
+  await moreEntry(page, await openMore(page), "Send to an agent…").click();
+  await expect(sendForm(page)).toBeVisible();
+}
 
 /** The form or the question the block opens. */
 const sendForm = (page: Page) => page.getByRole("dialog", { name: "Send to an agent", exact: true });
@@ -63,21 +73,24 @@ test("sending from the item with a line shows who has it, in the item and in the
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");
 
-  await expect(who(page)).toContainText("With you.");
-  await who(page).getByRole("button", { name: "Send to an agent", exact: true }).click();
+  await expect(chip(page)).toHaveCount(0);
+  await sendFromMore(page);
   const form = sendForm(page);
   await expect(form.getByRole("radio", { name: "To with context" })).toBeChecked();
   await expect(form.getByRole("radio", { name: "All the way" })).not.toBeChecked();
   await form.getByLabel("A line for the agent (optional)").fill("Use the new CA.");
   await form.getByRole("button", { name: "Send", exact: true }).click();
 
+  await expect(chip(page)).toHaveText("Agent · to with context");
+  await expect(sendForm(page)).toHaveCount(0);
+  // Focus goes to the chip that appeared.
+  await expect(chip(page)).toBeFocused();
+  await chip(page).click();
   await expect(who(page)).toContainText("With an agent since");
   await expect(who(page)).toContainText("going to: with context");
   await expect(who(page)).not.toContainText("all the way");
   await expect(who(page)).toContainText("“Use the new CA.”");
-  await expect(sendForm(page)).toHaveCount(0);
-  // Focus follows the button that replaced Send to an agent.
-  await expect(who(page).getByRole("button", { name: "Take back", exact: true })).toBeFocused();
+  await who(page).getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Sent to an agent, going to: with context." })).toBeVisible();
   // The row says it too: in words from a tablet up, and in its name for a screen reader at every width.
   await expect(heldRow(page, "Rotate the certs")).toBeVisible();
@@ -90,8 +103,7 @@ test("sending from the item with a line shows who has it, in the item and in the
     .filter({ hasText: "Sent to an agent" })
     .getByRole("button", { name: "Undo", exact: true })
     .click();
-  await expect(who(page)).toContainText("With you.");
-  await expect(who(page).getByRole("button", { name: "Send to an agent", exact: true })).toBeVisible();
+  await expect(chip(page)).toHaveCount(0);
   await expect(row(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   // Undo is a take back, which the history keeps.
@@ -103,10 +115,11 @@ test("sending from the item with a line shows who has it, in the item and in the
 test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");
-  await who(page).getByRole("button", { name: "Send to an agent", exact: true }).click();
+  await sendFromMore(page);
   await sendForm(page).locator("label").filter({ hasText: "All the way" }).click();
   await expect(sendForm(page).getByRole("radio", { name: "All the way" })).toBeChecked();
   await sendForm(page).getByRole("button", { name: "Send", exact: true }).click();
+  await chip(page).click();
   await expect(who(page)).toContainText("going to: with context, all the way");
 
   const defined = await seed(page, heapPath, "Ship it");
@@ -117,14 +130,15 @@ test("all the way is offered and shown, and a defined task has one way to go", a
   });
   expect(made.ok()).toBe(true);
   await open(page, heapPath, defined.key, "Ship it");
-  await who(page).getByRole("button", { name: "Send to an agent", exact: true }).click();
+  await sendFromMore(page);
   await expect(sendForm(page)).toContainText("To done");
   await expect(sendForm(page).getByRole("radio")).toHaveCount(0);
   await sendForm(page).getByRole("button", { name: "Send", exact: true }).click();
+  await chip(page).click();
   await expect(who(page)).toContainText("going to: done");
 });
 
-test("taking back asks first: Cancel keeps it, Take back returns it to you with focus on Send to an agent", async ({
+test("taking back asks first: Cancel keeps it, Take back removes the chip and focus goes to ⋯", async ({
   page,
   heapPath,
 }) => {
@@ -132,6 +146,7 @@ test("taking back asks first: Cancel keeps it, Take back returns it to you with 
   await open(page, heapPath, key, "Rotate the certs");
   const takeBack = who(page).getByRole("button", { name: "Take back", exact: true });
 
+  await chip(page).click();
   await takeBack.click();
   await expect(takeBackAsk(page)).toContainText("Take this back from the agent? It stops, and what it changed stays.");
   await takeBackAsk(page).getByRole("button", { name: "Cancel", exact: true }).click();
@@ -141,8 +156,11 @@ test("taking back asks first: Cancel keeps it, Take back returns it to you with 
 
   await takeBack.click();
   await takeBackAsk(page).getByRole("button", { name: "Take back", exact: true }).click();
-  await expect(who(page)).toContainText("With you.");
-  await expect(who(page).getByRole("button", { name: "Send to an agent", exact: true })).toBeFocused();
+  await expect(chip(page)).toHaveCount(0);
+  await expect(who(page)).toHaveCount(0);
+  await expect(
+    itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More" }),
+  ).toBeFocused();
   // No toast: the person did it, and the history keeps it.
   await expect(page.getByRole("status").filter({ hasText: "agent" })).toHaveCount(0);
 });
@@ -160,19 +178,20 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
     "An agent has this. Starting it takes it back. Take it back and start it?",
   );
   await takeBackAsk(page).getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(who(page)).toContainText("With an agent since");
+  await expect(chip(page)).toBeVisible();
   await expect(state.getByRole("button", { name: "Start", exact: true })).toBeFocused();
 
-  await state.getByRole("button", { name: "Block", exact: true }).click();
+  await moreEntry(page, await openMore(page), "Block").click();
   await expect(takeBackAsk(page)).toHaveCount(0);
-  await expect(itemPane(page).getByText("Blocked", { exact: true })).toBeVisible();
-  await expect(who(page)).toContainText("With an agent since");
+  await expect(itemPane(page).getByRole("group", { name: "Status" })).toContainText("Blocked");
+  await expect(chip(page)).toBeVisible();
 
-  await state.getByRole("button", { name: "Done", exact: true }).click();
+  // Blocked, the main button is Unblock and Done is under ⋯.
+  await moreEntry(page, await openMore(page), "Done").click();
   await expect(takeBackAsk(page)).toContainText("Closing it takes it back. Take it back and close it?");
   await takeBackAsk(page).getByRole("button", { name: "Take back and close", exact: true }).click();
-  // A closed item offers only Reopen, at every width: "Done" would match the button still there before the close lands.
-  await expect(state.getByRole("button")).toHaveText(["Reopen"]);
+  // A closed item offers only Reopen and ⋯, at every width: "Done" would match the button still there before the close lands.
+  await expect(state.getByRole("button").first()).toHaveText("Reopen");
 });
 
 test("marking an item an agent has done from its row asks first, and closing takes it back", async ({
@@ -229,6 +248,7 @@ test("an admin turns on Agents prepare new notes, and a note added from Add show
   await addItem(page, "Fresh note", {}, { listed: false });
   await expect(heldRow(page, "Fresh note")).toBeVisible();
   await heldRow(page, "Fresh note").getByRole("link").click();
+  await chip(page).click();
   await expect(who(page)).toContainText("Prepared on add");
   await expect(who(page)).toContainText("going to: with context");
 });
@@ -283,9 +303,7 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   await expect(heldRow(page, "Rotate the certs").getByText("with an agent", { exact: true })).toBeHidden();
 
   await open(page, heapPath, plain.key, "Plain note");
-  const send = who(page).getByRole("button", { name: "Send to an agent", exact: true });
-  await expectTouchSize(send);
-  await send.click();
+  await sendFromMore(page);
   const form = sendForm(page);
   // A sheet, from the bottom of the screen: its padding is all that is below the form.
   const sheet = await form.boundingBox();
@@ -296,9 +314,13 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   await expectTouchSize(form.getByRole("button", { name: "Send", exact: true }));
   await expectTouchSize(form.getByRole("button", { name: "Cancel", exact: true }));
   await form.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(who(page).getByRole("button", { name: "Send to an agent", exact: true })).toBeFocused();
+  await expect(
+    itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More" }),
+  ).toBeFocused();
 
   await open(page, heapPath, sent.key, "Rotate the certs");
+  await expectTouchSize(chip(page));
+  await chip(page).click();
   const takeBack = who(page).getByRole("button", { name: "Take back", exact: true });
   await expectTouchSize(takeBack);
   await takeBack.click();
@@ -306,19 +328,19 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   await expectTouchSize(ask.getByRole("button", { name: "Take back", exact: true }));
   await expectTouchSize(ask.getByRole("button", { name: "Cancel", exact: true }));
   await ask.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(takeBack).toBeFocused();
+  await expect(who(page)).toBeVisible();
 });
 
-test("the item in an archived heap shows no Who has it block", async ({ page, heapPath }) => {
+test("the item in an archived heap shows no agent chip", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs", true);
   await open(page, heapPath, key, "Rotate the certs");
-  await expect(who(page)).toBeVisible();
+  await expect(chip(page)).toBeVisible();
 
   const archived = await page.request.post(`/api/v1${heapPath}/archive`, { headers });
   expect(archived.ok()).toBe(true);
   await page.reload();
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
-  await expect(who(page)).toHaveCount(0);
+  await expect(chip(page)).toHaveCount(0);
   await expect(itemPane(page).getByRole("button", { name: /Send to an agent|Take back/ })).toHaveCount(0);
   // Archiving took the turn back.
   const item = await (await page.request.get(`/api/v1${heapPath}/items/${key}`)).json();

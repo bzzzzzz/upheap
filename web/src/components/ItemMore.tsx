@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -103,6 +103,15 @@ export function ItemActions({
   const { copy } = useCopyText();
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
+  // Set by a send, until the item shows the agent's chip, which then takes the focus. The send form goes away with the
+  // send (the item can no longer be sent), so this is kept here.
+  const focusChip = useRef(false);
+  const hasTurn = item.turn != null;
+  useEffect(() => {
+    if (!focusChip.current || !hasTurn || sending) return;
+    focusChip.current = false;
+    focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]"));
+  }, [hasTurn, sending, focusAfterRender]);
   const [changing, setChanging] = useState(false);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const actions = actionsOf(item);
@@ -261,8 +270,9 @@ export function ItemActions({
           isOpen={sending}
           onClose={(sent) => {
             setSending(false);
-            // A send moves focus to the agent chip, which this would race.
-            if (!sent) focusAfterRender(() => moreRef.current);
+            // A send moves focus to the agent chip instead.
+            if (sent) focusChip.current = true;
+            else focusAfterRender(() => moreRef.current);
           }}
           triggerRef={moreRef}
         />

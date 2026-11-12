@@ -76,7 +76,7 @@ test("hovering or focusing the play button shows the done button beside it, and 
   ).toBeFocused();
 });
 
-test("the item pane walks the list, and the link sign by its title copies the link", async ({ page, heapPath }) => {
+test("the item pane walks the list, and shows the item's key", async ({ page, heapPath }) => {
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
   await addItem(page, "Slog", { effort: "XL", impact: "S" });
   const pane = itemPane(page);
@@ -92,7 +92,6 @@ test("the item pane walks the list, and the link sign by its title copies the li
 
   const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
   await expect(pane.getByText(key, { exact: true })).toBeVisible();
-  await expect(pane.getByRole("button", { name: `Copy the link to ${key}` })).toBeVisible();
 
   // Walking replaces the item rather than adding to the history, so it still closes in one step.
   await pane.getByRole("link", { name: "Previous item" }).click();

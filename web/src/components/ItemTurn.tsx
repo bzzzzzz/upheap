@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
@@ -179,23 +179,18 @@ export function SendToAgent({
   const send = useSendToAgent(heapRef);
   const takeBack = useTakeBack(heapRef);
   const setToast = useToast();
-  // Set by a send made here: once the item shows the agent, focus goes to its chip.
-  const focusChip = useRef(false);
   const turn = item.turn;
   // Someone else's send that arrives while the form is open closes it: the chip shows the agent has the item.
   const formOpen = isOpen && !turn;
-
-  useEffect(() => {
-    if (!focusChip.current || !turn) return;
-    focusChip.current = false;
-    document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]")?.focus();
-  }, [turn]);
+  // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't take it back.
+  const sent = useRef(false);
 
   const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
-  const sendNow = (reach: Reach, line: string) =>
-    send.mutateAsync({ item, body: { reach, line: line.trim() === "" ? null : line } }).then(
+  const sendNow = (reach: Reach, line: string) => {
+    sent.current = false;
+    return send.mutateAsync({ item, body: { reach, line: line.trim() === "" ? null : line } }).then(
       (saved) => {
-        focusChip.current = true;
+        sent.current = true;
         onClose(true);
         setToast({
           message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
@@ -205,13 +200,16 @@ export function SendToAgent({
       },
       () => undefined,
     );
+  };
 
   return (
     <PopoverSheet
       title="Send to an agent"
       triggerRef={triggerRef}
       isOpen={formOpen}
-      onClose={() => onClose(false)}
+      onClose={() => {
+        if (!sent.current) onClose(false);
+      }}
       placement="bottom end"
       size="narrow"
     >
