@@ -16,17 +16,21 @@ const components: Components = {
   h4: ({ children }) => <h5 className="mt-1 text-sm font-semibold first:mt-0">{children}</h5>,
   h5: ({ children }) => <h5 className="mt-1 text-sm font-semibold first:mt-0">{children}</h5>,
   h6: ({ children }) => <h5 className="mt-1 text-sm font-semibold first:mt-0">{children}</h5>,
-  a: ({ href, children }) =>
-    // Only a link to another origin opens a tab; an in-page anchor, such as a footnote's, moves in place.
-    href !== undefined && /^(https?:|mailto:)/i.test(href) ? (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
+  a: ({ href, children }) => {
+    // A link the URL transform dropped (an unsafe one) reads as the text it was written over.
+    if (href === undefined || href === "") return <span>{children}</span>;
+    // An in-page anchor, such as a footnote's, moves in place; every other link opens a tab, so the app stays open.
+    const inPage = href.startsWith("#");
+    return (
+      <a
+        href={href}
+        {...(inPage ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+        className="text-accent-ink underline"
+      >
         {children}
       </a>
-    ) : (
-      <a href={href} className="text-accent-ink underline">
-        {children}
-      </a>
-    ),
+    );
+  },
   img: ({ src, alt }) =>
     typeof src === "string" && src !== "" ? (
       <a href={src} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">

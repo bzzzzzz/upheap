@@ -382,11 +382,21 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     the value. Without `edit` (a reader, an archived heap, a closed item) the values are plain text.
 17. The **context** is the item's description rendered as Markdown (GitHub-flavoured: headings, emphasis, links, code,
     lists, task lists as disabled checkboxes, quotes, tables), with an Edit button, shown with `edit`. Raw HTML is
-    never rendered and images are never loaded: an image shows as a link. Links open in a new tab. A line break in the
-    text stays one, so plain text written before reads as it did. With none it says "No context yet." and the button
-    reads Add. Edit swaps the text in place for its source, with Save and Cancel (⌘ or Ctrl with Enter saves, Escape
-    cancels without closing the item); on a phone it opens a sheet that saves as it closes. Leaving the item with a
-    changed draft, by closing it or walking on, saves it, so nothing typed is lost.
+    never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves in
+    place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break
+    in the text stays one, so plain text written before reads as it did. With none it says "No context yet." and the
+    button reads Add. Edit swaps the text in place for a form with Save and Cancel, and on a phone opens the same form
+    in a sheet; it reads and behaves as the heap's Context card does (Heap settings). ⌘ or Ctrl with Enter saves, and
+    Escape does nothing, so a long draft is never lost to a stray key or closes the item. Save closes the form once
+    the save has landed, the text is read-only while it is in flight, and a failed save keeps the draft and says why.
+    When someone else saved a different context meanwhile, it shows above the draft under "Saved meanwhile", Save
+    reads Save again and replaces it, and Cancel keeps theirs. Dismissing the phone's sheet (✕, a swipe, a tap outside)
+    with a changed draft saves it like Save, and stays open if that doesn't land; an unchanged draft just closes. Done
+    and Won't do from the pane save a changed draft first, and don't go on if it can't be saved. Leaving the item with
+    a changed draft, by closing it or walking on, saves it when nothing else changed meanwhile, and otherwise doesn't
+    save it; a failure of that save is said under the Context. When the item can no longer be edited (closed
+    elsewhere, an archived heap, a changed role) the draft stays as read-only text that can be selected, with "This item
+    can't be edited any more; your text wasn't saved." and a Close button.
 
 ## Adding an item
 

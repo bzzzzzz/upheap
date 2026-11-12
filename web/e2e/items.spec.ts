@@ -185,10 +185,11 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   await expect(context.getByRole("listitem")).toHaveText(["one", "two"]);
-  // A script-scheme link and a remote image are never live: the link has no href, the image reads as a link.
+  // A script-scheme link and a remote image are never live: the link reads as plain text, the image as a link.
   await (await editContext(page)).fill("[bad](javascript:alert(1)) and ![x](https://example.com/t.png)");
   await saveContext(page, "bad and");
   await expect(context.locator("a[href^='javascript:' i]")).toHaveCount(0);
+  await expect(context.getByRole("link", { name: "bad", exact: true })).toHaveCount(0);
   await expect(context.locator("img")).toHaveCount(0);
   await expect(context.getByRole("link", { name: "x", exact: true })).toHaveAttribute(
     "href",
@@ -200,8 +201,8 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await expect(pane.locator("script")).toHaveCount(0);
   expect(await page.evaluate(() => "pwned" in window)).toBe(false);
 
-  // Save, Cancel and Escape are the explicit ways out of the editor on a wider screen; a phone's sheet saves as it closes.
-  test.skip(isPhone(page), "a phone edits the context in a sheet that saves as it closes");
+  // Save and Cancel are the ways out of the form; the focus goes back to Edit. The rest is checked on a wider screen.
+  test.skip(isPhone(page), "the phone's sheet is checked in its own test");
   const area = await editContext(page);
   await expect(area).toHaveValue(source);
   await area.fill("Just this");
@@ -213,12 +214,15 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Just this");
   await expect(context).not.toContainText("Never mind");
+  await expect(pane.getByRole("button", { name: "Edit context" })).toBeFocused();
 
-  // Escape in the textarea throws the draft away and keeps the item open.
-  await (await editContext(page)).fill("Not this either");
+  // Escape in the textarea does nothing: the draft stays and the item stays open.
+  const kept = await editContext(page);
+  await kept.fill("Not lost to a stray key");
   await page.keyboard.press("Escape");
-  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
+  await expect(kept).toHaveValue("Not lost to a stray key");
   await expect(pane).toBeVisible();
+  await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Just this");
 
   // Closing the item with a changed draft saves it, so nothing typed is lost.
@@ -483,14 +487,16 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   await need.getByRole("radio", { name: "Critical", exact: true }).click();
   await expect(fieldButton(page, "Need")).toHaveAccessibleName("Need: Critical");
 
-  // The context saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
+  // Escape does nothing; a tap on the dimmed page saves a changed draft like Save does, and Save does too.
   const context = pane.getByRole("region", { name: "Context", exact: true });
-  await (await editContext(page)).fill("Venue first");
+  const area = await editContext(page);
+  await area.fill("Venue first");
   await page.keyboard.press("Escape");
+  await expect(area).toHaveValue("Venue first");
+  await page.mouse.click(200, 20);
   await expect(context).toContainText("Venue first");
   await (await editContext(page)).fill("Venue, then dates");
-  await page.mouse.click(200, 20);
-  await expect(context).toContainText("Venue, then dates");
+  await saveContext(page, "Venue, then dates");
 
   // A new tag from the Tags sheet, its offer in view under the field.
   const tags = await field(page, "Tags");
@@ -615,37 +621,102 @@ async function refetchShowing(page: Page, title: string) {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
 }
 
-test("saving a context someone else changed meanwhile asks first, and loses neither text", async ({
+test("saving a context someone else changed meanwhile shows theirs above the draft, and Save again replaces it", async ({
   page,
   heapPath,
 }) => {
-  test.skip(isPhone(page), "a phone edits the context in a sheet that saves as it closes");
+  test.skip(isPhone(page), "the phone's sheet is checked in its own test");
   await addItem(page, "Write the plan");
   await openItem(page, "Write the plan");
   const pane = itemPane(page);
   const context = pane.getByRole("region", { name: "Context", exact: true });
-  const message = pane.getByText("Someone else changed the context meanwhile.", { exact: true });
+  const saved = pane.getByRole("heading", { name: "Saved meanwhile", exact: true });
 
-  // Use theirs: the draft goes and their text shows.
+  // Cancel keeps theirs.
   await (await editContext(page)).fill("Mine");
   await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed once" });
   await refetchShowing(page, "Renamed once");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(message).toBeVisible();
+  await expect(saved).toBeVisible();
+  await expect(pane.getByText("Theirs", { exact: true })).toBeVisible();
   await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Mine");
-  await pane.getByRole("button", { name: "Use theirs", exact: true }).click();
+  await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Theirs");
   await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
 
-  // Save mine anyway: the draft is written over theirs.
+  // Save again replaces it with the draft.
   await (await editContext(page)).fill("Mine again");
   await changeElsewhere(page, heapPath, { description: "Theirs again", title: "Renamed twice" });
   await refetchShowing(page, "Renamed twice");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(message).toBeVisible();
-  await pane.getByRole("button", { name: "Save mine anyway", exact: true }).click();
+  await expect(saved).toBeVisible();
+  await pane.getByRole("button", { name: "Save again", exact: true }).click();
   await expect(context).toContainText("Mine again");
   await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
+});
+
+test("a conflict on Done keeps the item open, with theirs shown above the draft", async ({ page, heapPath }) => {
+  test.skip(isPhone(page), "a phone edits the context in a sheet, which covers the pane's Done");
+  await addItem(page, "Ship the release");
+  await openItem(page, "Ship the release");
+  const pane = itemPane(page);
+  await (await editContext(page)).fill("Shipped");
+  await changeElsewhere(page, heapPath, { description: "Held back", title: "Renamed" });
+  await refetchShowing(page, "Renamed");
+
+  await changeState(page, "Done", "more");
+  await expect(pane.getByRole("heading", { name: "Saved meanwhile", exact: true })).toBeVisible();
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Shipped");
+  const state = pane.getByRole("group", { name: "State", exact: true });
+  await expect(state.getByRole("button", { name: "Start", exact: true })).toBeVisible();
+  await expect(state.getByRole("button", { name: "Reopen", exact: true })).toHaveCount(0);
+});
+
+test("a draft stays readable when the item is closed elsewhere, and says it wasn't saved", async ({
+  page,
+  heapPath,
+}) => {
+  test.skip(isPhone(page), "the phone's sheet is checked in its own test");
+  await addItem(page, "Ship the release");
+  await openItem(page, "Ship the release");
+  const pane = itemPane(page);
+  await (await editContext(page)).fill("Original");
+  await saveContext(page, "Original");
+  await (await editContext(page)).fill("Wrap-up that never got saved");
+  await changeElsewhere(page, heapPath, { state: "done" });
+  await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+
+  await expect(pane.getByText("This item can't be edited any more; your text wasn't saved.")).toBeVisible();
+  const draft = pane.getByRole("textbox", { name: "Context", exact: true });
+  await expect(draft).toHaveValue("Wrap-up that never got saved");
+  await expect(draft).toHaveJSProperty("readOnly", true);
+  await pane
+    .getByRole("region", { name: "Context", exact: true })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await expect(draft).toHaveCount(0);
+  await expect(pane.getByRole("region", { name: "Context", exact: true })).toBeFocused();
+});
+
+test("on a phone the context sheet has Save and Cancel, and a conflict keeps it open", async ({ page, heapPath }) => {
+  test.skip(!isPhone(page), "the sheet is the phone's form");
+  await addItem(page, "Write the plan");
+  await openItem(page, "Write the plan");
+  const sheet = page.getByRole("dialog", { name: "Context", exact: true });
+  await (await editContext(page)).fill("Mine");
+  await expect(sheet.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+
+  await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed once" });
+  await refetchShowing(page, "Renamed once");
+  // Dismissing with a changed draft runs the same save, so the conflict keeps the sheet open.
+  await sheet.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(sheet.getByRole("heading", { name: "Saved meanwhile", exact: true })).toBeVisible();
+  await expect(sheet.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Mine");
+
+  await sheet.getByRole("button", { name: "Save again", exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(itemPane(page).getByRole("region", { name: "Context", exact: true })).toContainText("Mine");
 });
 
 test("a context typed for the wrap-up is saved before Done closes the item", async ({ page }) => {

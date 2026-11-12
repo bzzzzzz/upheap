@@ -148,12 +148,12 @@ export async function editContext(page: Page): Promise<Locator> {
 }
 
 /**
- * Saves the context `editContext` opened and waits for the text to show: Save on a tablet or wide screen, which puts the
- * text back, and on a phone closing the sheet, which saves it. The rendered text is what only the server's answer has.
+ * Saves the context `editContext` opened and waits for the text to show: Save, in the pane or in the phone's sheet,
+ * which puts the text back. The rendered text is what only the server's answer has.
  */
 export async function saveContext(page: Page, text: string) {
-  if (isPhone(page)) await closeField(page);
-  else await itemPane(page).getByRole("button", { name: "Save", exact: true }).click();
+  const scope = isPhone(page) ? page.getByRole("dialog", { name: "Context", exact: true }) : itemPane(page);
+  await scope.getByRole("button", { name: "Save", exact: true }).click();
   await expect(itemPane(page).getByRole("region", { name: "Context", exact: true })).toContainText(text);
 }
 
