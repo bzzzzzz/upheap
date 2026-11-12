@@ -210,12 +210,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
 3. A row starts with three fixed slots, from a tablet up, so titles line up; a slot the person can't use stays
-   empty. First the **state button**: Start (a play circle) on an open row, Unblock (an amber closed padlock in a
+   empty. First the **state button**: Start (a play circle) on an open row, Unblock (a red closed padlock in a
    circle, drawn open while the row is hovered or focused, and always with a finger) on a blocked row, Pause (an
    accent circle, lightly filled, with two bars) on an in-progress row. Start moves the item to in progress; Unblock
    and Pause move it to open. A screen reader hears ", blocked" after a blocked row's title. Second **Done**, a circle
    with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
-   no line, when the server allows it and no agent has the item; a filled robot mark in the accent when an agent has
+   no line, when the server allows it and no agent has the item; a filled robot mark in ink when an agent has
    it, with a small accent dot when it waits for the person; empty otherwise (a reminder, a blocked item, a reader).
    With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
    always in full colour. A quick send shows the toast "Sent to an agent, going to: with context." with Undo (The item

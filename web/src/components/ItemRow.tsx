@@ -510,8 +510,8 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
 }
 
 /**
- * The way to unblock a blocked item, to open: a closed padlock in a circle, the row's one sign that it waits on
- * something. It is drawn open while the row is hovered or focused, and always with a finger.
+ * The way to unblock a blocked item, to open: a closed padlock in a circle, in the blocked colour the swipe's Blocked
+ * uses, the row's one sign that it waits on something. It is drawn open while the row is hovered or focused, and always with a finger.
  */
 function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
   const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";
@@ -522,7 +522,7 @@ function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
       onClick={onPress}
       aria-label={`Unblock ${item.title}`}
       title="Unblock"
-      className={`${BUTTON} text-accent-ink`}
+      className={`${BUTTON} text-overdue-ink`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -608,13 +608,14 @@ function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolea
 }
 
 /**
- * Says an agent has the item: a filled robot in the accent colour, with a dot when the agent waits for the person. Not
- * a button; the row's link says the same in words.
+ * Says an agent has the item: a filled robot in ink, apart from the quiet robot that sends and from the accent that
+ * marks in progress, with an accent dot when the agent waits for the person. Not a button; the row's link says the same
+ * in words.
  */
 function RobotMark({ waits }: { waits: boolean }) {
   return (
-    <span aria-hidden="true" className="relative flex size-6 items-center justify-center text-accent">
-      <Bot className="size-5 fill-accent/25" />
+    <span aria-hidden="true" className="relative flex size-6 items-center justify-center text-ink">
+      <Bot className="size-5 fill-ink/15" />
       {waits && <span className="absolute top-0 right-0 size-2 rounded-full bg-accent" />}
     </span>
   );
