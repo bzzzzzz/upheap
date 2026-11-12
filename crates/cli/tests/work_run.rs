@@ -1283,6 +1283,8 @@ async fn a_bad_allow_rule_is_refused_before_any_request() -> Result<()> {
             "{dash}"
         );
         expect_that!(tool.starts().len(), eq(0), "{dash}");
+        let next = cli.run(&["work", "next", "--quiet"]).await;
+        expect_that!(next.stdout.trim().is_empty(), eq(false), "{dash}");
     }
     Ok(())
 }
