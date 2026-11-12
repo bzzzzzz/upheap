@@ -137,10 +137,12 @@ cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item add "Order the new certificate" --task -q    # added as a task; -q prints its key
+cargo run -p cli -- item add "Renew the domain" --reminder 2027-03-12   # out of the list until that date
+cargo run -p cli -- item list --reminders shown                  # adds the reminders to come, in a group of their own
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
 cargo run -p cli -- item edit k3x9a --context-file context.md    # the item's context; or - for stdin, or --no-context
 cargo run -p cli -- item done k3x9a
-cargo run -p cli -- item to-task k3x9a                           # a note becomes a task, keeping its key and history
+cargo run -p cli -- item to-task k3x9a                           # a note or a reminder becomes a task, keeping its key and history
 cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
@@ -160,9 +162,10 @@ cargo run -p cli -- auth logout
 
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
 `UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. With `UPHEAP_RUN` set to a run's ID, every
-request is made inside that run: it may write the item's context, steps and questions, make a note a task and start
-it, on the run's own item only, and is refused anything else with exit 3. Exit codes: 0 done, 2 bad command line, 3
-refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1 anything else.
+request is made inside that run: it may write the item's context, steps and questions, make a note or a reminder a
+task and start it, on the run's own item only, and is refused anything else with exit 3. Exit codes: 0 done, 2 bad
+command line, 3 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain), 1
+anything else.
 
 ### From Claude Code
 

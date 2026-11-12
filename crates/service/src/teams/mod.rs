@@ -59,19 +59,24 @@ pub struct HeapView {
     pub allowed_actions: Vec<HeapAction>,
 }
 
-/// `heap` as a member with `role` sees it, with its open items counted.
+/// `heap` as a member with `role` sees it, with its open items counted at `now`.
 pub(crate) async fn load_heap_view(
     db: &impl ConnectionTrait,
     heap: Heap,
     role: Role,
+    now: Timestamp,
 ) -> Result<HeapView, ServiceError> {
-    let open_count = count_heap_open_items(db, heap.id).await?;
+    let open_count = count_heap_open_items(db, heap.id, now).await?;
     Ok(to_heap_view(heap, role, open_count))
 }
 
 /// How many open items `heap_id` has (see [`HeapView::open_count`]).
-pub(crate) async fn count_heap_open_items(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<u32, ServiceError> {
-    Ok(count_open_items(db, &[heap_id])
+pub(crate) async fn count_heap_open_items(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    now: Timestamp,
+) -> Result<u32, ServiceError> {
+    Ok(count_open_items(db, &[heap_id], now)
         .await?
         .get(&heap_id)
         .copied()
@@ -92,9 +97,10 @@ pub(crate) async fn load_heap_views(
     db: &impl ConnectionTrait,
     heaps: Vec<Heap>,
     role: Role,
+    now: Timestamp,
 ) -> Result<Vec<HeapView>, ServiceError> {
     let ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
-    let open_counts = count_open_items(db, &ids).await?;
+    let open_counts = count_open_items(db, &ids, now).await?;
     Ok(heaps
         .into_iter()
         .map(|heap| {
@@ -111,7 +117,7 @@ impl Services {
         let team = store::teams::find_team(&self.db, team_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        load_team_detail(&self.db, principal, team).await
+        load_team_detail(&self.db, principal, team, self.now()).await
     }
 
     #[allow(clippy::too_many_arguments)] // Every field of the entry differs between callers.
@@ -145,6 +151,7 @@ pub(super) async fn load_team_detail(
     db: &impl ConnectionTrait,
     principal: Principal,
     team: Team,
+    now: Timestamp,
 ) -> Result<TeamDetail, ServiceError> {
     let memberships = store::teams::list_memberships(db, team.id).await?;
     let caller = memberships
@@ -175,7 +182,7 @@ pub(super) async fn load_team_detail(
         })
         .collect::<Result<Vec<_>, ServiceError>>()?;
     let heaps = store::heaps::list_heaps_for_teams(db, &[team.id]).await?;
-    let heaps = load_heap_views(db, heaps, caller.role).await?;
+    let heaps = load_heap_views(db, heaps, caller.role, now).await?;
     Ok(TeamDetail {
         allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id),
         role: caller.role,

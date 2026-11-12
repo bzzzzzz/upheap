@@ -191,6 +191,14 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("stage"),
             ..simple(StatusCode::CONFLICT, "stage_needs_task", Category::Conflict)
         },
+        ServiceError::Item(ItemError::ReminderNeedsDate { .. }) => Classified {
+            field: Some("due"),
+            ..simple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "reminder_needs_date",
+                Category::Caller,
+            )
+        },
         ServiceError::Step(StepError::NeedsTask { .. }) => {
             simple(StatusCode::CONFLICT, "steps_need_task", Category::Conflict)
         }
@@ -215,6 +223,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::Turn(TurnError::NotStuck { .. }) => {
             simple(StatusCode::CONFLICT, "turn_not_stuck", Category::Conflict)
+        }
+        ServiceError::Turn(TurnError::NeedsNoteOrTask { .. }) => {
+            simple(StatusCode::CONFLICT, "turn_needs_note_or_task", Category::Conflict)
         }
         ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
         ServiceError::Run(RunError::CostRecorded) => {
@@ -406,6 +417,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::PasswordTooShort { .. } => ("password_too_short", Some(Field::Password.as_str())),
         ValidationError::PasswordTooLong { .. } => ("password_too_long", Some(Field::Password.as_str())),
         ValidationError::DueDateInvalid => ("due_date_invalid", Some("due")),
+        ValidationError::ReminderNeedsDate => ("reminder_needs_date", Some("due")),
         ValidationError::TimestampOutOfRange => ("timestamp_out_of_range", None),
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
         ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),

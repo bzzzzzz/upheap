@@ -326,6 +326,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
         };

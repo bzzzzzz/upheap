@@ -86,7 +86,7 @@ impl Services {
         let as_of = self.effective_as_of(requested_as_of, now);
         let viewable = self.list_viewable_heaps(principal).await?;
         let heap_ids: Vec<_> = viewable.iter().map(|viewable| viewable.heap.id).collect();
-        let with_items = store::items::count_items_by_heap(&self.db, &heap_ids, &StateKind::OPEN).await?;
+        let with_items = store::items::count_items_by_heap(&self.db, &heap_ids, &StateKind::OPEN, now).await?;
 
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
         let (mut hidden_count, mut in_progress_count) = (0_u32, 0_u32);

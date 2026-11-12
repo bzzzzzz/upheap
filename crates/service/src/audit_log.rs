@@ -753,6 +753,7 @@ const fn describe_kind(kind: Kind) -> &'static str {
     match kind {
         Kind::Note => "Note",
         Kind::Task => "Task",
+        Kind::Reminder => "Reminder",
     }
 }
 

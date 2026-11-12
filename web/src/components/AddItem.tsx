@@ -1,20 +1,22 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { Dialog, Modal, ModalOverlay, ToggleButtonGroup } from "react-aria-components";
+import { Dialog, Modal, ModalOverlay, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import type { DueInput, HeapRef, Item, ItemTag, Me, Need, Parameter, Size } from "../api/client";
 import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
 import { useAddAnother } from "./addAnother";
-import { ChoiceButtons } from "./ChoiceButtons";
+import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";
+import { DateField } from "./DateField";
 import { DuePicker } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
-import { matchesSearch, placeOf, splitList, toListQuery, type ListSearch } from "./listView";
+import { listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
+import { formatDate, isToCome } from "./reminders";
 import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 import { teamName } from "./teamName";
@@ -79,6 +81,8 @@ export function AddItem({
 
 /** A new item as the dialog holds it before it's added. */
 type Draft = {
+  /** A note, or a reminder, which has a date instead of a due time. */
+  kind: "note" | "reminder";
   title: string;
   description: string;
   /** Required: Add stays off until one is picked. */
@@ -86,18 +90,22 @@ type Draft = {
   effort: Size | null;
   impact: Size | null;
   due: DueInput | null;
+  /** The reminder's date, `YYYY-MM-DD`. Required for a reminder, and never sent for a note. */
+  date: string | null;
   tags: ItemTag[];
   /** Option ID by parameter ID. */
   values: Record<string, string | null>;
 };
 
 const EMPTY: Draft = {
+  kind: "note",
   title: "",
   description: "",
   need: null,
   effort: null,
   impact: null,
   due: null,
+  date: null,
   tags: [],
   values: {},
 };
@@ -109,17 +117,28 @@ type Added = {
   heap: HeapRef;
   heapName: string;
   place: { position: number; section: string | undefined } | undefined;
+  /** The date a reminder to come joins the list, as people say it; it has no place until then. */
+  joins: string | undefined;
 };
 
-/** "Added “Title” at #4 in Up next.", or where it went when the list on screen doesn't show it. */
-const addedMessage = ({ title, heapName, place }: Added) =>
-  place
-    ? `Added “${title}” at #${place.position}${place.section ? ` in ${place.section}` : ""}.`
-    : `Added “${title}” to ${heapName}.`;
+/**
+ * "Added “Title” at #4 in Up next.", or where it went when the list on screen doesn't show it. A reminder to come says
+ * when it joins the list instead.
+ */
+const addedMessage = ({ title, heapName, place, joins }: Added) =>
+  joins
+    ? `Added. It joins the list on ${joins}.`
+    : place
+      ? `Added “${title}” at #${place.position}${place.section ? ` in ${place.section}` : ""}.`
+      : `Added “${title}” to ${heapName}.`;
 
 /** The same, short enough for the corner of a phone's sheet. */
-const addedNote = ({ title, heapName, place }: Added) =>
-  place ? `“${title}” added at #${place.position}` : `“${title}” added to ${heapName}`;
+const addedNote = ({ title, heapName, place, joins }: Added) =>
+  joins
+    ? `“${title}” joins the list on ${joins}`
+    : place
+      ? `“${title}” added at #${place.position}`
+      : `“${title}” added to ${heapName}`;
 
 const sameHeap = (a: HeapRef, b: HeapRef) => a.team === b.team && a.heap === b.heap;
 
@@ -227,7 +246,9 @@ export function AddItemDialog({
     return `Asked because of the ${names.length === 1 ? "tag" : "tags"} ${names.join(", ")}`;
   };
 
-  const canAdd = draft.title.trim() !== "" && draft.need !== null && !create.isPending;
+  const reminder = draft.kind === "reminder";
+  const canAdd =
+    draft.title.trim() !== "" && draft.need !== null && (!reminder || draft.date !== null) && !create.isPending;
   const unsaved = draft.title.trim() !== "" && edits !== sent;
 
   const requestClose = () => {
@@ -267,12 +288,14 @@ export function AddItemDialog({
     setAdded(null);
     // Tags and parameter values belong to a heap; the rest carries over.
     setEdits({
+      kind: draft.kind,
       title: draft.title,
       description: draft.description,
       need: draft.need,
       effort: draft.effort,
       impact: draft.impact,
       due: draft.due,
+      date: draft.date,
     });
     setTarget(next);
   };
@@ -304,7 +327,10 @@ export function AddItemDialog({
           description: draft.description.trim() === "" ? null : draft.description,
           effort: draft.effort,
           impact: draft.impact,
-          due: draft.due,
+          // A reminder's date is its deadline; the server makes it firm, so it says so too.
+          ...(reminder && draft.date !== null
+            ? { kind: "reminder" as const, due: { date: draft.date, firm: true } }
+            : { due: draft.due }),
           tag_ids: draft.tags.map((tag) => tag.id),
           parameter_values: Object.fromEntries(
             suggested.flatMap((parameter) => {
@@ -343,7 +369,9 @@ export function AddItemDialog({
       titleRef.current?.focus();
     }
 
-    const list = add.onScreen && view ? await refetchList(heapRef, toListQuery(view)) : undefined;
+    // A reminder still to come is not in the ranked list, so there is no place to read from it.
+    const joins = isToCome(item) && item.due ? formatDate(item.due.date) : undefined;
+    const list = add.onScreen && view && !joins ? await refetchList(heapRef, listQueryFor(view, search)) : undefined;
     const place = list && placeOf(list, item.key);
     // Not a position the search on screen hides.
     const shown = place && matchesSearch(place.entry, search) ? place : undefined;
@@ -353,6 +381,7 @@ export function AddItemDialog({
       heap: add.heap,
       heapName: add.heapName,
       place: shown && { position: shown.entry.position, section: shown.section },
+      joins,
     };
     if (!add.addAnother || !open.current) {
       // Not over a toast about something done since, such as a row marked done.
@@ -398,6 +427,27 @@ export function AddItemDialog({
   );
 
   const chooser = <HeapChooser me={me} value={target} name={heapName} onChange={chooseHeap} />;
+
+  const kindChooser = (
+    <ToggleButtonGroup
+      aria-label="Kind"
+      selectionMode="single"
+      disallowEmptySelection
+      selectedKeys={[draft.kind]}
+      onSelectionChange={(keys) => {
+        const [picked] = [...keys];
+        if (picked !== undefined) set("kind", picked === "reminder" ? "reminder" : "note");
+      }}
+      className="flex gap-1"
+    >
+      <ToggleButton id="note" className={`${choiceButtonClass} rounded-lg px-4`}>
+        Note
+      </ToggleButton>
+      <ToggleButton id="reminder" className={`${choiceButtonClass} rounded-lg px-4`}>
+        Reminder
+      </ToggleButton>
+    </ToggleButtonGroup>
+  );
 
   const title = (
     <label className="flex flex-col">
@@ -533,10 +583,15 @@ export function AddItemDialog({
                   </div>
                 </div>
                 <div className="flex min-h-0 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-3">
+                  {kindChooser}
                   {title}
                   <NeedPicker layout="chips" value={draft.need} onChange={(need) => set("need", need)} />
                   <PhoneChips heapRef={target} draft={draft} set={set} />
-                  <DuePicker key={round} layout="chips" value={draft.due} onChange={(due) => set("due", due)} />
+                  {reminder ? (
+                    <DateField value={draft.date} onChange={(date) => set("date", date)} />
+                  ) : (
+                    <DuePicker key={round} layout="chips" value={draft.due} onChange={(due) => set("due", due)} />
+                  )}
                   {showMore && (
                     <div id={moreId} className="flex flex-col gap-3">
                       {description}
@@ -593,6 +648,7 @@ export function AddItemDialog({
                       </p>
                     )}
                   </div>
+                  {kindChooser}
                   {title}
                   {description}
                   <div className="grid grid-cols-[84px_minmax(0,1fr)] items-start gap-x-3 gap-y-3.5">
@@ -611,13 +667,17 @@ export function AddItemDialog({
                       value={draft.impact}
                       onChange={(v) => set("impact", v)}
                     />
-                    <DuePicker
-                      key={round}
-                      layout="grid"
-                      noneChoice
-                      value={draft.due}
-                      onChange={(due) => set("due", due)}
-                    />
+                    {reminder ? (
+                      <DateField layout="grid" value={draft.date} onChange={(date) => set("date", date)} />
+                    ) : (
+                      <DuePicker
+                        key={round}
+                        layout="grid"
+                        noneChoice
+                        value={draft.due}
+                        onChange={(due) => set("due", due)}
+                      />
+                    )}
                     <TagPicker
                       heapRef={target}
                       layout="grid"

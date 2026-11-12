@@ -5,7 +5,7 @@ use api_types::common::{ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto
 use api_types::items::{
     AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery, ClosedItemsDto, ClosedQuery, RankedListDto, RankedQuery,
 };
-use api_types::list_view::{BlockedLayoutDto, ListViewDto, SortDto, StateModeDto};
+use api_types::list_view::{BlockedLayoutDto, ListViewDto, RemindersModeDto, SortDto, StateModeDto};
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
 use api_types::views::SavedViewListDto;
@@ -31,12 +31,12 @@ pub struct ListArgs {
     #[arg(value_name = "TEXT", conflicts_with = "json")]
     pub text: Option<String>,
     /// Every open item of every heap you can use, in one ranked list, each with its heap. In place of one heap's list
-    #[arg(long, conflicts_with_all = ["name", "view", "tag", "closed", "sort", "sort_parameter"])]
+    #[arg(long, conflicts_with_all = ["name", "view", "tag", "closed", "sort", "sort_parameter", "reminders"])]
     pub all_heaps: bool,
     /// Closed items, most recently closed first, in place of the ranked list
     #[arg(long, conflicts_with_all = [
         "view", "tag", "need", "effort", "impact", "sort", "sort_parameter", "open", "in_progress", "blocked",
-        "blocked_layout",
+        "blocked_layout", "reminders",
     ])]
     pub closed: bool,
     /// A saved view of the heap, by name or ID. Flags given with it change what it shows
@@ -72,6 +72,10 @@ pub struct ListArgs {
     /// Whether shown blocked items get their own group or are mixed in: grouped or mixed
     #[arg(long, value_name = "LAYOUT", value_parser = parse_api_value::<BlockedLayoutDto>)]
     pub blocked_layout: Option<BlockedLayoutDto>,
+    /// Whether to list the heap's reminders to come, in a group after the others: hidden or shown. Hidden by
+    /// default, but a TEXT search always looks in them
+    #[arg(long, value_name = "MODE", value_parser = parse_api_value::<RemindersModeDto>)]
+    pub reminders: Option<RemindersModeDto>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -119,6 +123,14 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
                 if keeps(&entry.item, args.text.as_deref()) {
                     out.line(&entry.item.key)?;
                 }
+            }
+            for item in list
+                .value
+                .reminders
+                .iter()
+                .filter(|item| keeps(item, args.text.as_deref()))
+            {
+                out.line(&item.key)?;
             }
         }
         Mode::Human => render_ranked(&list.value, &query, args.text.as_deref(), out)?,
@@ -173,6 +185,11 @@ async fn build_query(args: &ListArgs, api: &HeapApi<'_>) -> Result<RankedQuery, 
     query.in_progress = args.in_progress.or(query.in_progress);
     query.blocked = args.blocked.or(query.blocked);
     query.blocked_layout = args.blocked_layout.or(query.blocked_layout);
+    query.reminders = args.reminders.or(query.reminders);
+    // A search finds reminders to come whatever the setting says.
+    if args.text.is_some() {
+        query.reminders = Some(RemindersModeDto::Shown);
+    }
     if let Some(sort) = args.sort {
         query.sort = Some(sort);
         // A view's sort parameter goes with sorting by a parameter, and only with that.
@@ -209,6 +226,7 @@ fn to_query(view: &ListViewDto) -> RankedQuery {
         in_progress: Some(view.in_progress),
         blocked: Some(view.blocked),
         blocked_layout: Some(view.blocked_layout),
+        reminders: Some(view.reminders),
         sort: Some(view.sort),
         sort_parameter: view.sort_parameter,
         tag: view.tag.clone(),
@@ -276,7 +294,8 @@ fn render_ranked(
     };
     let view = query.to_view().ok().map(|view| ListViewDto::from(&view));
     let footers: Vec<String> = hidden_footer(list.hidden_count, view).into_iter().collect();
-    render_groups(shown, &empty, &footers, out)
+    let reminders: Vec<&ItemDto> = list.reminders.iter().filter(|item| keeps(item, text)).collect();
+    render_groups(shown, &reminders, &empty, &footers, out)
 }
 
 fn render_across_heaps(
@@ -313,18 +332,20 @@ fn render_across_heaps(
             list.count
         ));
     }
-    render_groups(shown, &empty, &footers, out)
+    render_groups(shown, &[], &empty, &footers, out)
 }
 
-/// The table of `shown` groups under their headings, or `empty` when no group has a row, then the footers.
+/// The table of `shown` groups under their headings, then the `reminders` to come under theirs, or `empty` when
+/// there is no row at all, then the footers.
 fn render_groups(
     shown: Vec<(&'static str, Vec<ShownRow<'_>>)>,
+    reminders: &[&ItemDto],
     empty: &str,
     footers: &[String],
     out: &mut Output,
 ) -> std::io::Result<()> {
     let shown: Vec<_> = shown.into_iter().filter(|(_, rows)| !rows.is_empty()).collect();
-    if shown.is_empty() {
+    if shown.is_empty() && reminders.is_empty() {
         out.line(empty)?;
     }
     let mut rows = Vec::new();
@@ -333,12 +354,20 @@ fn render_groups(
     }
     let mut lines = out.render_table(&rows).into_iter();
     // Headings only when there's more than the ranked group to tell apart.
-    let headed = shown.len() > 1 || shown.first().is_some_and(|(heading, _)| *heading != "Ranked");
+    let headed =
+        shown.len() > 1 || !reminders.is_empty() || shown.first().is_some_and(|(heading, _)| *heading != "Ranked");
     for (heading, group) in &shown {
         if headed {
             out.line_toned(heading, Tone::Strong)?;
         }
         for line in lines.by_ref().take(group.len()) {
+            out.table_line("", &line)?;
+        }
+    }
+    if !reminders.is_empty() {
+        out.line_toned("Reminders to come", Tone::Strong)?;
+        let rows: Vec<Vec<Cell>> = reminders.iter().map(|item| reminder_row(item)).collect();
+        for line in out.render_table(&rows) {
             out.table_line("", &line)?;
         }
     }
@@ -349,6 +378,16 @@ fn render_groups(
         }
     }
     Ok(())
+}
+
+/// A reminder to come: key, title, the date it joins the list, tags. It has no position and no reason.
+fn reminder_row(item: &ItemDto) -> Vec<Cell> {
+    vec![
+        Cell::toned(item.key.clone(), Tone::Strong),
+        Cell::new(shorten(&item.title, TITLE_WIDTH)),
+        Cell::new(item.due.as_ref().map(|due| due.date.clone()).unwrap_or_default()),
+        Cell::new(tags_text(item)),
+    ]
 }
 
 fn ranked_row(row: &ShownRow<'_>) -> Vec<Cell> {

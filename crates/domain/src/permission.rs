@@ -109,7 +109,7 @@ pub enum ItemAction {
     ChangeState,
     /// Move a closed item back to open.
     Reopen,
-    /// Make a note a task.
+    /// Make a note or a reminder a task.
     MakeTask,
     /// Add a step to a task.
     AddStep,
@@ -139,18 +139,18 @@ pub fn allowed_item_actions(
     if !item.is_closed() {
         let mut actions = vec![ItemAction::Edit, ItemAction::Move, ItemAction::ChangeState];
         match item.kind {
-            Kind::Note => actions.push(ItemAction::MakeTask),
+            Kind::Note | Kind::Reminder => actions.push(ItemAction::MakeTask),
             Kind::Task => actions.push(ItemAction::AddStep),
         }
         actions.push(ItemAction::AskQuestion);
         if has_open_turn && stuck {
             actions.push(ItemAction::Retry);
         }
-        actions.push(if has_open_turn {
-            ItemAction::TakeBack
-        } else {
-            ItemAction::SendToAgent
-        });
+        if has_open_turn {
+            actions.push(ItemAction::TakeBack);
+        } else if item.kind != Kind::Reminder {
+            actions.push(ItemAction::SendToAgent);
+        }
         return actions;
     }
     if item.can_reopen(now) {
@@ -653,6 +653,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
         };
@@ -672,6 +673,24 @@ mod tests {
             };
         }
         item
+    }
+
+    #[gtest]
+    fn a_reminder_can_be_made_a_task_but_not_sent_to_an_agent_or_given_steps() {
+        let now = Timestamp::EPOCH;
+        let allowed = allowed_item_actions(
+            &item(Kind::Reminder, false),
+            &heap(false),
+            Role::Member,
+            false,
+            false,
+            now,
+        );
+
+        expect_that!(allowed.contains(&ItemAction::MakeTask), eq(true));
+        expect_that!(allowed.contains(&ItemAction::SendToAgent), eq(false));
+        expect_that!(allowed.contains(&ItemAction::AddStep), eq(false));
+        expect_that!(allowed.contains(&ItemAction::Edit), eq(true));
     }
 
     #[gtest]

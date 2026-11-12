@@ -291,7 +291,9 @@ export interface paths {
          * What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
          *     is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
          *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now.
+         *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
+         *     most 500 rows come back; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_waiting"];
         put?: never;
@@ -542,7 +544,8 @@ export interface paths {
         };
         /**
          * The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
-         *     item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
+         *     item except the reminders to come; the view then picks, groups and sorts what is returned, so filtered items
+         *     keep their relative order. With `reminders=shown` the response also lists the reminders to come, by date.
          */
         get: operations["list_ranked"];
         put?: never;
@@ -1902,6 +1905,12 @@ export interface components {
         InviteViewerStatus: "not_member" | "member" | "removed";
         Item: {
             allowed_actions: components["schemas"]["ItemAction"][];
+            /**
+             * Format: int64
+             * @description When a reminder joins the list: the start of its date. Before that it's out of the list. UTC milliseconds.
+             *     Set only when `kind` is `reminder`; `null` otherwise, a task that was a reminder included.
+             */
+            arrives_at?: number | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
             /**
              * Format: int64
@@ -2037,7 +2046,10 @@ export interface components {
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
             impact?: null | components["schemas"]["Size"];
-            /** @description A note can become a task; `"note"` on a task is refused. Applied before `stage`. `null` is refused. */
+            /**
+             * @description A note or a reminder can become a task; any other change is refused (`kind_change_not_allowed`). Applied
+             *     before `stage`. A reminder made a task starts as written. `null` is refused.
+             */
             kind?: components["schemas"]["Kind"];
             /** @description Need can be changed but not cleared; `null` is refused. */
             need?: components["schemas"]["Need"];
@@ -2076,10 +2088,11 @@ export interface components {
             name: string;
         };
         /**
-         * @description What an item is. A note becomes a task in place; a task never goes back to a note.
+         * @description What an item is. A note or a reminder becomes a task in place; a task never goes back, and a note and a reminder
+         *     never become each other.
          * @enum {string}
          */
-        Kind: "note" | "task";
+        Kind: "note" | "task" | "reminder";
         LinkTagsRequest: {
             /** @description Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all. */
             tag_ids: string[];
@@ -2108,6 +2121,7 @@ export interface components {
              *     Empty doesn't filter.
              */
             param: string[];
+            reminders: components["schemas"]["RemindersMode"];
             sort: components["schemas"]["ListSort"];
             /**
              * Format: uuid
@@ -2119,7 +2133,7 @@ export interface components {
         };
         /**
          * @description A list view to save. Leave a setting out for its default: in-progress items pinned, open items shown, blocked
-         *     items hidden and grouped, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
+         *     items hidden and grouped, reminders to come hidden, by priority, without filters. Send `sort_parameter` exactly when `sort` is `parameter`.
          */
         ListViewInput: {
             blocked?: null | components["schemas"]["StateMode"];
@@ -2131,6 +2145,7 @@ export interface components {
             open?: null | components["schemas"]["StateMode"];
             /** @description Options of the same heap's parameters. */
             param?: string[];
+            reminders?: null | components["schemas"]["RemindersMode"];
             sort?: null | components["schemas"]["ListSort"];
             /**
              * Format: uuid
@@ -2526,9 +2541,15 @@ export interface components {
             /** @description Items in shown states, including blocked items when they're mixed in. */
             ranked: components["schemas"]["RankedItem"][];
             /**
+             * @description The heap's reminders to come that the filters keep, soonest first, when `reminders` is `shown`; empty
+             *     otherwise. A reminder to come has no position and no explanation: it is out of the ranking until its date
+             *     (`arrives_at`), and out of every count.
+             */
+            reminders: components["schemas"]["Item"][];
+            /**
              * Format: int32
              * @description How many items the view would list without its filters (`tag`, `need`, `effort`, `impact`, `param`): the "14" in
-             *     "6 of 14". Hidden states still leave theirs out.
+             *     "6 of 14". Hidden states still leave theirs out, and reminders to come aren't counted.
              */
             unfiltered_count: number;
         };
@@ -2615,6 +2636,11 @@ export interface components {
              */
             username: string;
         };
+        /**
+         * @description Whether the list has a group of the heap's reminders to come, which are out of the ranking until their date.
+         * @enum {string}
+         */
+        RemindersMode: "hidden" | "shown";
         /** @enum {string} */
         Role: "admin" | "member";
         /** @description A run: one go an agent has at an item's turn. */
@@ -2998,6 +3024,7 @@ export interface components {
             /**
              * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
              *     its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
+             *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
              */
             rows: components["schemas"]["WaitingRow"][];
         };
@@ -4523,6 +4550,8 @@ export interface operations {
                 blocked?: components["schemas"]["StateMode"];
                 /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
                 blocked_layout?: components["schemas"]["BlockedLayout"];
+                /** @description Whether the response lists the heap's reminders to come in `reminders`. Defaults to `hidden`. */
+                reminders?: components["schemas"]["RemindersMode"];
                 /** @description What each group is sorted by. Ties keep priority order. Defaults to `priority`. */
                 sort?: components["schemas"]["ListSort"];
                 /** @description The parameter to sort by, a parameter of the same heap. Send it exactly when `sort` is `parameter`. */
@@ -4649,7 +4678,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4820,7 +4849,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
+            /** @description Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `reminder_needs_date` (`due` cleared on a reminder), `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle` */
             422: {
                 headers: {
                     [name: string]: unknown;

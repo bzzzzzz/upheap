@@ -55,7 +55,7 @@ pub struct ItemForRanking<'a> {
     pub id: ItemId,
     /// Shown in the "Blocks …" contributor of the item that blocks this one.
     pub title: &'a str,
-    pub created_at: Timestamp,
+    pub waiting_since: Timestamp,
     pub need: Need,
     pub effort: Option<Size>,
     pub impact: Option<Size>,
@@ -71,7 +71,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
         Self {
             id: item.id,
             title: item.title.as_str(),
-            created_at: item.created_at,
+            waiting_since: item.arrives_at.unwrap_or(item.created_at),
             need: item.need,
             effort: item.effort,
             impact: item.impact,
@@ -183,7 +183,7 @@ pub fn rank(
             .score
             .total_cmp(&score_a.score)
             .then_with(|| score_b.height.cmp(&score_a.height))
-            .then_with(|| a.created_at.cmp(&b.created_at))
+            .then_with(|| a.waiting_since.cmp(&b.waiting_since))
             .then_with(|| a.id.cmp(&b.id))
     });
 
@@ -391,7 +391,7 @@ mod v2 {
         as_of: Timestamp,
     ) -> Vec<Component> {
         let mut components = vec![
-            age(policy.age_weight.get(), item.need, item.created_at, as_of),
+            age(policy.age_weight.get(), item.need, item.waiting_since, as_of),
             value(policy.value_weight.get(), item),
         ];
         if let Some(due) = item.due {
@@ -579,7 +579,7 @@ mod tests {
         ItemForRanking {
             id: id(n),
             title: "Item",
-            created_at: day(created_day),
+            waiting_since: day(created_day),
             need: Need::Expected,
             effort: None,
             impact: None,
@@ -1081,6 +1081,49 @@ mod tests {
         expect_that!(order(&ranked), elements_are![eq(&expected.id), eq(&idea.id)]);
     }
 
+    fn reminder(created_day: i64, arrives_day: i64) -> Item {
+        use crate::handle::ItemKey;
+        use crate::item::{Kind, NewItem, Title};
+        use crate::{HeapId, UserId};
+
+        let fields = NewItem {
+            kind: Kind::Reminder,
+            title: Title::parse("Renew the domain").expect("valid"),
+            description: None,
+            need: Need::Expected,
+            effort: None,
+            impact: None,
+            due: None,
+            arrives_at: Some(day(arrives_day)),
+            tags: Default::default(),
+            parameters: BTreeMap::new(),
+        };
+        Item::new(
+            id(1),
+            HeapId::from_uuid(Uuid::nil()),
+            ItemKey::parse("k3x9a").expect("valid"),
+            fields,
+            UserId::from_uuid(Uuid::nil()),
+            day(created_day),
+        )
+    }
+
+    #[gtest]
+    fn a_reminders_age_counts_from_its_date_not_its_creation() {
+        let reminder = reminder(-90, -3);
+
+        let input = ItemForRanking::from(&reminder);
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[input], day(0));
+
+        expect_that!(input.waiting_since, eq(day(-3)));
+        let age = ranked[0]
+            .contributors
+            .iter()
+            .find(|c| c.factor == Factor::Age)
+            .map(|c| c.label.clone());
+        expect_that!(age.unwrap_or_default(), starts_with("Waiting 3 days"));
+    }
+
     #[gtest]
     fn need_sets_how_fast_an_item_ages() {
         // With need's own factor off, only the aging rate tells them apart: same age, different needs.
@@ -1231,7 +1274,7 @@ mod tests {
             .prop_map(|(id, created, need, effort, impact, due)| ItemForRanking {
                 id: ItemId::from_uuid(Uuid::from_u128(id)),
                 title: "Item",
-                created_at: day(created),
+                waiting_since: day(created),
                 need,
                 effort,
                 impact,

@@ -77,6 +77,7 @@ async fn run_on_new_item(world: &World, key: &str, started: i64) -> Result<(Item
         effort: None,
         impact: None,
         due: None,
+        arrives_at: None,
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
     };

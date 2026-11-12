@@ -8,6 +8,7 @@ import type {
   Need,
   RankedItem,
   RankedList,
+  RemindersMode,
   Size,
   StateMode,
 } from "../api/client";
@@ -18,6 +19,8 @@ export type ListSearch = {
   in_progress?: StateMode;
   blocked?: StateMode;
   blocked_layout?: BlockedLayout;
+  /** Whether the reminders to come get a group under the list. */
+  reminders?: RemindersMode;
   sort?: ListSort;
   /** The parameter ID the list is sorted by; set exactly when `sort` is `parameter`. */
   sort_parameter?: string;
@@ -43,8 +46,13 @@ export const STATE_MODES: readonly StateMode[] = ["pinned", "shown", "hidden"];
 export const MODE_LABELS: Record<StateMode, string> = { pinned: "Pinned", shown: "Shown", hidden: "Hidden" };
 
 /** The view settings besides the sort, which the Filters panel's Show section sets. */
-export type ViewSetting = ShownState | "blocked_layout";
-export const VIEW_SETTINGS: readonly ViewSetting[] = [...SHOWN_STATES, "blocked_layout"];
+export type ViewSetting = ShownState | "blocked_layout" | "reminders";
+export const VIEW_SETTINGS: readonly ViewSetting[] = [...SHOWN_STATES, "blocked_layout", "reminders"];
+
+export const REMINDERS_MODES: readonly RemindersMode[] = ["hidden", "shown"];
+export const REMINDERS_LABELS: Record<RemindersMode, string> = { hidden: "Hidden", shown: "Shown" };
+/** What the server does when `reminders` is left out. */
+export const DEFAULT_REMINDERS: RemindersMode = "hidden";
 
 /** Whether blocked items are in the list on their own, the one case where their layout matters. */
 export const isBlockedShown = (search: ListSearch) => (search.blocked ?? DEFAULT_MODES.blocked) === "shown";
@@ -65,6 +73,7 @@ export const withoutViewChanges = (search: ListSearch): ListSearch => ({
   in_progress: undefined,
   blocked: undefined,
   blocked_layout: undefined,
+  reminders: undefined,
 });
 
 /** The sorts that need no parameter. Sorting by a parameter is offered once per parameter. */
@@ -83,6 +92,7 @@ const oneOf =
 
 const mode = oneOf(STATE_MODES);
 const layout = oneOf<BlockedLayout>(["grouped", "mixed"]);
+const remindersMode = oneOf(REMINDERS_MODES);
 const sort = oneOf<ListSort>([...SORTS, "parameter"]);
 const list = (raw: unknown) => (typeof raw === "string" && raw !== "" ? raw : undefined);
 
@@ -115,6 +125,7 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
     in_progress: modeOf("in_progress"),
     blocked,
     blocked_layout: blockedLayout === "grouped" ? undefined : blockedLayout,
+    reminders: remindersMode(raw.reminders) === DEFAULT_REMINDERS ? undefined : remindersMode(raw.reminders),
     sort: sortBy === "priority" ? undefined : sortBy,
     sort_parameter: sortBy === "parameter" ? sortParameter : undefined,
     tag: ids(raw.tag),
@@ -140,6 +151,7 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     in_progress: search.in_progress,
     blocked: search.blocked,
     blocked_layout: search.blocked_layout,
+    reminders: search.reminders,
     sort: search.sort,
     sort_parameter: search.sort_parameter,
     tag: splitList(search.tag),
@@ -153,6 +165,13 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     Object.entries(query).filter(([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0)),
   ) as ListViewQuery;
 }
+
+/**
+ * The API query for the list on screen: the view's, and while search text is entered, the reminders to come too, so
+ * a search finds them whatever the view says (design/ux.md, The list).
+ */
+export const listQueryFor = (search: ListSearch, text: string): ListViewQuery =>
+  toListQuery(text.trim() === "" ? search : { ...search, reminders: "shown" });
 
 /** How many filters are on. */
 export const filterCount = (search: ListSearch) =>
@@ -180,7 +199,7 @@ export const withoutFiltersOrViewChanges = (search: ListSearch): ListSearch =>
  * The text search, the one filter the client runs: every word must appear in the title or description, ignoring
  * case. Matches keep the order the server sent.
  */
-export function matchesSearch(entry: RankedItem, text: string): boolean {
+export function matchesSearch(entry: Pick<RankedItem, "item">, text: string): boolean {
   const words = text.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
   const haystack = `${entry.item.title}\n${entry.item.description ?? ""}`.toLowerCase();

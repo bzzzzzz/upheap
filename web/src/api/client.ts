@@ -40,6 +40,7 @@ export type ItemRef = Schemas["ItemRef"];
 export type TagPatch = Schemas["TagPatchRequest"];
 export type NewTag = Schemas["CreateTagRequest"];
 export type StateMode = Schemas["StateMode"];
+export type RemindersMode = Schemas["RemindersMode"];
 export type BlockedLayout = Schemas["BlockedLayout"];
 export type ListSort = Schemas["ListSort"];
 export type Team = Schemas["Team"];

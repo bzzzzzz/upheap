@@ -92,13 +92,17 @@ impl From<NeedDto> for Need {
     }
 }
 
-/// What an item is. A note becomes a task in place; a task never goes back to a note.
+/// What an item is. A note or a reminder becomes a task in place; a task never goes back, and a note and a reminder
+/// never become each other.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = Kind)]
 pub enum KindDto {
     Note,
     Task,
+    /// An item with a date. Before the date it is out of the ranked list, the agents' queue and the counts; from the
+    /// date on it is an ordinary open item.
+    Reminder,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -110,6 +114,7 @@ impl From<Kind> for KindDto {
         match kind {
             Kind::Note => Self::Note,
             Kind::Task => Self::Task,
+            Kind::Reminder => Self::Reminder,
         }
     }
 }
@@ -122,6 +127,7 @@ impl TryFrom<KindDto> for Kind {
         match kind {
             KindDto::Note => Ok(Self::Note),
             KindDto::Task => Ok(Self::Task),
+            KindDto::Reminder => Ok(Self::Reminder),
             KindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
         }
     }
@@ -240,13 +246,14 @@ pub enum ItemActionDto {
     Move,
     ChangeState,
     Reopen,
-    /// Make a note a task. Offered for an open note the caller may edit.
+    /// Make a note or a reminder a task. Offered for an open note or reminder the caller may edit.
     MakeTask,
     /// Add a step to a task. Offered for an open task the caller may edit.
     AddStep,
     /// Ask a question or make a request on the item. Offered for an open item the caller may edit.
     AskQuestion,
-    /// Send the item to an agent, on `POST …/turn`. Offered for an open item the caller may edit that no agent has.
+    /// Send the item to an agent, on `POST …/turn`. Offered for an open note or task the caller may edit that no
+    /// agent has; a reminder must become a task first.
     SendToAgent,
     /// Take the item back from the agent, on `DELETE …/turn`. Offered for an open item the caller may edit that has
     /// an open turn.
@@ -661,9 +668,18 @@ impl DueInputDto {
     /// The due time this input stands for in `tz`. Fails with `DueDateInvalid` for a date that isn't `YYYY-MM-DD`
     /// or is out of range.
     pub fn to_due(&self, tz: &TimeZone) -> Result<Due, ValidationError> {
-        let date: jiff::civil::Date = self.date.parse().map_err(|_| ValidationError::DueDateInvalid)?;
-        let at = Timestamp::at_end_of_day(date, tz).ok_or(ValidationError::DueDateInvalid)?;
+        let at = Timestamp::at_end_of_day(self.parse_date()?, tz).ok_or(ValidationError::DueDateInvalid)?;
         Ok(Due { at, firm: self.firm })
+    }
+
+    /// The first millisecond of the date in `tz`, which is when a reminder for that date joins the list. Fails as
+    /// [`Self::to_due`] does.
+    pub fn to_start_of_day(&self, tz: &TimeZone) -> Result<Timestamp, ValidationError> {
+        Timestamp::at_start_of_day(self.parse_date()?, tz).ok_or(ValidationError::DueDateInvalid)
+    }
+
+    fn parse_date(&self) -> Result<jiff::civil::Date, ValidationError> {
+        self.date.parse().map_err(|_| ValidationError::DueDateInvalid)
     }
 }
 
@@ -695,6 +711,9 @@ pub struct ItemDto {
     /// `null` when unset.
     pub impact: Option<SizeDto>,
     pub due: Option<DueDto>,
+    /// When a reminder joins the list: the start of its date. Before that it's out of the list. UTC milliseconds.
+    /// Set only when `kind` is `reminder`; `null` otherwise, a task that was a reminder included.
+    pub arrives_at: Option<i64>,
     /// By name.
     pub tags: Vec<ItemTagDto>,
     /// A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
@@ -739,7 +758,7 @@ pub struct ItemDto {
     #[schema(required = true)]
     pub turn: Option<TurnDto>,
     /// The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item
-    /// is sent. `null` on a closed item and in a build that has no agents.
+    /// is sent. `null` on a closed item, on a reminder (no turn opens on one) and in a build that has no agents.
     #[serde(default)]
     #[schema(required = true)]
     pub next_goal: Option<GoalDto>,
@@ -976,7 +995,7 @@ mod tests {
             ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
-                "description": null, "kind": "reminder", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "description": null, "kind": "habit", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month",

@@ -142,7 +142,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (team, members, link) = lock_link_team(&txn, team_id, link_id).await?;
         if members.iter().any(|m| m.user_id == principal.user_id) {
-            let detail = load_team_detail(&txn, principal, team).await?;
+            let detail = load_team_detail(&txn, principal, team, self.now()).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
         }
 
@@ -150,7 +150,7 @@ impl Services {
         let removed_at = last_removed_at(&txn, team_id, principal.user_id).await?;
         link.check_join(now, removed_at)?;
         self.admit_through_link(&txn, principal, &link, now).await?;
-        let detail = load_team_detail(&txn, principal, team).await?;
+        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, invite_link_id = %link.id, user_id = %principal.user_id, "joined through invite link");
@@ -194,7 +194,7 @@ impl Services {
             run: None,
         };
         self.admit_through_link(&txn, principal, &link, now).await?;
-        let detail = load_team_detail(&txn, principal, team).await?;
+        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(

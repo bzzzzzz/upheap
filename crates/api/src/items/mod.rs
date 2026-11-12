@@ -35,7 +35,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 }
 
 /// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
-/// item; the view then picks, groups and sorts what is returned, so filtered items keep their relative order.
+/// item except the reminders to come; the view then picks, groups and sorts what is returned, so filtered items
+/// keep their relative order. With `reminders=shown` the response also lists the reminders to come, by date.
 #[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
     params(HeapParams, RankedQuery, TimeZoneHeader),
     responses((status = 200, body = RankedListDto), (status = 400, description = "`invalid_query`", body = Problem), (status = 404, body = Problem), (status = 422, description = "`tag_not_in_heap` (`field` `tag`), `option_not_in_heap` (`param`), `parameter_not_in_heap` or `sort_parameter_mismatch` (`sort_parameter`)", body = Problem)))]
@@ -71,6 +72,11 @@ async fn list_ranked(
         pinned: group(list.pinned),
         ranked: group(list.ranked),
         blocked: group(list.blocked),
+        reminders: list
+            .reminders
+            .into_iter()
+            .map(|view| to_item_dto(view, as_of, &tz))
+            .collect(),
         hidden_count: list.hidden_count,
         unfiltered_count: list.unfiltered_count,
         in_progress_count: list.in_progress_count,
@@ -162,7 +168,7 @@ async fn list_closed(
 /// Adds an item. Only the title is required.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
     params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
-    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
+    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 409, description = "`heap_archived`", body = Problem), (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem)))]
 async fn create_item(
     State(state): State<AppState>,
     path: HeapPath,
@@ -197,7 +203,7 @@ async fn get_item(
         (status = 403, description = "From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review`", body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`", body = Problem),
-        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
+        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `reminder_needs_date` (`due` cleared on a reminder), `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_item(

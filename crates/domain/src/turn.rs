@@ -212,6 +212,9 @@ pub enum TurnError {
     /// A retry on an item whose turn is not stuck, or has ended.
     #[error("item {item_id} has no stuck turn")]
     NotStuck { item_id: ItemId },
+    /// A go-ahead on a reminder. It must become a task first.
+    #[error("item {item_id} is a reminder; make it a task before sending it to an agent")]
+    NeedsNoteOrTask { item_id: ItemId },
 }
 
 impl Turn {
@@ -296,6 +299,8 @@ pub const fn goal_for(item: &Item) -> Goal {
         (Kind::Note, Stage::AsWritten) => Goal::WithContext,
         (Kind::Note, _) | (Kind::Task, Stage::AsWritten | Stage::WithContext) => Goal::Defined,
         (Kind::Task, Stage::Defined) => Goal::Done,
+        // No turn opens on a reminder (`send_to_agent` refuses it), so this is never used; it keeps the match total.
+        (Kind::Reminder, _) => Goal::WithContext,
     }
 }
 
@@ -329,6 +334,7 @@ mod tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
         };
@@ -365,6 +371,8 @@ mod tests {
         expect_that!(goal_for(&item(Kind::Task, Stage::AsWritten)), eq(Goal::Defined));
         expect_that!(goal_for(&item(Kind::Task, Stage::WithContext)), eq(Goal::Defined));
         expect_that!(goal_for(&item(Kind::Task, Stage::Defined)), eq(Goal::Done));
+        // Never used: no turn opens on a reminder.
+        expect_that!(goal_for(&item(Kind::Reminder, Stage::AsWritten)), eq(Goal::WithContext));
     }
 
     #[gtest]
@@ -445,6 +453,7 @@ mod run_tests {
             effort: None,
             impact: None,
             due: None,
+            arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
         };

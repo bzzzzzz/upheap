@@ -75,6 +75,8 @@ pub(super) fn journey(item: &WorkItemDto) -> String {
     let kind = match item.kind {
         KindDto::Note => "note",
         KindDto::Task => "task",
+        // No turn opens on a reminder, so the queue never holds one; this keeps the match total.
+        KindDto::Reminder => "reminder",
         KindDto::Unknown => "item",
     };
     format!("{kind} → {}", goal_phrase(item.goal))

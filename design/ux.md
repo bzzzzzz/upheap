@@ -224,6 +224,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    many are ticked, small and muted, after the stage icon (`2/5`; the static build, which shows no stage icon, has it
    in the same place), and a screen reader hears ", 2 of 5 steps ticked" after the title. Dropped steps don't
    count, and a task without an open or ticked step shows nothing. The static build never shows a stage icon.
+   A reminder has a calendar-clock icon in the same slot, and a screen reader hears ", reminder".
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
@@ -238,7 +239,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they
    return, "Save as view…" goes in the Filters panel.
 7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
-   Hidden, a dot on a changed one; shown blocked items in their own group or mixed in), then Narrow down (tags, need,
+   Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
+   Shown, point 16), then Narrow down (tags, need,
    effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
    sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
@@ -267,6 +269,13 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     phone, with "Take back and mark done", "Take back and start" or "Take back and close", and Cancel. Cancel
     puts a swiped row back and gives focus to the row. Blocked and Open don't ask. The change's Undo toast
     restores the state only: the turn stays taken back.
+16. A reminder before its date is not in the ranked list, and nothing counts it. **Reminders to come** in Filters ›
+    Show (Hidden by default, a chip when Shown) adds a group of that name under the list, after Blocked: a row has
+    the reminder mark, the title, the date it joins ("12 March") and the tags, and no position, circle or swipe.
+    They are in date order, soonest first, and the filters narrow them like the rest. A row opens the item, where
+    the date can be changed. With no reminders to come the group isn't there. While text is in the search box the
+    page asks for them whatever the setting says, so the search finds a reminder with a wrong date; they show in
+    that group, and clearing the search puts the list back as it was.
 
 ## The item
 
@@ -276,7 +285,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    alone when the item is closed or in the static build), then the state (the likeliest next state as the main
    button, then the others, with the other choices under ⋯, on a wide screen; on a phone the same buttons sit in a
    bar at the bottom of the sheet, the main one wider, with ⋯ beside them, and the state is a line under the kind
-   line), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
+   line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
+   it says "Joins the list on 12 March"), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
    four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description)
    and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
    sheet; the context saves as its sheet closes.
@@ -290,7 +300,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 6. The main button is the likeliest next state: Start for open, Done for in progress, Unblock for blocked. The other
    states are next to it. ⋯ is named More and holds Won't do, Make it a task… and Stage, each only when the server
    allows it; with none to show, ⋯ is absent. Make it a task asks first, naming the item, since a task can't go
-   back to a note. Stage lists as written and with context, and defined on a task only (a note says "Defined needs
+   back to a note (or to a reminder). A reminder that has arrived also has Make it a task as a button of its own,
+   the main one, before the state buttons. A reminder has an exact Date in place of Due (a sheet with a date field on
+   a phone), which can be moved, also back into the future, and not cleared; it has no steps and no Send to an agent. Stage lists as written and with context, and defined on a task only (a note says "Defined needs
    a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
@@ -369,6 +381,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    open, says the same in a line of its own, and goes back to how it started, keeping anything changed while it was
    being added. Add another is remembered on the device. Escape, Cancel or a tap outside closes it; if a title was
    typed, it asks first. An add that fails says so in the dialog, or in a toast once the dialog is closed.
+5. **Note | Reminder** sits at the top of the dialog, Note picked. A reminder has a required **Date**, an exact
+   calendar date, in place of Due, since its date is its deadline; Add stays off until one is picked. Everything else
+   is as for a note. Switching back to Note keeps the other fields and doesn't send the date. A reminder for a later
+   date isn't in the list, so the toast says "Added. It joins the list on 12 March." instead of where it landed; one
+   for today or earlier is in the list and gets the usual toast.
 
 ## Due
 

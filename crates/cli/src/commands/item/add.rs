@@ -1,4 +1,4 @@
-//! `upheap item add <title>`: add an item to a heap, and say where it landed.
+//! `upheap item add <title>`: add an item to a heap, and say where it landed, or when a reminder joins the list.
 
 use api_types::common::{ItemDto, KindDto, NeedDto, SizeDto};
 use api_types::items::{CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery};
@@ -42,8 +42,12 @@ pub struct AddArgs {
     #[arg(long, value_name = "NAME=OPTION", value_parser = parse_parameter_setting)]
     pub parameter: Vec<ParameterSetting>,
     /// Add it as a task, not a note
-    #[arg(long)]
+    #[arg(long, conflicts_with = "reminder")]
     pub task: bool,
+    /// Add it as a reminder for this date: out of the list until then. A date, YYYY-MM-DD, or a rough choice such
+    /// as next-week
+    #[arg(long, value_name = "WHEN", conflicts_with_all = ["due", "task"])]
+    pub reminder: Option<String>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -80,14 +84,20 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
             .filter_map(|(id, option)| Some((id, option?)))
             .collect()
     });
-    let due = match &args.due {
+    // A reminder's date is sent as its due, which the server makes firm.
+    let due = match args.reminder.as_ref().or(args.due.as_ref()) {
         Some(raw) => Some(resolve_due(raw, &client, &token).await?),
         None => None,
+    };
+    let kind = if args.reminder.is_some() {
+        Some(KindDto::Reminder)
+    } else {
+        args.task.then_some(KindDto::Task)
     };
     let body = CreateItemDto {
         title: args.title,
         description,
-        kind: args.task.then_some(KindDto::Task),
+        kind,
         need: args.need.unwrap_or(NeedDto::NiceToHave),
         effort: args.effort,
         impact: args.impact,
@@ -116,9 +126,18 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
             }
         };
     }
+    if args.reminder.is_some() && added.value.kind != KindDto::Reminder && out.mode() != Mode::Json {
+        // A server from before reminders ignored the kind, and added a note with a due date. A note can't become a
+        // reminder, so it stays as added.
+        out.note(&format!(
+            "warning: {} was added as a note with a due date, because this server doesn't know reminders",
+            added.value.key
+        ))?;
+    }
     match out.mode() {
         Mode::Json => out.json(&added.body)?,
         Mode::Quiet => out.line(&added.value.key)?,
+        Mode::Human if is_to_come(&added.value, app.env.now) => out.line(&to_come_line(&added.value))?,
         Mode::Human => {
             // The item is added whether or not we can say where it went.
             let landed = api.get::<RankedListDto>(&["items"], &RankedQuery::default()).await;
@@ -139,6 +158,23 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
 /// create does.
 fn needs_task_patch(task: bool, added: &ItemDto) -> bool {
     task && added.kind != KindDto::Task
+}
+
+/// Whether `item` is a reminder whose date hasn't come at `now`: it is out of the list.
+pub(super) fn is_to_come(item: &ItemDto, now: jiff::Timestamp) -> bool {
+    item.kind == KindDto::Reminder
+        && item
+            .arrives_at
+            .is_some_and(|arrives_at| arrives_at > now.as_millisecond())
+}
+
+/// What a reminder that isn't in the list yet says when it is added.
+fn to_come_line(item: &ItemDto) -> String {
+    let date = item.due.as_ref().map_or("its date", |due| due.date.as_str());
+    format!(
+        "Added reminder \"{}\" ({}); it joins the list on {date}.",
+        item.title, item.key
+    )
 }
 
 /// Where an item sits in the list: its place in a group of `of` items.
@@ -174,7 +210,11 @@ fn find_landing(list: &RankedListDto, id: Uuid) -> Option<Landing> {
 }
 
 fn added_line(item: &ItemDto, landing: Option<&Landing>) -> String {
-    let what = if item.kind == KindDto::Task { "task " } else { "" };
+    let what = match item.kind {
+        KindDto::Task => "task ",
+        KindDto::Reminder => "reminder ",
+        KindDto::Note | KindDto::Unknown => "",
+    };
     let head = format!("Added {what}\"{}\" ({})", item.title, item.key);
     let Some(landing) = landing else {
         return format!("{head}.");
@@ -212,7 +252,26 @@ mod tests {
             "effort": null, "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0,
             "created_label": "today", "created_by": null, "closed_at": null, "closed_label": null,
             "closed_by": null, "closed_group": null, "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
+            "arrives_at": null,
         }))?)
+    }
+
+    #[gtest]
+    fn a_reminder_is_to_come_until_its_arrival() -> googletest::Result<()> {
+        let mut item = sample_item("reminder")?;
+        item.arrives_at = Some(2_000);
+        item.due = serde_json::from_value(serde_json::json!({
+            "at": 3_000, "date": "2027-03-12", "firm": true, "label": "12 Mar", "overdue": false,
+        }))?;
+
+        expect_that!(is_to_come(&item, jiff::Timestamp::from_millisecond(1_000)?), eq(true));
+        expect_that!(is_to_come(&item, jiff::Timestamp::from_millisecond(2_000)?), eq(false));
+        expect_that!(
+            to_come_line(&item),
+            eq("Added reminder \"Rotate certs\" (k3x9a); it joins the list on 2027-03-12.")
+        );
+        expect_that!(added_line(&item, None), eq("Added reminder \"Rotate certs\" (k3x9a)."));
+        Ok(())
     }
 
     #[gtest]

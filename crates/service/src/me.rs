@@ -46,7 +46,7 @@ impl Services {
         let member_counts = store::teams::count_members_by_team(&self.db, &team_ids).await?;
         let mut heaps = store::heaps::list_heaps_for_teams(&self.db, &team_ids).await?;
         let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
-        let open_counts = count_open_items(&self.db, &heap_ids).await?;
+        let open_counts = count_open_items(&self.db, &heap_ids, self.now()).await?;
 
         let teams = teams
             .into_iter()

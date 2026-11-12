@@ -307,6 +307,7 @@ fn list_view_fields(view: &ListView) -> Value {
         "in_progress": view.in_progress.code(),
         "blocked": view.blocked.code(),
         "blocked_layout": view.blocked_layout.code(),
+        "reminders": view.reminders.code(),
         "sort": view.sort.code(),
         "sort_parameter": view.sort.parameter().map(|id| id.to_string()),
         "tag": tags,
