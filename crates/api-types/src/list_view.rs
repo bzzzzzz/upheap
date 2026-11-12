@@ -69,10 +69,11 @@ impl From<BlockedLayout> for BlockedLayoutDto {
 }
 
 /// Whether the list has a group of the heap's reminders to come, which are out of the ranking until their date.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = RemindersMode)]
 pub enum RemindersModeDto {
+    #[default]
     Hidden,
     Shown,
 }
@@ -144,6 +145,10 @@ pub struct ListViewDto {
     pub in_progress: StateModeDto,
     pub blocked: StateModeDto,
     pub blocked_layout: BlockedLayoutDto,
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
     pub reminders: RemindersModeDto,
     pub sort: SortDto,
     /// The parameter the list is sorted by, when `sort` is `parameter`.
@@ -231,5 +236,35 @@ impl ListViewInputDto {
                 options: self.param.iter().copied().map(OptionId::from_uuid).collect(),
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+    use serde_json::json;
+
+    use super::*;
+
+    #[gtest]
+    fn a_saved_view_from_an_older_server_decodes_with_reminders_hidden() -> googletest::Result<()> {
+        let older = json!({
+            "open": "shown",
+            "in_progress": "pinned",
+            "blocked": "hidden",
+            "blocked_layout": "grouped",
+            "sort": "priority",
+            "sort_parameter": null,
+            "tag": [],
+            "effort": [],
+            "impact": [],
+            "need": [],
+            "param": [],
+        });
+
+        let view: ListViewDto = serde_json::from_value(older).or_fail()?;
+
+        expect_that!(view.reminders, eq(RemindersModeDto::Hidden));
+        Ok(())
     }
 }
