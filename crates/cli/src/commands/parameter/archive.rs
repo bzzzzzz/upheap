@@ -22,8 +22,9 @@ pub struct ArchiveArgs {
 }
 
 /// Archives the parameter. One that is archived already is archived again, since archiving says what the parameter
-/// should end up as and the server answers with it unchanged; the output says so. The server refuses while an open item has a value for it. Human output says what was
-/// done; `--quiet` prints nothing and `--json` the archived parameter.
+/// should end up as and the server answers with it unchanged; the output says so. The server refuses while an open
+/// item has a value for it. Human output says what was done; `--quiet` prints nothing and `--json` the archived
+/// parameter.
 pub async fn run(args: ArchiveArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let name = named_heap(args.heap.name.as_deref(), app)?;
     let client = app.client(app.server(&args.shared)?)?;
