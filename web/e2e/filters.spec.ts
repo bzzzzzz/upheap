@@ -1,6 +1,6 @@
 // The list's one Filters panel (design/ux.md, The list §7), at each width: what the list shows and the filters
 // together, with chips for both, and on a phone the sort inside it.
-import { addItem, expect, isPhone, row, test } from "./fixtures";
+import { addItem, expect, expectOrder, isPhone, row, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Opens the panel: Filters on a tablet or wide screen, Filters & sort on a phone. */
@@ -117,4 +117,75 @@ test("on a phone, a sort from the link shows on the Filters button", async ({ pa
   // Reset all keeps the sort, so it isn't offered for the sort alone.
   const panel = await openFilters(page);
   await expect(panel.getByRole("button", { name: "Reset all" })).toHaveCount(0);
+});
+
+test("a tag in a row filters the list, a second tag adds to it, and the same tag again takes it off", async ({
+  page,
+  heapPath,
+}) => {
+  const headers = { "x-csrf-protection": "1" };
+  const tag = async (name: string) => {
+    const created = await page.request.post(`/api/v1${heapPath}/tags`, { headers, data: { name } });
+    expect(created.status()).toBe(201);
+    return (await created.json()).id as string;
+  };
+  const item = async (title: string, tag_ids: string[]) => {
+    const created = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers,
+      data: { title, need: "expected", tag_ids },
+    });
+    expect(created.status()).toBe(201);
+  };
+  const infra = await tag("infra");
+  const docs = await tag("docs");
+  await item("Move the database", [infra, docs]);
+  await item("Write the guide", [docs]);
+  await item("Plain thing", []);
+  await page.goto(heapPath);
+  await expect(row(page, "Plain thing")).toBeVisible();
+  const database = row(page, "Move the database");
+  const on = page.getByRole("group", { name: "Filters on" });
+
+  await database.getByRole("button", { name: "Filter by tag infra" }).click();
+  await expect(on.getByRole("button", { name: "Remove filter infra" })).toBeVisible();
+  await expect(on).toContainText("1 of 3");
+  await expect(row(page, "Write the guide")).toHaveCount(0);
+  await expect(row(page, "Plain thing")).toHaveCount(0);
+  // Pressing a tag never opens the item.
+  await expect(page).not.toHaveURL(/\/items\//);
+  await expect(database.getByRole("button", { name: "Remove filter tag infra" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // The filter keeps items with any of its tags, so a second tag adds its items.
+  await database.getByRole("button", { name: "Filter by tag docs" }).click();
+  await expect(row(page, "Write the guide")).toBeVisible();
+  await expect(row(page, "Plain thing")).toHaveCount(0);
+  await expect(on).toContainText("2 of 3");
+
+  // The same tag again takes it off.
+  await database.getByRole("button", { name: "Remove filter tag infra" }).click();
+  await expect(database.getByRole("button", { name: "Filter by tag infra" })).toHaveAttribute("aria-pressed", "false");
+  await database.getByRole("button", { name: "Remove filter tag docs" }).click();
+  await expect(row(page, "Plain thing")).toBeVisible();
+  await expect(on).toHaveCount(0);
+});
+
+test("the list sorts by need, most needed first", async ({ page }) => {
+  await addItem(page, "An idea", { need: "Idea" });
+  await addItem(page, "Nice extra", { need: "Nice to have" });
+  await addItem(page, "Must happen", { need: "Critical" });
+  await addItem(page, "Someone waits", { need: "Expected" });
+
+  const panel = await openFilters(page);
+  if (isPhone(page)) {
+    await panel.getByRole("radiogroup", { name: "Sort by" }).getByText("Most needed", { exact: true }).click();
+    await panel.getByRole("button", { name: /^Show 4 items$/ }).click();
+  } else {
+    await panel.getByRole("button", { name: "Close" }).click();
+    await page.getByLabel("Sort by").selectOption({ label: "Most needed" });
+  }
+  await expect(page).toHaveURL(/sort=need/);
+  await expectOrder(page, ["Must happen", "Someone waits", "Nice extra", "An idea"]);
 });

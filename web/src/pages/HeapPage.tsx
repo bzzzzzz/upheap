@@ -6,7 +6,14 @@ import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
-import { ComingRow, focusFirstRow, focusRowOf, ItemRow, type ChangeState } from "../components/ItemRow";
+import {
+  ComingRow,
+  focusFirstRow,
+  focusRowOf,
+  ItemRow,
+  useRefocusStartedRow,
+  type ChangeState,
+} from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
@@ -22,6 +29,8 @@ import {
   pinnedTitle,
   placeOf,
   SHOWN_STATES,
+  splitList,
+  toggled,
   viewChanges,
   type ListSearch,
 } from "../components/listView";
@@ -50,9 +59,10 @@ export function HeapPage({
   // A change to an item an agent has asks first: every way of changing a state in the list goes through it.
   const agentConfirm = useConfirmAgentStateChange(changeState.run);
   const closeItem = useCloseItem(heapRef, itemKey);
+  useRefocusStartedRow(list.data);
 
   // The list's keys (ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
-  // Escape closes the open item. The rows handle the arrows and `x` themselves.
+  // Escape closes the open item. The rows handle the arrows, `x` and `s` themselves.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -109,7 +119,7 @@ export function HeapPage({
 }
 
 /**
- * Changes an item's state from the list, by its circle, `x`, a swipe or a row's buttons, then offers to undo it
+ * Changes an item's state from the list, by a row's buttons, `x`, `s` or a swipe, then offers to undo it
  * (ux.md, The list §3). Undo puts back the state it had, and the blocker with it. After Done, when nothing else is
  * in progress, the toast also offers to start the top open item (ux.md, The list §10).
  */
@@ -256,9 +266,14 @@ function ListPage({
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length + coming.length;
   const narrowed = search.trim() !== "" || filters > 0;
+  const activeTags: ReadonlySet<string> = new Set(splitList(view.tag));
+  // A tag in a row joins the view's tag filter (any of its tags), or leaves it when it is in it already.
+  const onToggleTag = (tagId: string) => onViewChange({ ...view, tag: toggled(view.tag, tagId) });
   const rows = (entries: RankedItem[], pinned?: boolean) => (
     <ItemList
       entries={entries}
+      activeTags={activeTags}
+      onToggleTag={onToggleTag}
       heapRef={heapRef}
       itemKey={itemKey}
       onChangeState={onChangeState}
@@ -323,6 +338,8 @@ function ListPage({
                   heapRef={heapRef}
                   selected={item.key === itemKey}
                   itemOpen={itemKey !== undefined}
+                  activeTags={activeTags}
+                  onToggleTag={onToggleTag}
                 />
               ))}
             </ol>
@@ -406,12 +423,16 @@ function ItemList({
   entries,
   heapRef,
   itemKey,
+  activeTags,
+  onToggleTag,
   onChangeState,
   compact,
 }: {
   entries: RankedItem[];
   heapRef: HeapRef;
   itemKey: string | undefined;
+  activeTags: ReadonlySet<string>;
+  onToggleTag: (tagId: string) => void;
   onChangeState: ChangeState;
   compact: (entry: RankedItem) => boolean;
 }) {
@@ -426,6 +447,8 @@ function ItemList({
             selected={entry.item.key === itemKey}
             itemOpen={itemKey !== undefined}
             compact={compact(entry)}
+            activeTags={activeTags}
+            onToggleTag={onToggleTag}
             onChangeState={onChangeState}
           />
         ))}

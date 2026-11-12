@@ -8883,10 +8883,11 @@
       },
       "ListSort": {
         "type": "string",
-        "description": "What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),\n`impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).\nItems without the value come last.",
+        "description": "What the list is sorted by: `priority` (highest first), `due` (soonest first), `need` (most needed first), `effort` (smallest first),\n`impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).\nItems without the value come last.",
         "enum": [
           "priority",
           "due",
+          "need",
           "effort",
           "impact",
           "parameter"

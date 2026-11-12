@@ -3,7 +3,18 @@
 // an item an agent already has send it through the API. Server build only.
 import type { Locator, Page } from "@playwright/test";
 
-import { addItem, expect, goTo, isPhone, itemPane, PASSWORD, row, test, uniqueUser } from "./fixtures";
+import {
+  addItem,
+  expect,
+  goTo,
+  isPhone,
+  itemPane,
+  markDoneFromList,
+  PASSWORD,
+  row,
+  test,
+  uniqueUser,
+} from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -165,23 +176,22 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
   await expect(state.getByRole("button")).toHaveText(["Reopen"]);
 });
 
-test("marking an item an agent has done from its circle asks first, and closing takes it back", async ({
+test("marking an item an agent has done from its row asks first, and closing takes it back", async ({
   page,
   heapPath,
 }) => {
   const { key, id } = await seed(page, heapPath, "Rotate the certs", true);
   await page.goto(heapPath);
-  const circle = page.getByRole("button", { name: "Mark Rotate the certs done" });
   const ask = page.getByRole("alertdialog");
 
-  await circle.click();
+  await markDoneFromList(page, "Rotate the certs", heldRow(page, "Rotate the certs"));
   await expect(ask).toContainText("An agent has “Rotate the certs”. Marking it done takes it back from the agent.");
   await ask.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(ask).toHaveCount(0);
   await expect(heldRow(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs").getByRole("link")).toBeFocused();
 
-  await circle.click();
+  await markDoneFromList(page, "Rotate the certs", heldRow(page, "Rotate the certs"));
   await ask.getByRole("button", { name: "Take back and mark done", exact: true }).click();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   await expect(row(page, "Rotate the certs")).toHaveCount(0);

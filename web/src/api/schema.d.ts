@@ -2098,12 +2098,12 @@ export interface components {
             tag_ids: string[];
         };
         /**
-         * @description What the list is sorted by: `priority` (highest first), `due` (soonest first), `effort` (smallest first),
+         * @description What the list is sorted by: `priority` (highest first), `due` (soonest first), `need` (most needed first), `effort` (smallest first),
          *     `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
          *     Items without the value come last.
          * @enum {string}
          */
-        ListSort: "priority" | "due" | "effort" | "impact" | "parameter";
+        ListSort: "priority" | "due" | "need" | "effort" | "impact" | "parameter";
         /** @description A list view with every setting spelled out, as a saved view returns it. */
         ListView: {
             blocked: components["schemas"]["StateMode"];

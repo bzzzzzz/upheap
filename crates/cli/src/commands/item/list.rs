@@ -54,7 +54,7 @@ pub struct ListArgs {
     /// Keep items with any of these impacts: s, m, l, xl. Repeat or separate with commas
     #[arg(long, value_name = "SIZE", value_delimiter = ',', value_parser = parse_api_value::<SizeDto>)]
     pub impact: Vec<SizeDto>,
-    /// What each group is sorted by: priority, due, effort, impact, or parameter with --sort-parameter
+    /// What each group is sorted by: priority, due, need, effort, impact, or parameter with --sort-parameter
     #[arg(long, value_name = "SORT", value_parser = parse_api_value::<SortDto>)]
     pub sort: Option<SortDto>,
     /// The custom parameter to sort by, by name or ID; implies --sort parameter

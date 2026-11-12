@@ -11,12 +11,12 @@ import {
   DEFAULT_REMINDERS,
   filterCount,
   isBlockedShown,
-  joinList,
   MODE_LABELS,
   REMINDERS_LABELS,
   REMINDERS_MODES,
   SHOWN_STATES,
   SORT_LABELS,
+  toggled,
   SORTS,
   splitList,
   STATE_MODES,
@@ -650,12 +650,6 @@ function chosenArchived(parameter: Parameter, chosen: string[]) {
     .filter((option) => chosen.includes(option.id))
     .map((option) => ({ id: option.id, label: `${option.label} (archived)` }));
 }
-
-/** Toggles `value` in a comma-separated list param. */
-const toggled = (raw: string | undefined, value: string) => {
-  const values = splitList(raw);
-  return joinList(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
-};
 
 const BLOCKED_LAYOUTS: readonly BlockedLayout[] = ["grouped", "mixed"];
 const LAYOUT_LABELS: Record<BlockedLayout, string> = { grouped: "Own group", mixed: "Mixed in" };

@@ -133,8 +133,44 @@ export async function changeState(page: Page, label: string) {
 
 /** Expects the rows of the open list to show these titles, in this order. */
 export async function expectOrder(page: Page, titles: string[]) {
-  for (const [index, title] of titles.entries()) {
-    await expect(row(page, title).getByLabel(`Position ${index + 1}`, { exact: true })).toBeVisible();
+  await expect(page.locator("main [data-row-link]")).toHaveText(
+    titles.map((title) => new RegExp(`^${escapeRegExp(title)}(,|$)`)),
+  );
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Drags from `at` (the middle by default) across the width of `target` by `dx`, `dy`, in steps, as a finger would. */
+export async function drag(page: Page, target: Locator, dx: number, dy: number, at = 0.5) {
+  // Waits until it's still, as the phone's sheet slides up as it opens.
+  await target.click({ trial: true, position: { x: ((await target.boundingBox())?.width ?? 0) * at, y: 8 } });
+  const box = await target.boundingBox();
+  if (!box) throw new Error("Nothing to drag");
+  const x = box.x + box.width * at;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 12 });
+  await page.mouse.up();
+}
+
+/**
+ * Marks an open item done from its list row: a swipe right on a touch screen, the done button beside play with a
+ * mouse (design/ux.md, The list).
+ */
+export async function markDoneFromList(page: Page, title: string, from: Locator = row(page, title)) {
+  const touch = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+  if (touch) {
+    // From the left of the row, clear of an item panel over its right. A row that was swiped and sprang back (the
+    // question to take an item back from an agent was cancelled) isn't under the finger until it is still.
+    await expect
+      .poll(() =>
+        from.locator('[class~="group/row"]').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41),
+      )
+      .toBeLessThan(1);
+    await drag(page, from, 200, 0, 0.2);
+  } else {
+    await from.getByRole("button", { name: `Mark ${title} done` }).click();
   }
 }
 
