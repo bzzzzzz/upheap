@@ -6,12 +6,13 @@ import { useAddComment } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { fieldClass, focusClass } from "./ItemQuestions";
+import { Markdown } from "./Markdown";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
  * An item's comments (ux.md, The item §18): the thread under the context, oldest first, at every width and always
  * open, and under it a field to add one when the server offers `comment`. A comment is never changed or deleted, so a
- * row has no controls, and its text is shown as text, with its line breaks. Nothing is fetched here: `item` is a
+ * row has no controls, and its text is shown as Markdown (ux.md, Markdown text). Nothing is fetched here: `item` is a
  * single-item response, the only kind that carries the comments; a list row has `comments: null`, which reads as none.
  * Nothing is rendered when there are none and the caller may not add one.
  *
@@ -59,7 +60,7 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
               <p className="text-xs text-ink-soft">
                 {comment.created_by?.display_name ?? "Someone"} · {comment.created_label}
               </p>
-              <p className="text-sm break-words whitespace-pre-wrap">{comment.body}</p>
+              <Markdown text={comment.body} />
             </li>
           ))}
         </ul>

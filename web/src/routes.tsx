@@ -24,7 +24,7 @@ import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { HeapPage } from "./pages/HeapPage";
-import { HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
+import { HeapContextSettings, HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { InvitePage } from "./pages/InvitePage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
@@ -322,6 +322,15 @@ const heapGeneralSettingsRoute = createRoute({
   },
 });
 
+const heapContextSettingsRoute = createRoute({
+  getParentRoute: () => heapSettingsRoute,
+  path: "context",
+  component: function HeapContextSettingsRoute() {
+    const { team, heap } = heapContextSettingsRoute.useParams();
+    return <HeapContextSettings heap={{ team, heap }} />;
+  },
+});
+
 const tagsRoute = createRoute({
   getParentRoute: () => heapSettingsRoute,
   path: "tags",
@@ -446,7 +455,13 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     heapRoute.addChildren([itemRoute]),
     closedRoute,
-    heapSettingsRoute.addChildren([heapGeneralSettingsRoute, tagsRoute, parametersRoute, rankingRoute]),
+    heapSettingsRoute.addChildren([
+      heapGeneralSettingsRoute,
+      heapContextSettingsRoute,
+      tagsRoute,
+      parametersRoute,
+      rankingRoute,
+    ]),
     oldTagsRoute,
     oldParametersRoute,
     heapActivityRoute,

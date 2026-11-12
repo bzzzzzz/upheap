@@ -96,7 +96,9 @@ test("a question without choices is answered with text, and then reads in Questi
   await expect(folded.locator("summary")).toHaveText("1 answered");
   await folded.locator("summary").click();
   await expect(folded).toContainText("Which CA do we use?");
-  await expect(folded).toContainText("→ Let's Encrypt");
+  // A reply without picks shows its comment alone, without the arrow.
+  await expect(folded).toContainText("Let's Encrypt");
+  await expect(folded).not.toContainText("→");
   await expect(folded).toContainText("You, today");
 
   // The last reply takes the section away and puts the focus on the item itself, not its title field.
@@ -144,7 +146,8 @@ test("a choice question is answered by one pick, a many-choice one by any number
 
   const folded = answered(page);
   await folded.locator("summary").click();
-  await expect(folded).toContainText("→ Let's Encrypt. Free and automatic");
+  await expect(folded).toContainText("→ Let's Encrypt");
+  await expect(folded).toContainText("Free and automatic");
   await expect(folded).toContainText("→ EU, Asia");
 
   const [first, second] = await questionsOf(page, item);
@@ -177,7 +180,8 @@ test("a request is replied to at once with Done or Can't be done, and a comment"
 
   const folded = answered(page);
   await folded.locator("summary").click();
-  await expect(folded).toContainText("→ Done. Token is in the vault.");
+  await expect(folded).toContainText("→ Done");
+  await expect(folded).toContainText("Token is in the vault.");
   await expect(folded).toContainText("→ Can't be done");
 
   const [first, second] = await questionsOf(page, item);
@@ -209,6 +213,43 @@ test("details open in place, and the row names its step", async ({ page, heapPat
   await expect(
     section.getByRole("listitem").filter({ hasText: "Any other thoughts?" }).getByRole("button", { name: "Details" }),
   ).toHaveCount(0);
+});
+
+test("details render as Markdown, and a reply's comment renders below its picks", async ({ page, heapPath }) => {
+  const item = await itemWithQuestions(page, heapPath, "Choose a CA", [
+    {
+      kind: "question",
+      text: "Which CA?",
+      details: "Consider:\n\n- **cost**\n- trust <b>raw</b>",
+      choices: ["A", "B"],
+    },
+    { kind: "question", text: "Anything else?" },
+  ]);
+  const section = waits(page);
+  const row = section.getByRole("listitem").filter({ hasText: "Which CA?" });
+  await row.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(row.getByRole("listitem")).toHaveCount(2);
+  await expect(row.locator("strong")).toHaveText("cost");
+  await expect(row.locator("b")).toHaveCount(0);
+
+  await row.locator("label").filter({ hasText: "B" }).click();
+  await row.getByLabel("Comment").fill("Because **trust** matters");
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+  const other = section.getByRole("listitem").filter({ hasText: "Anything else?" });
+  await other.getByLabel("Answer").fill("Just *this*");
+  await other.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(section).toHaveCount(0);
+
+  const folded = answered(page);
+  await folded.locator("summary").click();
+  const picked = folded.getByRole("listitem").filter({ hasText: "Which CA?" });
+  await expect(picked.getByText("→ B", { exact: true })).toBeVisible();
+  await expect(picked.locator("strong").last()).toHaveText("trust");
+  // A reply with only a comment shows it without the arrow.
+  const only = folded.getByRole("listitem").filter({ hasText: "Anything else?" });
+  await expect(only.locator("em")).toHaveText("this");
+  await expect(only).not.toContainText("→");
+  expect((await questionsOf(page, item))[1].reply.comment).toBe("Just *this*");
 });
 
 test("someone else's reply meanwhile takes the row away with a note", async ({ page, heapPath }) => {

@@ -68,13 +68,13 @@ const components: Components = {
 const remarkPlugins = [remarkGfm, remarkBreaks];
 
 /**
- * An item's context as Markdown (ux.md, The item §17), read-only. GitHub-flavoured, with a single newline kept as a line
- * break so a context written as plain text reads as it was typed. Memoised on the text, so a render of the item that
- * leaves the text alone doesn't parse it again.
+ * Markdown text written by people and agents (ux.md, Markdown text), read-only. GitHub-flavoured, with a single newline
+ * kept as a line break so text written as plain text reads as it was typed. `className` sets the text colour. Memoised
+ * on the text, so a render that leaves the text alone doesn't parse it again.
  */
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({ text, className = "text-ink" }: { text: string; className?: string }) {
   return (
-    <div className="flex flex-col gap-2 text-sm leading-normal break-words text-ink">
+    <div className={`flex flex-col gap-2 text-sm leading-normal break-words ${className}`}>
       <ReactMarkdown remarkPlugins={remarkPlugins} skipHtml components={components}>
         {text}
       </ReactMarkdown>

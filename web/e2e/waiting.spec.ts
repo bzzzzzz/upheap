@@ -141,10 +141,10 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
     data: { name: "Acme", slug: `t-${crypto.randomUUID().slice(0, 8)}` },
   });
   expect(made.status()).toBe(201);
-  const acme = await newHeap(page, (await made.json()).slug, "Launch", "Ship by June. Reviews happen on Fridays.");
+  const acme = await newHeap(page, (await made.json()).slug, "Launch", "Ship by **June**. Reviews happen on Fridays.");
   const certs = await seed(page, heapPath, {
     title: "Rotate the certs",
-    description: "The certs expire on the 3rd.",
+    description: "The certs expire on the **3rd**.",
     task: true,
     questions: [
       { kind: "question", text: "Which CA do we use?", details: "Internal or public.", step: 1 },
@@ -181,17 +181,17 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   }
   await expect(rows(page).filter({ hasText: "Put a token in the vault." })).toContainText("Request");
 
-  // Details holds the details as written, and Context under it the item's and the heap's, fetched when opened.
+  // Details holds the details as Markdown text, and Context under it the item's and the heap's, fetched when opened.
   const contextRequests: string[] = [];
   page.on("request", (request) => {
     if (/\/items\/[^/]+$/.test(new URL(request.url()).pathname)) contextRequests.push(request.url());
   });
-  await expect(ca.getByText("The certs expire on the 3rd.")).toHaveCount(0);
+  await expect(ca.getByText("The certs expire on the")).toHaveCount(0);
   await ca.getByRole("button", { name: "Details", exact: true }).click();
   await expect(ca.getByText("Internal or public.")).toBeVisible();
   expect(contextRequests).toEqual([]);
   await ca.getByRole("button", { name: "Context", exact: true }).click();
-  await expect(ca.getByText("The certs expire on the 3rd.")).toBeVisible();
+  await expect(ca.locator("strong")).toHaveText("3rd");
   await expect(ca.getByRole("heading", { name: "This item" })).toBeVisible();
   // The personal heap has no context written.
   await expect(ca.getByText("No context")).toBeVisible();
@@ -199,7 +199,8 @@ test("rows follow the score across heaps, with their item, heap, team and step, 
   // Without details, Context stands alone, and the heap's context shows under the heap's name.
   await regions.getByRole("button", { name: "Context", exact: true }).click();
   await expect(regions.getByRole("heading", { name: "Launch", exact: true })).toBeVisible();
-  await expect(regions.getByText("Ship by June. Reviews happen on Fridays.")).toBeVisible();
+  await expect(regions.locator("strong")).toHaveText("June");
+  await expect(regions).toContainText("Ship by June. Reviews happen on Fridays.");
   await expect(regions.getByRole("button", { name: "Details" })).toHaveCount(0);
 
   // The title opens the item in its heap.

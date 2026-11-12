@@ -1,4 +1,4 @@
-// The heap's settings (design/ux.md, Heap settings): General, Tags, Parameters and Ranking as tabs, each at its own path.
+// The heap's settings (design/ux.md, Heap settings): General, Context, Tags, Parameters and Ranking as tabs, each at its own path.
 import { addItem, expect, expectOrder, goTo, test } from "./fixtures";
 
 test("General renames the heap, changes its link name and archives it", async ({ page, heapPath }) => {
@@ -193,8 +193,58 @@ test("the preview shows how the top of the list would move", async ({ page }) =>
   await expectOrder(page, ["Quick win", "Urgent"]);
 });
 
-test("the heap's context is written in General: Edit, Save, Cancel and clearing it", async ({ page }) => {
+test("General has no Context card, and Context is a tab between General and Tags", async ({ page, heapPath }) => {
   await goTo(page, "Settings");
+  await expect(page.getByRole("region", { name: "Context", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Agents" })).toBeVisible();
+  const tabs = page.getByRole("navigation", { name: "Settings" });
+  await expect(tabs.getByRole("link")).toHaveText(["General", "Context", "Tags", "Parameters", "Ranking"]);
+  await goTo(page, "Context");
+  await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/context$`));
+  await expect(tabs.getByRole("link", { name: "Context" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("region", { name: "Context", exact: true })).toBeVisible();
+});
+
+test("the context renders as Markdown, and never runs what it holds", async ({ page }) => {
+  await goTo(page, "Context");
+  const card = page.getByRole("region", { name: "Context", exact: true });
+  const edit = card.getByRole("button", { name: "Edit" });
+  await edit.click();
+  await page
+    .getByLabel("Heap context")
+    .fill(
+      "# Docs\n\nSee **the wiki**.\n\n- one\n- two\n\n[site](https://example.com) <b>raw</b> [x](javascript:alert(1))",
+    );
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(edit).toBeFocused();
+  await expect(card.getByRole("heading", { name: "Docs" })).toBeVisible();
+  await expect(card.locator("strong")).toHaveText("the wiki");
+  await expect(card.getByRole("listitem")).toHaveText(["one", "two"]);
+  await expect(card.getByRole("link", { name: "site" })).toHaveAttribute("target", "_blank");
+  await expect(card.locator("b")).toHaveCount(0);
+  await expect(card).not.toContainText("<b>");
+  await expect(card.getByRole("link", { name: "x" })).toHaveCount(0);
+  await expect(card).toContainText("x");
+});
+
+test("a reader and an archived heap show the context rendered, without Edit", async ({ page, heapPath }) => {
+  await goTo(page, "Context");
+  const card = page.getByRole("region", { name: "Context", exact: true });
+  await card.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Heap context").fill("Read **me**");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.locator("strong")).toHaveText("me");
+  await goTo(page, "Settings");
+  await page.getByRole("button", { name: "Archive heap" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
+  await goTo(page, "Context");
+  await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/context$`));
+  await expect(card.locator("strong")).toHaveText("me");
+  await expect(card.getByRole("button", { name: "Edit" })).toHaveCount(0);
+});
+
+test("the heap's context is written on the Context tab: Edit, Save, Cancel and clearing it", async ({ page }) => {
+  await goTo(page, "Context");
   const card = page.getByRole("region", { name: "Context", exact: true });
   const empty = card.getByText(
     "What the project is, where its repository and docs are, where its work is reviewed and what finishing a piece means.",
@@ -203,7 +253,7 @@ test("the heap's context is written in General: Edit, Save, Cancel and clearing 
   const field = page.getByLabel("Heap context");
   await expect(empty).toBeVisible();
 
-  // The text keeps its line breaks, and focus goes back to Edit once it is saved.
+  // The text keeps its line breaks (as a break), and focus goes back to Edit once it is saved.
   await edit.click();
   await expect(field).toBeFocused();
   await field.fill("Docs are in the wiki.\nWork is reviewed on GitHub.");
@@ -211,8 +261,8 @@ test("the heap's context is written in General: Edit, Save, Cancel and clearing 
   await expect(field).toHaveCount(0);
   await expect(edit).toBeFocused();
   const text = card.getByText("Docs are in the wiki.");
-  await expect(text).toHaveText("Docs are in the wiki.\nWork is reviewed on GitHub.");
-  await expect(text).toHaveCSS("white-space", "pre-wrap");
+  await expect(text).toContainText("Work is reviewed on GitHub.");
+  await expect(text.locator("br")).toHaveCount(1);
   await page.reload();
   await expect(card.getByText("Docs are in the wiki.")).toBeVisible();
 
@@ -239,7 +289,7 @@ test("a context saved by someone else meanwhile is shown above the draft, which 
   page,
   heapPath,
 }) => {
-  await goTo(page, "Settings");
+  await goTo(page, "Context");
   const card = page.getByRole("region", { name: "Context", exact: true });
   const field = page.getByLabel("Heap context");
   await card.getByRole("button", { name: "Edit" }).click();

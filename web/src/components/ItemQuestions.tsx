@@ -14,6 +14,7 @@ import { useReplyToQuestion } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, isClosed } from "./labels";
+import { Markdown } from "./Markdown";
 import { StuckRow } from "./StuckRow";
 import { useUserName } from "./userName";
 
@@ -87,9 +88,7 @@ function QuestionHead({
   question: Question;
   context?: ReactNode;
 }) {
-  const details = question.details ? (
-    <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">{question.details}</p>
-  ) : null;
+  const details = question.details ? <Markdown text={question.details} className="text-ink-soft" /> : null;
   let folded: ReactNode = null;
   if (details && context) {
     folded = (
@@ -561,11 +560,8 @@ function Outcome({ question }: { question: Question }) {
   const who = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)}, ` : "";
   return (
     <>
-      <p className="text-sm break-words">
-        → {labels}
-        {labels && reply.comment ? ". " : ""}
-        <span className="whitespace-pre-wrap">{reply.comment}</span>
-      </p>
+      {labels && <p className="text-sm break-words">→ {labels}</p>}
+      {reply.comment && <Markdown text={reply.comment} />}
       <p className="text-xs text-muted">
         {who}
         {reply.replied_label}

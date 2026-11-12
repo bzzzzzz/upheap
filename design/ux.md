@@ -77,6 +77,18 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
 3. **Motion** for sheet drag, swipe rows and the list's reorder animation.
 4. **lucide-react** for icons.
 
+### Markdown text
+
+Longer text that people and agents write shows as rendered Markdown, through one component (`Markdown`): the context of
+a heap, an item and a step, a question's details, the comment in a reply, and an item's comments. It is
+GitHub-flavoured: headings, emphasis, links, code, lists, task lists as disabled checkboxes, quotes and tables. Raw
+HTML is never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves
+in place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break in
+the text stays one, so plain text written before reads as it did. Long words and addresses break, and code blocks and
+tables scroll sideways inside their box, so the page never does. Writing stays a plain textarea of the Markdown source,
+with no toolbar and no preview. A turn's line, a stuck reason, error messages and a question's short text and choices
+are one line each and stay plain.
+
 ## Layout
 
 Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
@@ -115,23 +127,23 @@ the block when it opens.
 
 ### Heap settings
 
-**Settings** is one page for a heap's configuration, with a tab each for **General**, **Tags**, **Parameters** and **Ranking**.
-Each tab is a link with its own path (`/settings`, `/settings/tags`, `/settings/parameters`, `/settings/ranking`), so Back steps between
+**Settings** is one page for a heap's configuration, with a tab each for **General**, **Context**, **Tags**, **Parameters** and **Ranking**.
+Each tab is a link with its own path (`/settings`, `/settings/context`, `/settings/tags`, `/settings/parameters`, `/settings/ranking`), so Back steps between
 them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name
-and the link name, edited in place, a note that a new link name breaks old links, the heap's history, a Context
-card, and Archive heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New
+and the link name, edited in place, a note that a new link name breaks old links, the heap's history, the Agents card, and Archive heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New
 link: /teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads
 the values.
 
-The **Context** card shows the heap's context as written, with its line breaks and no rendering, or a muted line
-saying what a context holds when there is none. Any member sees an Edit button (not on an archived heap), which
+The **Context** tab holds the Context card. It shows the heap's context as Markdown text (see Toolkit), or a muted
+line saying what a context holds when there is none. Anyone who can open Settings sees the tab. A member with
+`edit_context` sees an Edit button (not on an archived heap), which
 turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
 the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
-saved a different context meanwhile, it shows above the kept draft under "Saved meanwhile", and Save again replaces
+saved a different context meanwhile, it shows rendered above the kept draft under "Saved meanwhile", and Save again replaces
 it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
 Cancel give focus back to Edit.
 
-The **Agents** card, under Context, has a switch, "Agents prepare new notes", with the line "Each note added here is
+The **Agents** card, on General under Details, has a switch, "Agents prepare new notes", with the line "Each note added here is
 sent to an agent to fill in its context, then comes back to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
 switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
 "off".
@@ -330,13 +342,16 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
     checkbox that ticks and unticks it, the title edited in place (Enter or leaving the field saves, Escape or a
-    blank title puts it back), a chevron that shows its context (a plain-text field, saved on leaving it, closed to
-    begin with) and ⋯ with Drop, or Restore on a dropped step. A dropped step is struck through and muted, with a
+    blank title puts it back), a chevron that shows its context (closed to begin with; see below) and ⋯ with Drop, or Restore on a dropped step. A dropped step is struck through and muted, with a
     dash in place of its checkbox, and stays in the list. "Add a step" opens a one-line field in place: Enter adds
     the step and keeps the field for the next, leaving it with text adds the step and closes it, Escape closes it
     without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
     it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
-    steps and the count to read, with no checkbox to change, no ⋯ and no Add.
+    steps and the count to read, with no checkbox to change, no ⋯ and no Add. A step's context opens rendered as
+    Markdown text (see Toolkit), for everyone, and the chevron shows only when there is one, or the step can be edited.
+    An editor sees a small Edit button under the text ("Edit step context"), which swaps it for the field with the
+    source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text. An
+    editor opening a step with no context gets the field at once. A refetch doesn't touch what is typed.
 12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the summary at the top of
     the item, under the status line, a tinted, outlined block (the accent at a low fill, a 2 px accent border) like the
     open-questions box in Questions, the same on
@@ -359,8 +374,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     heap a row shows its text and details with no controls. A closed item has no open rows: closing withdrew its open
     questions, which read in the fold as "Withdrawn".
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
-    withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as
-written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
+    withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone), and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
     and all are withdrawn. It only reads; changing a reply is later.
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
@@ -394,11 +408,8 @@ written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N
     picked one clears it), the due choices (staying open while an exact date is chosen), the date, the tags (staying
     open for several picks) or the parameter's options. A pick saves at once and closes it, and focus goes back to
     the value. Without `edit` (a reader, an archived heap, a closed item) the values are plain text.
-17. The **context** is the item's description rendered as Markdown (GitHub-flavoured: headings, emphasis, links, code,
-    lists, task lists as disabled checkboxes, quotes, tables), with an Edit button, shown with `edit`. Raw HTML is
-    never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves in
-    place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break
-    in the text stays one, so plain text written before reads as it did. With none it says "No context yet." and the
+17. The **context** is the item's description rendered as Markdown text (see Toolkit), with an Edit button, shown
+    with `edit`. With none it says "No context yet." and the
     button reads Add. Edit swaps the text in place for a form with Save and Cancel, and on a phone opens the same form
     in a sheet; it reads and behaves as the heap's Context card does (Heap settings). ⌘ or Ctrl with Enter saves, and
     Escape does nothing, so a long draft is never lost to a stray key or closes the item. Save closes the form once
@@ -415,8 +426,8 @@ written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N
 
 18. **Comments n**, under the context at every width and always open (not a disclosure, not a sheet row), before
     the Steps, lists the item's comments oldest first with a thin rule between them. Each is a quiet
-    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it as plain
-    text with its line breaks kept; a comment is never edited or deleted, so a row has no controls. The heading is
+    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it rendered
+    as Markdown text (see Toolkit); a comment is never edited or deleted, so a row has no controls. The heading is
     "Comments 3", or just "Comments" when there are none. Under the list, where the server offers `comment` (also on
     a closed item), is the field "Add a comment" that grows with its text, and a Comment button, off until the field
     has text and while it is sending; on a phone the button spans the width and is 44 px, on wider screens it is at
@@ -479,8 +490,8 @@ its row, and every item whose agent turn is stuck, with the ways out.
    name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
    one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action
    shows no controls.
-3. **Details ▸** holds the details as written and under them **Context ▸**, which unfolds the item's context and the
-   heap's, each under a small heading ("This item", the heap's name), or "No context". They are fetched when Context is
+3. **Details ▸** holds the details as Markdown text and under them **Context ▸**, which unfolds the item's context and the
+   heap's, rendered as Markdown text too, each under a small heading ("This item", the heap's name), or "No context". They are fetched when Context is
    opened, not with the page. A question without details shows Context alone.
 4. After a reply there is no toast: the row leaves, the count drops, the focus goes to the row that took its place if it
    was lost with the row, else to the heading, and a polite live region says Replied to “<text>”. If it fails the row

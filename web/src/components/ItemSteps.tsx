@@ -4,7 +4,9 @@ import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, Item, Step, StepPatch } from "../api/client";
 import { useAddStep, useUpdateStep } from "../api/queries";
+import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
+import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 
 /**
@@ -90,6 +92,21 @@ function StepRow({
   const canEdit = step.allowed_actions.includes("edit");
   const dropped = step.state === "dropped";
   const hasDisclosure = Boolean(step.context) || canEdit;
+  // Whether the context's textarea is open. An editor sees it at once for a step with no context, so adding takes one
+  // step; with a context it shows rendered until Edit. Focusing the textarea sets the flag, so a context arriving from
+  // elsewhere never swaps a draft out from under the typing.
+  const [editingContext, setEditingContext] = useState(false);
+  const contextField = useRef<HTMLTextAreaElement>(null);
+  // Set by Edit, so focus goes into the field once it is there.
+  const focusContext = useRef(false);
+  useEffect(() => {
+    if (editingContext && focusContext.current) {
+      focusContext.current = false;
+      const field = contextField.current;
+      field?.focus();
+      field?.setSelectionRange(field.value.length, field.value.length);
+    }
+  }, [editingContext]);
 
   const saveTitle = (field: HTMLTextAreaElement) => {
     const title = field.value.trim();
@@ -201,18 +218,36 @@ function StepRow({
       </div>
       {contextShown && (
         <div className="pr-1 pb-2 pl-9 pointer-coarse:pl-11">
-          {canEdit ? (
+          {canEdit && (editingContext || !step.context) ? (
             <textarea
+              ref={contextField}
               aria-label="Step context"
-              key={step.context ?? ""}
               defaultValue={step.context ?? ""}
               rows={2}
               placeholder="Background for this step"
-              onBlur={(e) => saveContext(e.target.value)}
+              onFocus={() => setEditingContext(true)}
+              onBlur={(e) => {
+                saveContext(e.target.value);
+                setEditingContext(false);
+              }}
               className="field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base"
             />
           ) : (
-            <p className="text-sm whitespace-pre-wrap text-ink-soft">{step.context}</p>
+            <>
+              {step.context && <Markdown text={step.context} className="text-ink-soft" />}
+              {canEdit && (
+                <Button
+                  aria-label="Edit step context"
+                  onPress={() => {
+                    focusContext.current = true;
+                    setEditingContext(true);
+                  }}
+                  className={`${compactButtonClass.quiet} -ml-3 min-h-9 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent`}
+                >
+                  Edit
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
