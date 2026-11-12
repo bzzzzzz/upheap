@@ -167,6 +167,15 @@ pub fn list_due_choices(as_of: Timestamp, tz: &TimeZone) -> Vec<DueChoice> {
         .collect()
 }
 
+/// The labels of the [due choices](list_due_choices), nearest first. They are the same on every day and in every
+/// timezone; only the dates move.
+pub fn list_due_choice_labels() -> Vec<&'static str> {
+    list_due_choices(Timestamp::EPOCH, &TimeZone::UTC)
+        .into_iter()
+        .map(|choice| choice.label)
+        .collect()
+}
+
 fn local_date(at: Timestamp, tz: &TimeZone) -> Date {
     at.to_jiff().to_zoned(tz.clone()).date()
 }
@@ -284,6 +293,18 @@ mod tests {
             ]
         );
         expect_that!(choices[1].date.to_string(), eq("2027-01-08"));
+    }
+
+    #[gtest]
+    fn the_due_choice_labels_are_those_of_every_day() {
+        let tokyo = TimeZone::get("Asia/Tokyo").expect("bundled");
+        for (as_of, tz) in [(day(0), utc()), (day(68), tokyo)] {
+            let labels: Vec<_> = list_due_choices(as_of, &tz)
+                .into_iter()
+                .map(|choice| choice.label)
+                .collect();
+            expect_that!(list_due_choice_labels(), eq(&labels));
+        }
     }
 
     #[gtest]
