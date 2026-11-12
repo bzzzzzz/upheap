@@ -178,9 +178,9 @@ starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory 
 item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
 `auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
 and run what your own and the project's Claude settings allow. With `--root`, each run starts in a new directory
-under the root instead, named by the item's key and the run's ID, with a `CLAUDE.md` that says how to work there
-and Claude settings that allow any command, edit and read, for preparing as well: a run there has to clone and
-build what it works on. Nothing removes these directories. Exit codes: 0 done, 2 bad command line, 3 refused, 4
+under the root instead, named by the item's key and the run's ID, with a `CLAUDE.md` that says how to work there,
+and `claude` may run any command, edit and read, for preparing as well: a run there has to clone and build what it
+works on. Nothing removes these directories. Exit codes: 0 done, 2 bad command line, 3 refused, 4
 not signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything
 else.
 

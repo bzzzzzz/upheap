@@ -126,7 +126,12 @@ mod processes {
         // Arrange: the script records where it runs. The run's directory is under a root that isn't there yet.
         let dir = tempfile::tempdir()?;
         let seen = dir.path().join("seen");
-        let body = format!("pwd -P > '{}'\nprintf '%s' '{{\"is_error\":false}}'", seen.display());
+        let args = dir.path().join("args");
+        let body = format!(
+            "pwd -P > '{}'\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"is_error\":false}}'",
+            seen.display(),
+            args.display()
+        );
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
         let run_dir = dir.path().join("root").join("k3x9a-the-run");
 
@@ -148,12 +153,11 @@ mod processes {
             std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
             contains_substring("for one run on one Upheap item")
         )?;
-        let settings: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(run_dir.join(".claude/settings.json"))?)?;
-        verify_that!(settings["permissions"]["allow"].as_array(), some(not(is_empty())))?;
+        // No settings file: Claude would ignore its allow rules in a directory nobody has trusted.
+        verify_that!(run_dir.join(".claude").exists(), eq(false))?;
         verify_that!(
-            settings["permissions"]["deny"],
-            eq(&serde_json::json!(["Bash(upheap auth:*)"]))
+            std::fs::read_to_string(&args)?,
+            contains_substring("--disallowedTools\nBash(upheap auth:*)")
         )
     }
 
