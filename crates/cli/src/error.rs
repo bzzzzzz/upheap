@@ -64,6 +64,13 @@ pub enum CliError {
     /// The agent tool `work run` starts isn't there, or wouldn't start.
     #[error(transparent)]
     Tool(#[from] ToolError),
+    /// The file `work run --instructions` names can't be read.
+    #[error("couldn't read the instructions at {}", .path.display())]
+    NoInstructions {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error(transparent)]
     Login(#[from] LoginError),
     #[error(transparent)]
@@ -105,7 +112,7 @@ impl CliError {
     /// The exit code for the failure's category.
     pub fn exit_code(&self) -> u8 {
         match self {
-            Self::Config(_) | Self::TokenStore(_) | Self::Tool(_) => 6,
+            Self::Config(_) | Self::TokenStore(_) | Self::Tool(_) | Self::NoInstructions { .. } => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
             Self::NoSuchStep { .. } | Self::NoSuchQuestion { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
             Self::Lookup(
@@ -226,6 +233,9 @@ impl CliError {
             )),
             (Self::Tool(ToolError::NoDirectory { .. }), _) => {
                 Some("check that `--root` names a directory you can write to".to_owned())
+            }
+            (Self::NoInstructions { .. }, _) => {
+                Some("check that `--instructions` names a text file you can read".to_owned())
             }
             (Self::Auth(AuthError::RefreshNotKept(_)), _) => Some("sign in again with `upheap auth login`".to_owned()),
             (Self::Config(ConfigError::Parse { .. }), _) => {

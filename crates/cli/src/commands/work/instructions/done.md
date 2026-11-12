@@ -14,8 +14,9 @@ Before anything, read the comments and the questions under the item: they say wh
 
 Doing the work
 1. `upheap item start <key>`, unless it is in progress.
-2. Follow how work is done in this project: the heap's context, and the project's own instructions in this
-   directory (CLAUDE.md, AGENTS.md, a contributing guide). Never work on the default branch.
+2. Follow how work is done here: the runner's instructions below when there are any, the heap's context, and the
+   project's own instructions in this directory (CLAUDE.md, AGENTS.md, a contributing guide). Never work on the
+   default branch.
 3. Work through the steps in order. Tick each as it is finished (`upheap step tick <key>.<n>`), add a step when a
    new part turns up, drop one that isn't needed (`upheap step drop`). Steps already ticked are done: an earlier
    run did them. Carry on from there.
