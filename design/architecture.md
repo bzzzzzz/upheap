@@ -21,9 +21,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
    triggers or stored procedures. Everything runs on SQLite, MySQL and Postgres, and CI tests all three.
 4. **Nothing is deleted, and everything is audited.** No `DELETE` of domain data. Every write and its audit entry
    commit in one transaction.
-5. **Single binary.** One executable serves the API and the embedded web app. The [local build](#local-build) is
-   the one other deliverable: the same backend crates compiled to WebAssembly and shipped with the web app as a
-   static site.
+5. **Single binary.** One executable serves the API and the embedded web app.
 
 ## Stack
 
@@ -32,7 +30,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Backend | Rust (stable), a Cargo workspace |
 | HTTP | axum on tokio, tower middleware |
 | API contract | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift |
-| Data access | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres. The local build uses SeaORM's proxy connection over SQLite-wasm |
+| Data access | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres |
 | Migrations | sea-orm-migration, embedded in the binary and run at startup |
 | Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients. External identity providers (OIDC) are planned, not built |
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
@@ -42,20 +40,12 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 
 ## Workspace
 
-Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it,
-and `local` sits beside `server` as the other entry point. `domain` depends on nothing in the workspace, so ranking
+Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it.
+`domain` depends on nothing in the workspace, so ranking
 and the state rules are unit- and property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
 linking the server. The crates and their roles are listed in [README.md](../README.md#layout); each crate's root
 module says what it owns.
-
-`service` and `api` put what only a shared server needs behind their default `accounts` feature: registration,
-sign-in and sessions, team management, user lookup, OAuth. The local build leaves it out, so that code and its
-dependencies aren't in the wasm at all ([Local build](#local-build)). `api` also has an `agents` feature, on by
-default, for what only the server build has for agents, which the local build leaves out: the stage of an item, sending
-an item to an agent, taking it back and retrying it (the `/turn` routes and their actions), the agent's queue and
-runs (the `/work` routes, and the `Upheap-Run` header), and the heap setting that agents prepare new notes. The features are additive: with `accounts` on, the local user still works, which lets the native API tests
-cover it.
 
 ## Data model
 
@@ -141,8 +131,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   turn is out of the queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of
   its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
   failure, and withdraws the open questions asked in a run of it; the person's own stay open.
-  **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads (the `agents` feature only; a
-  build without it ignores the header) into `Principal::run`. A write made in a run must be on the allowlist in
+  **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
   `extract.rs` (the item's `PATCH`, steps, questions, and the run's own heartbeat, reached and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
@@ -222,16 +211,14 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    the root holds the app's own pages and the server's paths (`/api`, `/healthz`, `/oauth`). API paths have the
    same shape under `/api/v1`, so a web URL becomes its API call by adding the prefix.
 5. **Short links.** `/h/my-team/backlog/k3x9a` is the short form, one handle per position: team, then heap, then
-   item. The web app's router replaces it with the full URL as it opens, so it works the same in the local build,
-   which has no server to redirect. Items offer Copy link with the short form; the API has none. The CLI takes an
+   item. The web app's router replaces it with the full URL as it opens. Items offer Copy link with the short form; the API has none. The CLI takes an
    item as its key within the default heap, or as the full path `my-team/backlog/k3x9a`, a short link without its
    `/h/`, so a pasted link works too.
 6. **Changes.** Usernames are fixed, and an item's key changes only when it moves to a heap that has the key. Team
    and heap slugs can change, and an item's heap can, by a move. An old link stops working when any of them does;
    redirects from old handles are out of scope for now.
 7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
-   slug, and the first heap is `personal`. The local build's user is `me`, so its links read
-   `/upheap/teams/me/heaps/personal/items/k3x9a`. A first OIDC sign-in will ask for a username before creating the
+   slug, and the first heap is `personal`. A first OIDC sign-in will ask for a username before creating the
    user.
 
 ## Ranking
@@ -413,7 +400,6 @@ a fixed time.
      person at the browser should see, and the CLI gives up waiting after a few minutes.
    - A proxy that puts HTTP Basic auth in front of the server works for the web app but not for the CLI, since a
      request carries one `Authorization` header. Such a proxy has to let `/api` through.
-   - All of it is part of the `accounts` feature; the local build serves none of it.
 3. **External identity providers** (planned): generic OIDC, configured per deployment. A first sign-in creates the
    user, after asking for a username. An identity is matched by `(provider, subject)`, never by email alone.
 4. **Local accounts:** passwords are hashed with argon2id, sign-in takes an email address or a username, and
@@ -451,8 +437,7 @@ a fixed time.
      with one. `GET /me/history` reads exactly those three actions for the caller, with no way to name another user or
      team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
      as one sentence with no actor ("Password changed. 2 other sign-ins ended.") from the entry's diff, and the
-     sentence is made on reading, so a wording fix reaches old entries. Cookie or bearer token may read it; it is
-     part of the `accounts` feature.
+     sentence is made on reading, so a wording fix reaches old entries. Cookie or bearer token may read it.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 
@@ -589,104 +574,6 @@ the remaining admins.
    needs authentication, and neither reveals versions or configuration.
 6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
-7. **Local build:** a static site with no configuration. One user and one team, which
-   holds every heap, with the data in the browser ([Local build](#local-build)).
-
-## Local build
-
-A second way to ship Upheap: a static site that runs the whole app in one browser for one person
-and keeps the data there. Nothing to install, no server, no account. The self-hosted server stays the product for
-teams; the local build is for trying Upheap out and for people who only need a personal heap. It doesn't sync
-between devices or share with anyone, has no sign-in, and implements nothing a second time: ranking, validation,
-permissions and the API are the same Rust code in both builds.
-
-### How it runs
-
-```
-React app ── openapi-fetch ── worker fetch ─▶ Web Worker
-                                               ├─ wasm: api Router → service → store (SeaORM)
-                                               └─ SQLite-wasm, database file in OPFS
-```
-
-1. **`crates/local`** is the counterpart of `server`. Through `wasm-bindgen` it exposes `Backend`: `open()` builds
-   the clock and the database connection, runs the migrations, opens the local user and builds the `api` Router;
-   `handle(method, uri, headers, body)` turns its arguments into an `http::Request`, calls the Router as a tower
-   `Service` and returns the response. Routes, DTOs, error mapping, `If-Match` and problem+json stay as they are.
-2. **The web app swaps `fetch`, nothing else.** The API client imports `#api-fetch`, which package.json `imports`
-   resolves to the browser's `fetch`, or, under the `local-build` condition that `vite --mode local-build` sets, to
-   `src/local/fetch.ts`, which posts each request to the worker. TanStack Query, the routes and the components don't
-   change, and the server build holds neither the worker nor the wasm. `#local-database` resolves the same way to
-   the export, import and tab-lock code, or to nothing: it's about the build, not about what the user may do, so it
-   doesn't go through `allowed_actions`.
-3. **One request at a time.** The worker queues requests and finishes one before starting the next, which gives the
-   one-writer behaviour SQLite has on the server and keeps transactions from interleaving when a handler awaits. A
-   request the worker can't answer at all, as when the backend failed to start, fails like a network error.
-4. **Single-user mode.** On first start `Services::open_local_user` makes the user "Me" (username `me`), the team
-   "My heaps" and the heap "Personal" with the same code that makes a personal team on registration; later starts
-   find them. The API resolves every request to that user (`Authentication::LocalUser`), and every heap belongs to
-   that team. The web app doesn't check which build it's in: for the local user the API leaves out of
-   `allowed_actions` what one user can't do (no `sign_out` or `create_team`, only `create_heap` on the team), and
-   the web app hides the rest, linking straight to the one team where the server build lists teams. The Team page
-   stays as the place to create, rename, archive and unarchive heaps.
-5. **Features, not flags.** The `accounts` feature ([Workspace](#workspace)), `api`'s `agents` feature (the server
-   build sends an item's stage, offers the turn and `/work` routes and the `send_to_agent`, `take_back`, `retry` and `set_agents_prepare`
-   actions, and accepts `agents_prepare`; the local build does none of that, so the web app takes what it shows from
-   `allowed_actions`) and `api`'s `trace-and-timeout` feature (the request span
-   and timeout need `Instant::now()` and tokio's timer, which the browser lacks) are left out, so that code, argon2
-   and tokio's blocking pool aren't in the wasm. What changes is which use cases exist;
-   the permission functions in `domain` don't. Steps are not behind `agents`: the local build has them, as it has
-   kinds.
-6. **Platform.** There is no tokio runtime: `wasm-bindgen-futures` drives the Router in one thread, and shared code
-   uses only tokio's task-locals (Async §1 of the principles). The clock is `Date.now()`, since `SystemTime::now()`
-   panics on `wasm32-unknown-unknown`; randomness is `getrandom`'s browser backend, chosen by a `cfg` flag in
-   `.cargo/config.toml`; migration timestamps use `time`'s wasm-bindgen feature for the same reason. `local`'s
-   dependencies are declared for the wasm target only, because SeaORM's `proxy` doesn't compile beside the sqlx
-   drivers. The time zone database is bundled, so the `Time-Zone` header works the same.
-
-### Database
-
-1. **SQLite-wasm with `opfs-sahpool`.** The database is a real SQLite file in the Origin Private File System. This
-   VFS needs no COOP and COEP headers, which GitHub Pages can't set, but works only inside a worker and allows one
-   connection per database.
-2. **SeaORM over a proxy connection,** because sqlx doesn't build for wasm. `store`'s `proxy` feature turns on
-   SeaORM's `ProxyDatabaseTrait`, `local` opens the connection as `DbBackend::Sqlite` so SeaORM generates the same
-   SQL as on the server, and the proxy calls SQLite-wasm synchronously through a JS shim in the same worker. Result
-   columns are typed from the entity column they came from, since SQLite declares every integer alike
-   (`crates/local/src/proxy.rs`); SQLite's unique-constraint codes are marked so `StoreError` still maps them to
-   `Duplicate` and `email_taken` and the like reach the client; and a failed `COMMIT`, which the proxy's `commit`
-   can't report, is rolled back and fails the request with `500`.
-3. **Same schema, same migrations,** run at worker start-up as the server's run at boot. A new version on Pages
-   migrates each user's database the next time they open the page, so the rule that released migrations are never
-   edited matters even more here: a database in someone's browser can't be repaired by hand.
-4. **One tab at a time.** Before opening the database the worker takes a Web Lock that it holds until its tab
-   closes. A second tab's worker waits, and the page says Upheap is open in another tab until it opens there.
-
-### Keeping the data
-
-Browser storage can be cleared by the user, or by the browser when the disk fills up.
-
-1. The app asks the browser to keep its data (`navigator.storage.persist()`), and a storage note says that the data
-   lives only in this browser, that the browser may clear it when it hasn't agreed to keep it, and that no copy was
-   downloaded in the last two weeks, or ever, when that's so.
-2. **Export and import** are worker messages beside the HTTP requests, in the same queue, not API endpoints: they
-   are about where this build keeps its data, which a server has no part in. The export is a normal SQLite file
-   with the server's schema, which leaves a path open to moving it onto a server later. An import can't lose the
-   data: the worker refuses a file that isn't a sound SQLite database with SeaORM's migration table, keeps a copy of
-   the current database, swaps in the file and opens it with the migrations, so an older copy is brought up to
-   date; if that fails, as for a copy from a newer version, it puts the old database back and says nothing changed.
-   A `count` message reads a file in memory, never in an OPFS slot, so the replace confirm can say what the copy
-   holds and what goes.
-3. **The last download is kept per browser** in `localStorage`. It is a fact about this browser that no server ever
-   sees, so the web app words it itself, the one exception to thin clients (Thin clients §2 of the principles).
-
-### Build
-
-`wasm-pack` builds `crates/local` into `web/src/local/backend`, and `vite build --mode local-build` picks the worker
-`fetch` and takes the Pages base path from `UPHEAP_BASE`. The build writes a copy of `index.html` as `404.html`,
-which Pages serves for any path without a file, so deep links and reloads work although Pages can't rewrite paths.
-It isn't published, and CI doesn't build or test
-it. The OpenAPI document is about 0.2 MB of the wasm and stays, since leaving it out would mean declaring the routes
-twice. The commands are in [README.md](../README.md#develop).
 
 ## CLI
 
@@ -698,7 +585,7 @@ section is how it maps onto this API.
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
    task's steps (add, tick, drop, edit), an item's questions (ask, request), tags
    (list, add, edit), heaps (list, pick a default) and signing in. Teams, members, heap settings, parameters and
-   saved-view editing stay in the web app. The local build has no server, so the CLI can't reach it.
+   saved-view editing stay in the web app.
 2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
    link without its `/h/`. A pasted link works, short or in the long form the address bar shows after the redirect;
    its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is
@@ -722,7 +609,7 @@ section is how it maps onto this API.
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
    keyed by the server's URL: the refresh token, and the last access token with its expiry, as JSON. `keyring` uses
-   the Secret Service over zbus on Linux, which is pure Rust, so a static build needs no libdbus. On macOS the CLI
+   the Secret Service over zbus on Linux, which is pure Rust, so a static binary needs no libdbus. On macOS the CLI
    runs `/usr/bin/security` instead, with the secret on its standard input. A keychain entry lets the program that
    made it read it without asking, and macOS tells programs apart by code signature, so an entry `upheap` made
    itself was closed to its next build: a dialog after every upgrade and every rebuild, which a command run by a
@@ -759,8 +646,7 @@ section is how it maps onto this API.
 5. **End to end:** Playwright covers the golden paths (sign up and sign in, add and rank, block and unblock, close
    and reopen, work a task through its steps, parameter management) against the real binary on in-memory SQLite, at phone, tablet and desktop
    widths. Each test registers its own account, so tests share no data and run in parallel; everything beyond these
-   paths is tested lower down. The same paths, without sign-up, run against the local build, with its own tests for
-   export, import and the tab lock.
+   paths is tested lower down.
 6. **CLI:** `crates/cli/tests` runs each command against the real API router on in-memory SQLite, served on a
    localhost port, and checks stdout, stderr and the exit code. The tests sign in through the real OAuth endpoints,
    most by seeding the token store with tokens from a code they approved and exchanged, the login tests by running

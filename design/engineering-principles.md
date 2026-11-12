@@ -684,9 +684,6 @@ saying so.
    Principles](#principles) §6): ranking, permissions, contributors, fuzzy due-date labels and validation live on
    the server. A client's own logic is text search, local UI state and animation, and it shows or hides actions
    only from `allowed_actions`. Anything else is a bug.
-2. **Overrides [API, Responses](#responses) §1 for the local build only.** It counts and words facts about its own
-   browser-held database and last download date in the client ([architecture.md](architecture.md#local-build),
-   Keeping the data), since no server is involved.
 
 ### Ranking
 
@@ -706,11 +703,3 @@ saying so.
    whose removal deletes the row while the audit log keeps the history ([architecture.md](architecture.md#data-model)).
    Authentication plumbing that isn't domain data, ended sessions, sign-in attempt counts, and ended OAuth codes
    and token families with their tokens, may be deleted.
-
-### Local build
-
-1. **The same backend without accounts,** compiled to WebAssembly ([architecture.md](architecture.md#local-build)).
-   It runs on `wasm-bindgen-futures` in one worker thread, so code shared with it uses only tokio's task-locals,
-   which need no runtime, and the rest of tokio stays behind features the local build leaves out, such as
-   `accounts` ([Rust, Async](#async) §1).
-2. **No configuration** ([Operations](#operations) §1): the local build has nothing to configure.

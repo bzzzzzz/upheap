@@ -229,19 +229,6 @@ TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433 cargo test -p stor
 docker stop upheap-test-postgres
 ```
 
-The local build ([design/architecture.md](design/architecture.md#local-build)) runs the backend in a worker in the page, on
-SQLite-wasm with its data in the browser. It needs `rustup target add wasm32-unknown-unknown` and wasm-pack 0.14.
-Build the backend into the web app, then run it with Vite or check it:
-
-```sh
-(cd web && npm run build:backend)   # after every change to the Rust code
-(cd web && npm run dev:local)       # http://localhost:5173, no server needed
-cargo clippy -p service -p api --no-default-features -- -D warnings
-cargo clippy -p local --target wasm32-unknown-unknown -- -D warnings
-(cd web && npm run typecheck:local && npm run smoke:local)
-(cd web && npm run e2e:local)       # Playwright against the static build
-```
-
 After changing the API, regenerate the spec and the TypeScript types, and commit both:
 
 ```sh
@@ -258,7 +245,6 @@ crates/api-types  request and response types, shared by the API and the CLI
 crates/api        axum routes, OpenAPI, sessions, problem+json
 crates/cli        the upheap command-line client
 crates/server     the binary: config, startup, embedded web app
-crates/local      the local build: the backend in wasm, on SQLite-wasm in the browser
 web/              React app (TypeScript), generated API types only
 plugins/upheap    the Claude Code plugin: skills that add items, report status and do the next one, through the CLI
 ```

@@ -39,7 +39,7 @@ Not commitments. [product.md](../product.md) holds the commitments.
 - **Small web leftovers:** a member count on the team row, open counts in the heap switcher, an "Added" row in
   the phone item sheet, a back button on phone pages outside a heap, an optional link name when adding a heap.
 - **Onboarding** beyond the empty heap's one line: how ranking works, what the sizes and loose due times mean.
-- **Error pages:** a `404`, the local backend failing to open its storage, an offline banner, the `500` request ID.
+- **Error pages:** a `404`, an offline banner, the `500` request ID.
 - **Hiding Create account when registration is closed,** or having the sign-in page say that an account needs an
   invite link, and a countdown on a throttled sign-in.
 - **More invite links:** for one person or one use, and into a single heap.
@@ -54,10 +54,8 @@ Not commitments. [product.md](../product.md) holds the commitments.
 - **Moving items,** what is left: a Move control in the web app (needs a mockup), moves across teams, redirects from an
   item's old link, and moving several items at once.
 - **Notifications and due reminders.**
-- **Installable app:** a PWA for the local build, then store builds
-  ([ux.md](../ux.md#later-an-installable-app)).
+- **Installable app:** a PWA of the web app, then store builds.
 - **Username suggestions** when the chosen one is taken.
 - **Renaming a personal team.** The web app hides Rename on it, and the server still offers it.
-- **Moving an exported local database to a server.** An import would need a way to claim the account.
 - **In the CLI:** a `--create-tags` flag, and profiles for several servers.
 - **Playwright against Postgres.**

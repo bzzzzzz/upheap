@@ -15,7 +15,7 @@ product.md differ, product.md wins. Product is product.md below.
 | Stable states, Handing work, Waiting, Agents' progress | Working with agents |
 | Review §1 to §4 | Review |
 | Command-line client §1 to §4 | The agent loop |
-| One person and teams §1 | Distribution §5 |
+| One person and teams §1 | Distribution §4 |
 
 Everything else stays here until it's built: the commitments that aren't core, the workflows, the concepts and
 rules, the choices (those marked D go to decisions.md once built), the interface inventory and wireframes.
@@ -30,8 +30,7 @@ rules, the choices (those marked D go to decisions.md once built), the interface
    it was given. (Owner.)
 4. A note is today's item, unchanged. (Owner.)
 5. An agent both refines work and does it. (Owner.)
-6. One person uses agents by running a server for themselves. The browser-only build stays as it is, without
-   agents. (Owner.)
+6. One person uses agents by running a server for themselves. (Owner.)
 7. This pitch replaces the one in product.md, and it is still a ranked todo list holding more work than can be
    done. Agents are how part of that work gets done, not what the product is. (Owner.)
 8. Upheap waits for the person and doesn't interrupt. It pushes only what they asked for: a reminder, or
@@ -208,8 +207,7 @@ is resolved or turned into a task.
 **One person and teams**
 
 1. **Core.** Everything above works for one person with no teammates, on a server they run for themselves.
-2. The browser-only build stays as it is, without agents: it has no API for the command-line client to reach.
-3. In a shared heap any member can send an item on, answer a question and edit a context. Nothing else is designed
+2. In a shared heap any member can send an item on, answer a question and edit a context. Nothing else is designed
    for teams here.
 
 ### Actors
@@ -738,8 +736,7 @@ as it was before stays in the item's history.
 ### Inventory
 
 Frequency is Constant (several times a session), Daily, Weekly, Sometimes or Once. Necessity is Core (no
-workaround), Enabler (done painfully without it), Nice to have or Polish. Both are rated for the server build.
-The local build has no agents: it gets what works without one (W1, W4, W5, W12, W15 and W17) and none of the rest.
+workaround), Enabler (done painfully without it), Nice to have or Polish.
 
 **Web app**
 
@@ -825,7 +822,7 @@ Wide sidebar, tablet rail              Phone tabs
 │ Settings               │
 │ team, Teams, Account   │
 └────────────────────────┘
-States: no count at zero. Local build: neither entry, and today's tabs.
+States: no count at zero.
 ```
 
 ```
@@ -836,8 +833,7 @@ ALL WIDTHS · List row (W1)                            constant · core
 │ ○ 5   Renew the domain  reminder                                      │
 Marks: a task shows a checklist icon before the title (a note shows none, and the slot stays so titles line up),
        and after the title the stage: with context a page, defined a clipboard with a check, as written none.
-       No words on the row; a screen reader hears them. The step count joins after the stage icon; the local
-       build shows no stage icon.
+       No words on the row; a screen reader hears them. The step count joins after the stage icon.
        A task shows steps ticked of steps; a reminder shows its mark; a note shows nothing.
        The end of the row says "with an agent" or "waits for you", and nothing when it's the person's.
 States: the state circle and the swipes work as today. On an item an agent holds they ask first, since
@@ -926,7 +922,7 @@ Who has it, by state:
                          [Send on ▾] [Changes asked…]  Changes asked takes a line saying what's wrong.
   With an agent:         "With an agent since 14:02, going to: defined."  [Take back]
   Stuck:                 shown under Waits for you, with [Retry] [Take back].
-  Closed, any reminder, an archived heap, the local build: no line. A reminder becomes a task first.
+  Closed, any reminder, an archived heap: no line. A reminder becomes a task first.
 Steps: a tap ticks or unticks; the title is edited in place; Drop is under the step's ⋯.
 Context: Edit turns it into a Markdown text field; it saves as it closes, like today's description.
 A reminder shows its date where a task shows its steps, and Make it a task is its main action once due.
@@ -993,7 +989,6 @@ Prepare: an admin's control; everyone else reads the value. One line says what i
 Weight:  each person's own, with a line saying it's against their other heaps and nobody else sees it.
 Cost:    the total of the runs on the heap's items, per unit when there is more than one.
 Activity, the heap's and the team's, marks an agent's change the same way an item's history does.
-Local build: none of these.
 ```
 
 ```

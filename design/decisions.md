@@ -223,6 +223,8 @@ the local build leaves out.
 local user too. Nothing left out can reach the wasm, which keeps it smaller. A feature added to the
 server must be placed behind `accounts` when the local build can't offer it.
 
+**Superseded** by §34.
+
 ## 18. SQLite in the browser through SeaORM's proxy connection, on `opfs-sahpool`
 
 **Context.** The local build needs a database in the browser that runs the same migrations and SQL as the server.
@@ -236,6 +238,8 @@ sqlx doesn't build for wasm, and GitHub Pages can't send the COOP and COEP heade
 **Consequences.** One connection per database, so the worker holds a Web Lock and the app runs in one tab at a
 time. The proxy types result columns from the entity metadata, since SQLite declares every integer alike. Released
 migrations reach users' browsers directly and can never be edited.
+
+**Superseded** by §34.
 
 ## 19. Export and import are worker messages, not API endpoints
 
@@ -251,6 +255,8 @@ build. The date of the last download is kept in `localStorage` and worded by the
 **Consequences.** The server build holds none of this code and the API stays what a server can do. Whether the
 feature exists is a fact about the build, not a permission, so it bypasses `allowed_actions`. The storage note is
 the one exception to thin clients (Thin clients §2 of the principles).
+
+**Superseded** by §34.
 
 ## 20. Production runs on Cloud Run with Neon Postgres
 
@@ -383,3 +389,17 @@ writes 3.1, and sharing the types the spec is generated from is simpler anyway.
 
 **Consequences.** The CLI links `domain` but never the services, the store or the database drivers. A response type
 both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §7).
+
+## 34. The local build is dropped
+
+**Context.** §17 to §19 added a static single-user build: the backend compiled to WebAssembly, on SQLite-wasm in the
+browser, published to GitHub Pages. It cost upkeep on every change: a wasm size limit, a second runtime with its own
+constraints (no blocking pool, no timer, no clock), Cargo features gating accounts, agents and tracing across the
+backend, and a second end-to-end suite.
+
+**Decision.** Remove it, its features and its tests. One build: the server, which one person can run for themselves.
+
+**Instead of.** Keeping it, with its size limit lifted.
+
+**Consequences.** One configuration to build and test. Code may use what the server has: the blocking pool, timers
+and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19.
