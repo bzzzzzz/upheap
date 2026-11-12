@@ -1,5 +1,5 @@
 // The invite page (design/ux.md, Invite page): the golden path of stage 1 on a server with registration closed,
-// and a small test for each state of the page. Joining a team is the server's, so the local build skips this file.
+// and a small test for each state of the page.
 import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
 
 import { test as closed } from "./closedServer";

@@ -1,7 +1,6 @@
 // The reset page and the forgot-password line on sign-in (design/ux.md, Reset page and Sign in and create account):
 // the golden path of a person who forgot their password, on a server whose operator makes the link with the server's
-// own command, and a small test for each state of the page. Passwords are the server's, so the local build skips
-// this file.
+// own command, and a small test for each state of the page.
 import type { Browser, TestInfo } from "@playwright/test";
 
 import { test as closed, type ClosedServer } from "./closedServer";

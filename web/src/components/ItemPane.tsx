@@ -815,7 +815,7 @@ function ContextEditor({ context, onSave }: { context: string; onSave: (text: st
 
 /**
  * What the item is and how far it has been prepared, under its title at every width (ux.md, The item §2): the icons
- * with their words. Closed items and the static build show the kind only, as the server sends no stage for them.
+ * with their words. Closed items show the kind only, as the server sends no stage for them.
  */
 function KindLine({ item }: { item: Item }) {
   return (

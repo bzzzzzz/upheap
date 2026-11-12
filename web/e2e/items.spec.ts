@@ -277,8 +277,7 @@ test("on a phone, the item's fields open sheets, and the state buttons sit at th
   await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
 });
 
-test("a note is made a task and its stage is set from the item", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The static build has no stage; kind.spec.ts in e2e/local covers it.");
+test("a note is made a task and its stage is set from the item", async ({ page }) => {
   await addItem(page, "Rotate the certs");
   await openItem(page, "Rotate the certs");
   const pane = itemPane(page);
@@ -328,8 +327,7 @@ test("a note is made a task and its stage is set from the item", async ({ page, 
   await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, with context$/ })).toBeVisible();
 });
 
-test("a task is worked through its steps from the item", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The static build's steps are covered by e2e/local/steps.spec.ts.");
+test("a task is worked through its steps from the item", async ({ page }) => {
   await addItem(page, "Rotate the certs");
   await openItem(page, "Rotate the certs");
   await makeTask(page, "Rotate the certs");

@@ -5,7 +5,6 @@ import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { useMe, useSignOut, useUpdateMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
-import { LocalDataSection } from "../components/LocalDatabase";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { PasswordCard } from "../components/PasswordCard";
 import { ProblemText } from "../components/ProblemText";
@@ -27,8 +26,8 @@ const themes: readonly { id: Theme; label: string }[] = [
 ];
 
 /**
- * The signed-in user's display name, which teammates see, their password (server build), this browser's theme,
- * where the CLI is signed in as them (server build), and in the local build their data.
+ * The signed-in user's display name, which teammates see, their password, this browser's theme and where the CLI is
+ * signed in as them.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
 export function AccountPage() {
@@ -70,7 +69,6 @@ export function AccountPage() {
         {me.allowed_actions.includes("change_password") && <PasswordCard inputClass={nameFormClasses.input} />}
         <AppearanceSection />
         {me.allowed_actions.includes("manage_sign_ins") && <SignInsSection />}
-        <LocalDataSection />
         {me.allowed_actions.includes("sign_out") && (
           <div className="flex flex-wrap items-center gap-3">
             <button

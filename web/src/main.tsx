@@ -6,7 +6,6 @@ import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
-import { LocalDatabaseGate } from "./components/LocalDatabase";
 import { followThemeAcrossTabs } from "./components/theme";
 import { createAppRouter, handlesOwnSignIn, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
@@ -70,16 +69,14 @@ if (root) {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <MotionConfig reducedMotion="user">
-          <LocalDatabaseGate>
-            {/* Links in React Aria components (heap rows) navigate through the router, under its base path. */}
-            <AriaRouterProvider
-              navigate={(to, options) => void router.navigate({ ...to, ...options })}
-              // React Aria asks for an href for every item, with "" where it has none; only links need building.
-              useHref={(to) => (to ? router.buildLocation(to).href : "")}
-            >
-              <RouterProvider router={router} />
-            </AriaRouterProvider>
-          </LocalDatabaseGate>
+          {/* Links in React Aria components (heap rows) navigate through the router, under its base path. */}
+          <AriaRouterProvider
+            navigate={(to, options) => void router.navigate({ ...to, ...options })}
+            // React Aria asks for an href for every item, with "" where it has none; only links need building.
+            useHref={(to) => (to ? router.buildLocation(to).href : "")}
+          >
+            <RouterProvider router={router} />
+          </AriaRouterProvider>
         </MotionConfig>
       </QueryClientProvider>
     </StrictMode>,

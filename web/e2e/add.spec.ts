@@ -106,8 +106,7 @@ test("Add says where the item landed, in a toast or in the dialog, and Add anoth
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Last one");
 });
 
-test("the next item can be typed and added while the list catches up", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+test("the next item can be typed and added while the list catches up", async ({ page }) => {
   await openAdd(page);
   const dialog = addDialog(page);
   await dialog.getByLabel("Add another").check();
@@ -133,8 +132,7 @@ test("the next item can be typed and added while the list catches up", async ({ 
   await expect(row(page, "Call Sam")).toBeVisible();
 });
 
-test("an add on its way is no draft to discard, and what's changed meanwhile stays", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+test("an add on its way is no draft to discard, and what's changed meanwhile stays", async ({ page }) => {
   const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
   // The server takes its time to take each item.
   await page.route(items, async (route) => {
@@ -165,8 +163,7 @@ test("an add on its way is no draft to discard, and what's changed meanwhile sta
   await expect(row(page, "Pay rent")).toBeVisible();
 });
 
-test("an add that lands after its dialog closed leaves the next dialog open", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+test("an add that lands after its dialog closed leaves the next dialog open", async ({ page }) => {
   const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
   await page.route(items, async (route) => {
     if (route.request().method() === "POST") await new Promise((done) => setTimeout(done, 1500));
@@ -187,8 +184,7 @@ test("an add that lands after its dialog closed leaves the next dialog open", as
   await page.unroute(items);
 });
 
-test("an add that fails after the dialog closed says so in a toast", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build answers in the page, out of reach of request routing.");
+test("an add that fails after the dialog closed says so in a toast", async ({ page }) => {
   const items = /\/api\/v1\/teams\/[^/]+\/heaps\/[^/]+\/items(\?|$)/;
   await page.route(items, async (route) => {
     if (route.request().method() !== "POST") return route.continue();

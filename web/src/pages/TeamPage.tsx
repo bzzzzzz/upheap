@@ -85,7 +85,7 @@ function TeamHeader({ team }: { team: Team }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState<TeamEdit | null>(null);
   const can = (action: Team["allowed_actions"][number]) => team.allowed_actions.includes(action);
-  // In the local build there's no Teams list to go back to: `/teams` leads here.
+  // With no Teams list (see `soleTeam`) there's nothing to go back to: `/teams` leads here.
   const listed = me !== undefined && soleTeam(me) === undefined;
   const role = team.personal ? "your personal team" : team.role === "admin" ? "you're an admin" : "you're a member";
   // After Save, Cancel or Escape, focus goes back to the ⋯ the editor came from.

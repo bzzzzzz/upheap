@@ -11,7 +11,7 @@ test("General renames the heap, changes its link name and archives it", async ({
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: /^Switch heap: Allotment/ }).first()).toBeAttached();
 
-  // A new link name moves the page to the heap's new path (under the local build's base path too), with the heap
+  // A new link name moves the page to the heap's new path, with the heap
   // shown at once and focus still in the field. To a finger, focus isn't moved back to the field, which would bring
   // the on-screen keyboard back up.
   const linkName = page.getByLabel("Heap link name");
@@ -60,7 +60,6 @@ test("Tags and Parameters are tabs of Settings, and their old paths lead there",
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/parameters$`));
   await expect(page.getByRole("button", { name: "New parameter" })).toBeVisible();
 
-  // `heapPath` holds the local build's base path too.
   await page.goto(`${heapPath}/tags`);
   await expect(page).toHaveURL(new RegExp(`${heapPath}/settings/tags$`));
   await page.goto(`${heapPath}/parameters`);
@@ -194,8 +193,7 @@ test("the preview shows how the top of the list would move", async ({ page }) =>
   await expectOrder(page, ["Quick win", "Urgent"]);
 });
 
-test("the heap's context is written in General: Edit, Save, Cancel and clearing it", async ({ page, localBuild }) => {
-  test.skip(localBuild, "The local build has no context card.");
+test("the heap's context is written in General: Edit, Save, Cancel and clearing it", async ({ page }) => {
   await goTo(page, "Settings");
   const card = page.getByRole("region", { name: "Context", exact: true });
   const empty = card.getByText(
@@ -240,9 +238,7 @@ test("the heap's context is written in General: Edit, Save, Cancel and clearing 
 test("a context saved by someone else meanwhile is shown above the draft, which a second Save then saves", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The local build has no context card.");
   await goTo(page, "Settings");
   const card = page.getByRole("region", { name: "Context", exact: true });
   const field = page.getByLabel("Heap context");

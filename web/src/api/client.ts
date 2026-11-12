@@ -1,5 +1,4 @@
 // Typed API client. Types come from the generated schema only; never write API types by hand.
-import { apiFetch } from "#api-fetch";
 import createClient, { type Middleware } from "openapi-fetch";
 
 import type { components, paths } from "./schema";
@@ -118,8 +117,6 @@ const standardHeaders: Middleware = {
 export const api = createClient<paths>({
   baseUrl: window.location.origin,
   credentials: "same-origin",
-  // The browser's, or the local build's worker (src/local/fetch.ts).
-  ...(apiFetch ? { fetch: apiFetch } : {}),
   // List parameters are comma-separated (`tag=a,b`), as the spec declares with `explode: false`.
   querySerializer: { array: { style: "form", explode: false } },
 });

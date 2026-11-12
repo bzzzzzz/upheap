@@ -8,7 +8,6 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { localDatabase } from "#local-database";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
@@ -58,8 +57,8 @@ export const meQuery = queryOptions({
 export const useMe = () => useQuery(meQuery);
 
 /**
- * The caller's one team when there's no Teams list to show: they can't start another, as in the local build. Links
- * then go straight to its page.
+ * The caller's one team when there's no Teams list to show: they can't start another. Links then go straight to
+ * its page.
  */
 export function soleTeam(me: Me): Me["teams"][number] | undefined {
   return !me.allowed_actions.includes("create_team") && me.teams.length === 1 ? me.teams[0] : undefined;
@@ -192,7 +191,7 @@ export function useItem(heap: HeapRef, key: string) {
 
 /**
  * What waits for the person across their heaps (ux.md, Waiting for me): its count is in the navigation, so it's fetched
- * for every page, once signed in, and not at all in the local build, where nothing can ask a question. Kept fresh for
+ * for every page, once signed in. Kept fresh for
  * 30 s and fetched again on window focus and after writes (no polling).
  */
 export function useWaiting() {
@@ -200,7 +199,6 @@ export function useWaiting() {
     queryKey: waitingKey,
     queryFn: async () => unwrap(await api.GET("/api/v1/me/waiting")),
     staleTime: 30_000,
-    enabled: !localDatabase,
   });
 }
 

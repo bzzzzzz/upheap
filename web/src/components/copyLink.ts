@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 /**
  * The short link to a team, heap or item (design/architecture.md, Handles): `/h/` and its handles, which the router expands
- * to the full path. Below the app's base, so the local build's links work where it's served.
+ * to the full path. Below the app's base.
  */
 export function shortLink(...handles: string[]): string {
   return new URL(`${import.meta.env.BASE_URL}h/${handles.map(encodeURIComponent).join("/")}`, window.location.origin)

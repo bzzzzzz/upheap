@@ -5,8 +5,8 @@ type NamedTeam = { name: string; personal: boolean };
 
 /**
  * Whether the team shows as "<display name>'s team" rather than its stored name (design/ux.md, Teams and Team): a
- * personal team among others, whose stored name is its owner's and reads as a person. Alone, as in the local build,
- * there is no list of teams to tell it from, so it keeps its own name ("My heaps").
+ * personal team among others, whose stored name is its owner's and reads as a person. Alone, with no Teams list,
+ * there is nothing to tell it from, so it keeps its own name.
  */
 export function namedForOwner(team: NamedTeam, me: Me): boolean {
   return team.personal && soleTeam(me) === undefined;

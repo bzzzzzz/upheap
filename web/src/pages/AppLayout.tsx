@@ -1,7 +1,6 @@
 // The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
-import { localDatabase } from "#local-database";
 import {
   Link,
   Outlet,
@@ -34,7 +33,6 @@ import { AddItemDialog } from "../components/AddItem";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
-import { StorageNote } from "../components/LocalDatabase";
 import { Logo } from "../components/Logo";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
 import { ProblemText } from "../components/ProblemText";
@@ -75,9 +73,6 @@ export function AppLayout() {
               <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
-                <div className="lg:hidden">
-                  <StorageNote className="mt-16 border-t border-line pt-4" />
-                </div>
               </div>
             </div>
             {me && shellHeap && <PhoneTabs me={me} heapRef={shellHeap} />}
@@ -133,8 +128,8 @@ function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
   const { team: teamSlug } = useParams({ strict: false });
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
   const urlTeam = me.teams.find((team) => team.slug === teamSlug);
-  // With one team and no Teams list, as in the local build, the team link goes straight to it, so a link to the
-  // team in the URL would repeat it.
+  // With one team and no Teams list, the team link goes straight to it, so a link to the team in the URL would
+  // repeat it.
   const onlyTeam = soleTeam(me);
   return {
     heap: heapTeam?.heaps.find((heap) => heap.slug === heapRef?.heap),
@@ -179,7 +174,7 @@ function NavLink({
 
 /**
  * Waiting for me, with the number of questions that wait. The count is a badge on the icon in the rail and the tabs, and
- * on the right in the sidebar; it is part of the link's name, and there is none at zero. Not in the local build.
+ * on the right in the sidebar; it is part of the link's name, and there is none at zero.
  */
 function WaitingLink() {
   const count = useWaiting().data?.count ?? 0;
@@ -233,11 +228,9 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
         Upheap
       </div>
 
-      {!localDatabase && (
-        <div className="lg:border-b lg:border-line lg:pb-4">
-          <WaitingLink />
-        </div>
-      )}
+      <div className="lg:border-b lg:border-line lg:pb-4">
+        <WaitingLink />
+      </div>
 
       <div className="lg:hidden">
         <HeapSwitcher me={me} heapRef={heapRef} placement="end top">
@@ -303,9 +296,6 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
         )}
         <NavLink {...links.teams} activeOptions={{ exact: true }} icon={Users} />
         <NavLink to="/account" icon={User} label="Account" />
-        <div className="hidden lg:block">
-          <StorageNote className="px-2 pt-1.5" />
-        </div>
       </div>
     </aside>
   );
@@ -339,7 +329,7 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
 
 /**
  * The phone's tabs (ux.md, Layout): Open, Waiting, Add in the middle under the thumb, Closed, and More for the rest,
- * Settings among it. The local build has nothing to wait for, so its tabs are Open, Closed, Add, Settings and More.
+ * Settings among it.
  */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const links = useShellLinks(me, heapRef);
@@ -355,7 +345,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   // The heap's pages that only More leads to, so More shows as active on them.
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
   const onSettings = useMatch({ from: "/app/teams/$team/heaps/$heap/settings", shouldThrow: false }) !== undefined;
-  const onMorePage = onActivity || (!localDatabase && onSettings);
+  const onMorePage = onActivity || onSettings;
 
   return (
     <nav
@@ -364,7 +354,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 items-end gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
       <NavLink {...views.open} icon={List} label="Open" />
-      {localDatabase ? <NavLink {...views.closed} icon={CircleCheck} label="Closed" /> : <WaitingLink />}
+      <WaitingLink />
       <button
         type="button"
         aria-label="Add item"
@@ -374,11 +364,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       >
         <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
       </button>
-      {localDatabase ? (
-        <NavLink {...views.settings} icon={Settings} label="Settings" />
-      ) : (
-        <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
-      )}
+      <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
       <button
         type="button"
         aria-expanded={more}
@@ -396,7 +382,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
 }
 
 /**
- * More on a phone: the heap's settings (in the server build; the local build has them as a tab), its activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
+ * More on a phone: the heap's settings, its activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
  * release, as a button does, so lifting the finger never picks a row.
  */
 function MoreSheet({
@@ -422,11 +408,9 @@ function MoreSheet({
   return (
     <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
       <nav aria-label="More" className="flex flex-col">
-        {!localDatabase && (
-          <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
-            {row("Settings")}
-          </Link>
-        )}
+        <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
+          {row("Settings")}
+        </Link>
         <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
           {row("Activity")}
         </Link>

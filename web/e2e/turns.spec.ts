@@ -50,9 +50,7 @@ async function expectTouchSize(control: Locator) {
 test("sending from the item with a line shows who has it, in the item and in the list, and Undo takes it back", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");
 
@@ -92,12 +90,7 @@ test("sending from the item with a line shows who has it, in the item and in the
   await expect(history(page)).toContainText("took back a turn");
 });
 
-test("all the way is offered and shown, and a defined task has one way to go", async ({
-  page,
-  heapPath,
-  localBuild,
-}) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");
   await who(page).getByRole("button", { name: "Send to an agent", exact: true }).click();
@@ -124,9 +117,7 @@ test("all the way is offered and shown, and a defined task has one way to go", a
 test("taking back asks first: Cancel keeps it, Take back returns it to you with focus on Send to an agent", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const { key } = await seed(page, heapPath, "Rotate the certs", true);
   await open(page, heapPath, key, "Rotate the certs");
   const takeBack = who(page).getByRole("button", { name: "Take back", exact: true });
@@ -149,9 +140,7 @@ test("taking back asks first: Cancel keeps it, Take back returns it to you with 
 test("an item an agent has asks before Start and Done in the item, and Blocked doesn't ask", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const { key } = await seed(page, heapPath, "Rotate the certs", true);
   await open(page, heapPath, key, "Rotate the certs");
   const state = itemPane(page).getByRole("group", { name: "State", exact: true });
@@ -179,9 +168,7 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
 test("marking an item an agent has done from its circle asks first, and closing takes it back", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   const { key, id } = await seed(page, heapPath, "Rotate the certs", true);
   await page.goto(heapPath);
   const circle = page.getByRole("button", { name: "Mark Rotate the certs done" });
@@ -211,9 +198,7 @@ test("marking an item an agent has done from its circle asks first, and closing 
 test("an admin turns on Agents prepare new notes, and a note added from Add shows with an agent", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild, "The static build has no agents.");
   await goTo(page, "Settings");
   const prepare = page.getByRole("switch", { name: "Agents prepare new notes" });
   await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
@@ -242,9 +227,7 @@ test("an admin turns on Agents prepare new notes, and a note added from Add show
 test("a member who is not an admin reads the prepare setting as text, with no switch", async ({
   page,
   browser,
-  localBuild,
 }, testInfo) => {
-  test.skip(localBuild, "The static build has no agents.");
   const created = await page.request.post("/api/v1/teams", {
     headers,
     data: { name: "Acme", slug: `t-${crypto.randomUUID().slice(0, 8)}` },
@@ -280,9 +263,8 @@ test("a member who is not an admin reads the prepare setting as text, with no sw
 test("on a phone the row carries the agent mark and the forms open as sheets that a finger can use", async ({
   page,
   heapPath,
-  localBuild,
 }) => {
-  test.skip(localBuild || !isPhone(page), "Phone only.");
+  test.skip(!isPhone(page), "Phone only.");
   const sent = await seed(page, heapPath, "Rotate the certs", true);
   const plain = await seed(page, heapPath, "Plain note");
   await page.goto(heapPath);
@@ -318,8 +300,7 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   await expect(takeBack).toBeFocused();
 });
 
-test("the item in an archived heap shows no Who has it block", async ({ page, heapPath, localBuild }) => {
-  test.skip(localBuild, "The static build has no agents.");
+test("the item in an archived heap shows no Who has it block", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs", true);
   await open(page, heapPath, key, "Rotate the certs");
   await expect(who(page)).toBeVisible();

@@ -1,6 +1,0 @@
-{
-  "//": "The local build's worker, which needs the backend built into src/local/backend (npm run build:backend).",
-  "extends": "./tsconfig.json",
-  "include": ["src/local", "scripts"],
-  "exclude": []
-}

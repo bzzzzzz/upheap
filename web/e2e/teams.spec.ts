@@ -1,10 +1,8 @@
 // The Teams and Team pages (design/ux.md, Teams and Team): making a team, sharing it, and managing its heaps
-// and members. Teams with others are the server's, so most of these skip the local build.
+// and members.
 import type { APIRequestContext, Browser, Page, TestInfo } from "@playwright/test";
 
 import { addItem, createTeam, expect, expectFitsWidth, isPhone, PASSWORD, test, uniqueUser } from "./fixtures";
-
-const SERVER_ONLY = "The local build has one user and one team.";
 
 /** Registers someone else, in a request context of their own so the page stays signed in as itself. */
 async function registerOther(request: APIRequestContext, display_name: string) {
@@ -37,11 +35,7 @@ async function addMember(page: Page, username: string) {
 const members = (page: Page) => page.getByRole("region", { name: /^Members/ });
 const heaps = (page: Page) => page.getByRole("region", { name: "Heaps" });
 
-test("a team is created with or without a link name, and a taken one is said under its field", async ({
-  page,
-  localBuild,
-}) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("a team is created with or without a link name, and a taken one is said under its field", async ({ page }) => {
   const linkName = `t-${crypto.randomUUID().slice(0, 8)}`;
 
   // Without a link name the server makes one from the name, and the note doesn't guess it.
@@ -90,12 +84,7 @@ test("a team is created with or without a link name, and a taken one is said und
   await expect(personal).toContainText("Only you · 1 heap");
 });
 
-test("the counts come from the server: open items per heap, members per team", async ({
-  page,
-  request,
-  localBuild,
-}) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("the counts come from the server: open items per heap, members per team", async ({ page, request }) => {
   const grace = await registerOther(request, "Grace Hopper");
   await createTeam(page, "Counting");
   await page.getByRole("button", { name: "+ New heap" }).click();
@@ -123,9 +112,7 @@ test("the counts come from the server: open items per heap, members per team", a
 test("a member is added from the search with the keyboard, and removing one says what happens", async ({
   page,
   request,
-  localBuild,
 }) => {
-  test.skip(localBuild, SERVER_ONLY);
   const sam = await registerOther(request, "Sam Ortiz");
   await createTeam(page, "Acme");
   await page.getByRole("button", { name: "+ New heap" }).click();
@@ -253,8 +240,7 @@ test("a heap's ⋯ renames it, archives and unarchives it, and shows its history
   await expect(heaps(page).getByRole("deletion").filter({ hasText: "Garden" })).toBeVisible();
 });
 
-test("the team's ⋯ renames it, changes its link name and opens its activity", async ({ page, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("the team's ⋯ renames it, changes its link name and opens its activity", async ({ page }) => {
   const linkName = `t-${crypto.randomUUID().slice(0, 8)}`;
   await createTeam(page, "Orchard");
   const more = page.getByRole("button", { name: /^More for / });
@@ -294,8 +280,7 @@ test("the team's ⋯ renames it, changes its link name and opens its activity", 
   await expect(page).toHaveURL(new RegExp(`/teams/${linkName}/activity$`));
 });
 
-test("the team's activity fits the screen with a long team name", async ({ page, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("the team's activity fits the screen with a long team name", async ({ page }) => {
   const name = "Q".repeat(100);
   await createTeam(page, name);
   await page.getByRole("button", { name: /^More for / }).click();
@@ -305,8 +290,7 @@ test("the team's activity fits the screen with a long team name", async ({ page,
   await expectFitsWidth(page, "The team's activity");
 });
 
-test("leaving asks first, and the last admin is told why they can't", async ({ page, request, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("leaving asks first, and the last admin is told why they can't", async ({ page, request }) => {
   const grace = await registerOther(request, "Grace Hopper");
   await createTeam(page, "Rota");
   await expect(page.getByText("You are the only admin, so you can't leave until someone else is one.")).toBeVisible();
@@ -333,8 +317,7 @@ test("leaving asks first, and the last admin is told why they can't", async ({ p
   await expect(page.getByRole("link", { name: "Open Rota" })).toHaveCount(0);
 });
 
-test("giving up your own admin role asks first", async ({ page, request, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("giving up your own admin role asks first", async ({ page, request }) => {
   const sam = await registerOther(request, "Sam Ortiz");
   await createTeam(page, "Acme");
   await addMember(page, sam.username);
@@ -390,12 +373,7 @@ test("giving up your own admin role asks first", async ({ page, request, localBu
   }
 });
 
-test("Enter waits for the results of what was typed, not the ones still on screen", async ({
-  page,
-  request,
-  localBuild,
-}) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("Enter waits for the results of what was typed, not the ones still on screen", async ({ page, request }) => {
   test.skip(isPhone(page), "A phone's Enter never adds anyone; the member test covers that.");
   const sam = await registerOther(request, "Sam Ortiz");
   await createTeam(page, "Waiting");
@@ -425,8 +403,7 @@ const inviteLinkButton = (page: Page) => page.getByRole("button", { name: "Invit
 const REVOKE_QUESTION =
   /^Revoke your link that ends .+\? It stops working at once\. People who joined through it stay\.$/;
 
-test("an admin makes, copies and revokes an invite link", async ({ page, context, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("an admin makes, copies and revokes an invite link", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await createTeam(page, "Gate");
   const links = inviteLinks(page);
@@ -484,12 +461,7 @@ test("an admin makes, copies and revokes an invite link", async ({ page, context
   await expect(page.getByText("You revoked Tester's invite link")).toBeVisible();
 });
 
-test("a member sees no invite links, and Activity says who joined through one", async ({
-  page,
-  browser,
-  localBuild,
-}, testInfo) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("a member sees no invite links, and Activity says who joined through one", async ({ page, browser }, testInfo) => {
   await createTeam(page, "Door");
   const teamPath = new URL(page.url()).pathname;
   await inviteLinkButton(page).click();
@@ -526,8 +498,7 @@ test("a member sees no invite links, and Activity says who joined through one", 
   await expect(page.getByText(/Sam Ortiz joined through Tester.s invite link/)).toBeVisible();
 });
 
-test("a copy the browser refuses shows the link to copy by hand", async ({ page, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("a copy the browser refuses shows the link to copy by hand", async ({ page }) => {
   test.skip(page.viewportSize()?.width !== 1280, "One width is enough for the fallback.");
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -548,8 +519,7 @@ test("a copy the browser refuses shows the link to copy by hand", async ({ page,
   await expect(field).toHaveCount(0);
 });
 
-test("a phone copies an older link from its ⋯ sheet", async ({ page, context, localBuild }) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("a phone copies an older link from its ⋯ sheet", async ({ page, context }) => {
   test.skip(!isPhone(page), "The sheet is the phone's.");
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await createTeam(page, "Older");
@@ -594,8 +564,7 @@ async function listLinks(page: Page) {
   return ((await listed.json()) as { links: { id: string; token: string | null }[] }).links;
 }
 
-test("an admin reads the history of a working link", async ({ page, browser, localBuild }, testInfo) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("an admin reads the history of a working link", async ({ page, browser }, testInfo) => {
   await createTeam(page, "Trail");
   await inviteLinkButton(page).click();
   const links = inviteLinks(page);
@@ -622,8 +591,7 @@ test("an admin reads the history of a working link", async ({ page, browser, loc
   }
 });
 
-test("past links list a revoked link, who joined and its history", async ({ page, browser, localBuild }, testInfo) => {
-  test.skip(localBuild, SERVER_ONLY);
+test("past links list a revoked link, who joined and its history", async ({ page, browser }, testInfo) => {
   await createTeam(page, "Past");
   const links = inviteLinks(page);
   await inviteLinkButton(page).click();
