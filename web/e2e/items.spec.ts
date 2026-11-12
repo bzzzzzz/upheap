@@ -5,18 +5,23 @@ import {
   closeField,
   closeItem,
   dayFromToday,
+  editContext,
   expect,
   expectOrder,
-  markDoneFromList,
   field,
+  fieldButton,
   goTo,
   isPhone,
   itemPane,
   makeTask,
+  markDoneFromList,
+  moreEntry,
   openHistory,
   openItem,
+  openMore,
   pick,
   row,
+  saveContext,
   test,
 } from "./fixtures";
 
@@ -42,19 +47,20 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await addItem(page, "Write the rota");
   await openItem(page, "Write the rota");
   const pane = itemPane(page);
-  // The link sign beside the title copies the item's short link.
-  await expect(pane.getByRole("button", { name: /^Copy the link to [0-9a-z]{5}$/ })).toBeVisible();
 
-  // Each change saves as it's made, one after the other.
+  // Each change saves as it's made, one after the other, and the value reads the new choice once the server has it.
   await pick(page, "Effort", "S");
+  await expect(fieldButton(page, "Effort")).toHaveAccessibleName("Effort: S");
   await pick(page, "Impact", "XL");
+  await expect(fieldButton(page, "Impact")).toHaveAccessibleName("Impact: XL");
   await pane.getByLabel("Title", { exact: true }).fill("Write the team rota");
   await pane.getByLabel("Title", { exact: true }).press("Enter");
-  await (await field(page, "Context")).getByLabel("Context").fill("For the next quarter");
-  await closeField(page);
-  // The likeliest next state is the first button: Start, for an open item, then Done once it's started.
+  await (await editContext(page)).fill("For the next quarter");
+  await saveContext(page, "For the next quarter");
+  // The likeliest next state is the main button: Start, for an open item, then Done once it's started.
+  const state = pane.getByRole("group", { name: "State", exact: true });
   await changeState(page, "Start");
-  await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
+  await expect(state.getByRole("button").first()).toHaveText("Done");
   await expect(row(page, "Write the team rota")).toBeVisible();
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
   // History starts collapsed, with who added the item beside it, and opens with a click.
@@ -70,7 +76,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await changeState(page, "Done");
   await expect(row(page, "Write the team rota")).toHaveCount(0);
   await changeState(page, "Reopen");
-  await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Start");
+  await expect(state.getByRole("button").first()).toHaveText("Start");
   await expect(row(page, "Write the team rota")).toBeVisible();
 
   // Back closes the item and leaves the list where it was.
@@ -81,11 +87,173 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   // Opened from a link, it closes to its list.
   await openItem(page, "Write the team rota");
   await page.reload();
-  await expect((await field(page, "Context")).getByLabel("Context")).toHaveValue("For the next quarter");
-  await closeField(page);
+  await expect(pane.getByRole("region", { name: "Context", exact: true })).toContainText("For the next quarter");
   await closeItem(page);
   await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
   await expect(row(page, "Write the team rota")).toBeVisible();
+});
+
+test("the fields read first, and a value opens its editor on a click", async ({ page }) => {
+  await addItem(page, "Plan the trip");
+  await openItem(page, "Plan the trip");
+  const pane = itemPane(page);
+
+  // Labelled values, with nothing open to edit.
+  for (const name of ["Need: Expected", "Effort: Set effort", "Impact: Set impact", "Due: Set due", "Tags: None"]) {
+    await expect(pane.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  await expect(pane.getByRole("radiogroup")).toHaveCount(0);
+
+  // A click opens the editor, a pick saves and closes it, and focus goes back to the value.
+  const editor = await pick(page, "Effort", "M");
+  await expect(fieldButton(page, "Effort")).toHaveAccessibleName("Effort: M");
+  await expect(editor).toHaveCount(0);
+  await expect(fieldButton(page, "Effort")).toBeFocused();
+
+  // Picking the picked one again clears it, where the choice is made on buttons.
+  if (!isPhone(page)) {
+    await pick(page, "Effort", "M");
+    await expect(fieldButton(page, "Effort")).toHaveAccessibleName("Effort: Set effort");
+  }
+});
+
+test("an unset effort, impact and due date that hold the rank back are marked", async ({ page }) => {
+  await addItem(page, "Renew the certificate", { need: "Critical", effort: "S", impact: "XL" });
+  await addItem(page, "Dark mode", { need: "Idea" });
+  await openItem(page, "Dark mode");
+
+  // The server says what keeps it from ranking higher; the fields that can fix that carry the mark.
+  await expect(fieldButton(page, "Effort")).toHaveAttribute("data-gap", "true");
+  await expect(fieldButton(page, "Impact")).toHaveAttribute("data-gap", "true");
+  await expect(fieldButton(page, "Due")).toHaveAttribute("data-gap", "true");
+  // A low need is set on purpose, so it isn't marked.
+  await expect(fieldButton(page, "Need")).not.toHaveAttribute("data-gap");
+
+  await pick(page, "Effort", "M");
+  await expect(fieldButton(page, "Effort")).toHaveAccessibleName("Effort: M");
+  await expect(fieldButton(page, "Effort")).not.toHaveAttribute("data-gap");
+  await expect(fieldButton(page, "Impact")).toHaveAttribute("data-gap", "true");
+});
+
+test("the rank chip says why the item ranks where it does", async ({ page }) => {
+  await addItem(page, "Renew the certificate", { need: "Critical", effort: "S", impact: "XL" });
+  await addItem(page, "Dark mode", { need: "Idea" });
+  await openItem(page, "Dark mode");
+
+  const chip = itemPane(page).getByRole("button", { name: "Why it's #2", exact: true });
+  await expect(chip).toHaveText("#2");
+  await chip.click();
+  const why = page.getByRole("dialog", { name: "Why it's #2", exact: true });
+  // What holds it back is text: the fields themselves are where to fix it.
+  await expect(why.getByRole("list", { name: "Held back by" }).getByRole("listitem")).toContainText([
+    "Need: Idea",
+    "No due date",
+    "Effort and impact not set",
+  ]);
+  await expect(why.getByRole("button")).toHaveCount(1);
+  await why.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(why).toHaveCount(0);
+  await expect(chip).toBeFocused();
+});
+
+test("the item that ranks first says nothing holds it back", async ({ page }) => {
+  await addItem(page, "Dark mode", { need: "Idea", effort: "S", impact: "XL" });
+  await openItem(page, "Dark mode");
+
+  await itemPane(page).getByRole("button", { name: "Why it's #1", exact: true }).click();
+  const why = page.getByRole("dialog", { name: "Why it's #1", exact: true });
+  await expect(why.getByRole("listitem").first()).toBeVisible();
+  await expect(why.getByText("Held back by")).toHaveCount(0);
+});
+
+test("the context reads as Markdown, never runs what is written in it, and Edit changes the source", async ({
+  page,
+}) => {
+  await addItem(page, "Write the plan");
+  await openItem(page, "Write the plan");
+  const pane = itemPane(page);
+  const context = pane.getByRole("region", { name: "Context", exact: true });
+  await expect(context).toContainText("No context yet.");
+
+  const source = "**bold** and a [link](https://example.com)\n\n- one\n- two\n\n<script>window.pwned = true</script>";
+  await (await editContext(page)).fill(source);
+  await saveContext(page, "bold and a link");
+  await expect(context.locator("strong")).toHaveText("bold");
+  const link = context.getByRole("link", { name: "link", exact: true });
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(context.getByRole("listitem")).toHaveText(["one", "two"]);
+  // Raw HTML is dropped, not run.
+  await expect(pane.locator("script")).toHaveCount(0);
+  expect(await page.evaluate(() => "pwned" in window)).toBe(false);
+
+  // Save, Cancel and Escape are the explicit ways out of the editor on a wider screen; a phone's sheet saves as it closes.
+  test.skip(isPhone(page), "a phone edits the context in a sheet that saves as it closes");
+  const area = await editContext(page);
+  await expect(area).toHaveValue(source);
+  await area.fill("Just this");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(context).toContainText("Just this");
+  await expect(pane.getByRole("button", { name: "Edit context" })).toBeFocused();
+
+  await (await editContext(page)).fill("Never mind");
+  await pane.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(context).toContainText("Just this");
+  await expect(context).not.toContainText("Never mind");
+
+  // Escape in the textarea throws the draft away and keeps the item open.
+  await (await editContext(page)).fill("Not this either");
+  await page.keyboard.press("Escape");
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
+  await expect(pane).toBeVisible();
+  await expect(context).toContainText("Just this");
+
+  // Closing the item with a changed draft saves it, so nothing typed is lost.
+  await (await editContext(page)).fill("Kept on close");
+  await closeItem(page);
+  await openItem(page, "Write the plan");
+  await expect(context).toContainText("Kept on close");
+});
+
+test("the item has one main state button, and ⋯ holds the rest", async ({ page }) => {
+  await addItem(page, "Ship the release");
+  await openItem(page, "Ship the release");
+  const state = itemPane(page).getByRole("group", { name: "State", exact: true });
+
+  // Start and ⋯, and nothing else.
+  await expect(state.getByRole("button")).toHaveCount(2);
+  await expect(state.getByRole("button").first()).toHaveText("Start");
+  await expect(state.getByRole("button", { name: "More", exact: true })).toBeVisible();
+
+  const more = await openMore(page);
+  for (const name of ["Block", "Done", "Won't do", "Copy link"]) {
+    await expect(moreEntry(page, more, name)).toBeVisible();
+  }
+  // Done from ⋯ closes the item; the pane offers to reopen it.
+  await moreEntry(page, more, "Done").click();
+  await expect(state.getByRole("button", { name: "Reopen", exact: true })).toBeVisible();
+});
+
+test("a reader's item has values to read, no Edit, and ⋯ with only Copy link", async ({ page, heapPath }) => {
+  // An archived heap is read-only, as it is for a reader: the server offers neither edit nor change_state.
+  await addItem(page, "Rotate the certs", { effort: "S" });
+  await openItem(page, "Rotate the certs");
+  const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const archived = await page.request.post(`/api/v1${heapPath}/archive`, { headers: { "x-csrf-protection": "1" } });
+  expect(archived.ok()).toBe(true);
+  await page.goto(`${heapPath}/items/${key}`);
+  const pane = itemPane(page);
+  await expect(pane.getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
+
+  await expect(pane.getByText("Expected", { exact: true })).toBeVisible();
+  await expect(pane.getByText("Not set").first()).toBeVisible();
+  await expect(pane.getByRole("button", { name: /^(Need|Effort|Impact|Due|Tags): / })).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: /^(Edit|Add) context$/ })).toHaveCount(0);
+  await expect(pane.getByRole("group", { name: "State", exact: true }).getByRole("button")).toHaveCount(1);
+
+  const more = await openMore(page);
+  await expect(moreEntry(page, more, "Copy link")).toBeVisible();
+  await expect(more.getByRole(isPhone(page) ? "button" : "menuitem")).toHaveCount(isPhone(page) ? 2 : 1);
 });
 
 test("History opened on one item starts collapsed on the next", async ({ page }) => {
@@ -147,20 +315,31 @@ test("the keyboard moves through the list, opens an item and marks one done", as
 test("an item is blocked by another and unblocked", async ({ page }) => {
   await addItem(page, "Deploy", { effort: "S", impact: "XL" });
   await addItem(page, "Get approval");
+  const status = () => itemPane(page).getByRole("group", { name: "Status" });
+  /** Opens Change blocker… from ⋯ on the open, blocked item. */
+  const changeBlocker = async () => {
+    await moreEntry(page, await openMore(page), "Change blocker…").click();
+    const dialog = page.getByRole("dialog", { name: "Change blocker", exact: true });
+    await expect(dialog).toBeVisible();
+    return dialog;
+  };
 
   // Blocked items are hidden by default.
   await openItem(page, "Deploy");
   await changeState(page, "Block");
   await expect(row(page, "Deploy")).toHaveCount(0);
+  await expect(status()).toContainText("Blocked");
   await closeItem(page);
   // The note under the list says what's hidden, and brings it back.
   await expect(page.getByText("1 blocked item is hidden.")).toBeVisible();
   await page.getByRole("button", { name: "Show it" }).click();
   await expect(row(page, "Deploy")).toBeVisible();
 
+  // Blocking saved the state at once; the blocker is named after, from ⋯, and the status line links to it.
   await openItem(page, "Deploy");
-  await itemPane(page).getByLabel("Waiting for").selectOption({ label: "Get approval" });
-  await expect(itemPane(page).getByLabel("Waiting for")).toHaveValue(/.+/);
+  await (await changeBlocker()).getByLabel("Waiting for").selectOption({ label: "Get approval" });
+  await expect(status()).toContainText("Blocked by");
+  await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Get approval$/ })).toBeVisible();
   await closeItem(page);
   // The blocker takes on the priority of what waits for it, and says so.
   await expect(row(page, "Get approval")).toContainText("Blocks “Deploy”");
@@ -168,14 +347,17 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   // The blocker isn't offered the item it blocks to wait for, which would be a cycle.
   await openItem(page, "Get approval");
   await changeState(page, "Block");
-  await expect(itemPane(page).getByLabel("Waiting for")).toBeVisible();
-  await expect(itemPane(page).getByLabel("Waiting for").getByRole("option")).toHaveText(["Nothing picked"]);
+  const blocker = await changeBlocker();
+  await expect(blocker.getByLabel("Waiting for")).toBeVisible();
+  await expect(blocker.getByLabel("Waiting for").getByRole("option")).toHaveText(["Nothing picked"]);
+  await closeField(page);
   await changeState(page, "Unblock");
+  await expect(status()).not.toContainText("Blocked");
   await closeItem(page);
 
   await openItem(page, "Deploy");
   await changeState(page, "Unblock");
-  await expect(itemPane(page).getByLabel("Waiting for")).toHaveCount(0);
+  await expect(status()).not.toContainText("Blocked by");
   await closeItem(page);
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");
 });
@@ -258,40 +440,59 @@ test("a short link opens the item it names", async ({ page, heapPath }) => {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
 });
 
-test("on a phone, the item's fields open sheets, and the state buttons sit at the bottom", async ({ page }) => {
-  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone shows the fields as rows.");
+test("on a phone, need, effort and impact open sheets, and the bar holds the main button and ⋯", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone has the sheets and the bar.");
   await addItem(page, "Plan the offsite");
   await openItem(page, "Plan the offsite");
   const pane = itemPane(page);
 
-  // The toast from adding it stays under the sheet, which keeps its bar of states usable.
+  // The toast from adding it stays under the sheet, which keeps its bar usable.
   await expect(page.getByRole("status").filter({ hasText: "Added “Plan the offsite”" })).toBeVisible();
-  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true }).click();
+  // The bar holds the main button and ⋯, and nothing else.
+  const bar = pane.getByRole("group", { name: "State", exact: true });
+  await expect(bar.getByRole("button")).toHaveCount(2);
+  await expect(bar.getByRole("button").first()).toHaveText("Start");
+  await bar.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "More", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "More", exact: true })).toHaveCount(0);
 
+  // The three cells of the first row each open a sheet.
+  for (const name of ["Need", "Effort", "Impact"]) {
+    const sheet = await field(page, name);
+    await expect(sheet.getByRole("radiogroup", { name, exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
+  }
+  // A need is picked from rows with what it means under each.
+  const need = await field(page, "Need");
+  await expect(need.getByRole("radio")).toHaveCount(4);
+  await need.getByRole("radio", { name: "Critical", exact: true }).click();
+  await expect(fieldButton(page, "Need")).toHaveAccessibleName("Need: Critical");
+
   // The context saves however its sheet closes: here with Escape, then with a tap on the dimmed page.
-  await (await field(page, "Context")).getByLabel("Context").fill("Venue first");
+  const context = pane.getByRole("region", { name: "Context", exact: true });
+  await (await editContext(page)).fill("Venue first");
   await page.keyboard.press("Escape");
-  await expect(pane.getByRole("button", { name: "Context Venue first" })).toBeVisible();
-  await (await field(page, "Context")).getByLabel("Context").fill("Venue, then dates");
+  await expect(context).toContainText("Venue first");
+  await (await editContext(page)).fill("Venue, then dates");
   await page.mouse.click(200, 20);
-  await expect(pane.getByRole("button", { name: "Context Venue, then dates" })).toBeVisible();
+  await expect(context).toContainText("Venue, then dates");
 
   // A new tag from the Tags sheet, its offer in view under the field.
   const tags = await field(page, "Tags");
   await tags.getByLabel("Add a tag").fill("travel");
   await tags.getByRole("option", { name: "Create tag “travel”" }).click();
   await closeField(page);
-  await expect(pane.getByRole("button", { name: "Tags travel" })).toBeVisible();
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel");
 
-  // Won't do is under ⋯ at the end of the bar; a closed item shows all its fields, unchangeable.
-  await pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("dialog", { name: "More", exact: true }).getByRole("button", { name: "Won't do" }).click();
-  await expect(pane.getByText("Venue, then dates", { exact: true })).toBeVisible();
-  await expect(pane.getByRole("button", { name: /^Context/ })).toHaveCount(0);
-  await expect(pane.getByRole("group", { name: "State" }).getByRole("button")).toHaveText(["Reopen"]);
+  // Won't do is under ⋯; a closed item shows all its fields, unchangeable.
+  await changeState(page, "Won't do");
+  await expect(context.getByText("Venue, then dates", { exact: true })).toBeVisible();
+  await expect(pane.getByRole("button", { name: /^(Edit|Add) context$/ })).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: /^(Need|Effort|Impact|Due|Tags): / })).toHaveCount(0);
+  await expect(bar.getByRole("button")).toHaveCount(2);
+  await expect(bar.getByRole("button").first()).toHaveText("Reopen");
 });
 
 test("a note is made a task and its stage is set from the item", async ({ page }) => {
@@ -299,46 +500,29 @@ test("a note is made a task and its stage is set from the item", async ({ page }
   await openItem(page, "Rotate the certs");
   const pane = itemPane(page);
   const phone = isPhone(page);
-  await expect(pane.getByText("Note · As written", { exact: true })).toBeVisible();
+  const status = pane.getByRole("group", { name: "Status" });
+  await expect(status).toContainText("Note · As written");
 
   // Making a note a task asks first, naming it: a task can't go back.
   const more = pane.getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true });
-  await more.click();
-  if (phone)
-    await page
-      .getByRole("dialog", { name: "More", exact: true })
-      .getByRole("button", { name: "Make it a task…" })
-      .click();
-  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
+  await moreEntry(page, await openMore(page), "Make it a task…").click();
   const confirm = page.getByRole("alertdialog", { name: "Make “Rotate the certs” a task?" });
   await expect(confirm).toContainText("A task can't go back to a note.");
   // Cancel keeps the note and gives focus back to the ⋯.
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
   await expect(more).toBeFocused();
-  await expect(pane.getByText("Note · As written", { exact: true })).toBeVisible();
-  await more.click();
-  if (phone)
-    await page
-      .getByRole("dialog", { name: "More", exact: true })
-      .getByRole("button", { name: "Make it a task…" })
-      .click();
-  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
+  await expect(status).toContainText("Note · As written");
+  await moreEntry(page, await openMore(page), "Make it a task…").click();
   await confirm.getByRole("button", { name: "Make it a task" }).click();
-  await expect(pane.getByText("Task · As written", { exact: true })).toBeVisible();
+  await expect(status).toContainText("Task · As written");
 
   // The stage saves at once. A task can be defined, and offers no second Make it a task.
-  await more.click();
-  if (phone) {
-    const sheet = page.getByRole("dialog", { name: "More", exact: true });
-    await expect(sheet.getByRole("button", { name: "Make it a task…" })).toHaveCount(0);
-    await sheet.getByRole("radio", { name: "With context" }).click();
-  } else {
-    const menu = page.getByRole("menu", { name: "More" });
-    await expect(menu.getByRole("menuitem", { name: "Make it a task…" })).toHaveCount(0);
-    await menu.getByRole("menuitemradio", { name: "With context" }).click();
-  }
-  await expect(pane.getByText("Task · With context", { exact: true })).toBeVisible();
+  const menu = await openMore(page);
+  await expect(menu.getByText("Make it a task…")).toHaveCount(0);
+  if (phone) await menu.getByRole("radio", { name: "With context" }).click();
+  else await menu.getByRole("menuitemradio", { name: "With context" }).click();
+  await expect(status).toContainText("Task · With context");
 
   await closeItem(page);
   await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, with context$/ })).toBeVisible();
@@ -395,57 +579,4 @@ test("a task is worked through its steps from the item", async ({ page }) => {
     "text-decoration-line",
     "line-through",
   );
-});
-
-test("the item says what holds it back, and each entry takes you to its field", async ({ page }) => {
-  await addItem(page, "Renew the certificate", { need: "Critical", effort: "S", impact: "XL" });
-  await addItem(page, "Dark mode", { need: "Idea" });
-  await openItem(page, "Dark mode");
-  const pane = itemPane(page);
-  const heldBack = pane.getByRole("list", { name: "Held back by" });
-  await expect(heldBack.getByRole("listitem")).toContainText([
-    "Need: Idea",
-    "No due date",
-    "Effort and impact not set",
-  ]);
-
-  // Sizes: the Effort buttons come first, and picking one changes the entry once the server has ranked again.
-  await pane.getByRole("button", { name: /Set sizes/ }).click();
-  const effort = pane.getByRole("radiogroup", { name: "Effort", exact: true });
-  await expect(effort.getByRole("radio", { name: "S", exact: true })).toBeFocused();
-  await effort.getByRole("radio", { name: "M", exact: true }).click();
-  await expect(heldBack).toContainText("Impact not set, counts as S");
-  await expect(heldBack).not.toContainText("Effort and impact not set");
-
-  // Need: the picked step has the focus, and the entry goes once the need isn't low.
-  await pane.getByRole("button", { name: /Change need/ }).click();
-  const need = pane.getByRole("radiogroup", { name: "Need", exact: true });
-  await expect(need.getByRole("radio", { name: "Idea", exact: true })).toBeFocused();
-  await need.getByRole("radio", { name: "Expected", exact: true }).click();
-  await expect(heldBack).not.toContainText("Need: Idea");
-
-  // Due: the picker on a wide screen, the Due sheet on a phone.
-  await pane.getByRole("button", { name: /Set due date/ }).click();
-  if (isPhone(page)) {
-    const sheet = page.getByRole("dialog", { name: "Due", exact: true });
-    await sheet.getByRole("radio", { name: "Exact date", exact: true }).click();
-    await sheet.getByLabel("Exact due date").fill(dayFromToday(5));
-    await closeField(page);
-  } else {
-    const due = pane.getByRole("radiogroup", { name: "Due", exact: true });
-    await expect(due.locator(":focus")).toHaveCount(1);
-    await due.getByRole("radio", { name: "Exact date", exact: true }).click();
-    await pane.getByLabel("Exact due date").fill(dayFromToday(5));
-  }
-  await expect(heldBack).not.toContainText("No due date");
-  // The entry that opened the sheet is gone, so focus returns to the Due row, not to the page.
-  if (isPhone(page)) await expect(pane.getByRole("button", { name: /^Due/ })).toBeFocused();
-});
-
-test("the item that ranks first says nothing holds it back", async ({ page }) => {
-  await addItem(page, "Dark mode", { need: "Idea", effort: "S", impact: "XL" });
-  await openItem(page, "Dark mode");
-
-  await expect(itemPane(page).getByRole("heading", { name: "Why it's #1" })).toBeVisible();
-  await expect(itemPane(page).getByText("Held back by")).toHaveCount(0);
 });

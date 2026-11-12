@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import {
@@ -127,16 +127,16 @@ function stuckOf(item: Item): WaitingStuck | null {
 }
 
 /**
- * What an item is waiting for the person to answer (ux.md, The item): one row per open question, each with its reply
- * controls, and above them the item's stuck turn, when it has one, with Retry and Take back. Shown only while the item is open: closing withdraws its open questions, which {@link AnsweredQuestions}
- * lists.
- * A row is shown when the server offers `reply` on the question, otherwise (an archived heap) as text. It stays
- * mounted when empty, for the live message after the last reply and the note about a reply someone else made.
+ * What an item is waiting for the person to answer (ux.md, The item): the open questions, which sit in the Questions
+ * section, and the item's stuck turn, when it has one, which sits in Waits for you at the top. The two share what a
+ * reply or a retry leaves to say, and where focus goes next, so it is kept here, by the item, for both to use. Both
+ * show only while the item is open: closing withdraws its open questions, which {@link AnsweredQuestions} lists.
  */
-export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
+export function useItemWaits(item: Item) {
   const closed = isClosed(item.state);
   const open = closed ? [] : (item.questions ?? []).filter((question) => question.state === "open");
-  const listRef = useRef<HTMLUListElement>(null);
+  // The id of the open questions' list, found by id because the hook's result is passed around and a ref isn't.
+  const listId = useId();
   const [message, setMessage] = useState("");
   const [elsewhere, setElsewhere] = useState<string[]>([]);
   // The stuck turn was taken back or retried by someone else first.
@@ -166,33 +166,82 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
     const first = next
-      ? listRef.current?.querySelector<HTMLElement>(
-          `[data-question="${next.number}"] :is(input, textarea, button):not([data-details]):not(:disabled)`,
-        )
+      ? firstControl(document.getElementById(listId), next.number)
       : document.querySelector<HTMLElement>("[data-item-pane]");
     first?.focus();
   });
 
-  const onReplied = (question: Question) => {
+  const replied = (question: Question) => {
     repliedTo.current = question.number;
     setElsewhere([]);
     setRefused([]);
     setMessage(`Replied to “${question.text}”.`);
   };
-  const onElsewhere = (question: Question) => {
+  const repliedElsewhere = (question: Question) => {
     repliedTo.current = question.number;
     setElsewhere((current) => [...current, question.text]);
   };
-
-  const onRefused = (question: Question, comment: string | null) => {
+  const refusedReply = (question: Question, comment: string | null) => {
     repliedTo.current = question.number;
     setRefused((current) => [...current, { text: question.text, comment }]);
   };
+  const retried = () => {
+    actedOnStuck.current = true;
+    setStuckChanged(false);
+    setMessage(`Retried “${item.title}”.`);
+  };
+  const tookBack = () => {
+    actedOnStuck.current = true;
+    setStuckChanged(false);
+    setMessage(`Took back “${item.title}”.`);
+  };
 
+  return {
+    closed,
+    open,
+    stuck,
+    listId,
+    message,
+    elsewhere,
+    refused,
+    stuckChanged,
+    setStuckChanged,
+    replied,
+    repliedElsewhere,
+    refusedReply,
+    retried,
+    tookBack,
+  };
+}
+
+export type ItemWaits = ReturnType<typeof useItemWaits>;
+
+/** The first control of the open question numbered `number` in `list`: a reply's first input or button. */
+function firstControl(list: HTMLElement | null, number: number) {
+  return list?.querySelector<HTMLElement>(
+    `[data-question="${number}"] :is(input, textarea, button):not([data-details]):not(:disabled)`,
+  );
+}
+
+/**
+ * Waits for you, the one tinted, outlined block at the top of the item (ux.md, The item): the stuck turn, when it
+ * has one, with Retry and Take back, and one line saying how many questions wait, with Answer to go to the first. The
+ * reply controls are in {@link ItemQuestions}, under the Steps. It stays mounted when empty, for the live message
+ * after the last reply and the note about a stuck turn someone else dealt with.
+ */
+export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
+  const { open, stuck } = waits;
+  const answer = () => {
+    const first = open[0];
+    if (!first) return;
+    const list = document.getElementById(waits.listId);
+    list?.querySelector(`[data-question="${first.number}"]`)?.scrollIntoView({ block: "nearest" });
+    firstControl(list, first.number)?.focus({ preventScroll: true });
+  };
   return (
     <>
       <span role="status" className="sr-only">
-        {message}
+        {waits.message}
       </span>
       {(stuck || open.length > 0) && (
         <section
@@ -200,60 +249,85 @@ export function WaitsForYou({ heapRef, item }: { heapRef: HeapRef; item: Item })
           className="flex flex-col gap-1.5 rounded-xl border-2 border-accent bg-accent/10 p-3"
         >
           <h3 className="text-xs font-medium text-accent-ink">Waits for you</h3>
-          <ul ref={listRef} className="flex flex-col divide-y divide-accent/30">
+          <div className="flex flex-col divide-y divide-accent/30">
             {stuck && (
-              <StuckRow
-                heapRef={heapRef}
-                item={item}
-                stuck={stuck}
-                line={<p className="text-xs text-muted">Stuck · going to: {GOAL_LABELS[stuck.goal]}</p>}
-                onRetried={() => {
-                  actedOnStuck.current = true;
-                  setStuckChanged(false);
-                  setMessage(`Retried “${item.title}”.`);
-                }}
-                onTakenBack={() => {
-                  actedOnStuck.current = true;
-                  setStuckChanged(false);
-                  setMessage(`Took back “${item.title}”.`);
-                }}
-                onElsewhere={() => setStuckChanged(true)}
-              />
+              <ul className="py-3 first:pt-0 last:pb-0">
+                <StuckRow
+                  heapRef={heapRef}
+                  item={item}
+                  stuck={stuck}
+                  line={<p className="text-xs text-muted">Stuck · going to: {GOAL_LABELS[stuck.goal]}</p>}
+                  onRetried={waits.retried}
+                  onTakenBack={waits.tookBack}
+                  onElsewhere={() => waits.setStuckChanged(true)}
+                />
+              </ul>
             )}
-            {open.map((question) => (
+            {open.length > 0 && (
+              <div className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <p className="text-sm">
+                  {open.length === 1 ? "1 question waits for you" : `${open.length} questions wait for you`}
+                </p>
+                <Button onPress={answer} className={`${compactButtonClass.bordered} shrink-0 ${focusClass}`}>
+                  Answer ↓
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+      {!waits.closed && waits.stuckChanged && (
+        <p role="alert" className="text-sm text-overdue-ink">
+          Someone else changed this meanwhile.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * The Questions section (ux.md, The item): the open questions with their reply controls in the outlined box, then
+ * what {@link AnsweredQuestions} folds. Shown when the item has any question. A row is shown with controls when the
+ * server offers `reply` on the question, otherwise (an archived heap) as text. After a reply the row leaves and joins
+ * the fold.
+ */
+export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
+  if ((item.questions ?? []).length === 0) return null;
+  return (
+    <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
+      <h3 className="text-xs font-semibold text-muted">Questions</h3>
+      {waits.open.length > 0 && (
+        <div className="rounded-xl border-2 border-accent bg-accent/10 p-3">
+          <ul id={waits.listId} className="flex flex-col divide-y divide-accent/30">
+            {waits.open.map((question) => (
               <QuestionRow
                 key={question.number}
                 heapRef={heapRef}
                 item={item}
                 line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
                 question={question}
-                onReplied={onReplied}
-                onElsewhere={onElsewhere}
-                onRefused={onRefused}
+                onReplied={waits.replied}
+                onElsewhere={waits.repliedElsewhere}
+                onRefused={waits.refusedReply}
               />
             ))}
           </ul>
-        </section>
+        </div>
       )}
-      {/* Under the state buttons, where this stays mounted when the item closes and the section goes. */}
-      {refused.map((entry, index) => (
+      {waits.refused.map((entry, index) => (
         <p key={index} role="alert" className="text-sm whitespace-pre-wrap text-overdue-ink">
           The item was closed before your reply to “{entry.text}” was sent.
           {entry.comment && `\nYour comment: ${entry.comment}`}
         </p>
       ))}
-      {!closed &&
-        elsewhere.map((text, index) => (
+      {!waits.closed &&
+        waits.elsewhere.map((text, index) => (
           <p key={index} role="alert" className="text-sm text-overdue-ink">
             Someone else replied to “{text}” meanwhile.
           </p>
         ))}
-      {!closed && stuckChanged && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          Someone else changed this meanwhile.
-        </p>
-      )}
-    </>
+      <AnsweredQuestions item={item} />
+    </section>
   );
 }
 
@@ -440,14 +514,18 @@ function ReplyControls({
 }
 
 /**
- * The questions that don't wait in {@link WaitsForYou}, folded above History: the answered ones and the ones closing
- * the item withdrew. Read-only.
+ * The questions that don't wait, folded under the open ones: the answered ones and the ones closing the item withdrew.
+ * The summary counts the answered, and the withdrawn when there are no answered, as "2 answered" or "1 closed".
+ * Read-only.
  */
-export function AnsweredQuestions({ item }: { item: Item }) {
+function AnsweredQuestions({ item }: { item: Item }) {
   const listed = (item.questions ?? []).filter(
     (question) => question.state === "answered" || question.state === "withdrawn",
   );
   if (listed.length === 0) return null;
+  const answered = listed.filter((question) => question.state === "answered").length;
+  const closed = listed.length - answered;
+  const summary = answered > 0 ? `${answered} answered${closed > 0 ? `, ${closed} closed` : ""}` : `${closed} closed`;
   return (
     <details className="group">
       <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
@@ -455,7 +533,7 @@ export function AnsweredQuestions({ item }: { item: Item }) {
           aria-hidden="true"
           className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
         />
-        Questions {listed.length}
+        {summary}
       </summary>
       <ul className="mt-1 flex flex-col divide-y divide-line pl-3">
         {listed.map((question) => (

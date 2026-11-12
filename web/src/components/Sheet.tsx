@@ -101,18 +101,28 @@ export function SheetChoice({
   id,
   muted = false,
   note,
+  hint,
   children,
 }: {
   id: Key;
   muted?: boolean;
   note?: { id: string; text: string };
+  /** Under the label, for a choice that needs a sentence to tell it apart; it describes the choice, not names it. */
+  hint?: { id: string; text: string };
   children: ReactNode;
 }) {
   return (
-    <ToggleButton id={id} aria-describedby={note?.id} className={sheetRowClass}>
+    <ToggleButton id={id} aria-describedby={hint?.id ?? note?.id} className={sheetRowClass}>
       {({ isSelected }) => (
         <>
-          <span className={`flex-1 ${muted && !isSelected ? "text-ink-soft" : ""}`}>{children}</span>
+          <span className={`flex flex-1 flex-col ${muted && !isSelected ? "text-ink-soft" : ""}`}>
+            {children}
+            {hint && (
+              <span id={hint.id} aria-hidden="true" className="text-[13px] font-normal text-muted">
+                {hint.text}
+              </span>
+            )}
+          </span>
           {note && (
             <span id={note.id} aria-hidden="true" className="text-[13px] font-normal text-muted">
               {note.text}

@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
 import { useSendToAgent, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
-import { compactButtonClass } from "./buttons";
+import { chipClass, compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS } from "./labels";
@@ -13,6 +13,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useConfirmation } from "./useConfirmation";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const pickClass = `group flex min-h-9 items-center gap-2 text-sm ${focusClass} pointer-coarse:min-h-11`;
@@ -22,46 +23,180 @@ const labelClass = "text-xs font-medium text-ink-soft";
 const fieldClass =
   "field-sizing-content min-h-20 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
 
+/** What the agent chip reads (ux.md, The item): where the turn is going, that it waits for the person, or that it is stuck. */
+const chipText = (item: Item, turn: Turn) =>
+  turn.stuck ? "Agent stuck" : item.waits_for_you ? "Agent · waiting for you" : `Agent · to ${GOAL_LABELS[turn.goal]}`;
+
 /**
- * Who has the item (ux.md, The item): the person, or an agent, and the person's way to hand it over or take it back.
- * The server decides when there is one to show: an agent has the item, or the person may send it or take it back. A
- * closed item, an archived heap and a reader have none of these.
+ * Who has the item, when an agent does (ux.md, The item): a chip in the status line that opens a popover on a wide
+ * screen and a tablet, a sheet on a phone, with since when, where it is going, the person's line and how it began,
+ * and Take back, which asks first, inline in the popover or in a sheet on a phone. While the turn is stuck the popover
+ * only says so: Retry and Take back are in Waits for you. `onTakenBack` runs once the turn is taken back, which
+ * removes the chip, so the caller that stays moves focus on.
  */
-export function ItemTurn({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
-  const offered = item.allowed_actions.includes("send_to_agent") || item.allowed_actions.includes("take_back");
-  if (!item.turn && !offered) return null;
-  return <WhoHasIt heapRef={heapRef} item={item} />;
+export function AgentChip({ heapRef, item, onTakenBack }: { heapRef: HeapRef; item: Item; onTakenBack: () => void }) {
+  const takeBack = useTakeBack(heapRef);
+  const phone = useMedia(PHONE);
+  const questionId = useId();
+  const chip = useRef<HTMLButtonElement>(null);
+  const focusAfterRender = useFocusAfterRender();
+  const [open, setOpen] = useState(false);
+  const { confirming, ask, cancel, dismiss, buttonRef: takeBackButton } = useConfirmation();
+  const turn = item.turn;
+  if (!turn) return null;
+
+  const canTakeBack = item.allowed_actions.includes("take_back") && !turn.stuck;
+  const confirmingTakeBack = canTakeBack && confirming;
+  const close = () => {
+    dismiss();
+    setOpen(false);
+    focusAfterRender(() => chip.current);
+  };
+  const takeBackNow = () =>
+    takeBack.mutateAsync(item).then(
+      () => {
+        dismiss();
+        setOpen(false);
+        onTakenBack();
+      },
+      () => undefined,
+    );
+
+  return (
+    <>
+      <button
+        ref={chip}
+        type="button"
+        data-agent-chip=""
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Who has it: ${chipText(item, turn)}`}
+        onClick={() => {
+          takeBack.reset();
+          setOpen(true);
+        }}
+        className={`${chipClass} ${turn.stuck ? "border-accent bg-accent/10 font-medium text-accent-ink" : ""}`}
+      >
+        {chipText(item, turn)}
+      </button>
+      {/* On a phone the question is a sheet of its own in place of the sheet that asked it. */}
+      <PopoverSheet
+        title="Who has it"
+        triggerRef={chip}
+        isOpen={open && !(phone && confirmingTakeBack)}
+        onClose={close}
+        placement="bottom start"
+        size="narrow"
+      >
+        <TurnText item={item} turn={turn} />
+        {canTakeBack &&
+          (confirmingTakeBack && !phone ? (
+            <InlineConfirm
+              question={TAKE_BACK_QUESTION}
+              confirmLabel="Take back"
+              pending={takeBack.isPending}
+              error={takeBack.error}
+              onConfirm={() => void takeBackNow()}
+              onCancel={cancel}
+            />
+          ) : (
+            <Button
+              ref={takeBackButton}
+              onPress={() => {
+                takeBack.reset();
+                ask();
+              }}
+              className={`${compactButtonClass.bordered} self-start ${focusClass}`}
+            >
+              Take back
+            </Button>
+          ))}
+      </PopoverSheet>
+      {phone && (
+        <Sheet
+          title="Take back"
+          role="alertdialog"
+          describedBy={questionId}
+          isOpen={open && confirmingTakeBack}
+          onClose={cancel}
+          aside={item.title}
+        >
+          <div className="flex flex-col gap-2 pb-1">
+            <p id={questionId} className="px-1 py-1 text-[15px] text-ink">
+              {TAKE_BACK_QUESTION}
+            </p>
+            <button
+              type="button"
+              autoFocus
+              disabled={takeBack.isPending}
+              onClick={() => void takeBackNow()}
+              className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
+            >
+              Take back
+            </button>
+            <button
+              type="button"
+              disabled={takeBack.isPending}
+              onClick={cancel}
+              className="min-h-13 rounded-xl border border-line text-[15px] text-ink disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            {takeBack.error && (
+              <p role="alert" className="text-sm text-overdue-ink">
+                {itemProblem(takeBack.error)}
+              </p>
+            )}
+          </div>
+        </Sheet>
+      )}
+    </>
+  );
 }
 
-function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
+/**
+ * The form that sends the item to an agent, from the item's ⋯ (ux.md, The item): a popover under the ⋯ on a wide
+ * screen and a tablet, a sheet on a phone. Send acts at once, closes the form, gives focus to the agent chip, and
+ * shows a toast with Undo, which takes the turn back. The server decides when there is a goal to offer
+ * (`next_goal`) and when sending is allowed; the caller shows the entry only then.
+ */
+export function SendToAgent({
+  heapRef,
+  item,
+  goal,
+  isOpen,
+  onClose,
+  triggerRef,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  goal: Goal;
+  isOpen: boolean;
+  /** Closes the form; `sent` is whether a send closed it. */
+  onClose: (sent: boolean) => void;
+  triggerRef: RefObject<HTMLElement | null>;
+}) {
   const send = useSendToAgent(heapRef);
   const takeBack = useTakeBack(heapRef);
   const setToast = useToast();
-  const phone = useMedia(PHONE);
-  const headingId = useId();
-  const questionId = useId();
-  const sendButton = useRef<HTMLButtonElement>(null);
-  const { confirming, ask, cancel, dismiss, buttonRef: takeBackButton } = useConfirmation();
-  const [form, setForm] = useState(false);
-  // Which button takes the focus once the block shows the other state: set by a send or a take back made here.
-  const focusNext = useRef<"take-back" | "send" | null>(null);
+  // Set by a send made here: once the item shows the agent, focus goes to its chip.
+  const focusChip = useRef(false);
   const turn = item.turn;
-  // Someone else's send that arrives while the form is open closes it: the block shows the agent has the item.
-  const formOpen = form && !turn;
+  // Someone else's send that arrives while the form is open closes it: the chip shows the agent has the item.
+  const formOpen = isOpen && !turn;
 
   useEffect(() => {
-    const next = focusNext.current;
-    if (next === null || (next === "take-back") !== (turn != null)) return;
-    focusNext.current = null;
-    (next === "take-back" ? takeBackButton : sendButton).current?.focus();
-  }, [turn, takeBackButton]);
+    if (!focusChip.current || !turn) return;
+    focusChip.current = false;
+    document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]")?.focus();
+  }, [turn]);
 
   const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
   const sendNow = (reach: Reach, line: string) =>
     send.mutateAsync({ item, body: { reach, line: line.trim() === "" ? null : line } }).then(
       (saved) => {
-        focusNext.current = "take-back";
-        setForm(false);
+        focusChip.current = true;
+        onClose(true);
         setToast({
           message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
           // Undo is a take back, recorded in the item's history, with no second toast.
@@ -70,130 +205,28 @@ function WhoHasIt({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       },
       () => undefined,
     );
-  const takeBackNow = () =>
-    takeBack.mutateAsync(item).then(
-      () => {
-        focusNext.current = "send";
-        dismiss();
-      },
-      () => undefined,
-    );
-
-  const canSend = item.allowed_actions.includes("send_to_agent");
-  // While the turn is stuck, Retry and Take back are in Waits for you; this block only says so.
-  const canTakeBack = item.allowed_actions.includes("take_back") && !turn?.stuck;
-  const confirmingTakeBack = turn != null && confirming;
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2.5">
-      <h3 id={headingId} className="text-xs font-medium text-ink-soft">
-        Who has it
-      </h3>
-      {turn ? (
-        <>
-          <TurnText item={item} turn={turn} />
-          {canTakeBack &&
-            (confirmingTakeBack && !phone ? (
-              <InlineConfirm
-                question={TAKE_BACK_QUESTION}
-                confirmLabel="Take back"
-                pending={takeBack.isPending}
-                error={takeBack.error}
-                onConfirm={() => void takeBackNow()}
-                onCancel={cancel}
-              />
-            ) : (
-              <Button
-                ref={takeBackButton}
-                onPress={() => {
-                  takeBack.reset();
-                  ask();
-                }}
-                className={`${compactButtonClass.bordered} self-start ${focusClass}`}
-              >
-                Take back
-              </Button>
-            ))}
-          {phone && (
-            <Sheet
-              title="Take back"
-              role="alertdialog"
-              describedBy={questionId}
-              isOpen={confirmingTakeBack}
-              onClose={cancel}
-              aside={item.title}
-            >
-              <div className="flex flex-col gap-2 pb-1">
-                <p id={questionId} className="px-1 py-1 text-[15px] text-ink">
-                  {TAKE_BACK_QUESTION}
-                </p>
-                <button
-                  type="button"
-                  autoFocus
-                  disabled={takeBack.isPending}
-                  onClick={() => void takeBackNow()}
-                  className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
-                >
-                  Take back
-                </button>
-                <button
-                  type="button"
-                  disabled={takeBack.isPending}
-                  onClick={cancel}
-                  className="min-h-13 rounded-xl border border-line text-[15px] text-ink disabled:opacity-40"
-                >
-                  Cancel
-                </button>
-                {takeBack.error && (
-                  <p role="alert" className="text-sm text-overdue-ink">
-                    {itemProblem(takeBack.error)}
-                  </p>
-                )}
-              </div>
-            </Sheet>
-          )}
-        </>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm">With you.</p>
-          {canSend && (
-            <Button
-              ref={sendButton}
-              onPress={() => {
-                send.reset();
-                setForm(true);
-              }}
-              aria-haspopup="dialog"
-              aria-expanded={formOpen}
-              className={`${compactButtonClass.bordered} ${focusClass}`}
-            >
-              Send to an agent
-            </Button>
-          )}
-        </div>
-      )}
-      {!turn && item.next_goal && (
-        <PopoverSheet
-          title="Send to an agent"
-          triggerRef={sendButton}
-          isOpen={formOpen}
-          onClose={() => setForm(false)}
-          placement="bottom start"
-        >
-          <SendForm
-            goal={item.next_goal}
-            pending={send.isPending}
-            onSend={(reach, line) => void sendNow(reach, line)}
-            onCancel={() => setForm(false)}
-          />
-        </PopoverSheet>
-      )}
+    <PopoverSheet
+      title="Send to an agent"
+      triggerRef={triggerRef}
+      isOpen={formOpen}
+      onClose={() => onClose(false)}
+      placement="bottom end"
+      size="narrow"
+    >
+      <SendForm
+        goal={goal}
+        pending={send.isPending}
+        onSend={(reach, line) => void sendNow(reach, line)}
+        onCancel={() => onClose(false)}
+      />
       {send.error && (
         <p role="alert" className="text-sm text-overdue-ink">
           {itemProblem(send.error)}
         </p>
       )}
-    </section>
+    </PopoverSheet>
   );
 }
 

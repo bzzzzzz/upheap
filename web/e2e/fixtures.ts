@@ -79,14 +79,7 @@ export async function openHistory(page: Page): Promise<Locator> {
 
 /** Makes the open item, a note, a task through its More menu, answering the question that asks. */
 export async function makeTask(page: Page, title: string) {
-  const more = itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true });
-  await more.click();
-  if (isPhone(page))
-    await page
-      .getByRole("dialog", { name: "More", exact: true })
-      .getByRole("button", { name: "Make it a task…" })
-      .click();
-  else await page.getByRole("menu", { name: "More" }).getByRole("menuitem", { name: "Make it a task…" }).click();
+  await moreEntry(page, await openMore(page), "Make it a task…").click();
   await page
     .getByRole("alertdialog", { name: `Make “${title}” a task?` })
     .getByRole("button", { name: "Make it a task" })
@@ -100,51 +93,100 @@ export async function closeItem(page: Page) {
   await expect(itemPane(page)).toHaveCount(0);
 }
 
+/** The item's field `name` (Need, Effort, Impact, Due, Date, Tags or a parameter) as a button holding its value. */
+export const fieldButton = (page: Page, name: string): Locator =>
+  itemPane(page).getByRole("button", { name: new RegExp(`^${name}: `) });
+
 /**
- * Where the open item's field `name` is changed: on a phone its row opens a sheet, which this opens and returns; on a
- * tablet or wide screen the field is in the pane itself.
+ * Opens the editor of the open item's field `name`: a popover under its value on a tablet or wide screen, a sheet on a
+ * phone, both a dialog named for the field. Returns it.
  */
 export async function field(page: Page, name: string): Promise<Locator> {
   // The fields show once the item has loaded.
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toBeVisible();
-  const opener = itemPane(page).getByRole("button", { name: new RegExp(`^${name}( |$)`) });
-  if ((await opener.count()) > 0 && (await opener.isVisible())) {
-    await opener.click();
-    const sheet = page.getByRole("dialog", { name, exact: true });
-    await expect(sheet).toBeVisible();
-    return sheet;
-  }
-  return itemPane(page);
+  await fieldButton(page, name).click();
+  const editor = page.getByRole("dialog", { name, exact: true });
+  await expect(editor).toBeVisible();
+  return editor;
 }
 
-/** Closes the sheet a field opened on a phone, if one is still open. */
+/** Closes the popover or sheet a field opened, if one is still open. */
 export async function closeField(page: Page) {
-  const sheet = page.getByRole("dialog").filter({ has: page.getByRole("heading") });
-  if ((await sheet.count()) > 0) {
-    await sheet.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(sheet).toHaveCount(0);
+  const editor = page.getByRole("dialog").filter({ has: page.getByRole("heading") });
+  if ((await editor.count()) > 0) {
+    await editor.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(editor).toHaveCount(0);
   }
 }
 
 /**
- * Picks `option` in the item's radio group `group`: a state, a size, a parameter's option, a due choice. Returns
- * where it was picked, the pane or a phone's sheet, which closes itself once a choice is the whole job.
+ * Picks `option` in the item's radio group `group`: a size, a need, a parameter's option, a due choice. Returns the
+ * editor it was picked in, which closes itself once a choice is the whole job.
  */
 export async function pick(page: Page, group: string, option: string): Promise<Locator> {
-  const scope = await field(page, group);
-  await scope
+  const editor = await field(page, group);
+  await editor
     .getByRole("radiogroup", { name: group, exact: true })
     .getByRole("radio", { name: option, exact: true })
     .click();
-  return scope;
+  return editor;
 }
 
-/** Presses the item pane's state button `label`: Start, Block, Done, Unblock, Back to open or Reopen. */
-export async function changeState(page: Page, label: string) {
+/**
+ * Opens the open item's context for editing: Edit (or Add) swaps the text for a textarea in place on a tablet or wide
+ * screen, and opens a sheet on a phone. Returns the textarea.
+ */
+export async function editContext(page: Page): Promise<Locator> {
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toBeVisible();
+  await itemPane(page)
+    .getByRole("button", { name: /^(Edit|Add) context$/ })
+    .click();
+  const scope = isPhone(page) ? page.getByRole("dialog", { name: "Context", exact: true }) : itemPane(page);
+  const area = scope.getByRole("textbox", { name: "Context", exact: true });
+  await expect(area).toBeFocused();
+  return area;
+}
+
+/**
+ * Saves the context `editContext` opened and waits for the text to show: Save on a tablet or wide screen, which puts the
+ * text back, and on a phone closing the sheet, which saves it. The rendered text is what only the server's answer has.
+ */
+export async function saveContext(page: Page, text: string) {
+  if (isPhone(page)) await closeField(page);
+  else await itemPane(page).getByRole("button", { name: "Save", exact: true }).click();
+  await expect(itemPane(page).getByRole("region", { name: "Context", exact: true })).toContainText(text);
+}
+
+/** Opens the item pane's ⋯ and returns the menu on a tablet or wide screen, the sheet on a phone. */
+export async function openMore(page: Page): Promise<Locator> {
   await itemPane(page)
     .getByRole("group", { name: "State", exact: true })
-    .getByRole("button", { name: label, exact: true })
+    .getByRole("button", { name: "More", exact: true })
     .click();
+  const more = isPhone(page)
+    ? page.getByRole("dialog", { name: "More", exact: true })
+    : page.getByRole("menu", { name: "More" });
+  await expect(more).toBeVisible();
+  return more;
+}
+
+/** An entry of the ⋯ opened by `openMore`: a menu item on a tablet or wide screen, a button in the sheet on a phone. */
+export const moreEntry = (page: Page, more: Locator, name: string): Locator =>
+  isPhone(page) ? more.getByRole("button", { name, exact: true }) : more.getByRole("menuitem", { name, exact: true });
+
+/**
+ * Presses the item pane's state button `label`: the main button (Start, Done, Unblock, Reopen) or an entry of ⋯ (Block,
+ * Done, Won't do, Back to open).
+ */
+export async function changeState(page: Page, label: string) {
+  const main = itemPane(page)
+    .getByRole("group", { name: "State", exact: true })
+    .getByRole("button", { name: label, exact: true });
+  if ((await main.count()) > 0) {
+    await main.click();
+    return;
+  }
+  await moreEntry(page, await openMore(page), label).click();
 }
 
 /** Expects the rows of the open list to show these titles, in this order. */
@@ -278,7 +320,7 @@ export async function goTo(page: Page, name: AppPage) {
   if (await link.isVisible()) {
     await link.click();
   } else {
-    await openMore(page);
+    await openTabsMore(page);
     // A row may carry a note after its name, such as the account's username.
     await page
       .getByRole("navigation", { name: "More" })
@@ -302,7 +344,7 @@ export async function addParameter(page: Page, name: string, weight: number, opt
 }
 
 /** Opens More from the phone's tabs. */
-async function openMore(page: Page) {
+async function openTabsMore(page: Page) {
   await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
 }
 
