@@ -60,7 +60,9 @@ async function expectTouchSize(control: Locator) {
   expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
 }
 
-const who = (page: Page): Locator => itemPane(page).getByRole("region", { name: "Who has it", exact: true });
+/** The agent chip in the status line, and the popover it opens. */
+const chip = (page: Page): Locator => itemPane(page).getByRole("button", { name: /^Who has it: / });
+const who = (page: Page): Locator => page.getByRole("dialog", { name: "Who has it", exact: true });
 const waitsForYou = (page: Page): Locator => itemPane(page).getByRole("region", { name: "Waits for you", exact: true });
 
 test("a stuck turn is a row in Waiting for me with its reason, and Retry puts it back at once", async ({
@@ -209,11 +211,14 @@ test("the item shows its stuck turn in Waits for you, and Retry hands it back to
   await page.goto(`${heapPath}/items/${certs.key}`);
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
 
-  // The stuck row is in Waits for you, with the reason and both ways out; Who has it only says so.
+  // The stuck row is in Waits for you, with the reason and both ways out; the agent chip only says so.
   await expect(waitsForYou(page)).toContainText("Stuck · going to: with context");
   await expect(waitsForYou(page)).toContainText("3 runs in a row failed: The tool crashed");
+  await expect(chip(page)).toHaveText("Agent stuck");
+  await chip(page).click();
   await expect(who(page)).toContainText("An agent is stuck, going to: with context.");
-  await expect(who(page).getByRole("button")).toHaveCount(0);
+  await expect(who(page).getByRole("button")).toHaveCount(1);
+  await who(page).getByRole("button", { name: "Close", exact: true }).click();
   const retry = waitsForYou(page).getByRole("button", { name: /^Retry/ });
   if (isPhone(page)) {
     await expectTouchSize(retry);
@@ -223,9 +228,11 @@ test("the item shows its stuck turn in Waits for you, and Retry hands it back to
   await retry.click();
 
   await expect(waitsForYou(page)).toHaveCount(0);
+  await expect(chip(page)).toHaveText("Agent · to with context");
+  await expect(itemPane(page)).toBeFocused();
+  await chip(page).click();
   await expect(who(page)).toContainText("With an agent since");
   await expect(who(page).getByRole("button", { name: "Take back", exact: true })).toBeVisible();
-  await expect(itemPane(page)).toBeFocused();
   await expect(page.getByRole("status").filter({ hasText: "Retried" })).toHaveText("Retried “Rotate the certs”.");
 });
 
@@ -244,8 +251,9 @@ test("Take back from the item's stuck row asks first and leaves the item with th
   await waitsForYou(page).getByRole("alertdialog").getByRole("button", { name: "Take back", exact: true }).click();
 
   await expect(waitsForYou(page)).toHaveCount(0);
-  await expect(who(page)).toContainText("With you.");
-  await expect(who(page).getByRole("button", { name: "Send to an agent", exact: true })).toBeVisible();
+  await expect(chip(page)).toHaveCount(0);
+  // No next row, so focus goes to the item.
+  await expect(itemPane(page)).toBeFocused();
 });
 
 test("the item list says a stuck item waits for you", async ({ page, heapPath }) => {

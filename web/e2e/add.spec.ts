@@ -337,7 +337,7 @@ test("a parameter the filters pick one option of starts with it, under More fiel
 test("the message names the group the item went into when something is pinned", async ({ page }) => {
   await addItem(page, "Under way");
   await openItem(page, "Under way");
-  await changeState(page, "Start");
+  await changeState(page, "Start", "main");
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
   await closeItem(page);
 

@@ -27,14 +27,8 @@ test("an admin manages a parameter, and its options rank the items", async ({ pa
     await goTo(page, "Open");
     await openItem(page, title);
     await pick(page, "Customer", customer);
-    // Checked in the pane, or on a phone shown on the field's row once its sheet closes.
-    const phone = (page.viewportSize()?.width ?? 0) < 640;
-    await expect(
-      phone
-        ? itemPane(page).getByRole("button", { name: `Customer ${customer}`, exact: true })
-        : itemPane(page).getByRole("radio", { name: customer, exact: true }),
-    ).toBeVisible();
-    if (!phone) await expect(itemPane(page).getByRole("radio", { name: customer, exact: true })).toBeChecked();
+    // The value reads the pick once the server has it.
+    await expect(itemPane(page).getByRole("button", { name: `Customer: ${customer}`, exact: true })).toBeVisible();
     await closeItem(page);
     await expect(row(page, title)).toContainText(`Customer: ${customer}`);
   }

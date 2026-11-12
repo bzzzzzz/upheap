@@ -39,9 +39,3 @@ export function useCopyText() {
     },
   };
 }
-
-/** Copies the short link to what the handles name; `copied` is true for a moment after. */
-export function useCopyLink() {
-  const { copied, copy } = useCopyText();
-  return { copied, copy: (...handles: string[]) => void copy(shortLink(...handles)) };
-}

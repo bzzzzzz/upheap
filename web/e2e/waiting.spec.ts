@@ -319,7 +319,7 @@ test("a list row says it waits for you until the question is answered", async ({
 
   await waiting.getByRole("link", { name: /^Rotate the certs/ }).click();
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
-  const section = itemPane(page).getByRole("region", { name: "Waits for you", exact: true });
+  const section = itemPane(page).getByRole("group", { name: "Open questions", exact: true });
   await section.getByLabel("Answer").fill("Let's Encrypt");
   await section.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(section).toHaveCount(0);

@@ -23,3 +23,7 @@ export const compactButtonClass = {
   /** A square button with only an icon, which carries the `aria-label`: 36 px, 44 px to a finger. */
   icon: `${buttonClass} ${unborderedClass} size-9 shrink-0 rounded-[9px] text-ink-soft hover:bg-sunken hover:text-ink pointer-coarse:size-11`,
 };
+
+/** The chip's pill, shared by the rank and agent chips (ux.md, The item): 44 px tall where the pointer is coarse. */
+export const chipClass =
+  "inline-flex min-h-6 items-center rounded-full border border-line bg-sunken px-2 text-xs text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:min-h-11 pointer-coarse:px-3";
