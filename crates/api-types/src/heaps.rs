@@ -120,7 +120,7 @@ pub struct HeapPatchDto {
 }
 
 /// New weights for the heap and its parameters, saved together. Leave a weight out to keep it.
-#[derive(Default, Serialize, Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = HeapWeightsPatchRequest)]
 pub struct HeapWeightsPatchDto {

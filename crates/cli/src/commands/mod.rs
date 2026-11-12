@@ -57,8 +57,6 @@ pub enum UsageError {
     ParameterAndNoParameter { name: String },
     #[error("{flag} names {name} twice; give it once")]
     ParameterTwice { flag: &'static str, name: String },
-    #[error("--parameter names {name} twice with different weights")]
-    ParameterWeightsConflict { name: String },
     #[error("can't read stdin as text for {flag} -")]
     UnreadableStdin {
         flag: &'static str,

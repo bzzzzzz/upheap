@@ -640,7 +640,7 @@ async fn heap_weights_refuses_bad_values_and_unknown_or_conflicting_parameters()
     expect_that!(conflict.exited(2), eq(true));
     expect_that!(
         conflict.stderr,
-        contains_substring("--parameter names Area twice with different weights")
+        contains_substring("--parameter names Area twice; give it once")
     );
     expect_that!(after_refusals, eq(&untouched_weights()));
     expect_that!(repeated.exited(0), eq(true));
@@ -686,7 +686,8 @@ async fn heap_weights_by_a_member_is_refused() -> Result<()> {
     let stored = server.send(&ada, "GET", "/teams/infra/heaps/ops", None).await?;
 
     // Assert
-    expect_that!(refused.exited(0), eq(false));
+    expect_that!(refused.exited(4), eq(true));
+    expect_that!(refused.stdout, eq(""));
     expect_that!(stored["weights"]["need"], eq(&json!(10)));
     Ok(())
 }

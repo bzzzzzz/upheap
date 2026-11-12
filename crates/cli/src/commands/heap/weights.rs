@@ -3,21 +3,18 @@
 use std::collections::BTreeMap;
 
 use api_types::heaps::{HeapDto, HeapWeightsPatchDto, HeapWeightsResultDto, ParameterWeightChangeDto};
-use api_types::me::MeDto;
 use api_types::parameters::ParameterListDto;
 use clap::Args;
+use domain::parameter::Weight;
 use uuid::Uuid;
 
 use crate::client::NO_QUERY;
 use crate::commands::heap::show::render_weights;
-use crate::commands::heap_api::{HeapApi, named_heap};
+use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
 use crate::commands::{SharedArgs, UsageError};
-use crate::lookup::{HeapHandle, find_parameter, resolve_heap};
+use crate::lookup::{HeapHandle, find_parameter};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
-
-/// The highest weight a factor can have.
-const MAX_WEIGHT: u16 = 100;
 
 #[derive(Args, Debug)]
 pub struct WeightsArgs {
@@ -53,8 +50,8 @@ pub struct ParameterWeight {
 /// Reads a weight: a whole number from 0 to 100.
 fn parse_weight(raw: &str) -> Result<u16, String> {
     match raw.trim().parse::<u16>() {
-        Ok(weight) if weight <= MAX_WEIGHT => Ok(weight),
-        _ => Err(format!("`{raw}` isn't a whole number from 0 to {MAX_WEIGHT}")),
+        Ok(weight) if weight <= Weight::MAX => Ok(weight),
+        _ => Err(format!("`{raw}` isn't a whole number from 0 to {}", Weight::MAX)),
     }
 }
 
@@ -91,8 +88,7 @@ pub async fn run(args: WeightsArgs, app: &App, out: &mut Output) -> Result<(), C
     let name = named_heap(args.heap.as_deref(), app)?;
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
-    let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
-    let handle = resolve_heap(name, &me.value)?;
+    let handle = resolve_heap_handle(name, &client, &token).await?;
     let api = HeapApi {
         client: &client,
         token: &token,
@@ -149,7 +145,8 @@ fn resolve_parameter_weights(
             .insert(parameter.id, change)
             .is_some_and(|before| before.weight != i64::from(setting.weight))
         {
-            return Err(UsageError::ParameterWeightsConflict {
+            return Err(UsageError::ParameterTwice {
+                flag: "--parameter",
                 name: parameter.name.clone(),
             }
             .into());
@@ -251,7 +248,7 @@ mod tests {
         // Assert
         verify_that!(
             result,
-            err(displays_as(eq("--parameter names Area twice with different weights")))
+            err(displays_as(eq("--parameter names Area twice; give it once")))
         )
     }
 
