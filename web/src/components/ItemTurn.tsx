@@ -23,9 +23,18 @@ const labelClass = "text-xs font-medium text-ink-soft";
 const fieldClass =
   "field-sizing-content min-h-20 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
 
-/** What the agent chip reads (ux.md, The item §15): where the turn is going, that it waits for the person, or that it is stuck. */
+/**
+ * What the agent chip reads (ux.md, The item §15): where the turn is going, that it waits for the person, or that it is
+ * stuck. A turn sent all the way names its reach: its goal is only the first stop, so "to with context" would mislead.
+ */
 const chipText = (item: Item, turn: Turn) =>
-  turn.stuck ? "Agent stuck" : item.waits_for_you ? "Agent · waiting for you" : `Agent · to ${GOAL_LABELS[turn.goal]}`;
+  turn.stuck
+    ? "Agent stuck"
+    : item.waits_for_you
+      ? "Agent · waiting for you"
+      : turn.reach === "all_the_way"
+        ? "Agent · all the way"
+        : `Agent · to ${GOAL_LABELS[turn.goal]}`;
 
 /**
  * Who has the item, when an agent does (ux.md, The item §15): a chip in the status line that opens a popover on a wide

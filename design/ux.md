@@ -81,11 +81,11 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
 
 Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
-| Width | Navigation | List | Item |
-| --- | --- | --- | --- |
-| Phone, under 640 px | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More | Full width, compact rows | Bottom sheet over the list |
-| Tablet, 640–1023 px | An 80 px rail: Waiting, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column | Pane beside the list while an item is selected |
+| Width                | Navigation                                                                                                                                                                                                                | List                                                     | Item                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Settings, Activity, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -350,10 +350,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     questions, which read in the fold as "Withdrawn".
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
     withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>. <comment as
-    written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
+written>` and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
     and all are withdrawn. It only reads; changing a reply is later.
-15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context", "Agent ·
-    waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
+15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
+    all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
     "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and "Prepared on add" for an
     item the heap's setting sent. If the item waits for the person it reads "An agent is waiting for your answer,
