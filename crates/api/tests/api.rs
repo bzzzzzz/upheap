@@ -265,7 +265,7 @@ async fn closed_items_reopen_only_within_a_week() -> Result<()> {
     expect_that!(inside.body["state"], eq(&json!("open")));
     expect_that!(outside.status, eq(StatusCode::CONFLICT));
     expect_that!(outside.body["code"], eq(&json!("reopen_window_expired")));
-    expect_that!(closed.body["items"][0]["allowed_actions"], eq(&json!([])));
+    expect_that!(closed.body["items"][0]["allowed_actions"], eq(&json!(["comment"])));
     Ok(())
 }
 

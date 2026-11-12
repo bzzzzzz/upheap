@@ -103,6 +103,16 @@ The tables and columns are in the migrations. These are the conventions they fol
   500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+- **An item's comments are rows of their own** in `item_comments`: an append-only thread under the item's context,
+  so an agent or a person adds to an item without rewriting its context, which could change the author's words and
+  clash with their edits. A comment has no `version` and is never changed or deleted, and adding one never bumps the
+  item's `version`, so it never conflicts with an edit and needs no `If-Match`. Its `number` is one past the highest the
+  item has had, given under the heap lock with a locking read like a step's, backed by a unique index on `(item_id,
+  number)`, and never reused; it is the comment's name (`k3x9a.c3`). Any item takes one, open or closed, in an active
+  heap. An item has at most 200, and the 201st is refused (`too_many_comments`): the size assumption that lets a
+  single-item response carry all of them, at most 200 times 20,000 characters, while a list row carries `comments:
+  null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
+  `MEDIUMTEXT` on MySQL.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
   person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
@@ -137,7 +147,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
   failure, and withdraws the open questions asked in a run of it; the person's own stay open.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, and the run's own heartbeat, reached and finish) or it is
+  `extract.rs` (the item's `PATCH`, steps, questions, comments, and the run's own heartbeat, reached and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
   and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
@@ -555,7 +565,9 @@ the remaining admins.
    as text and IDs replaced by current names. The raw `diff` is returned too.
 6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
    read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
-   by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A question's are
+   by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A comment is
+   recorded the same way (`CommentAdded`, "commented on"), with its number and its whole text, so History shows what
+   was said. A question's are
    recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
    question's number and text and, once answered, the labels picked and the comment. So are a question withdrawn
    by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
@@ -597,7 +609,7 @@ principles; the exit codes are in `crates/cli/src/error.rs`, and the commands an
 section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), an item's questions (ask, request), tags
+   task's steps (add, tick, drop, edit), an item's questions (ask, request) and comments (add, list), tags
    (list, add, edit), parameters (list, add, edit, archive, and their options), heaps (list, pick a default) and
    signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
    write per kind of change (name and weight, tags, option order), each at the version the last returned, because
@@ -608,6 +620,7 @@ section is how it maps onto this API.
    exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it. A step
    is its item and its number, `<item>.<number>` (`k3x9a.3`, `team/heap/k3x9a.3`), split at the last `.` after the
    last `/`, since a link's host has dots and a key never does; `step add --after` also takes the bare number.
+   Questions and comments are named the same way in output, `k3x9a.q2` and `k3x9a.c3`.
 3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
    server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
    refusals. `item block --by` sets `blocked_by_item_id` in the same request; a bare key there is in the blocked

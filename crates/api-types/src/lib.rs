@@ -11,6 +11,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod comments;
 pub mod common;
 pub mod due_choices;
 pub mod heaps;

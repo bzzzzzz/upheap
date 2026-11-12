@@ -69,8 +69,8 @@ opened: say so in a line when you may have missed some.
 Lead with one sentence that says the state of things: how much is under way, whether anything waits for them, and
 what's next. Then, for one heap:
 
-- **In progress:** each item with its key, title and how far it got ("3 of 5 steps", or the last thing its context
-  says). Say so if nothing is.
+- **In progress:** each item with its key, title and how far it got ("3 of 5 steps", or the last thing its comments
+  or context say). Say so if nothing is.
 - **Waiting for you:** each open question or request, with the item's key and the question in a line. Leave the
   heading out when there are none.
 - **Next:** the top three ranked items, each with its key, title and why it's there in a few plain words ("critical,

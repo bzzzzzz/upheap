@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use domain::audit::{AuditAction, EntityType};
+use domain::comment::Comment;
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
 use domain::item::{Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
@@ -73,6 +74,8 @@ pub struct ItemView {
     pub step_actions: Vec<StepAction>,
     /// The item's questions in number order, or `None` in a list, which doesn't carry them.
     pub questions: Option<Vec<QuestionView>>,
+    /// The item's comments in number order, or `None` in a list, which doesn't carry them.
+    pub comments: Option<Vec<CommentView>>,
     /// Whether the item is open and has an open question, in an active heap (see
     /// [`domain::question::waits_for_you`]).
     pub waits_for_you: bool,
@@ -112,6 +115,14 @@ pub struct QuestionView {
     /// Who closed the item and so withdrew it, when it's withdrawn and that is known.
     pub withdrawn_by: Option<User>,
     pub allowed_actions: Vec<QuestionAction>,
+}
+
+/// A comment with the user who wrote it.
+#[derive(Debug)]
+pub struct CommentView {
+    pub comment: Comment,
+    /// Who wrote it. `None` only if the user can't be found, which users never being deleted rules out.
+    pub created_by: Option<User>,
 }
 
 /// An item's value for one custom parameter, ready to show.
@@ -322,6 +333,7 @@ impl Services {
                 step_progress: None,
                 step_actions,
                 questions: None,
+                comments: None,
                 // Set below, from one count for the entries that are listed.
                 waits_for_you: false,
                 turn: None,
@@ -531,6 +543,7 @@ impl Services {
                     step_progress,
                     step_actions,
                     questions: None,
+                    comments: None,
                     // Closed items never wait, and no agent has them.
                     waits_for_you: false,
                     turn: None,
@@ -638,6 +651,7 @@ impl Services {
             step_progress: None,
             step_actions,
             questions: Some(Vec::new()),
+            comments: Some(Vec::new()),
             waits_for_you: false,
             // A new item has no questions, so an open turn is an agent having it.
             with_agent: turn.is_some(),
@@ -652,6 +666,7 @@ impl Services {
         let access = authorize_heap(&self.db, principal, item.heap_id, Permission::ViewHeap).await?;
         let steps = store::steps::list_steps(&self.db, item.id).await?;
         let questions = store::questions::list_questions(&self.db, item.id).await?;
+        let comments = store::comments::list_comments(&self.db, item.id).await?;
         let open_turn = store::turns::find_open_turn(&self.db, item.id).await?;
         build_item_view(
             &self.db,
@@ -661,6 +676,7 @@ impl Services {
             ItemChildren {
                 steps,
                 questions,
+                comments,
                 open_turn,
                 locking: false,
             },
@@ -849,6 +865,7 @@ impl Services {
 pub(crate) struct ItemChildren {
     pub steps: Vec<Step>,
     pub questions: Vec<Question>,
+    pub comments: Vec<Comment>,
     /// The item's open turn, if it has one.
     pub open_turn: Option<Turn>,
     /// Whether these were read with locking reads after the heap lock, so the turn's runs are read the same way.
@@ -857,19 +874,20 @@ pub(crate) struct ItemChildren {
 }
 
 impl ItemChildren {
-    /// The steps, questions and open turn of `item_id` as they are now, with locking reads (see
+    /// The steps, questions, comments and open turn of `item_id` as they are now, with locking reads (see
     /// [`store::steps::list_steps_locking`]). A write calls it after the heap lock.
     pub(crate) async fn read_locking(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Self, StoreError> {
         Ok(Self {
             steps: store::steps::list_steps_locking(db, item_id).await?,
             questions: store::questions::list_questions_locking(db, item_id).await?,
+            comments: store::comments::list_comments_locking(db, item_id).await?,
             open_turn: store::turns::find_open_turn_locking(db, item_id).await?,
             locking: true,
         })
     }
 }
 
-/// The view of `item`, with its steps and questions, as `role` sees it in `heap` at `now`. It reads the heap's tags
+/// The view of `item`, with its steps, questions and comments, as `role` sees it in `heap` at `now`. It reads the heap's tags
 /// and parameters, the blocker and the users, so it can run inside the transaction that wrote the item.
 pub(crate) async fn build_item_view(
     db: &impl ConnectionTrait,
@@ -882,6 +900,7 @@ pub(crate) async fn build_item_view(
     let ItemChildren {
         steps,
         questions,
+        comments,
         open_turn,
         locking,
     } = children;
@@ -902,6 +921,7 @@ pub(crate) async fn build_item_view(
     let waits_for_you = waits_for_you(&item, heap, open_questions, stuck);
     let with_agent = with_agent(&item, heap, open_questions, turn.is_some(), stuck);
     let questions = build_question_views(db, heap, role, &item, questions).await?;
+    let comments = build_comment_views(db, comments).await?;
     Ok(ItemView {
         parameters: describe_values(&item, &parameters),
         item,
@@ -915,6 +935,7 @@ pub(crate) async fn build_item_view(
         steps: Some(steps),
         step_actions,
         questions: Some(questions),
+        comments: Some(comments),
         waits_for_you,
         turn,
         with_agent,
@@ -1028,6 +1049,32 @@ async fn build_question_views(
                     .and_then(|withdrawal| withdrawal.withdrawn_by),
             ),
             question,
+        })
+        .collect())
+}
+
+/// `comments` of an item with the users who wrote them. The comments of an item are bounded
+/// ([`domain::comment::MAX_COMMENTS`]) and so are the people who write them.
+async fn build_comment_views(
+    db: &impl ConnectionTrait,
+    comments: Vec<Comment>,
+) -> Result<Vec<CommentView>, ServiceError> {
+    let ids: Vec<UserId> = comments
+        .iter()
+        .map(|comment| comment.created_by)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let users: HashMap<UserId, User> = store::users::list_users(db, &ids)
+        .await?
+        .into_iter()
+        .map(|user| (user.id, user))
+        .collect();
+    Ok(comments
+        .into_iter()
+        .map(|comment| CommentView {
+            created_by: pick_user(&users, Some(comment.created_by)),
+            comment,
         })
         .collect())
 }

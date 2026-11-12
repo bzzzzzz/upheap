@@ -8,6 +8,7 @@ use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use clap::Args;
 
 use super::common::{locate_item, state_text};
+use crate::commands::comment::comment_lines;
 use crate::commands::heap_api::{HeapApi, indented_context};
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
@@ -98,8 +99,23 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
             out.line(&line)?;
         }
     }
+    render_comments(item, out)?;
     render_steps(item, out)?;
     render_questions(item, out)
+}
+
+/// The item's comments, when it has any: a heading and then the thread as `comment list` prints it.
+fn render_comments(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
+    let lines = comment_lines(item);
+    if lines.is_empty() {
+        return Ok(());
+    }
+    out.line("")?;
+    out.line_toned("Comments", Tone::Strong)?;
+    for line in lines {
+        out.line(&line)?;
+    }
+    Ok(())
 }
 
 /// The task's steps, when it has any: a heading with the progress, and a line for each step in order, with its

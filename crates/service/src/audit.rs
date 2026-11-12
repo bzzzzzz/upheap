@@ -1,5 +1,6 @@
 //! Building audit entries and diffs.
 
+use domain::comment::Comment;
 use domain::heap::HeapPolicy;
 use domain::item::{Due, Item, Kind, Stage};
 use domain::list_view::ListView;
@@ -97,6 +98,14 @@ pub(crate) fn describe_new_question(question: &Question) -> Value {
         fields.insert("question_step".into(), json!(step.get()));
     }
     Value::Object(fields)
+}
+
+/// A newly added comment, for its `comment_added` entry: its number and its whole text.
+pub(crate) fn describe_new_comment(comment: &Comment) -> Value {
+    json!({
+        "comment": comment.number.get(),
+        "comment_text": comment.body.as_str(),
+    })
 }
 
 /// The reply to a question, for its `question_answered` entry: the labels picked, joined, and the comment, each

@@ -8,6 +8,7 @@ use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
+use domain::comment::CommentError;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
@@ -215,6 +216,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::Question(QuestionError::Withdrawn { .. }) => {
             simple(StatusCode::CONFLICT, "question_withdrawn", Category::Conflict)
+        }
+        ServiceError::Comment(CommentError::TooMany { .. }) => {
+            simple(StatusCode::CONFLICT, "too_many_comments", Category::Conflict)
         }
         ServiceError::Turn(TurnError::AlreadyOpen { .. }) => {
             simple(StatusCode::CONFLICT, "turn_open", Category::Conflict)

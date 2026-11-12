@@ -3,7 +3,7 @@ For agents
 Naming
 - An item is named by its key (k3x9a), by team/heap/key, or by a link to it. A key names the same item for good;
   a position in the list doesn't, so never keep one.
-- A step is its item's key and its number: k3x9a.3. A question is k3x9a.q2.
+- A step is its item's key and its number: k3x9a.3. A question is k3x9a.q2, a comment k3x9a.c3.
 - A heap is team/heap. A command marked [heap] works in the heap --heap names, or else UPHEAP_HEAP, or else the
   default set with `upheap heap use`. With none of them it fails and says how to set one.
   `upheap item list --all-heaps` lists every heap's items in one ranked list, each with its heap, and needs no heap
@@ -13,8 +13,8 @@ Output
 - Results go to stdout, errors to stderr. Without a flag the output is text for people.
 - --json prints the server's response body unchanged, and a refusal's problem body on stderr.
 - -q prints only what the next command needs: `upheap item add -q` the new item's key, `upheap step add -q` the
-  step (k3x9a.3), `upheap question ask -q` the question (k3x9a.q1), `upheap item list -q` the keys in ranked order
-  (with --all-heaps, team/heap/key).
+  step (k3x9a.3), `upheap question ask -q` the question (k3x9a.q1), `upheap comment add -q` the comment (k3x9a.c3),
+  `upheap item list -q` the keys in ranked order (with --all-heaps, team/heap/key).
 
 Exit codes
   0  done, or nothing to do
@@ -29,8 +29,8 @@ Exit codes
 
 Long text
 - Anything longer than a line goes in from a file: write the file, then pass it with --context-file (an item's,
-  a step's or a heap's context), --details-file (a question's long version) or --comment-file (a reply's comment).
-  `-` in place of the file reads stdin.
+  a step's or a heap's context), --details-file (a question's long version), --comment-file (a reply's comment) or
+  --file (a comment). `-` in place of the file reads stdin.
 - `upheap item add` takes the context with --context-file too, and a task's steps with --step, so a task with its
   context and steps is one call. If a step fails, the item stays added with the steps before it, and the output
   names its key: add the rest with `upheap step add`, don't add the item again.
@@ -38,10 +38,12 @@ Long text
 The usual order of work
 1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
 2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
-   with its context, steps, and questions with their answers.
+   with its context, comments, steps, and questions with their answers.
    A reminder, added with `upheap item add "<title>" --reminder <date>`, stays out of the list until that date;
    `upheap item list --reminders shown` lists those still to come.
-3. Write what you learn where the next reader will look: the item's context, not a comment in your reply.
+3. Write what you learn, decide or do where the next reader will look: as a comment on the item, with
+   `upheap comment add`, not in your reply. A comment adds to the item without touching its context. Change the
+   context, with --context-file on `upheap item edit`, only to correct or restate what the item is.
    Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
    then a step for each part, ticked as each one is finished.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
@@ -59,6 +61,7 @@ The usual order of work
 Example
   upheap item add "Rotate the staging certs" --effort s --task --context-file context.md --step "Order the new certificate" --step "Install it in staging" -q    # prints the key, say k3x9a
   upheap question ask k3x9a "Which CA do we use?" --choice "Internal" --choice "Let's Encrypt"
+  upheap comment add k3x9a "Staging uses the internal CA; production still has the old certificate."
   upheap item start k3x9a
   upheap step tick k3x9a.1
   upheap item done k3x9a

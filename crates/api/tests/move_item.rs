@@ -170,7 +170,7 @@ impl World {
 
 #[gtest]
 #[tokio::test]
-async fn an_item_arrives_with_its_context_steps_questions_and_turn() -> Result<()> {
+async fn an_item_arrives_with_its_context_steps_questions_comments_and_turn() -> Result<()> {
     // Arrange
     let w = world().await?;
     let old_url = w.item_url().await?;
@@ -222,6 +222,22 @@ async fn an_item_arrives_with_its_context_steps_questions_and_turn() -> Result<(
         )
         .await?;
     anyhow::ensure!(answered.status == StatusCode::OK, "reply failed: {}", answered.body);
+    for body in ["Use the internal CA.", "Done in staging."] {
+        let commented = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{old_url}/comments"),
+                Some(&w.session),
+                Some(json!({ "body": body })),
+            )
+            .await?;
+        anyhow::ensure!(
+            commented.status == StatusCode::CREATED,
+            "comment failed: {}",
+            commented.body
+        );
+    }
     let sent = w
         .app
         .send(
@@ -256,6 +272,8 @@ async fn an_item_arrives_with_its_context_steps_questions_and_turn() -> Result<(
     expect_that!(there.body["steps"], eq(&before["steps"]));
     expect_that!(there.body["step_progress"], eq(&json!({ "ticked": 1, "total": 2 })));
     expect_that!(there.body["questions"], eq(&before["questions"]));
+    expect_that!(there.body["comments"], eq(&before["comments"]));
+    expect_that!(there.body["comments"].as_array().map(Vec::len), some(eq(2)));
     expect_that!(there.body["turn"], eq(&before["turn"]));
     expect_that!(there.body["turn"].is_object(), eq(true));
     expect_that!(there.body["waits_for_you"], eq(&before["waits_for_you"]));

@@ -6,6 +6,7 @@
 
 pub mod audit;
 mod codes;
+pub mod comments;
 mod entities;
 mod error;
 pub mod heaps;

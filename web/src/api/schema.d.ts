@@ -591,6 +591,27 @@ export interface paths {
         patch: operations["update_item"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds a comment to an item, open or closed, and answers with the whole item. The new comment is the one with the
+         *     highest `number`. Comments are never changed or deleted, and an item has at most 200. Adding one needs no
+         *     `If-Match`; the item's `version` and `updated_at` don't change.
+         */
+        post: operations["add_comment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/move": {
         parameters: {
             query?: never;
@@ -1329,6 +1350,11 @@ export interface components {
             /** @description Items in shown states, including blocked items when they're mixed in. */
             ranked: components["schemas"]["AcrossHeapsItem"][];
         };
+        /** @description A comment to add to an item. */
+        AddCommentRequest: {
+            /** @description Plain text, trimmed, 1 to 20,000 characters. Line breaks are kept. */
+            body: string;
+        };
         AddMemberRequest: {
             /**
              * Format: uuid
@@ -1407,7 +1433,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1539,6 +1565,28 @@ export interface components {
             items: components["schemas"]["Item"][];
             /** @description Pass as `cursor` for the next page; `null` on the last page. */
             next_cursor?: string | null;
+        };
+        /** @description One comment on an item. A comment is never changed or deleted. */
+        Comment: {
+            /** @description Plain text, with its line breaks. */
+            body: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            created_at: number;
+            created_by?: null | components["schemas"]["UserRef"];
+            /**
+             * @description When it was added, ready to show in the request's timezone: the time ("14:02") for today, else the date
+             *     ("yesterday", "3 Nov").
+             */
+            created_label: string;
+            /**
+             * Format: int32
+             * @description The comment's number within its item, given when it was added and never changed or reused. The comment is
+             *     named by its item's key and this number, as `k3x9a.c3`.
+             */
+            number: number;
         };
         /** @description One labelled reason for an item's position. */
         Contributor: {
@@ -1922,6 +1970,11 @@ export interface components {
             /** @description When it was closed, ready to show ("yesterday", "3 Nov"). */
             closed_label?: string | null;
             /**
+             * @description The item's comments in number order, oldest first. `null` in the ranked list and the closed list: read the
+             *     item for its comments.
+             */
+            comments?: components["schemas"]["Comment"][] | null;
+            /**
              * Format: int64
              * @description UTC milliseconds.
              */
@@ -1997,7 +2050,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "move" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "send_to_agent" | "take_back" | "retry";
+        ItemAction: "edit" | "move" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "comment" | "send_to_agent" | "take_back" | "retry";
         /** @description The heap a row's item is in, and its team. */
         ItemHeap: {
             /** Format: uuid */
@@ -4861,6 +4914,83 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_comment: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCommentRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` or `too_many_comments` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A blank or too long `body` (`field` `body`) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -4,6 +4,7 @@
 //! result is reproducible.
 
 pub mod audit;
+pub mod comment;
 pub mod due;
 pub mod handle;
 pub mod heap;
@@ -31,8 +32,8 @@ pub mod user;
 pub mod validation;
 
 pub use ids::{
-    HeapId, InviteLinkId, ItemId, OptionId, ParameterId, QuestionId, RunId, SavedViewId, StepId, TagId, TeamId,
-    TokenFamilyId, TurnId, UserId,
+    CommentId, HeapId, InviteLinkId, ItemId, OptionId, ParameterId, QuestionId, RunId, SavedViewId, StepId, TagId,
+    TeamId, TokenFamilyId, TurnId, UserId,
 };
 pub use time::{Duration, Timestamp};
 pub use validation::ValidationError;

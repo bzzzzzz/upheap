@@ -10,6 +10,7 @@ mod audit;
 pub mod audit_log;
 pub mod auth;
 mod clock;
+pub mod comments;
 mod error;
 pub mod handles;
 pub mod heaps;
