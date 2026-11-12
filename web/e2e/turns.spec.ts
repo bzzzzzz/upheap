@@ -119,6 +119,8 @@ test("all the way is offered and shown, and a defined task has one way to go", a
   await sendForm(page).locator("label").filter({ hasText: "All the way" }).click();
   await expect(sendForm(page).getByRole("radio", { name: "All the way" })).toBeChecked();
   await sendForm(page).getByRole("button", { name: "Send", exact: true }).click();
+  // The chip names the reach: the goal is only the first stop.
+  await expect(chip(page)).toHaveText("Agent · all the way");
   await chip(page).click();
   await expect(who(page)).toContainText("going to: with context, all the way");
 
