@@ -51,7 +51,7 @@ The usual order of work
    for them, and their answer reads back in `upheap item show`.
 
 Example
-  upheap item add "Rotate the staging certs" --need expected --effort s --task -q --context-file context.md --step "Order the new certificate" --step "Install it in staging"
+  upheap item add "Rotate the staging certs" --effort s --task --context-file context.md --step "Order the new certificate" --step "Install it in staging" -q    # prints the key, say k3x9a
   upheap question ask k3x9a "Which CA do we use?" --choice "Internal" --choice "Let's Encrypt"
   upheap item start k3x9a
   upheap step tick k3x9a.1
