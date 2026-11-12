@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 
-import type { Item } from "../api/client";
+import { ApiProblem, type Item } from "../api/client";
 import { compactButtonClass } from "./buttons";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
 import { itemProblem } from "./itemProblems";
@@ -15,8 +15,8 @@ const normal = (text: string) => (text.trim() === "" ? "" : text);
 
 /**
  * The item's context, its description, read as Markdown with an Edit button (ux.md, The item §17). Edit swaps the text
- * in place for a form on a wide screen and a tablet, and opens the same form in a sheet on a phone. With no `edit` the
- * text is only read, and with none and no text the section is absent. A save made as the form goes away has no form
+ * in place for a form on a wide screen and a tablet, and opens the same form in a sheet on a phone. Without `canEdit`
+ * the text is only read, and with none and no text the section is absent. A save made as the form goes away has no form
  * left to say it failed, so a failure is said in the app's toast, which outlives the pane.
  */
 export function ItemContext({
@@ -61,7 +61,17 @@ export function ItemContext({
       context={text}
       canEdit={canEdit}
       onSave={onSave}
-      onLeaveFailed={(e) => showToast({ message: itemProblem(e), error: true })}
+      onLeaveFailed={(e) =>
+        showToast({
+          // The pane is gone, so the message names the item; a conflict's own wording would point at a version
+          // nothing shows any more.
+          message:
+            e === null
+              ? `Your context for “${item.title}” wasn't saved: someone else changed it meanwhile.`
+              : `Your context for “${item.title}” wasn't saved${e instanceof ApiProblem && e.status === 409 ? ": someone else changed the item meanwhile." : `. ${itemProblem(e)}`}`,
+          error: true,
+        })
+      }
       onSaver={setSaver}
       onDone={done}
     />
@@ -122,9 +132,9 @@ export function ItemContext({
  * stays. The text is read-only while a save is in flight, so what was typed is what was sent. If the saved text is no
  * longer the one Edit opened, someone else changed it: Save shows it above the draft under "Saved meanwhile" and
  * becomes Save again, which replaces it. Only Save again does: until then nothing else saves over their text, neither
- * the save for Done and Won't do (which then doesn't go on) nor the one as the form goes away. Cancel throws the draft away. Escape does nothing, so a long draft is never
- * lost to a stray key (and it doesn't close the item). If the item can't be edited any more, the draft stays on
- * screen to read and select, unsaved.
+ * the save for Done and Won't do (which then doesn't go on) nor the one as the form goes away. Cancel throws the draft
+ * away. Escape does nothing, so a long draft is never lost to a stray key (and it doesn't close the item). If the item
+ * can't be edited any more, the draft stays on screen to read and select, unsaved.
  *
  * Leaving with a changed draft (the item closed, the pane walked to the next) saves it too, as the form goes away, and
  * can't say if that fails here; the toast says it. It skips the save when the text moved since Edit, or the item
@@ -143,7 +153,8 @@ function ContextForm({
   canEdit: boolean;
   onSave: (text: string) => Promise<void>;
   /** Says that the save made as the form went away failed. */
-  onLeaveFailed: (error: Error) => void;
+  /** A changed draft that leaving didn't save: the save's error, or `null` when someone else changed the text. */
+  onLeaveFailed: (error: Error | null) => void;
   /** Hands out the form's save while it is open, and takes it back as it goes away. */
   onSaver: Dispatch<SetStateAction<FlushDraft | null>>;
   onDone: (auto?: boolean) => void;
@@ -230,6 +241,9 @@ function ContextForm({
         now.context === now.opened
       ) {
         now.onSave(now.text).catch((e: unknown) => now.onLeaveFailed(e instanceof Error ? e : new Error(String(e))));
+      } else if (!now.settled && !now.pending && now.canEdit && normal(now.text) !== now.opened) {
+        // Someone else's text moved since Edit: theirs stays, and the person hears that theirs didn't go in.
+        now.onLeaveFailed(null);
       }
     },
     [],

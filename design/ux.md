@@ -395,7 +395,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     with a changed draft saves it like Save, and stays open if that doesn't land; an unchanged draft just closes. Done
     and Won't do from the pane save a changed draft first, and don't go on if it can't be saved. Leaving the item with
     a changed draft, by closing it or walking on, saves it when nothing else changed meanwhile, and otherwise doesn't
-    save it; a failure of that save is said in a toast. When the item can no longer be edited (closed
+    save it; either way a toast says the context for that item wasn't saved, and why. When the item can no longer be edited (closed
     elsewhere, an archived heap, a changed role) the draft stays as read-only text that can be selected, with "This item
     can't be edited any more; your text wasn't saved." and a Close button.
 
