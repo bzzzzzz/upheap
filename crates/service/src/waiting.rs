@@ -52,7 +52,7 @@ pub enum WaitingSubject {
     /// A turn whose runs keep failing.
     Stuck(StuckView),
     /// A blocked item whose blocker was closed or moved to another heap.
-    BlockerGone(BlockerGoneView),
+    BlockerGone(Box<BlockerGoneView>),
 }
 
 /// A gone blocker, as a row shows it.
@@ -369,7 +369,7 @@ impl Services {
                             gone,
                             allowed_actions,
                         };
-                        (WaitingSubject::BlockerGone(view), None, 0, true)
+                        (WaitingSubject::BlockerGone(Box::new(view)), None, 0, true)
                     }
                 };
                 Some(WaitingRow {

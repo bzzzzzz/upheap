@@ -288,10 +288,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn
-         *     is stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
+         * What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
+         *     stuck, and the blocked items whose blocker was closed as won't do or moved to another heap, in the active heaps of
+         *     their teams, one row each, most important first. Rows are ordered by the item's
          *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-         *     position, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now.
+         *     position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
+         *     for now.
          *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
          *     most 500 rows come back; `count` is the true total. Read-only, for any member.
          */
@@ -1493,6 +1495,16 @@ export interface components {
          * @enum {string}
          */
         BlockedLayout: "grouped" | "mixed";
+        /** @description A blocker that stopped holding the item it blocks. */
+        BlockerGone: {
+            how: components["schemas"]["BlockerGoneHow"];
+            moved_to?: null | components["schemas"]["HeapSummary"];
+        };
+        /**
+         * @description How a blocker stopped holding the item it blocks. More ways can join.
+         * @enum {string}
+         */
+        BlockerGoneHow: "done" | "wont_do" | "moved";
         /** @description What the signed-in user gives to change their password. */
         ChangePasswordRequest: {
             /** @description The password now in use, to show it is the user and not someone at their open browser. */
@@ -1961,6 +1973,7 @@ export interface components {
              */
             arrives_at?: number | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
+            blocker_gone: null | components["schemas"]["BlockerGone"];
             /**
              * Format: int64
              * @description UTC milliseconds; set exactly when the item is closed.
@@ -2035,8 +2048,8 @@ export interface components {
              */
             version: number;
             /**
-             * @description Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the
-             *     caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
+             * @description Whether the item is open, in an active heap, and has an open question, a stuck agent turn or a gone blocker:
+             *     it waits for the caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
              *     and in an archived heap.
              */
             waits_for_you: boolean;
@@ -3068,21 +3081,29 @@ export interface components {
             id: string;
         };
         /**
-         * @description What waits for the caller: every open question on an open item, and every item with a stuck agent turn, in their
-         *     active heaps, most important first.
+         * @description What waits for the caller: every open question on an open item, every item with a stuck agent turn, and every
+         *     blocked item whose blocker is gone, in their active heaps, most important first.
          */
         Waiting: {
             /**
              * Format: int32
-             * @description How many rows wait, questions and stuck turns. At most 500 are in `rows`; this is the true total.
+             * @description How many rows wait: questions, stuck turns and gone blockers. At most 500 are in `rows`; this is the true total.
              */
             count: number;
             /**
              * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
-             *     its heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.
+             *     its heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.
              *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
              */
             rows: components["schemas"]["WaitingRow"][];
+        };
+        /** @description A blocker that stopped holding the row's item, which stays blocked until the caller moves it on. */
+        WaitingBlocker: {
+            /** @description What the caller may do about it: `change_state`, to unblock the item, when they may edit items. */
+            allowed_actions: components["schemas"]["ItemAction"][];
+            gone: components["schemas"]["BlockerGone"];
+            /** @description The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. */
+            item: components["schemas"]["ItemRef"];
         };
         /** @description The item a row is on. */
         WaitingItem: {
@@ -3102,13 +3123,14 @@ export interface components {
         };
         /** @description One thing that waits. */
         WaitingRow: {
+            blocker: null | components["schemas"]["WaitingBlocker"];
             heap: components["schemas"]["ItemHeap"];
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
             question: null | components["schemas"]["Question"];
             /**
              * @description The title of the step the question names, so a client needn't load the item's steps. `null` when it names
-             *     none, or one that no longer exists, and on a `stuck` row.
+             *     none, or one that no longer exists, and on the other rows.
              */
             step_title?: string | null;
             stuck: null | components["schemas"]["WaitingStuck"];
@@ -3117,7 +3139,7 @@ export interface components {
          * @description What kind of thing waits. More kinds can join.
          * @enum {string}
          */
-        WaitingRowKind: "question" | "stuck";
+        WaitingRowKind: "question" | "stuck" | "blocker_gone";
         /** @description A turn whose runs keep failing. */
         WaitingStuck: {
             /** @description What the caller may do about it: `retry` and `take_back`, when they may edit items. */

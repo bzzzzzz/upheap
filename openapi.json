@@ -979,7 +979,7 @@
         "tags": [
           "me"
         ],
-        "summary": "What waits for the signed-in user: the open questions and requests on open items, and the items whose agent turn\nis stuck, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's\nranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's\nposition, a stuck row before the item's questions, and the question's number; all heaps weigh the same for now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At\nmost 500 rows come back; `count` is the true total. Read-only, for any member.",
+        "summary": "What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is\nstuck, and the blocked items whose blocker was closed as won't do or moved to another heap, in the active heaps of\ntheir teams, one row each, most important first. Rows are ordered by the item's\nranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's\nposition, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same\nfor now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At\nmost 500 rows come back; `count` is the true total. Read-only, for any member.",
         "operationId": "get_waiting",
         "parameters": [
           {
@@ -7426,6 +7426,38 @@
           "mixed"
         ]
       },
+      "BlockerGone": {
+        "type": "object",
+        "description": "A blocker that stopped holding the item it blocks.",
+        "required": [
+          "how"
+        ],
+        "properties": {
+          "how": {
+            "$ref": "#/components/schemas/BlockerGoneHow"
+          },
+          "moved_to": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HeapSummary",
+                "description": "The heap of the item's team the blocker is in now, when it was moved away from the item's heap."
+              }
+            ]
+          }
+        }
+      },
+      "BlockerGoneHow": {
+        "type": "string",
+        "description": "How a blocker stopped holding the item it blocks. More ways can join.",
+        "enum": [
+          "done",
+          "wont_do",
+          "moved"
+        ]
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "description": "What the signed-in user gives to change their password.",
@@ -8505,6 +8537,7 @@
           "kind",
           "stage_choices",
           "state",
+          "blocker_gone",
           "need",
           "tags",
           "parameters",
@@ -8539,7 +8572,18 @@
               },
               {
                 "$ref": "#/components/schemas/ItemRef",
-                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be\nclosed: finishing a blocker doesn't unblock what waits for it."
+                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed\nas won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team\nafter a move: then `blocker_gone` says so."
+              }
+            ]
+          },
+          "blocker_gone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BlockerGone",
+                "description": "How the blocker stopped holding the item, when it did: closed, or moved to another heap. The item stays blocked\nand waits for the caller (`waits_for_you`), who unblocks it, closes it or picks another blocker. `null`\notherwise."
               }
             ]
           },
@@ -8766,7 +8810,7 @@
           },
           "waits_for_you": {
             "type": "boolean",
-            "description": "Whether the item is open and has an open question, in an active heap: whoever asked it, it waits for the\ncaller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item\nand in an archived heap."
+            "description": "Whether the item is open, in an active heap, and has an open question, a stuck agent turn or a gone blocker:\nit waits for the caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item\nand in an archived heap."
           },
           "with_agent": {
             "type": "boolean",
@@ -11278,7 +11322,7 @@
       },
       "Waiting": {
         "type": "object",
-        "description": "What waits for the caller: every open question on an open item, and every item with a stuck agent turn, in their\nactive heaps, most important first.",
+        "description": "What waits for the caller: every open question on an open item, every item with a stuck agent turn, and every\nblocked item whose blocker is gone, in their active heaps, most important first.",
         "required": [
           "count",
           "rows"
@@ -11287,7 +11331,7 @@
           "count": {
             "type": "integer",
             "format": "int32",
-            "description": "How many rows wait, questions and stuck turns. At most 500 are in `rows`; this is the true total.",
+            "description": "How many rows wait: questions, stuck turns and gone blockers. At most 500 are in `rows`; this is the true total.",
             "minimum": 0
           },
           "rows": {
@@ -11295,7 +11339,32 @@
             "items": {
               "$ref": "#/components/schemas/WaitingRow"
             },
-            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, a stuck row before the item's questions, then the question's number. Heaps weigh the same for now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first."
+            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first."
+          }
+        }
+      },
+      "WaitingBlocker": {
+        "type": "object",
+        "description": "A blocker that stopped holding the row's item, which stays blocked until the caller moves it on.",
+        "required": [
+          "item",
+          "gone",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemAction"
+            },
+            "description": "What the caller may do about it: `change_state`, to unblock the item, when they may edit items."
+          },
+          "gone": {
+            "$ref": "#/components/schemas/BlockerGone"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap."
           }
         }
       },
@@ -11362,9 +11431,21 @@
           "item",
           "heap",
           "question",
-          "stuck"
+          "stuck",
+          "blocker"
         ],
         "properties": {
+          "blocker": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WaitingBlocker",
+                "description": "The gone blocker. Set on a `blocker_gone` row."
+              }
+            ]
+          },
           "heap": {
             "$ref": "#/components/schemas/ItemHeap"
           },
@@ -11390,7 +11471,7 @@
               "string",
               "null"
             ],
-            "description": "The title of the step the question names, so a client needn't load the item's steps. `null` when it names\nnone, or one that no longer exists, and on a `stuck` row."
+            "description": "The title of the step the question names, so a client needn't load the item's steps. `null` when it names\nnone, or one that no longer exists, and on the other rows."
           },
           "stuck": {
             "oneOf": [
@@ -11410,7 +11491,8 @@
         "description": "What kind of thing waits. More kinds can join.",
         "enum": [
           "question",
-          "stuck"
+          "stuck",
+          "blocker_gone"
         ]
       },
       "WaitingStuck": {
