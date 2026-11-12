@@ -3,7 +3,7 @@
 mod common;
 
 use anyhow::Result;
-use common::{HEAP, TestServer, TestUser, ada_with_items, cli_in_heap, key};
+use common::{HEAP, TestCli, TestServer, TestUser, ada_with_items, cli_in_heap, key};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -337,5 +337,401 @@ async fn item_show_has_no_questions_section_for_an_item_without_questions() -> R
 
     // Assert
     expect_that!(shown.stdout, not(contains_substring("Questions")));
+    Ok(())
+}
+
+/// Asks a question with `choices` (free text when empty) through the CLI.
+async fn ask(cli: &TestCli, task: &str, text: &str, choices: &[&str], many: bool) {
+    let mut args = vec!["question", "ask", task, text];
+    for choice in choices {
+        args.extend(["--choice", choice]);
+    }
+    if many {
+        args.push("--many");
+    }
+    assert!(cli.run(&args).await.exited(0));
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_picks_by_label_ignoring_case_and_item_show_reads_it_back() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+
+    // Act
+    let replied = cli
+        .run(&["question", "reply", &format!("{task}.q1"), "--pick", "let's ENCRYPT"])
+        .await;
+    let shown = cli.run(&["item", "show", &task]).await;
+
+    // Assert
+    expect_that!(replied.stdout, eq(&format!("Replied to {task}.q1: Which CA?\n")));
+    expect_that!(replied.stderr, eq(""));
+    expect_that!(replied.exited(0), eq(true));
+    expect_that!(shown.stdout, contains_substring("Question · answered"));
+    expect_that!(shown.stdout, contains_substring("→ Let's Encrypt"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_picks_by_number_and_many_picks_and_json_prints_the_item() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+    ask(&cli, &task, "Which hosts?", &["a", "b", "c"], true).await;
+
+    // Act
+    let by_number = cli
+        .run(&["question", "reply", &format!("{task}.q1"), "--pick", "2", "--quiet"])
+        .await;
+    let many = cli
+        .run(&[
+            "question",
+            "reply",
+            &format!("{task}.q2"),
+            "--pick",
+            "c",
+            "--pick",
+            "1",
+            "--pick",
+            "C",
+            "--json",
+        ])
+        .await;
+
+    // Assert
+    expect_that!(by_number.stdout, eq(""));
+    expect_that!(by_number.exited(0), eq(true));
+    let body: Value = serde_json::from_str(&many.stdout)?;
+    expect_that!(body["key"], eq(&task));
+    expect_that!(body["questions"][1]["reply"]["picked"], eq(&json!([0, 2])));
+    let read = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(read["questions"][0]["reply"]["picked"], eq(&json!([1])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_to_a_request_takes_done_and_a_comment() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    cli.run(&["question", "request", &task, "Put a token in the vault."])
+        .await;
+    cli.run(&["question", "request", &task, "Open the port."]).await;
+
+    // Act
+    let done = cli
+        .run(&[
+            "question",
+            "reply",
+            &format!("{task}.q1"),
+            "--pick",
+            "done",
+            "--comment",
+            "Put it in.",
+        ])
+        .await;
+    let refused = cli
+        .run(&["question", "reply", &format!("{task}.q2"), "--pick", "can't be done"])
+        .await;
+
+    // Assert
+    expect_that!(done.exited(0), eq(true));
+    expect_that!(refused.exited(0), eq(true));
+    let shown = cli.run(&["item", "show", &task]).await;
+    expect_that!(shown.stdout, contains_substring("→ Done \"Put it in.\""));
+    expect_that!(shown.stdout, contains_substring("→ Can't be done"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_reads_the_comment_from_a_file_or_stdin() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Why?", &[], false).await;
+    ask(&cli, &task, "And why not?", &[], false).await;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("comment.txt");
+    std::fs::write(&path, "Because of the rules\n")?;
+    let path = path.to_string_lossy().into_owned();
+
+    // Act
+    let from_file = cli
+        .run(&[
+            "question",
+            "reply",
+            &format!("{task}.q1"),
+            "--comment-file",
+            &path,
+            "--quiet",
+        ])
+        .await;
+    cli.stdin = b"From stdin\nsecond line\n".to_vec();
+    let from_stdin = cli
+        .run(&["question", "reply", &format!("{task}.q2"), "--comment", "-", "--quiet"])
+        .await;
+
+    // Assert
+    expect_that!(from_file.stdout, eq(""));
+    expect_that!(from_file.exited(0), eq(true));
+    expect_that!(from_stdin.stdout, eq(""));
+    expect_that!(from_stdin.exited(0), eq(true));
+    let read = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(read["questions"][0]["reply"]["comment"], eq("Because of the rules"));
+    expect_that!(read["questions"][1]["reply"]["comment"], eq("From stdin\nsecond line"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_without_a_pick_or_a_comment_is_a_usage_error_and_sends_nothing() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Why?", &[], false).await;
+
+    // Act
+    let run = cli.run(&["question", "reply", &format!("{task}.q1")]).await;
+
+    // Assert
+    expect_that!(run.exited(2), eq(true));
+    expect_that!(run.stderr, contains_substring("--pick"));
+    expect_that!(run.stderr, contains_substring("--comment"));
+    let read = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(read["questions"][0]["state"], eq("open"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_with_an_unknown_pick_lists_the_choices_and_free_text_takes_no_pick() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+    ask(&cli, &task, "Why?", &[], false).await;
+
+    // Act
+    let unknown = cli
+        .run(&["question", "reply", &format!("{task}.q1"), "--pick", "maybe"])
+        .await;
+    let free_text = cli
+        .run(&["question", "reply", &format!("{task}.q2"), "--pick", "1"])
+        .await;
+
+    // Assert
+    expect_that!(unknown.exited(3), eq(true));
+    expect_that!(
+        unknown.stderr,
+        contains_substring(format!(
+            "{task}.q1 has no choice `maybe`; its choices: Internal, Let's Encrypt"
+        ))
+    );
+    expect_that!(free_text.exited(3), eq(true));
+    expect_that!(
+        free_text.stderr,
+        contains_substring(format!("{task}.q2 takes a free-text reply: give --comment, not --pick"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_to_a_question_the_item_does_not_have_points_to_item_show() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let run = cli
+        .run(&["question", "reply", &format!("{task}.q7"), "--comment", "Hi"])
+        .await;
+
+    // Assert
+    expect_that!(run.exited(4), eq(true));
+    expect_that!(run.stderr, contains_substring(format!("no question `{task}.q7`")));
+    expect_that!(
+        run.stderr,
+        contains_substring(format!("`upheap item show {task}` lists its questions"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_to_an_answered_question_is_refused_with_the_servers_message() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Why?", &[], false).await;
+    reply(&server, &ada, &task, 1, json!({ "comment": "First" })).await?;
+
+    // Act
+    let run = cli
+        .run(&["question", "reply", &format!("{task}.q1"), "--comment", "Second"])
+        .await;
+
+    // Assert
+    expect_that!(run.exited(3), eq(true));
+    expect_that!(run.stderr, contains_substring("answered"));
+    let read = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(read["questions"][0]["reply"]["comment"], eq("First"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_with_a_malformed_name_is_a_usage_error() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let no_q = cli
+        .run(&["question", "reply", &format!("{task}.2"), "--comment", "Hi"])
+        .await;
+    let zero = cli
+        .run(&["question", "reply", &format!("{task}.q0"), "--comment", "Hi"])
+        .await;
+
+    // Assert
+    expect_that!(no_q.exited(2), eq(true));
+    expect_that!(no_q.stderr, contains_substring("isn't a question"));
+    expect_that!(zero.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_on_a_closed_item_or_after_reopening_says_the_question_was_withdrawn() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+    cli.run(&["item", "done", &task]).await;
+    let name = format!("{task}.q1");
+
+    // Act
+    let closed = cli.run(&["question", "reply", &name, "--pick", "1"]).await;
+    cli.run(&["item", "reopen", &task]).await;
+    let reopened = cli.run(&["question", "reply", &name, "--pick", "1"]).await;
+
+    // Assert
+    for run in [closed, reopened] {
+        expect_that!(run.exited(3), eq(true));
+        expect_that!(
+            run.stderr,
+            contains_substring(format!("{name} was withdrawn, so there is nothing to reply to"))
+        );
+        expect_that!(run.stderr, not(contains_substring("reopen")));
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn repeating_a_reply_is_safe_and_another_reply_is_refused() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which hosts?", &["a", "b", "c"], true).await;
+    let name = format!("{task}.q1");
+    cli.run(&[
+        "question",
+        "reply",
+        &name,
+        "--pick",
+        "a",
+        "--pick",
+        "c",
+        "--comment",
+        "Both.",
+    ])
+    .await;
+
+    // Act
+    let same = cli
+        .run(&[
+            "question",
+            "reply",
+            &name,
+            "--pick",
+            "3",
+            "--pick",
+            "A",
+            "--comment",
+            " Both. ",
+        ])
+        .await;
+    let quiet = cli
+        .run(&[
+            "question",
+            "reply",
+            &name,
+            "--pick",
+            "a",
+            "--pick",
+            "c",
+            "--comment",
+            "Both.",
+            "-q",
+        ])
+        .await;
+    let json = cli
+        .run(&[
+            "question",
+            "reply",
+            &name,
+            "--pick",
+            "a",
+            "--pick",
+            "c",
+            "--comment",
+            "Both.",
+            "--json",
+        ])
+        .await;
+    let other = cli.run(&["question", "reply", &name, "--pick", "b"]).await;
+
+    // Assert
+    expect_that!(same.stdout, eq(&format!("{name} is already answered with that.\n")));
+    expect_that!(same.exited(0), eq(true));
+    expect_that!(quiet.stdout, eq(""));
+    expect_that!(quiet.exited(0), eq(true));
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["questions"][0]["state"], eq("answered"));
+    expect_that!(other.exited(3), eq(true));
+    expect_that!(other.stderr, contains_substring("answered already with another reply"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_reply_to_a_choice_question_without_a_pick_lists_the_choices() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+
+    // Act
+    let run = cli
+        .run(&["question", "reply", &format!("{task}.q1"), "--comment", "Whatever"])
+        .await;
+
+    // Assert
+    expect_that!(run.exited(3), eq(true));
+    expect_that!(
+        run.stderr,
+        contains_substring(format!(
+            "{task}.q1 takes a pick: give --pick with one of: Internal, Let's Encrypt"
+        ))
+    );
     Ok(())
 }

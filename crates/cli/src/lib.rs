@@ -203,6 +203,8 @@ enum QuestionCommand {
     Ask(commands::question::ask::AskArgs),
     /// Ask for something to do on an item; it is replied to with Done or Can't be done
     Request(commands::question::ask::RequestArgs),
+    /// Reply to a question or a request on an item
+    Reply(commands::question::reply::ReplyArgs),
 }
 
 #[derive(Subcommand)]
@@ -314,6 +316,7 @@ impl Command {
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
             Self::Comment(CommentCommand::Add(args)) => &args.shared,
             Self::Comment(CommentCommand::List(args)) => &args.shared,
+            Self::Question(QuestionCommand::Reply(args)) => &args.shared,
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
@@ -452,6 +455,7 @@ async fn dispatch(command: Command, app: &App, out: &mut Output) -> Result<(), C
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
         Command::Comment(CommentCommand::Add(args)) => commands::comment::add::run(args, app, out).await,
         Command::Comment(CommentCommand::List(args)) => commands::comment::list::run(args, app, out).await,
+        Command::Question(QuestionCommand::Reply(args)) => commands::question::reply::run_reply(args, app, out).await,
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,

@@ -152,6 +152,7 @@ cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "L
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
 cargo run -p cli -- comment add k3x9a "Used the internal CA."   # a comment on the item; or --file notes.md, or - for stdin
 cargo run -p cli -- comment list k3x9a                          # an item's comments, oldest first
+cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file
 cargo run -p cli -- work next                                    # what an agent would work on next, without taking it
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
 UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  # with a run, writes are the run's

@@ -69,6 +69,14 @@ export async function openItem(page: Page, title: string) {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
 }
 
+/** Opens the open item's History, which starts collapsed, and returns its region. */
+export async function openHistory(page: Page): Promise<Locator> {
+  const history = itemPane(page).getByRole("region", { name: "History", exact: true });
+  await history.locator("summary", { hasText: "History" }).click();
+  await expect(history.locator("details")).toHaveAttribute("open");
+  return history;
+}
+
 /** Makes the open item, a note, a task through its More menu, answering the question that asks. */
 export async function makeTask(page: Page, title: string) {
   const more = itemPane(page).getByRole("group", { name: "State" }).getByRole("button", { name: "More", exact: true });

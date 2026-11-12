@@ -7,7 +7,7 @@ import { ToggleButtonGroup } from "react-aria-components";
 import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
 import { useBlockerCandidates, useItem, useParameters, useUpdateItem } from "../api/queries";
 import { gerund, takesBack } from "./agentConfirm";
-import { AuditHistory } from "./AuditHistory";
+import { HistoryDisclosure } from "./AuditHistory";
 import { BlockerSelect } from "./BlockerSelect";
 import { useCopyLink } from "./copyLink";
 import { blockerCandidatesFor } from "./blockerCandidates";
@@ -517,12 +517,13 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       <AnsweredQuestions item={item} />
 
-      <section aria-label="History" className="flex flex-col gap-1.5 border-t border-line pt-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-xs font-medium text-ink-soft">History</h3>
+      {/* History starts collapsed and loads once opened; each item opens with it collapsed again. Who added the
+          item stays in view, on the same line as History's toggle. */}
+      <section aria-label="History" className="relative border-t border-line pt-3">
+        <HistoryDisclosure scope={{ heap: heapRef }} entityId={item.id} className="" />
+        <div className="absolute top-3 right-0 flex h-9 items-center pointer-coarse:h-11">
           <AddedBy item={item} />
         </div>
-        <AuditHistory scope={{ heap: heapRef }} entityId={item.id} />
       </section>
 
       {phone && (

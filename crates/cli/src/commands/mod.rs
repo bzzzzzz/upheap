@@ -81,6 +81,8 @@ pub enum UsageError {
     OrderRepeatsOption { option: String },
     #[error("--replace-with names {option}, the option being archived; name another option of {parameter}")]
     ReplaceWithItself { option: String, parameter: String },
+    #[error("give the reply: --pick a choice, or --comment")]
+    EmptyReply,
     #[error("UPHEAP_RUN isn't a run ID")]
     BadRunEnv,
     #[error("work claim starts a run; unset UPHEAP_RUN first")]

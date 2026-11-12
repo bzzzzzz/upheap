@@ -283,7 +283,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    line; a reminder's kind line carries its date, "Reminder · 12 March", and while the date is ahead a line under
    it says "Joins the list on 12 March"), then "Why it's #3" from the contributors, then a task's Steps (point 11), then the need's
    four steps, effort and impact as S M L XL buttons, due, tags, parameters, the context (the item's description),
-   the comments (point 16) and the history. On a phone due, tags, parameters and the context are rows of label and value, each opening a
+   the comments (point 16) and the history, collapsed until it's clicked, on every item it opens. On a phone due, tags, parameters and the context are rows of label and value, each opening a
    sheet; the context saves as its sheet closes.
 3. Each parameter is picked like effort and impact: a row of option buttons when it has a few options (up to four),
    and a menu row when it has more or long labels. A parameter linked to one of the item's tags shows up as soon as

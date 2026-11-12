@@ -10,6 +10,7 @@ import {
   isPhone,
   itemPane,
   markDoneFromList,
+  openHistory,
   PASSWORD,
   row,
   test,
@@ -48,9 +49,6 @@ const who = (page: Page): Locator => itemPane(page).getByRole("region", { name: 
 /** The form or the question the block opens. */
 const sendForm = (page: Page) => page.getByRole("dialog", { name: "Send to an agent", exact: true });
 const takeBackAsk = (page: Page) => page.getByRole("alertdialog");
-
-/** The history of the open item, as it reads in the pane. */
-const history = (page: Page) => itemPane(page).getByRole("region", { name: "History", exact: true });
 
 /** Expects a control to be at least 44 px tall, rounded: layout can land one a hair short, such as 43.99997. */
 async function expectTouchSize(control: Locator) {
@@ -97,8 +95,9 @@ test("sending from the item with a line shows who has it, in the item and in the
   await expect(row(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   // Undo is a take back, which the history keeps.
-  await expect(history(page)).toContainText("opened a turn");
-  await expect(history(page)).toContainText("took back a turn");
+  const history = await openHistory(page);
+  await expect(history).toContainText("opened a turn");
+  await expect(history).toContainText("took back a turn");
 });
 
 test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
@@ -202,7 +201,7 @@ test("marking an item an agent has done from its row asks first, and closing tak
   const actions = ((await log.json()).entries as { action: string }[]).map((entry) => entry.action);
   expect(actions.slice(0, 3)).toEqual(["item_updated", "turn_taken_back", "turn_opened"]);
   await open(page, heapPath, key, "Rotate the certs");
-  await expect(history(page)).toContainText("took back a turn");
+  await expect(await openHistory(page)).toContainText("took back a turn");
 });
 
 test("an admin turns on Agents prepare new notes, and a note added from Add shows with an agent", async ({

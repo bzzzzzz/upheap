@@ -111,10 +111,15 @@ pub(crate) fn named_heap<'a>(flag: Option<&'a str>, app: &'a App) -> Result<Heap
 
 /// The description a flag gives: its text, or all of stdin for `-`, less the newline that ends it.
 pub(crate) async fn read_description(raw: &str, app: &App) -> Result<String, CliError> {
+    read_text_flag(raw, "--description", app).await
+}
+
+/// The text a flag called `flag` gives: its value, or all of stdin for `-`, less the newline that ends it.
+pub(crate) async fn read_text_flag(raw: &str, flag: &'static str, app: &App) -> Result<String, CliError> {
     if raw != "-" {
         return Ok(raw.to_owned());
     }
-    let text = app.read_stdin("--description").await?;
+    let text = app.read_stdin(flag).await?;
     let text = text.strip_suffix('\n').unwrap_or(&text);
     Ok(text.strip_suffix('\r').unwrap_or(text).to_owned())
 }
