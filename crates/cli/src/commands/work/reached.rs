@@ -3,6 +3,7 @@
 //! It takes no item: the run knows it. The server checks the item as it is now; when it misses a condition the
 //! refusal names it, and the run, still live, can fix the item and say reached again.
 
+use api_types::turns::{GoalDto, ReachDto};
 use api_types::work::{ReachedRequestDto, RunDto};
 use clap::Args;
 
@@ -23,7 +24,8 @@ pub struct ReachedArgs {
     pub shared: SharedArgs,
 }
 
-/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`; `--quiet` prints nothing and
+/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`, or `... k3x9a goes on, all the
+/// way.` when the turn was sent all the way and didn't reach done; `--quiet` prints nothing and
 /// `--json` the run. Needs `UPHEAP_RUN`.
 pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let run = current_run(app, "reached")?.to_owned();
@@ -42,11 +44,14 @@ pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), C
         Mode::Quiet => {}
         Mode::Human => {
             let item = &reached.value.item;
-            out.line(&format!(
-                "Reached: {}. {} is yours again.",
-                goal_phrase(item.goal),
-                item.key
-            ))?;
+            // The server's rule for opening the next turn (`Turn::follow_on` in the domain crate), which the
+            // response doesn't carry: change the two together.
+            let ending = if item.reach == ReachDto::AllTheWay && item.goal != GoalDto::Done {
+                "goes on, all the way"
+            } else {
+                "is yours again"
+            };
+            out.line(&format!("Reached: {}. {} {ending}.", goal_phrase(item.goal), item.key))?;
         }
     }
     Ok(())

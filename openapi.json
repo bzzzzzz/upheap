@@ -6809,7 +6809,7 @@
         "tags": [
           "work"
         ],
-        "summary": "Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a\ndescription and no open question; `defined` needs an open task with a description, a step that isn't dropped and no\nopen question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the\nitem's stage becomes the goal, and `turn_reached` is recorded. A miss is `not_reached` and names the first condition\nmissed; the run stays live, so the agent can fix the item and say it again.",
+        "summary": "Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a\ndescription and no open question; `defined` needs an open task with a description, a step that isn't dropped and no\nopen question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the\nitem's stage becomes the goal, and `turn_reached` is recorded. A turn sent all the way opens the next turn at once,\nrecorded as `turn_opened`. A miss is `not_reached` and names the first condition\nmissed; the run stays live, so the agent can fix the item and say it again.",
         "operationId": "reached",
         "parameters": [
           {
@@ -10347,7 +10347,7 @@
       },
       "Reach": {
         "type": "string",
-        "description": "How far a turn is meant to go.\n\n- `one`: to the next stable state (`goal`), then back to the person.\n- `all_the_way`: on through the stable states until the work is done. Until agents run turns it behaves as `one`.",
+        "description": "How far a turn is meant to go.\n\n- `one`: to the next stable state (`goal`), then back to the person.\n- `all_the_way`: on through the stable states until the work is done. Each turn goes to the next stable state, and\n  when a run reaches it the next turn opens at once.",
         "enum": [
           "one",
           "all_the_way"

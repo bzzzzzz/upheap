@@ -15,7 +15,8 @@ use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
 pub enum Reach {
     /// To the next stable state, then back to the person.
     One,
-    /// On through the stable states until the work is done. Behaves as [`Reach::One`] until runs exist.
+    /// On through the stable states until the work is done. Each turn still goes one stable state; the next opens
+    /// when it is reached (see [`Turn::follow_on`]).
     AllTheWay,
 }
 
@@ -281,6 +282,28 @@ impl Turn {
         }
     }
 
+    /// The turn that opens when this one, sent all the way, is reached short of done: the same reach, line, source and
+    /// opener, going to the goal [`goal_for`] says for `item` as it is once this turn is reached. `None` for a turn
+    /// of one state, for one that reached done, and for a reminder, which takes no turn.
+    #[must_use]
+    pub fn follow_on(&self, id: TurnId, item: &Item, now: Timestamp) -> Option<Self> {
+        if self.reach != Reach::AllTheWay || self.goal == Goal::Done || item.kind == Kind::Reminder {
+            return None;
+        }
+        Some(Self {
+            id,
+            item_id: self.item_id,
+            reach: self.reach,
+            goal: goal_for(item),
+            line: self.line.clone(),
+            opened_by: self.opened_by,
+            source: self.source,
+            opened_at: now,
+            ended: None,
+            failed_runs: 0,
+        })
+    }
+
     /// This turn taken back by `by` at `now`.
     #[must_use]
     pub fn take_back(&self, by: UserId, now: Timestamp) -> Self {
@@ -410,6 +433,77 @@ mod tests {
             closed_by: None,
         };
         expect_that!(with_agent(&closed, &heap(false), 0, true, false), eq(false));
+    }
+
+    fn all_the_way(note: &Item) -> Turn {
+        let mut turn = Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            note,
+            Reach::AllTheWay,
+            TurnLine::parse("Use the new CA.").expect("valid"),
+            TurnSource::GoAhead,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+        turn.failed_runs = 2;
+        turn
+    }
+
+    #[gtest]
+    fn a_turn_sent_all_the_way_is_followed_by_one_to_the_next_state() {
+        // Arrange
+        let reached_item = item(Kind::Note, Stage::WithContext);
+        let turn = all_the_way(&item(Kind::Note, Stage::AsWritten));
+        let id = TurnId::from_uuid(Uuid::from_u128(41));
+        let now = Timestamp::EPOCH;
+
+        // Act
+        let next = turn.follow_on(id, &reached_item, now);
+
+        // Assert
+        expect_that!(
+            next,
+            some(eq(&Turn {
+                id,
+                item_id: turn.item_id,
+                reach: Reach::AllTheWay,
+                goal: Goal::Defined,
+                line: turn.line.clone(),
+                opened_by: turn.opened_by,
+                source: TurnSource::GoAhead,
+                opened_at: now,
+                ended: None,
+                failed_runs: 0,
+            }))
+        );
+    }
+
+    #[gtest]
+    fn the_follow_on_of_a_defined_task_goes_to_done() {
+        let turn = all_the_way(&item(Kind::Task, Stage::WithContext));
+        let next = turn.follow_on(
+            TurnId::from_uuid(Uuid::from_u128(41)),
+            &item(Kind::Task, Stage::Defined),
+            Timestamp::EPOCH,
+        );
+        expect_that!(next.map(|next| next.goal), some(eq(Goal::Done)));
+    }
+
+    #[gtest]
+    fn a_turn_of_one_state_a_turn_to_done_and_a_reminder_have_no_follow_on() {
+        let id = TurnId::from_uuid(Uuid::from_u128(41));
+        let note = item(Kind::Note, Stage::WithContext);
+        let mut one = all_the_way(&note);
+        one.reach = Reach::One;
+        expect_that!(one.follow_on(id, &note, Timestamp::EPOCH), none());
+
+        let mut to_done = all_the_way(&note);
+        to_done.goal = Goal::Done;
+        expect_that!(to_done.follow_on(id, &note, Timestamp::EPOCH), none());
+
+        let turn = all_the_way(&note);
+        let reminder = item(Kind::Reminder, Stage::AsWritten);
+        expect_that!(turn.follow_on(id, &reminder, Timestamp::EPOCH), none());
     }
 
     #[gtest]
