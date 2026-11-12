@@ -383,6 +383,35 @@ test("a list row says it waits for you until the question is answered", async ({
   expect((await (await page.request.get(item)).json()).waits_for_you).toBe(false);
 });
 
+test("the count follows questions asked elsewhere every 30 s, on a list and on a page without one", async ({
+  page,
+  heapPath,
+}) => {
+  // A faked clock, so 30 s pass at once; installed before the page loads, so the app's timers use it.
+  await page.clock.install();
+  await page.reload();
+  await expect(entry(page)).toHaveAccessibleName(/^Waiting( for me)?$/);
+
+  // On the list: a question asked through the API, as an agent would, reaches the row and the count on the next poll,
+  // with no reload, focus or write of the person's own.
+  await seed(page, heapPath, { title: "Rotate the certs", questions: [{ kind: "question", text: "Which CA?" }] });
+  await page.clock.fastForward(30_000);
+  await expect(
+    page
+      .getByRole("listitem")
+      .filter({ hasText: "Rotate the certs" })
+      .getByRole("link", { name: /waits for you/ }),
+  ).toBeVisible();
+  await expect(entry(page)).toHaveAccessibleName(/ 1$/);
+
+  // On a page without the ranked list, the count still follows.
+  await page.goto(`${heapPath}/closed`);
+  await expect(entry(page)).toHaveAccessibleName(/ 1$/);
+  await seed(page, heapPath, { title: "Plan the launch", questions: [{ kind: "question", text: "Which date?" }] });
+  await page.clock.fastForward(30_000);
+  await expect(entry(page)).toHaveAccessibleName(/ 2$/);
+});
+
 test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in More", async ({ page }) => {
   test.skip(!isPhone(page), "Tabs are the phone's.");
   const tabs = page.getByRole("navigation", { name: "Heap views" });

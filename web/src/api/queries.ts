@@ -75,6 +75,12 @@ const waitingKey = ["waiting"] as const;
 const usersKey = (query: string) => ["users", query] as const;
 
 /**
+ * How often what others change on the server reaches a page left open: the ranked list and the Waiting count are
+ * fetched again on this interval. TanStack Query skips it while the tab is hidden.
+ */
+const POLL_INTERVAL = 30_000;
+
+/**
  * The ranked list in one view, kept stable within a session: the first response's `as_of` is sent back on every
  * refetch and view change, so only edited items move; reloading the page ranks at the current time. While a new
  * view loads, the previous one stays on screen.
@@ -93,7 +99,7 @@ export function useRankedList(heap: HeapRef, view: ListViewQuery) {
       return data;
     },
     placeholderData: keepPreviousData,
-    refetchInterval: 30_000,
+    refetchInterval: POLL_INTERVAL,
   });
   return query;
 }
@@ -184,14 +190,15 @@ export function useItem(heap: HeapRef, key: string) {
 
 /**
  * What waits for the person across their heaps (ux.md, Waiting for me): its count is in the navigation, so it's fetched
- * for every page, once signed in. Kept fresh for 30 s and fetched again on window focus and after writes (no
- * polling).
+ * for every page, once signed in. Fetched again every 30 s like the list, so a question an agent or a teammate asks
+ * reaches the count with no write of the person's own, and also on window focus and after writes.
  */
 export function useWaiting() {
   return useQuery({
     queryKey: waitingKey,
     queryFn: async () => unwrap(await api.GET("/api/v1/me/waiting")),
-    staleTime: 30_000,
+    staleTime: POLL_INTERVAL,
+    refetchInterval: POLL_INTERVAL,
   });
 }
 
