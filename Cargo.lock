@@ -115,7 +115,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "api-types",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "api-types"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "domain",
  "googletest",
@@ -864,7 +864,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "api",
@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "googletest",
  "jiff",
@@ -3506,7 +3506,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "api",
@@ -3526,7 +3526,7 @@ dependencies = [
 
 [[package]]
 name = "service"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -3853,7 +3853,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "domain",
