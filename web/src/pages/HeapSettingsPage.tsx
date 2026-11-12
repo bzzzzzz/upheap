@@ -8,18 +8,20 @@ import { BASE } from "../basePath";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
+import { Markdown } from "../components/Markdown";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, inputClass, nameFormClasses } from "./settingsForm";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
+// On a phone the five tabs are a little tighter, so they fit a 375 px screen and none hides off its edge.
 const tabClass =
-  "-mb-px flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm font-medium text-ink-soft hover:text-ink data-[status=active]:border-accent data-[status=active]:text-ink";
+  "-mb-px flex min-h-11 shrink-0 items-center border-b-2 border-transparent px-3 text-sm font-medium max-sm:px-2 max-sm:text-[13px] text-ink-soft hover:text-ink data-[status=active]:border-accent data-[status=active]:text-ink";
 
 /**
- * The heap's settings (ux.md, Heap settings): General (name, link name, archive), Tags, Parameters and Ranking, each a tab
- * with its own path under `/settings`. The tab's page renders below them.
+ * The heap's settings (ux.md, Heap settings): General (name, link name, agents, archive), Context, Tags, Parameters and
+ * Ranking, each a tab with its own path under `/settings`. The tab's page renders below them.
  */
 export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
   const { data: heap } = useHeap(heapRef);
@@ -28,7 +30,7 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
       <h1 className="mt-6 mb-3 text-[22px] font-semibold tracking-[-0.015em] sm:mb-1">Settings</h1>
       {/* A phone's top bar already names the heap. */}
       {heap && <p className="mb-3 hidden text-sm text-muted sm:block">{heap.name}</p>}
-      <nav aria-label="Settings" className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
+      <nav aria-label="Settings" className="mb-6 flex gap-1 overflow-x-auto border-b border-line max-sm:gap-0">
         <Link
           to="/teams/$team/heaps/$heap/settings"
           params={heapRef}
@@ -36,6 +38,9 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
           className={tabClass}
         >
           General
+        </Link>
+        <Link to="/teams/$team/heaps/$heap/settings/context" params={heapRef} className={tabClass}>
+          Context
         </Link>
         <Link to="/teams/$team/heaps/$heap/settings/tags" params={heapRef} className={tabClass}>
           Tags
@@ -53,7 +58,7 @@ export function HeapSettingsLayout({ heap: heapRef }: { heap: HeapRef }) {
 }
 
 /**
- * The heap's name, its link name (the last part of its path), its context and whether it's archived. Those who may
+ * The heap's name, its link name (the last part of its path), its agents and whether it's archived. Those who may
  * change them, as `allowed_actions` says, edit them in place; everyone else reads them.
  */
 export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
@@ -151,8 +156,6 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
         {can("view_history") && <HistoryDisclosure scope={{ team: heapRef.team }} entityId={data.id} />}
       </section>
 
-      <HeapContextCard team={heapRef.team} heap={data} canEdit={can("edit_context")} />
-
       <AgentsCard team={heapRef.team} heap={data} canSet={can("set_agents_prepare")} />
 
       {can(archiveAction) && (
@@ -226,7 +229,31 @@ function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: 
 const CONTEXT_MAX_CHARS = 20_000;
 
 /**
- * The heap's context, as written: read in place, with an Edit button that turns the card into a form (ux.md, Heap
+ * The Context tab (ux.md, Heap settings): the heap's context card, with the same loading and error handling as General.
+ */
+export function HeapContextSettings({ heap: heapRef }: { heap: HeapRef }) {
+  const heap = useHeap(heapRef);
+  // A failed refetch keeps the data; the error shows only without it.
+  if (!heap.data) {
+    if (heap.isError) {
+      return (
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {heap.error.message}
+        </p>
+      );
+    }
+    return <p className="py-16 text-center text-muted">Loading…</p>;
+  }
+  const data = heap.data;
+  return (
+    <div className="flex max-w-[640px] flex-col gap-4 sm:gap-6">
+      <HeapContextCard team={heapRef.team} heap={data} canEdit={data.allowed_actions.includes("edit_context")} />
+    </div>
+  );
+}
+
+/**
+ * The heap's context, as Markdown text: read in place, with an Edit button that turns the card into a form (ux.md, Heap
  * settings). The draft is local state from the press of Edit, so a refetch of the heap doesn't touch it; a failed
  * save keeps the form and the draft open. Escape does nothing, so a long draft is never lost to a stray key.
  */
@@ -285,9 +312,13 @@ function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; ca
           {contextChanged && (
             <div className="w-full">
               <h3 className="text-sm/normal font-medium text-ink">Saved meanwhile</h3>
-              <p className="mt-1 rounded-md border border-line bg-canvas p-3 text-sm/normal break-words whitespace-pre-wrap text-ink-soft">
-                {heap.context ?? "No context."}
-              </p>
+              <div className="mt-1 rounded-md border border-line bg-canvas p-3">
+                {heap.context ? (
+                  <Markdown text={heap.context} className="text-ink-soft" />
+                ) : (
+                  <p className="text-sm/normal text-ink-soft">No context.</p>
+                )}
+              </div>
             </div>
           )}
           <textarea
@@ -320,7 +351,9 @@ function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; ca
       ) : (
         <>
           {heap.context ? (
-            <p className="mt-2 text-sm/normal break-words whitespace-pre-wrap text-ink-soft">{heap.context}</p>
+            <div className="mt-2">
+              <Markdown text={heap.context} className="text-ink-soft" />
+            </div>
           ) : (
             <p className="mt-2 text-sm/normal text-muted">
               What the project is, where its repository and docs are, where its work is reviewed and what finishing a

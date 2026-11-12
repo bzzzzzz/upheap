@@ -20,7 +20,7 @@ pub struct AddArgs {
     /// The item: its key, team/heap/key, or a link to it
     #[arg(value_name = "ITEM")]
     pub item: String,
-    /// The comment: plain text, up to 20,000 characters. Or use --file
+    /// The comment: Markdown, up to 20,000 characters. Or use --file
     #[arg(value_name = "TEXT", conflicts_with = "file", required_unless_present = "file")]
     pub text: Option<String>,
     /// Read the comment from this file, or from stdin for `-`

@@ -352,7 +352,7 @@ pub struct StepDto {
     /// by its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.
     pub number: u32,
     pub title: String,
-    /// Plain text; `null` when there is none.
+    /// Markdown; `null` when there is none.
     pub context: Option<String>,
     pub state: StepStateDto,
     /// Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the
@@ -464,7 +464,7 @@ impl From<QuestionAction> for QuestionActionDto {
 pub struct QuestionReplyDto {
     /// Indices into the question's `choices`, ascending. Empty for a question without choices.
     pub picked: Vec<u32>,
-    /// Plain text; `null` when there is none.
+    /// Markdown; `null` when there is none.
     pub comment: Option<String>,
     /// Who replied. `null` when it can't be traced.
     pub replied_by: Option<UserRefDto>,
@@ -484,7 +484,7 @@ pub struct QuestionDto {
     pub kind: QuestionKindDto,
     /// The short version: one line.
     pub text: String,
-    /// The long version, plain text; `null` when there is none.
+    /// The long version, Markdown; `null` when there is none.
     pub details: Option<String>,
     /// The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
     /// `Can't be done`.

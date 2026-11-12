@@ -17,7 +17,7 @@ use crate::common::{StepStateDto, double_option};
 pub struct AddStepDto {
     /// 1 to 300 characters.
     pub title: String,
-    /// Plain text, at most 20,000 characters; blank means none.
+    /// Markdown, at most 20,000 characters; blank means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
     /// The number of the step the new one goes right after. Left out, the step goes at the end.
@@ -48,7 +48,7 @@ impl AddStepDto {
 pub struct StepPatchDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    /// Plain text; `null` or blank clears it.
+    /// Markdown; `null` or blank clears it.
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub context: Option<Option<String>>,

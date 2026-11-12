@@ -4,7 +4,9 @@ import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef, Item, Step, StepPatch } from "../api/client";
 import { useAddStep, useUpdateStep } from "../api/queries";
+import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
+import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 
 /**
@@ -48,7 +50,12 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
               step={step}
               contextShown={shown.has(step.number)}
               onToggleContext={() => toggleContext(step.number)}
-              onSave={(patch) => update.mutate({ step, patch })}
+              onSave={(patch) =>
+                update.mutateAsync({ step, patch }).then(
+                  () => true,
+                  () => false,
+                )
+              }
             />
           ))}
         </ul>
@@ -85,21 +92,43 @@ function StepRow({
   step: Step;
   contextShown: boolean;
   onToggleContext: () => void;
-  onSave: (patch: StepPatch) => void;
+  /** Resolves to whether the save landed; a failure is shown by the list. */
+  onSave: (patch: StepPatch) => Promise<boolean>;
 }) {
   const canEdit = step.allowed_actions.includes("edit");
   const dropped = step.state === "dropped";
   const hasDisclosure = Boolean(step.context) || canEdit;
+  // Whether the context's textarea is open. An editor sees it at once for a step with no context, so adding takes one
+  // step; with a context it shows rendered until Edit. Focusing the textarea sets the flag, so a context arriving from
+  // elsewhere never swaps a draft out from under the typing.
+  const [editingContext, setEditingContext] = useState(false);
+  const contextField = useRef<HTMLTextAreaElement>(null);
+  // Counts the context's saves, so only the latest one closes the field: an earlier save landing while a later one
+  // is in flight (and may fail) must not take its draft away.
+  const contextSaves = useRef(0);
+  // Set by Edit, so focus goes into the field once it is there.
+  const focusContext = useRef(false);
+  useEffect(() => {
+    if (editingContext && focusContext.current) {
+      focusContext.current = false;
+      const field = contextField.current;
+      field?.focus();
+      field?.setSelectionRange(field.value.length, field.value.length);
+    }
+  }, [editingContext]);
 
   const saveTitle = (field: HTMLTextAreaElement) => {
     const title = field.value.trim();
     // A blank title isn't saved, and neither is a title that hasn't changed: the field shows the saved one again.
-    if (title !== "" && title !== step.title) onSave({ title });
+    if (title !== "" && title !== step.title) void onSave({ title });
     else field.value = step.title;
   };
-  const saveContext = (text: string) => {
+  // Saves a changed context, and resolves to whether the field may close: at once when nothing changed, else once the
+  // save has landed, so a failed save keeps the draft in the field.
+  const saveContext = (text: string): Promise<boolean> => {
     const context = text.trim();
-    if (context !== (step.context ?? "")) onSave({ context: context === "" ? null : context });
+    if (context === (step.context ?? "")) return Promise.resolve(true);
+    return onSave({ context: context === "" ? null : context });
   };
 
   return (
@@ -201,18 +230,50 @@ function StepRow({
       </div>
       {contextShown && (
         <div className="pr-1 pb-2 pl-9 pointer-coarse:pl-11">
-          {canEdit ? (
+          {canEdit && (editingContext || !step.context) ? (
             <textarea
+              ref={contextField}
               aria-label="Step context"
-              key={step.context ?? ""}
               defaultValue={step.context ?? ""}
               rows={2}
               placeholder="Background for this step"
-              onBlur={(e) => saveContext(e.target.value)}
+              onFocus={() => setEditingContext(true)}
+              onKeyDown={(e) => {
+                // Escape does nothing here, so a draft is never lost to a stray key and the item stays open.
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onBlur={(e) => {
+                const field = e.currentTarget;
+                const save = ++contextSaves.current;
+                void saveContext(field.value).then((landed) => {
+                  // Back to the rendered text, unless the save failed, a later one is on its way, or the person came
+                  // back to the field meanwhile.
+                  if (landed && save === contextSaves.current && document.activeElement !== field) {
+                    setEditingContext(false);
+                  }
+                });
+              }}
               className="field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base"
             />
           ) : (
-            <p className="text-sm whitespace-pre-wrap text-ink-soft">{step.context}</p>
+            <>
+              {step.context && <Markdown text={step.context} className="text-ink-soft" />}
+              {canEdit && (
+                <Button
+                  aria-label="Edit step context"
+                  onPress={() => {
+                    focusContext.current = true;
+                    setEditingContext(true);
+                  }}
+                  className={`${compactButtonClass.quiet} -ml-3 min-h-9 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent`}
+                >
+                  Edit
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}

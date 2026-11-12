@@ -18,7 +18,7 @@ pub struct AskQuestionDto {
     pub kind: QuestionKindDto,
     /// The short version: 1 to 300 characters, on one line.
     pub text: String,
-    /// The long version: plain text, at most 20,000 characters; blank means none.
+    /// The long version: Markdown, at most 20,000 characters; blank means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
     /// For a `question`: none, or from 2 to 10 labels to pick from, each 1 to 100 characters on one line, no two the
@@ -64,7 +64,7 @@ pub struct ReplyDto {
     /// that takes one pick, one or more when it takes `many`. Ascending or not, without repeats.
     #[serde(default)]
     pub picked: Vec<u32>,
-    /// Plain text, at most 20,000 characters. Required for a question without choices; otherwise optional.
+    /// Markdown, at most 20,000 characters. Required for a question without choices; otherwise optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 }

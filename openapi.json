@@ -7054,7 +7054,7 @@
         "properties": {
           "body": {
             "type": "string",
-            "description": "Plain text, trimmed, 1 to 20,000 characters. Line breaks are kept."
+            "description": "Markdown, trimmed, 1 to 20,000 characters. Line breaks are kept."
           }
         },
         "additionalProperties": false
@@ -7106,7 +7106,7 @@
               "string",
               "null"
             ],
-            "description": "Plain text, at most 20,000 characters; blank means none."
+            "description": "Markdown, at most 20,000 characters; blank means none."
           },
           "title": {
             "type": "string",
@@ -7197,7 +7197,7 @@
               "string",
               "null"
             ],
-            "description": "The long version: plain text, at most 20,000 characters; blank means none."
+            "description": "The long version: Markdown, at most 20,000 characters; blank means none."
           },
           "kind": {
             "$ref": "#/components/schemas/QuestionKind"
@@ -7608,7 +7608,7 @@
         "properties": {
           "body": {
             "type": "string",
-            "description": "Plain text, with its line breaks."
+            "description": "Markdown, as written."
           },
           "created_at": {
             "type": "integer",
@@ -8006,7 +8006,7 @@
               "string",
               "null"
             ],
-            "description": "What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as\nwritten: plain text for now, Markdown later. `null` when nobody has written one."
+            "description": "What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as\nwritten, in Markdown. `null` when nobody has written one."
           },
           "id": {
             "type": "string",
@@ -9948,7 +9948,7 @@
               "string",
               "null"
             ],
-            "description": "The long version, plain text; `null` when there is none."
+            "description": "The long version, Markdown; `null` when there is none."
           },
           "kind": {
             "$ref": "#/components/schemas/QuestionKind"
@@ -10064,7 +10064,7 @@
               "string",
               "null"
             ],
-            "description": "Plain text; `null` when there is none."
+            "description": "Markdown; `null` when there is none."
           },
           "picked": {
             "type": "array",
@@ -10106,7 +10106,7 @@
               "string",
               "null"
             ],
-            "description": "Plain text, at most 20,000 characters. Required for a question without choices; otherwise optional."
+            "description": "Markdown, at most 20,000 characters. Required for a question without choices; otherwise optional."
           },
           "picked": {
             "type": "array",
@@ -10725,7 +10725,7 @@
               "string",
               "null"
             ],
-            "description": "Plain text; `null` when there is none."
+            "description": "Markdown; `null` when there is none."
           },
           "id": {
             "type": "string",
@@ -10767,7 +10767,7 @@
               "string",
               "null"
             ],
-            "description": "Plain text; `null` or blank clears it."
+            "description": "Markdown; `null` or blank clears it."
           },
           "state": {
             "oneOf": [

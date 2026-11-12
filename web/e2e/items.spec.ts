@@ -769,3 +769,110 @@ test("on a phone the sheet of an item closed elsewhere shows the draft and still
   await sheet.getByRole("button", { name: "Close", exact: true }).first().click();
   await expect(sheet).toHaveCount(0);
 });
+
+/** Makes a task through the API with one step, which has this context, and opens it. */
+async function openTaskWithStep(page: Page, heapPath: string, context?: string) {
+  const headers = { "x-csrf-protection": "1" };
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers,
+    data: { title: "Rotate the certs", need: "expected" },
+  });
+  expect(created.status()).toBe(201);
+  const { key, version } = await created.json();
+  const item = `/api/v1${heapPath}/items/${key}`;
+  const made = await page.request.patch(item, {
+    headers: { ...headers, "If-Match": `"${version}"` },
+    data: { kind: "task" },
+  });
+  expect(made.status()).toBe(200);
+  const step = await page.request.post(`${item}/steps`, { headers, data: { title: "Inventory the certs", context } });
+  expect(step.status()).toBe(201);
+  await page.goto(`${heapPath}/items/${key}`);
+  const steps = itemPane(page).getByRole("region", { name: "Steps" });
+  await expect(steps.getByRole("textbox", { name: "Step title" })).toHaveValue("Inventory the certs");
+  return steps;
+}
+
+test("a step's context renders as Markdown, and Edit opens its source in a field that saves on leaving it", async ({
+  page,
+  heapPath,
+}) => {
+  const steps = await openTaskWithStep(page, heapPath);
+  // With no context the field is there at once, so adding takes one step; leaving it saves and shows it rendered.
+  await steps.getByRole("button", { name: "Show context" }).click();
+  const field = steps.getByRole("textbox", { name: "Step context" });
+  await field.fill("Use **bold**\nand <b>raw</b>");
+  await field.press("Tab");
+  await expect(steps.locator("strong")).toHaveText("bold");
+  await expect(field).toHaveCount(0);
+  await expect(steps.locator("b")).toHaveCount(0);
+  const edit = steps.getByRole("button", { name: "Edit step context" });
+  await expect(edit).toBeVisible();
+
+  // Edit shows the source, focused with the caret at the end; leaving it saves the change.
+  await edit.click();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("Use **bold**\nand <b>raw</b>");
+  await page.keyboard.type(" more");
+  await field.press("Tab");
+  await expect(steps.getByText("raw more")).toBeVisible();
+  await expect(field).toHaveCount(0);
+
+  // Unchanged text goes back to the rendered text without a save.
+  await edit.click();
+  await field.press("Tab");
+  await expect(field).toHaveCount(0);
+  await expect(edit).toBeVisible();
+  await page.reload();
+  await itemPane(page).getByRole("button", { name: "Show context" }).click();
+  await expect(itemPane(page).locator("strong")).toHaveText("bold");
+});
+
+test("a reader sees a step's context rendered and no Edit", async ({ page, heapPath }) => {
+  const steps = await openTaskWithStep(page, heapPath, "Check **all** hosts");
+  const archived = await page.request.post(`/api/v1${heapPath}/archive`, { headers: { "x-csrf-protection": "1" } });
+  expect(archived.ok()).toBe(true);
+  await page.reload();
+  await steps.getByRole("button", { name: "Show context" }).click();
+  await expect(steps.locator("strong")).toHaveText("all");
+  await expect(steps.getByRole("button", { name: "Edit step context" })).toHaveCount(0);
+  await expect(steps.getByRole("textbox", { name: "Step context" })).toHaveCount(0);
+});
+
+test("a step's context edit that fails to save stays in the field, and Escape neither drops it nor closes the item", async ({
+  page,
+  heapPath,
+}) => {
+  const steps = await openTaskWithStep(page, heapPath, "Old text");
+  await steps.getByRole("button", { name: "Show context" }).click();
+  await steps.getByRole("button", { name: "Edit step context" }).click();
+  const field = steps.getByRole("textbox", { name: "Step context" });
+  await field.fill("New");
+  // Escape leaves the draft and the item open: typing goes on in the same field.
+  await field.press("Escape");
+  await page.keyboard.type(" text");
+  await expect(field).toHaveValue("New text");
+  await expect(page).toHaveURL(/\/items\//);
+
+  // The save is refused: the field stays, with the draft, and the reason shows.
+  await page.route(/\/steps\/\d+$/, (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          status: 500,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ type: "about:blank", title: "Internal error", status: 500, code: "internal" }),
+        })
+      : route.fallback(),
+  );
+  await field.press("Tab");
+  await expect(steps.getByRole("alert")).toBeVisible();
+  await expect(field).toHaveValue("New text");
+  await expect(steps.locator("p", { hasText: "Old text" })).toHaveCount(0);
+
+  // Once it can be saved, leaving the field again saves it and shows it rendered.
+  await page.unroute(/\/steps\/\d+$/);
+  await field.focus();
+  await field.press("Tab");
+  await expect(field).toHaveCount(0);
+  await expect(steps.getByText("New text")).toBeVisible();
+});

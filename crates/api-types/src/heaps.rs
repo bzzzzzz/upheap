@@ -76,7 +76,7 @@ pub struct HeapDto {
     pub slug: String,
     pub name: String,
     /// What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
-    /// written: plain text for now, Markdown later. `null` when nobody has written one.
+    /// written, in Markdown. `null` when nobody has written one.
     pub context: Option<String>,
     /// Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with
     /// context, a task to defined. Off for a new heap.

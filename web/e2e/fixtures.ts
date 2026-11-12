@@ -302,16 +302,17 @@ export async function expectFitsWidth(page: Page, name: string) {
   expect(overflow, `${name} scrolls sideways`).toBeLessThanOrEqual(0);
 }
 
-/** A page the app's navigation leads to. Tags, Parameters and Ranking are tabs of the heap's Settings. */
-export type AppPage = "Open" | "Closed" | "Activity" | "Settings" | "Tags" | "Parameters" | "Ranking" | "Account";
+/** A page the app's navigation leads to. Context, Tags, Parameters and Ranking are tabs of the heap's Settings. */
+export type AppPage =
+  "Open" | "Closed" | "Activity" | "Settings" | "Context" | "Tags" | "Parameters" | "Ranking" | "Account";
 
 /**
  * Goes to one of the app's pages through its navigation, wherever the layout puts it: the sidebar on a wide screen,
- * the rail on a tablet, and on a phone the bottom tabs or their More menu. Tags, Parameters and Ranking go through
+ * the rail on a tablet, and on a phone the bottom tabs or their More menu. Context, Tags, Parameters and Ranking go through
  * Settings.
  */
 export async function goTo(page: Page, name: AppPage) {
-  if (name === "Tags" || name === "Parameters" || name === "Ranking") {
+  if (name === "Context" || name === "Tags" || name === "Parameters" || name === "Ranking") {
     const tab = page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name, exact: true });
     if (!(await tab.isVisible())) await goTo(page, "Settings");
     await tab.click();

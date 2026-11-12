@@ -1353,7 +1353,7 @@ export interface components {
         };
         /** @description A comment to add to an item. */
         AddCommentRequest: {
-            /** @description Plain text, trimmed, 1 to 20,000 characters. Line breaks are kept. */
+            /** @description Markdown, trimmed, 1 to 20,000 characters. Line breaks are kept. */
             body: string;
         };
         AddMemberRequest: {
@@ -1377,7 +1377,7 @@ export interface components {
              * @description The number of the step the new one goes right after. Left out, the step goes at the end.
              */
             after?: number | null;
-            /** @description Plain text, at most 20,000 characters; blank means none. */
+            /** @description Markdown, at most 20,000 characters; blank means none. */
             context?: string | null;
             /** @description 1 to 300 characters. */
             title: string;
@@ -1416,7 +1416,7 @@ export interface components {
              *     same ignoring case. Not for a `request`, which always has `Done` and `Can't be done`.
              */
             choices?: string[] | null;
-            /** @description The long version: plain text, at most 20,000 characters; blank means none. */
+            /** @description The long version: Markdown, at most 20,000 characters; blank means none. */
             details?: string | null;
             kind: components["schemas"]["QuestionKind"];
             /** @description Whether any number of choices may be picked. Only with `choices`. Defaults to `false`. */
@@ -1569,7 +1569,7 @@ export interface components {
         };
         /** @description One comment on an item. A comment is never changed or deleted. */
         Comment: {
-            /** @description Plain text, with its line breaks. */
+            /** @description Markdown, as written. */
             body: string;
             /**
              * Format: int64
@@ -1722,7 +1722,7 @@ export interface components {
             archived_at?: number | null;
             /**
              * @description What the project is, where its knowledge lives, where work is reviewed and what finishing a piece means, as
-             *     written: plain text for now, Markdown later. `null` when nobody has written one.
+             *     written, in Markdown. `null` when nobody has written one.
              */
             context?: string | null;
             /** Format: uuid */
@@ -2478,7 +2478,7 @@ export interface components {
              *     `Can't be done`.
              */
             choices: string[];
-            /** @description The long version, plain text; `null` when there is none. */
+            /** @description The long version, Markdown; `null` when there is none. */
             details?: string | null;
             kind: components["schemas"]["QuestionKind"];
             /** @description Whether any number of choices may be picked, not just one. */
@@ -2529,7 +2529,7 @@ export interface components {
         };
         /** @description The reply to a question. */
         QuestionReply: {
-            /** @description Plain text; `null` when there is none. */
+            /** @description Markdown; `null` when there is none. */
             comment?: string | null;
             /** @description Indices into the question's `choices`, ascending. Empty for a question without choices. */
             picked: number[];
@@ -2544,7 +2544,7 @@ export interface components {
         };
         /** @description A reply to a question. */
         QuestionReplyRequest: {
-            /** @description Plain text, at most 20,000 characters. Required for a question without choices; otherwise optional. */
+            /** @description Markdown, at most 20,000 characters. Required for a question without choices; otherwise optional. */
             comment?: string | null;
             /**
              * @description Indices into the question's `choices`: none for a question without choices, one for a request or a question
@@ -2835,7 +2835,7 @@ export interface components {
         /** @description One step of a task. */
         Step: {
             allowed_actions: components["schemas"]["StepAction"][];
-            /** @description Plain text; `null` when there is none. */
+            /** @description Markdown; `null` when there is none. */
             context?: string | null;
             /** Format: uuid */
             id: string;
@@ -2861,7 +2861,7 @@ export interface components {
         StepAction: "edit";
         /** @description A partial edit of a step. Leave a field out to keep it; send `null` to clear the context. */
         StepPatch: {
-            /** @description Plain text; `null` or blank clears it. */
+            /** @description Markdown; `null` or blank clears it. */
             context?: string | null;
             state?: null | components["schemas"]["StepState"];
             title?: string | null;

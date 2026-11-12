@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
+import { Markdown } from "../components/Markdown";
 import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
 
@@ -191,7 +192,7 @@ function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
   );
 }
 
-/** The item's context and its heap's, as written. Fetched when this is shown, not with the page. */
+/** The item's context and its heap's, as Markdown text. Fetched when this is shown, not with the page. */
 function RowContext({ heapRef, itemKey, heapName }: { heapRef: HeapRef; itemKey: string; heapName: string }) {
   const item = useItem(heapRef, itemKey);
   const heap = useHeap(heapRef);
@@ -205,7 +206,7 @@ function RowContext({ heapRef, itemKey, heapName }: { heapRef: HeapRef; itemKey:
           {query.error.message}
         </p>
       ) : text ? (
-        <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">{text}</p>
+        <Markdown text={text} className="text-ink-soft" />
       ) : (
         <p className="text-sm text-muted">No context</p>
       )}

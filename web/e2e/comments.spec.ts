@@ -39,8 +39,9 @@ test("a comment is added from the item's field and reads under Comments with its
   const first = comments.getByRole("listitem");
   await expect(first).toHaveCount(1);
   await expect(first).toContainText("Tester ·");
-  await expect(first.locator("p").last()).toHaveText("Use the internal CA\nfor staging.");
-  await expect(first.locator("p").last()).toHaveCSS("white-space", "pre-wrap");
+  await expect(first).toContainText("Use the internal CA");
+  await expect(first).toContainText("for staging.");
+  await expect(first.locator("br")).toHaveCount(1);
   await expect(field).toHaveValue("");
   await expect(field).toBeFocused();
   await expect(comments.getByRole("status")).toHaveText("Comment added");
@@ -57,4 +58,25 @@ test("a comment is added from the item's field and reads under Comments with its
   const reloaded = itemPane(page).getByRole("region", { name: "Comments", exact: true });
   await expect(reloaded.getByRole("listitem")).toHaveCount(2);
   await expect(reloaded.getByRole("listitem").first()).toContainText("Use the internal CA");
+});
+
+test("a comment renders as Markdown and never runs raw HTML", async ({ page, heapPath }) => {
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers,
+    data: { title: "Rotate the certs", need: "expected" },
+  });
+  expect(created.status()).toBe(201);
+  const { key } = await created.json();
+  const added = await page.request.post(`/api/v1${heapPath}/items/${key}/comments`, {
+    headers,
+    data: { body: "Do **both**:\n\n- staging\n- prod\n\nthen tell <b>us</b>\nsoon" },
+  });
+  expect(added.ok()).toBe(true);
+  await page.goto(`${heapPath}/items/${key}`);
+  const comment = itemPane(page).getByRole("region", { name: "Comments", exact: true }).locator("ul > li").first();
+  await expect(comment.locator("strong")).toHaveText("both");
+  await expect(comment.getByRole("listitem")).toHaveText(["staging", "prod"]);
+  await expect(comment.locator("br")).toHaveCount(1);
+  await expect(comment.locator("b")).toHaveCount(0);
+  await expect(comment).not.toContainText("<b>");
 });
