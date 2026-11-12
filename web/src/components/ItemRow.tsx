@@ -17,6 +17,17 @@ import { TagChips } from "./TagChips";
  */
 export type ChangeState = (item: Item, state: ItemState, onError?: () => void) => void;
 
+/**
+ * The list's tag and parameter filters as a row's chips use them: what is on, and how a chip turns its own value on
+ * or off (ux.md, The list).
+ */
+export type RowFilters = {
+  tags: ReadonlySet<string>;
+  options: ReadonlySet<string>;
+  toggleTag: (tagId: string) => void;
+  toggleOption: (optionId: string) => void;
+};
+
 /** How far a row slides left to show its two actions, and how far right marks it done. */
 const ACTIONS_WIDTH = 176;
 const DONE_DISTANCE = 96;
@@ -61,8 +72,7 @@ export function ItemRow({
   selected,
   itemOpen,
   compact = false,
-  activeTags,
-  onToggleTag,
+  filters,
   onChangeState,
 }: {
   entry: RankedItem;
@@ -70,16 +80,18 @@ export function ItemRow({
   selected: boolean;
   itemOpen: boolean;
   compact?: boolean;
-  activeTags: ReadonlySet<string>;
-  onToggleTag: (tagId: string) => void;
+  filters: RowFilters;
   onChangeState: ChangeState;
 }) {
   const { item, contributors } = entry;
   const canChangeState = item.allowed_actions.includes("change_state");
   const onMarkDone = () => onChangeState(item, "done");
-  const onStart = () => {
+  const onStart = () => onChangeState(item, "in_progress");
+  // From the keyboard, the focus follows the row into In progress. A failed or cancelled start forgets it, so a later
+  // start from elsewhere doesn't pull the focus into the list.
+  const onStartFromKeyboard = () => {
     refocusAfterStart = item.key;
-    onChangeState(item, "in_progress");
+    onChangeState(item, "in_progress", () => (refocusAfterStart = undefined));
   };
   const startable = item.state === "open" || item.state === "blocked";
   const touch = useMedia(TOUCH);
@@ -97,7 +109,7 @@ export function ItemRow({
       onMarkDone();
     } else if (event.key === "s" && canChangeState && startable) {
       event.preventDefault();
-      onStart();
+      onStartFromKeyboard();
     }
   };
 
@@ -165,6 +177,7 @@ export function ItemRow({
               <span className="sr-only">
                 {item.kind === "task" && ", task"}
                 {item.kind === "reminder" && ", reminder"}
+                {item.state === "blocked" && ", blocked"}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
@@ -178,14 +191,24 @@ export function ItemRow({
               </span>
             )}
             {item.due && <DueChip due={item.due} />}
-            <TagChips tags={item.tags} active={activeTags} onToggle={onToggleTag} />
-            <ParameterChips parameters={item.parameters} className="hidden lg:inline-flex" />
+            <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />
+            <ParameterChips
+              parameters={item.parameters}
+              active={filters.options}
+              onToggle={filters.toggleOption}
+              className="hidden lg:inline-flex"
+            />
           </div>
           {!compact && contributors.length > 0 && (
             <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
           )}
           {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
-          <ParameterChips parameters={item.parameters} className="mt-1 flex lg:hidden" />
+          <ParameterChips
+            parameters={item.parameters}
+            active={filters.options}
+            onToggle={filters.toggleOption}
+            className="mt-1 flex lg:hidden"
+          />
         </div>
         {item.waits_for_you && (
           <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
@@ -212,15 +235,13 @@ export function ComingRow({
   heapRef,
   selected,
   itemOpen,
-  activeTags,
-  onToggleTag,
+  filters,
 }: {
   item: Item;
   heapRef: HeapRef;
   selected: boolean;
   itemOpen: boolean;
-  activeTags: ReadonlySet<string>;
-  onToggleTag: (tagId: string) => void;
+  filters: RowFilters;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -267,7 +288,7 @@ export function ComingRow({
                 {formatDate(item.due.date)}
               </span>
             )}
-            <TagChips tags={item.tags} active={activeTags} onToggle={onToggleTag} />
+            <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />
           </div>
         </div>
         {item.waits_for_you && (
@@ -396,8 +417,8 @@ const BUTTON =
   "group relative z-10 -m-2 flex size-10 shrink-0 items-center justify-center rounded-full p-2 text-muted pointer-coarse:-m-2.5 pointer-coarse:size-11 pointer-coarse:p-2.5";
 
 /**
- * The one-tap way to start an open or blocked item: a circle with a play mark. Above the row's link, so a tap on it
- * doesn't open the item.
+ * The one-tap way to start an open or blocked item: a circle with a play mark, dashed when the item is blocked, as the
+ * row's one sign that it waits on something. Above the row's link, so a tap on it doesn't open the item.
  */
 function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
   return (
@@ -409,7 +430,15 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
       className={`${BUTTON} hover:text-accent`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
-        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+        <circle
+          cx="12"
+          cy="12"
+          r="9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeDasharray={item.state === "blocked" ? "3 3" : undefined}
+        />
         <path
           d="M10 8.5v7l5.5-3.5z"
           fill="currentColor"

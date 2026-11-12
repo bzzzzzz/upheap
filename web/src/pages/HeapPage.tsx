@@ -13,6 +13,7 @@ import {
   ItemRow,
   useRefocusStartedRow,
   type ChangeState,
+  type RowFilters,
 } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
 import { ItemPane } from "../components/ItemPane";
@@ -266,14 +267,17 @@ function ListPage({
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length + coming.length;
   const narrowed = search.trim() !== "" || filters > 0;
-  const activeTags: ReadonlySet<string> = new Set(splitList(view.tag));
-  // A tag in a row joins the view's tag filter (any of its tags), or leaves it when it is in it already.
-  const onToggleTag = (tagId: string) => onViewChange({ ...view, tag: toggled(view.tag, tagId) });
+  // A tag or parameter chip in a row joins the view's filter, or leaves it when it is in it already.
+  const rowFilters: RowFilters = {
+    tags: new Set(splitList(view.tag)),
+    options: new Set(splitList(view.param)),
+    toggleTag: (tagId) => onViewChange({ ...view, tag: toggled(view.tag, tagId) }),
+    toggleOption: (optionId) => onViewChange({ ...view, param: toggled(view.param, optionId) }),
+  };
   const rows = (entries: RankedItem[], pinned?: boolean) => (
     <ItemList
       entries={entries}
-      activeTags={activeTags}
-      onToggleTag={onToggleTag}
+      filters={rowFilters}
       heapRef={heapRef}
       itemKey={itemKey}
       onChangeState={onChangeState}
@@ -338,8 +342,7 @@ function ListPage({
                   heapRef={heapRef}
                   selected={item.key === itemKey}
                   itemOpen={itemKey !== undefined}
-                  activeTags={activeTags}
-                  onToggleTag={onToggleTag}
+                  filters={rowFilters}
                 />
               ))}
             </ol>
@@ -423,16 +426,14 @@ function ItemList({
   entries,
   heapRef,
   itemKey,
-  activeTags,
-  onToggleTag,
+  filters,
   onChangeState,
   compact,
 }: {
   entries: RankedItem[];
   heapRef: HeapRef;
   itemKey: string | undefined;
-  activeTags: ReadonlySet<string>;
-  onToggleTag: (tagId: string) => void;
+  filters: RowFilters;
   onChangeState: ChangeState;
   compact: (entry: RankedItem) => boolean;
 }) {
@@ -447,8 +448,7 @@ function ItemList({
             selected={entry.item.key === itemKey}
             itemOpen={itemKey !== undefined}
             compact={compact(entry)}
-            activeTags={activeTags}
-            onToggleTag={onToggleTag}
+            filters={filters}
             onChangeState={onChangeState}
           />
         ))}

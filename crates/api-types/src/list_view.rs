@@ -96,8 +96,9 @@ impl From<RemindersMode> for RemindersModeDto {
     }
 }
 
-/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `need` (most needed first), `effort` (smallest first),
-/// `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its first option first).
+/// What the list is sorted by: `priority` (highest first), `due` (soonest first), `need` (most needed first),
+/// `effort` (smallest first), `impact` (largest first) or `parameter` (the custom parameter in `sort_parameter`, its
+/// first option first).
 /// Items without the value come last.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

@@ -3,17 +3,54 @@ import { useId, type ReactNode } from "react";
 import type { ItemParameter, Parameter } from "../api/client";
 import { ChoiceButtons, FieldFrame, type FieldLayout } from "./ChoiceButtons";
 
-/** The parameters of an item that has a value, as "Name: Label" chips. */
-export function ParameterChips({ parameters, className }: { parameters: ItemParameter[]; className?: string }) {
-  const set = parameters.filter((parameter) => parameter.option !== null);
+/**
+ * The parameters of an item that has a value, as "Name: Label" chips. With `onToggle` a chip is a button that adds its
+ * option to the list's parameter filter or, when it is in `active`, removes it, as a tag chip does (ux.md, The list);
+ * active chips are outlined. A chip of an archived parameter stays plain: the filter ignores archived parameters.
+ */
+export function ParameterChips({
+  parameters,
+  className,
+  active,
+  onToggle,
+}: {
+  parameters: ItemParameter[];
+  className?: string;
+  active?: ReadonlySet<string>;
+  onToggle?: (optionId: string) => void;
+}) {
+  const set = parameters.filter((parameter) => parameter.option);
   if (set.length === 0) return null;
   return (
     <ul className={`flex-wrap gap-1 ${className ?? "inline-flex"}`} aria-label="Parameters">
-      {set.map((parameter) => (
-        <li key={parameter.parameter_id} className="rounded-md bg-param-soft px-1.5 text-xs text-param-ink">
-          {parameter.name}: {parameter.option?.label}
-        </li>
-      ))}
+      {set.map(({ parameter_id, name, option, parameter_archived }) => {
+        if (!option) return null;
+        const words = `${name}: ${option.label}`;
+        if (!onToggle || parameter_archived) {
+          return (
+            <li key={parameter_id} className="rounded-md bg-param-soft px-1.5 text-xs text-param-ink">
+              {words}
+            </li>
+          );
+        }
+        const on = active?.has(option.id) ?? false;
+        return (
+          <li key={parameter_id} className="flex">
+            {/* The same 24 px hit area as a tag chip (TagChips), without growing the chip. */}
+            <button
+              type="button"
+              aria-pressed={on}
+              aria-label={on ? `Remove filter ${words}` : `Filter by ${words}`}
+              onClick={() => onToggle(option.id)}
+              className={`relative z-10 cursor-pointer rounded-md border px-1.5 text-xs text-param-ink before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${
+                on ? "border-param-ink bg-transparent" : "border-transparent bg-param-soft"
+              }`}
+            >
+              {words}
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

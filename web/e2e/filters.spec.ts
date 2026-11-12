@@ -172,6 +172,46 @@ test("a tag in a row filters the list, a second tag adds to it, and the same tag
   await expect(on).toHaveCount(0);
 });
 
+test("a parameter chip in a row filters the list by its option, and again takes it off", async ({ page, heapPath }) => {
+  const headers = { "x-csrf-protection": "1" };
+  const created = await page.request.post(`/api/v1${heapPath}/parameters`, {
+    headers,
+    data: { name: "Energy", options: ["High", "Low"] },
+  });
+  expect(created.status()).toBe(201);
+  const energy = (await created.json()) as { id: string; options: { id: string; label: string }[] };
+  const option = (label: string) => energy.options.find((o) => o.label === label)?.id ?? "";
+  const item = async (title: string, parameter_values: Record<string, string>) => {
+    const made = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers,
+      data: { title, need: "expected", parameter_values },
+    });
+    expect(made.status()).toBe(201);
+  };
+  await item("Deep work", { [energy.id]: option("High") });
+  await item("Inbox zero", { [energy.id]: option("Low") });
+  await item("No energy set", {});
+  await page.goto(heapPath);
+  await expect(row(page, "No energy set")).toBeVisible();
+  const deep = row(page, "Deep work");
+  const on = page.getByRole("group", { name: "Filters on" });
+
+  await deep.getByRole("button", { name: "Filter by Energy: High" }).click();
+  await expect(on).toContainText("1 of 3");
+  await expect(row(page, "Inbox zero")).toHaveCount(0);
+  await expect(row(page, "No energy set")).toHaveCount(0);
+  // Pressing a chip never opens the item.
+  await expect(page).not.toHaveURL(/\/items\//);
+  await expect(deep.getByRole("button", { name: "Remove filter Energy: High" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await deep.getByRole("button", { name: "Remove filter Energy: High" }).click();
+  await expect(row(page, "No energy set")).toBeVisible();
+  await expect(on).toHaveCount(0);
+});
+
 test("the list sorts by need, most needed first", async ({ page }) => {
   await addItem(page, "An idea", { need: "Idea" });
   await addItem(page, "Nice extra", { need: "Nice to have" });

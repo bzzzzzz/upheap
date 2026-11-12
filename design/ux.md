@@ -45,11 +45,11 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    opens. The admin adds a heap, adds each teammate (who must have an account; invitations come later), and makes a
    second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
    switcher.
-3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one from
-   the item or by swiping its row left; finish it with the state circle, a swipe right, or Done in the item; each
-   change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone. Re-size or re-date in the
-   item and watch it move. Block an item, naming what it waits for; it leaves the list, since blocked items are
-   hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
+3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one with
+   its row's play button, `s`, a swipe left or Start in the item; finish it with its row's circle, a swipe right, or
+   Done in the item; each change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone.
+   Re-size or re-date in the item and watch it move. Block an item, naming what it waits for; it leaves the list,
+   since blocked items are hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
    teammates' changes arrive as the list refetches, and rows animate to their new places.
 4. **Weekly review** (weekly). Closed: reopen what was closed by mistake, within its week, which is also the fix for
    a missed Undo (recovery). Back in the list, close what won't happen as Won't do and re-size the rest. A reload
@@ -163,8 +163,8 @@ A tablet gets its own layout rather than a stretched phone or a squeezed wide sc
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
    list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels;
    the account sits at the bottom.
-2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows,
-   including the effort and impact sizes, at touch sizes (44 px targets).
+2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows at
+   touch sizes (44 px targets).
 3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
    row switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it.
    Its controls are the phone sheet's (Start, Blocked, Done buttons; S M L XL buttons).
@@ -210,7 +210,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
    kept for parameters everywhere, so they read apart from tags (grey) and due dates.
 3. The main button, at the start of the row, acts in one tap. On an open or blocked row it is a play button that
-   starts the item. With a mouse, hovering or focusing it shows a done button, a small circle with a check, beside it;
+   starts the item; a blocked row's circle is dashed, and a screen reader hears ", blocked" after the title. With a mouse, hovering or focusing it shows a done button, a small circle with a check, beside it;
    a touch screen has no done button and swipes instead (point 5). On an in-progress row the main button is a
    half-filled circle that marks the item done. Without permission to change the state, the buttons are absent and
    the slot stays empty. An undo toast follows every state change from the list: bottom
@@ -265,7 +265,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 17. A tag in a row filters the list. Clicking it adds the tag to the tag filter (items with any of its tags), and
     clicking it again takes it off; the usual chip under the toolbar follows. While a tag is in the filter, its chips
-    in every row are outlined in the accent. Tags on the item, Waiting for me and the closed list are plain text.
+    in every row are outlined in the accent. A parameter chip ("Energy: Low") does the same with its option: it joins
+    the parameter filter, and is outlined in violet while it's on. Tags and parameters on the item, Waiting for me and
+    the closed list are plain text, and so is a chip of an archived parameter.
 18. Sort by offers Priority, Due soonest, Most needed, Smallest effort and Largest impact, then each custom parameter
     that has an order. Most needed lists Critical first, then Expected, Nice to have and Idea; items of the same
     need keep priority order.
