@@ -159,8 +159,11 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         added = match api.post_step(&added.value.key, &added.value.key, &body).await {
             Ok(item) => item,
             Err(err) => {
-                // With --json, stderr carries only the problem body, which scripts parse.
-                if out.mode() != Mode::Json {
+                // With --json, stderr carries only the problem body, which scripts parse; stdout gets the item as it
+                // stands, so a script still learns it was added and with which steps.
+                if out.mode() == Mode::Json {
+                    out.json(&added.body)?;
+                } else {
                     out.note(&partial_steps_note(&added.value.key, sent, steps))?;
                 }
                 return Err(err);
