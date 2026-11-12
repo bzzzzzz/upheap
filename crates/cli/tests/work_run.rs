@@ -462,6 +462,47 @@ async fn taking_the_turn_back_mid_run_stops_the_tool_and_the_line_says_so() -> R
     Ok(())
 }
 
+#[gtest]
+#[tokio::test]
+async fn a_tool_still_ending_after_it_reached_keeps_its_cost() -> Result<()> {
+    // Arrange: an agent that says reached at once, then takes its time to end, with heartbeats sent meanwhile. The
+    // server answers those as it does for a run taken back: the run is over.
+    let (_server, _ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    let agent = cli.agent();
+    let tool = StandIn::new(move |start| {
+        let agent = agent.clone();
+        async move {
+            let item = item_key_of(&start);
+            agent
+                .upheap_with_stdin(
+                    &start,
+                    &["item", "edit", &item, "--context-file", "-", "-q"],
+                    "Context.\n",
+                )
+                .await;
+            agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+            tokio::time::sleep(StdDuration::from_millis(300)).await;
+            Ok(ToolReport {
+                cost_usd: Some(0.31),
+                ..ToolReport::default()
+            })
+        }
+    });
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert: the tool was left to end, and what it cost is on the run.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.stopped(), eq(0));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![all![contains_substring("reached"), contains_substring("$0.31")]]
+    );
+    Ok(())
+}
+
 /// An agent that waits for the test to let it end, then writes the context and says reached.
 fn waiting_agent(agent: &Agent, entered: &Arc<Notify>, release: &Arc<Notify>) -> StandIn {
     let (agent, entered, release) = (agent.clone(), entered.clone(), release.clone());

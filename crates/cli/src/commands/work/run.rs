@@ -334,12 +334,18 @@ impl RunLoop<'_> {
         let mut heartbeat = tokio::time::interval_at(Instant::now() + self.heartbeat_every, self.heartbeat_every);
         heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut listening = true;
+        let mut alive = true;
         loop {
             tokio::select! {
                 result = &mut tool => return Driven::Ended(result),
-                _ = heartbeat.tick() => {
+                _ = heartbeat.tick(), if alive => {
                     if self.is_run_over(run).await {
-                        return Driven::Over;
+                        // A run that said reached is over too, with its tool still on its way out: that one is left
+                        // to end, so its cost is recorded. Any other run that is over was taken back or lapsed.
+                        if !self.has_reached(run).await {
+                            return Driven::Over;
+                        }
+                        alive = false;
                     }
                 }
                 interrupt = self.interrupts.recv(), if listening => match interrupt {
@@ -374,6 +380,15 @@ impl RunLoop<'_> {
         match sent.await {
             Err(CliError::Client(ClientError::Problem { problem, .. })) => problem.code == "run_over",
             Ok(()) | Err(_) => false,
+        }
+    }
+
+    /// Whether `run` ended as reached. Asked through `finish` with nothing to record, which leaves a run that has
+    /// ended as it is and answers with it.
+    async fn has_reached(&self, run: &RunDto) -> bool {
+        match self.finish(run, &FinishRequestDto::default()).await {
+            Ok(finished) => finished.value.end == Some(RunEndDto::Reached),
+            Err(_) => false,
         }
     }
 
