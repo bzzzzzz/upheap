@@ -666,8 +666,7 @@ section is how it maps onto this API.
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
-   item it may run
-   the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
+   item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
    person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names a new
    directory for each run and the tool makes it, with its own instructions (for Claude, `CLAUDE.md`), and starts
    there: a run then begins from nothing and can't see another run's files, and what it needs to carry on is in
