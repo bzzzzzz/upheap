@@ -426,8 +426,24 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
 }
 
 /**
- * Sends the item to an agent. The answer is the whole item, with its turn, and replaces the cached one; sending
- * needs no version, as a turn is its own row. A send refused because someone else sent the item first fetches it again.
+ * Puts the item a turn write answered with into the heap's cached lists, so a row shows the turn, or its end, as soon as
+ * the write lands rather than when the refetch after it does: until then the row would still offer to send. Only the
+ * ranked lists are changed; the blocker candidates share their key's prefix with another shape.
+ */
+function replaceListedItem(queryClient: QueryClient, heap: HeapRef, saved: Item) {
+  const swap = (entries: RankedList["ranked"]) =>
+    entries.map((entry) => (entry.item.id === saved.id ? { ...entry, item: saved } : entry));
+  queryClient.setQueriesData<RankedList>({ queryKey: rankedKey(heap) }, (list) =>
+    list && "pinned" in list
+      ? { ...list, pinned: swap(list.pinned), ranked: swap(list.ranked), blocked: swap(list.blocked) }
+      : list,
+  );
+}
+
+/**
+ * Sends the item to an agent. The answer is the whole item, with its turn, and replaces the cached one and the lists'
+ * copies; sending needs no version, as a turn is its own row. A send refused because someone else sent the item first,
+ * or blocked it, fetches it again.
  */
 export function useSendToAgent(heap: HeapRef) {
   const queryClient = useQueryClient();
@@ -439,9 +455,12 @@ export function useSendToAgent(heap: HeapRef) {
           body,
         }),
       ),
-    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      replaceListedItem(queryClient, heap, saved);
+    },
     onError: (error, { item }) => {
-      if (error instanceof ApiProblem && error.code === "turn_open") {
+      if (error instanceof ApiProblem && (error.code === "turn_open" || error.code === "turn_item_blocked")) {
         void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
       }
     },
@@ -469,6 +488,7 @@ export function useTakeBack(heap: HeapRef) {
       ),
     onSuccess: (saved) => {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      replaceListedItem(queryClient, heap, saved);
       dropStuckRow(queryClient, saved.id);
     },
     onSettled: () => {
@@ -494,6 +514,7 @@ export function useRetryTurn(heap: HeapRef) {
       ),
     onSuccess: (saved) => {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      replaceListedItem(queryClient, heap, saved);
       dropStuckRow(queryClient, saved.id);
     },
     onError: (_error, item) => {
