@@ -48,17 +48,33 @@ export async function registerThroughApi(page: Page) {
   return user;
 }
 
-/** The list row of the item titled `title`. */
+/**
+ * The list row of the item titled `title`. The row's link is named by the title and then what a screen reader hears
+ * after it (", task", ", blocked", ", with an agent"), so those may follow.
+ */
 export const row = (page: Page, title: string): Locator =>
-  page.getByRole("listitem").filter({ has: page.getByRole("link", { name: title, exact: true }) });
+  page.getByRole("listitem").filter({ has: page.getByRole("link", { name: rowLinkName(title) }) });
+
+/** The name of a row's link: the title, then what a screen reader hears after it, which Chrome starts with a space. */
+const rowLinkName = (title: string) => new RegExp(`^${escapeRegExp(title)}(\\s*, .+)?$`);
 
 /** The open item: a pane beside the list, a panel over it or a sheet, by the width. */
 export const itemPane = (page: Page): Locator => page.getByRole("region", { name: "Item", exact: true });
 
 /** Opens the item titled `title` from its row. */
 export async function openItem(page: Page, title: string) {
-  await row(page, title).getByRole("link", { name: title, exact: true }).click();
+  await row(page, title)
+    .getByRole("link", { name: rowLinkName(title) })
+    .click();
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
+}
+
+/** Opens the open item's History, which starts collapsed, and returns its region. */
+export async function openHistory(page: Page): Promise<Locator> {
+  const history = itemPane(page).getByRole("region", { name: "History", exact: true });
+  await history.locator("summary", { hasText: "History" }).click();
+  await expect(history.locator("details")).toHaveAttribute("open");
+  return history;
 }
 
 /** Makes the open item, a note, a task through its More menu, answering the question that asks. */
@@ -133,8 +149,44 @@ export async function changeState(page: Page, label: string) {
 
 /** Expects the rows of the open list to show these titles, in this order. */
 export async function expectOrder(page: Page, titles: string[]) {
-  for (const [index, title] of titles.entries()) {
-    await expect(row(page, title).getByLabel(`Position ${index + 1}`, { exact: true })).toBeVisible();
+  await expect(page.locator("main [data-row-link]")).toHaveText(
+    titles.map((title) => new RegExp(`^${escapeRegExp(title)}(,|$)`)),
+  );
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Drags from `at` (the middle by default) across the width of `target` by `dx`, `dy`, in steps, as a finger would. */
+export async function drag(page: Page, target: Locator, dx: number, dy: number, at = 0.5) {
+  // Waits until it's still, as the phone's sheet slides up as it opens.
+  await target.click({ trial: true, position: { x: ((await target.boundingBox())?.width ?? 0) * at, y: 8 } });
+  const box = await target.boundingBox();
+  if (!box) throw new Error("Nothing to drag");
+  const x = box.x + box.width * at;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 12 });
+  await page.mouse.up();
+}
+
+/**
+ * Marks an open item done from its list row: a swipe right on a touch screen, the done button beside play with a
+ * mouse (design/ux.md, The list).
+ */
+export async function markDoneFromList(page: Page, title: string, from: Locator = row(page, title)) {
+  const touch = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+  if (touch) {
+    // From the left of the row, clear of an item panel over its right. A row that was swiped and sprang back (the
+    // question to take an item back from an agent was cancelled) isn't under the finger until it is still.
+    await expect
+      .poll(() =>
+        from.locator('[class~="group/row"]').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41),
+      )
+      .toBeLessThan(1);
+    await drag(page, from, 200, 0, 0.2);
+  } else {
+    await from.getByRole("button", { name: `Mark ${title} done` }).click();
   }
 }
 

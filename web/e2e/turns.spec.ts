@@ -3,7 +3,19 @@
 // an item an agent already has send it through the API. Server build only.
 import type { Locator, Page } from "@playwright/test";
 
-import { addItem, expect, goTo, isPhone, itemPane, PASSWORD, row, test, uniqueUser } from "./fixtures";
+import {
+  addItem,
+  expect,
+  goTo,
+  isPhone,
+  itemPane,
+  markDoneFromList,
+  openHistory,
+  PASSWORD,
+  row,
+  test,
+  uniqueUser,
+} from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -37,9 +49,6 @@ const who = (page: Page): Locator => itemPane(page).getByRole("region", { name: 
 /** The form or the question the block opens. */
 const sendForm = (page: Page) => page.getByRole("dialog", { name: "Send to an agent", exact: true });
 const takeBackAsk = (page: Page) => page.getByRole("alertdialog");
-
-/** The history of the open item, as it reads in the pane. */
-const history = (page: Page) => itemPane(page).getByRole("region", { name: "History", exact: true });
 
 /** Expects a control to be at least 44 px tall, rounded: layout can land one a hair short, such as 43.99997. */
 async function expectTouchSize(control: Locator) {
@@ -86,8 +95,9 @@ test("sending from the item with a line shows who has it, in the item and in the
   await expect(row(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   // Undo is a take back, which the history keeps.
-  await expect(history(page)).toContainText("opened a turn");
-  await expect(history(page)).toContainText("took back a turn");
+  const history = await openHistory(page);
+  await expect(history).toContainText("opened a turn");
+  await expect(history).toContainText("took back a turn");
 });
 
 test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
@@ -165,23 +175,22 @@ test("an item an agent has asks before Start and Done in the item, and Blocked d
   await expect(state.getByRole("button")).toHaveText(["Reopen"]);
 });
 
-test("marking an item an agent has done from its circle asks first, and closing takes it back", async ({
+test("marking an item an agent has done from its row asks first, and closing takes it back", async ({
   page,
   heapPath,
 }) => {
   const { key, id } = await seed(page, heapPath, "Rotate the certs", true);
   await page.goto(heapPath);
-  const circle = page.getByRole("button", { name: "Mark Rotate the certs done" });
   const ask = page.getByRole("alertdialog");
 
-  await circle.click();
+  await markDoneFromList(page, "Rotate the certs", heldRow(page, "Rotate the certs"));
   await expect(ask).toContainText("An agent has “Rotate the certs”. Marking it done takes it back from the agent.");
   await ask.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(ask).toHaveCount(0);
   await expect(heldRow(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs").getByRole("link")).toBeFocused();
 
-  await circle.click();
+  await markDoneFromList(page, "Rotate the certs", heldRow(page, "Rotate the certs"));
   await ask.getByRole("button", { name: "Take back and mark done", exact: true }).click();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   await expect(row(page, "Rotate the certs")).toHaveCount(0);
@@ -192,7 +201,7 @@ test("marking an item an agent has done from its circle asks first, and closing 
   const actions = ((await log.json()).entries as { action: string }[]).map((entry) => entry.action);
   expect(actions.slice(0, 3)).toEqual(["item_updated", "turn_taken_back", "turn_opened"]);
   await open(page, heapPath, key, "Rotate the certs");
-  await expect(history(page)).toContainText("took back a turn");
+  await expect(await openHistory(page)).toContainText("took back a turn");
 });
 
 test("an admin turns on Agents prepare new notes, and a note added from Add shows with an agent", async ({

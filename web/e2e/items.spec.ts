@@ -7,11 +7,13 @@ import {
   dayFromToday,
   expect,
   expectOrder,
+  markDoneFromList,
   field,
   goTo,
   isPhone,
   itemPane,
   makeTask,
+  openHistory,
   openItem,
   pick,
   row,
@@ -55,10 +57,14 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await expect(pane.getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
   await expect(row(page, "Write the team rota")).toBeVisible();
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
-  await expect(pane.getByRole("region", { name: "History" })).toContainText("In progress");
+  // History starts collapsed, with who added the item beside it, and opens with a click.
+  const historyRegion = pane.getByRole("region", { name: "History" });
+  await expect(historyRegion).toContainText("Added by you today");
+  await expect(historyRegion).not.toContainText("You added item");
+  const history = await openHistory(page);
+  await expect(history).toContainText("In progress");
   // The user's own changes read as theirs.
-  await expect(pane.getByRole("region", { name: "History" })).toContainText("You added item");
-  await expect(pane.getByRole("region", { name: "History" })).toContainText("Added by you today");
+  await expect(history).toContainText("You added item");
 
   // Done leaves the item open in the pane, which offers to reopen it.
   await changeState(page, "Done");
@@ -82,16 +88,27 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await expect(row(page, "Write the team rota")).toBeVisible();
 });
 
+test("History opened on one item starts collapsed on the next", async ({ page }) => {
+  // Phones have no Next item in the pane: the sheet closes, and each item opens fresh.
+  test.skip(isPhone(page), "the pane walks the list only on wider screens");
+  await addItem(page, "Water the plants", { effort: "S", impact: "XL" });
+  await addItem(page, "Fix the gate", { effort: "XL", impact: "S" });
+  await openItem(page, "Water the plants");
+  await openHistory(page);
+  await itemPane(page).getByRole("link", { name: "Next item", exact: true }).click();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Fix the gate");
+  await expect(itemPane(page).getByRole("region", { name: "History" }).locator("details")).not.toHaveAttribute("open");
+});
 test("an item is closed from the list, undone, and reopened from Closed", async ({ page }) => {
   await addItem(page, "Write release notes");
 
-  await row(page, "Write release notes").getByRole("button", { name: "Mark Write release notes done" }).click();
+  await markDoneFromList(page, "Write release notes");
   await expect(row(page, "Write release notes")).toHaveCount(0);
   const toast = page.getByRole("status").filter({ hasText: "“Write release notes” is done." });
   await toast.getByRole("button", { name: "Undo" }).click();
   await expect(row(page, "Write release notes")).toBeVisible();
 
-  await row(page, "Write release notes").getByRole("button", { name: "Mark Write release notes done" }).click();
+  await markDoneFromList(page, "Write release notes");
   await expect(row(page, "Write release notes")).toHaveCount(0);
   await goTo(page, "Closed");
   const today = page.getByRole("region", { name: "Today" });
@@ -216,7 +233,7 @@ test("the Undo toast stays while items open and close over the list", async ({ p
 
   // Done from a row while another item is open, then another item opened and the pane closed.
   await openItem(page, "Quick win");
-  await row(page, "Slog").getByRole("button", { name: "Mark Slog done" }).click();
+  await markDoneFromList(page, "Slog");
   await expect(row(page, "Slog")).toHaveCount(0);
   const toast = page.getByRole("status").filter({ hasText: "“Slog” is done." });
   await expect(toast).toBeVisible();

@@ -10,6 +10,7 @@ import {
   expect,
   expectFitsWidth,
   goTo,
+  markDoneFromList,
   HEAP_URL,
   itemPane,
   openItem,
@@ -79,7 +80,7 @@ test("the sidebar's Open count follows adding an item and closing one", async ({
   await addItem(page, "Water the plants");
   await addItem(page, "Feed the cat");
   await expect(open).toHaveText(/^Open\s*2$/);
-  await row(page, "Feed the cat").getByRole("button", { name: "Mark Feed the cat done" }).click();
+  await markDoneFromList(page, "Feed the cat");
   await expect(row(page, "Feed the cat")).toHaveCount(0);
   await expect(open).toHaveText(/^Open\s*1$/);
 });
