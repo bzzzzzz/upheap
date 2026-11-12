@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import {
   addDialog,
   addItem,
@@ -59,7 +61,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await saveContext(page, "For the next quarter");
   // The likeliest next state is the main button: Start, for an open item, then Done once it's started.
   const state = pane.getByRole("group", { name: "State", exact: true });
-  await changeState(page, "Start");
+  await changeState(page, "Start", "main");
   await expect(state.getByRole("button").first()).toHaveText("Done");
   await expect(row(page, "Write the team rota")).toBeVisible();
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
@@ -73,9 +75,9 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await expect(history).toContainText("You added item");
 
   // Done leaves the item open in the pane, which offers to reopen it.
-  await changeState(page, "Done");
+  await changeState(page, "Done", "main");
   await expect(row(page, "Write the team rota")).toHaveCount(0);
-  await changeState(page, "Reopen");
+  await changeState(page, "Reopen", "main");
   await expect(state.getByRole("button").first()).toHaveText("Start");
   await expect(row(page, "Write the team rota")).toBeVisible();
 
@@ -183,6 +185,17 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   await expect(context.getByRole("listitem")).toHaveText(["one", "two"]);
+  // A script-scheme link and a remote image are never live: the link has no href, the image reads as a link.
+  await (await editContext(page)).fill("[bad](javascript:alert(1)) and ![x](https://example.com/t.png)");
+  await saveContext(page, "bad and");
+  await expect(context.locator("a[href^='javascript:' i]")).toHaveCount(0);
+  await expect(context.locator("img")).toHaveCount(0);
+  await expect(context.getByRole("link", { name: "x", exact: true })).toHaveAttribute(
+    "href",
+    "https://example.com/t.png",
+  );
+  await (await editContext(page)).fill(source);
+  await saveContext(page, "bold and a link");
   // Raw HTML is dropped, not run.
   await expect(pane.locator("script")).toHaveCount(0);
   expect(await page.evaluate(() => "pwned" in window)).toBe(false);
@@ -326,7 +339,7 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
   // Blocked items are hidden by default.
   await openItem(page, "Deploy");
-  await changeState(page, "Block");
+  await changeState(page, "Block", "more");
   await expect(row(page, "Deploy")).toHaveCount(0);
   await expect(status()).toContainText("Blocked");
   await closeItem(page);
@@ -346,17 +359,17 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
   // The blocker isn't offered the item it blocks to wait for, which would be a cycle.
   await openItem(page, "Get approval");
-  await changeState(page, "Block");
+  await changeState(page, "Block", "more");
   const blocker = await changeBlocker();
   await expect(blocker.getByLabel("Waiting for")).toBeVisible();
   await expect(blocker.getByLabel("Waiting for").getByRole("option")).toHaveText(["Nothing picked"]);
   await closeField(page);
-  await changeState(page, "Unblock");
+  await changeState(page, "Unblock", "main");
   await expect(status()).not.toContainText("Blocked");
   await closeItem(page);
 
   await openItem(page, "Deploy");
-  await changeState(page, "Unblock");
+  await changeState(page, "Unblock", "main");
   await expect(status()).not.toContainText("Blocked by");
   await closeItem(page);
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");
@@ -487,7 +500,7 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel");
 
   // Won't do is under ⋯; a closed item shows all its fields, unchangeable.
-  await changeState(page, "Won't do");
+  await changeState(page, "Won't do", "more");
   await expect(context.getByText("Venue, then dates", { exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: /^(Edit|Add) context$/ })).toHaveCount(0);
   await expect(pane.getByRole("button", { name: /^(Need|Effort|Impact|Due|Tags): / })).toHaveCount(0);
@@ -579,4 +592,75 @@ test("a task is worked through its steps from the item", async ({ page }) => {
     "text-decoration-line",
     "line-through",
   );
+});
+
+/** Changes the open item the way another member would, through the API, and returns once the server has it. */
+async function changeElsewhere(page: Page, heapPath: string, patch: Record<string, unknown>) {
+  const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const address = `/api/v1${heapPath}/items/${key}`;
+  const current = await page.request.get(address);
+  expect(current.ok()).toBe(true);
+  const { version } = await current.json();
+  const changed = await page.request.patch(address, {
+    headers: { "x-csrf-protection": "1", "If-Match": `"${version}"` },
+    data: patch,
+  });
+  expect(changed.ok()).toBe(true);
+}
+
+/** Makes the open pane fetch the item again, as coming back to the window does, and waits for the new title to show. */
+async function refetchShowing(page: Page, title: string) {
+  await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+  // The title is read from the same answer as the context, so once it shows, the pane has the other change.
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
+}
+
+test("saving a context someone else changed meanwhile asks first, and loses neither text", async ({
+  page,
+  heapPath,
+}) => {
+  test.skip(isPhone(page), "a phone edits the context in a sheet that saves as it closes");
+  await addItem(page, "Write the plan");
+  await openItem(page, "Write the plan");
+  const pane = itemPane(page);
+  const context = pane.getByRole("region", { name: "Context", exact: true });
+  const message = pane.getByText("Someone else changed the context meanwhile.", { exact: true });
+
+  // Use theirs: the draft goes and their text shows.
+  await (await editContext(page)).fill("Mine");
+  await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed once" });
+  await refetchShowing(page, "Renamed once");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(message).toBeVisible();
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Mine");
+  await pane.getByRole("button", { name: "Use theirs", exact: true }).click();
+  await expect(context).toContainText("Theirs");
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
+
+  // Save mine anyway: the draft is written over theirs.
+  await (await editContext(page)).fill("Mine again");
+  await changeElsewhere(page, heapPath, { description: "Theirs again", title: "Renamed twice" });
+  await refetchShowing(page, "Renamed twice");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(message).toBeVisible();
+  await pane.getByRole("button", { name: "Save mine anyway", exact: true }).click();
+  await expect(context).toContainText("Mine again");
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
+});
+
+test("a context typed for the wrap-up is saved before Done closes the item", async ({ page }) => {
+  test.skip(isPhone(page), "a phone edits the context in a sheet, which covers the pane's Done");
+  await addItem(page, "Ship the release");
+  await openItem(page, "Ship the release");
+  const pane = itemPane(page);
+  await (await editContext(page)).fill("Shipped, and the notes are in the wiki");
+
+  await changeState(page, "Done", "more");
+  await expect(
+    pane.getByRole("group", { name: "State", exact: true }).getByRole("button", { name: "Reopen" }),
+  ).toBeVisible();
+  await expect(pane.getByRole("region", { name: "Context", exact: true })).toContainText(
+    "Shipped, and the notes are in the wiki",
+  );
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
 });

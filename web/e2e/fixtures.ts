@@ -175,15 +175,16 @@ export const moreEntry = (page: Page, more: Locator, name: string): Locator =>
   isPhone(page) ? more.getByRole("button", { name, exact: true }) : more.getByRole("menuitem", { name, exact: true });
 
 /**
- * Presses the item pane's state button `label`: the main button (Start, Done, Unblock, Reopen) or an entry of ⋯ (Block,
- * Done, Won't do, Back to open).
+ * Presses the item pane's state button `label`: the main button (`from` "main": Start, Done, Unblock, Reopen) or an
+ * entry of ⋯ (`from` "more": Block, Done, Won't do, Back to open). The caller says which, as which one the item offers
+ * isn't something to look up once and hope.
  */
-export async function changeState(page: Page, label: string) {
-  const main = itemPane(page)
-    .getByRole("group", { name: "State", exact: true })
-    .getByRole("button", { name: label, exact: true });
-  if ((await main.count()) > 0) {
-    await main.click();
+export async function changeState(page: Page, label: string, from: "main" | "more") {
+  if (from === "main") {
+    await itemPane(page)
+      .getByRole("group", { name: "State", exact: true })
+      .getByRole("button", { name: label, exact: true })
+      .click();
     return;
   }
   await moreEntry(page, await openMore(page), label).click();

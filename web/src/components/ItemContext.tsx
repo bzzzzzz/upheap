@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import type { Item } from "../api/client";
 import { compactButtonClass } from "./buttons";
+import { useRegisterDraft } from "./contextDraft";
+import { itemProblem } from "./itemProblems";
 import { Markdown } from "./Markdown";
 import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
@@ -21,14 +23,14 @@ export function ItemContext({
 }: {
   item: Item;
   canEdit: boolean;
-  onSave: (text: string) => void;
+  onSave: (text: string) => Promise<void>;
 }) {
   const phone = useMedia(PHONE);
   const focusAfterRender = useFocusAfterRender();
   const editButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(false);
   const text = item.description ?? "";
-  if (!canEdit && text === "") return null;
+  if (!canEdit && text === "" && !editing) return null;
 
   const done = () => {
     setEditing(false);
@@ -54,7 +56,7 @@ export function ItemContext({
         )}
       </div>
       {editing && !phone ? (
-        <ContextForm context={text} onSave={onSave} onDone={done} />
+        <ContextForm context={text} canEdit={canEdit} onSave={onSave} onDone={done} />
       ) : empty ? (
         <p className="text-sm text-muted">No context yet.</p>
       ) : (
@@ -62,7 +64,7 @@ export function ItemContext({
       )}
       {phone && (
         <Sheet title="Context" isOpen={editing} onClose={done} aside={item.title}>
-          <ContextEditor context={text} onSave={onSave} />
+          <ContextEditor context={text} canEdit={canEdit} onSave={onSave} />
         </Sheet>
       )}
     </section>
@@ -71,34 +73,109 @@ export function ItemContext({
 
 /**
  * The source of the context on a wide screen and a tablet, in place of the text. The draft is local, started from the
- * saved text when Edit was pressed, so a refetch or someone else's save while typing leaves it alone; if Save then
- * conflicts, the item's conflict message says so. Save, or ⌘ or Ctrl with Enter, saves and goes back to the text;
- * Cancel or Escape throws the draft away. Escape stops here, so it doesn't also close the item.
+ * saved text when Edit was pressed, so a refetch or someone else's save while typing leaves it alone. Save, or ⌘ or Ctrl
+ * with Enter, saves and goes back to the text, but only once the save has landed: a failure is said under the text and
+ * the draft stays. If the saved text is no longer the one Edit opened, someone else changed it, and Save asks instead of
+ * overwriting: it shows their text and offers Save mine anyway or Use theirs. Cancel or Escape throws the draft away.
+ * Escape stops here, so it doesn't also close the item. If the item closes meanwhile, the draft stays on screen to read
+ * and select, unsaved.
+ *
+ * Leaving with a changed draft (the item closed, the pane walked to the next) saves it too, as the form goes away, and
+ * can't say if that fails. It skips the save when the text moved since Edit, or the item closed: losing the draft that
+ * way is better than silently overwriting someone else's text, or sending a write the server refuses.
  */
 function ContextForm({
   context,
+  canEdit,
   onSave,
   onDone,
 }: {
   context: string;
-  onSave: (text: string) => void;
+  canEdit: boolean;
+  onSave: (text: string) => Promise<void>;
   onDone: () => void;
 }) {
-  const [opened] = useState(context);
+  const register = useRegisterDraft();
+  const [opened, setOpened] = useState(context);
   const [text, setText] = useState(opened);
+  const [conflict, setConflict] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
-  // What the cleanup reads as the form goes away: the text as last typed, the save of that moment, and whether the
-  // draft was dealt with already, by Save or Cancel.
-  const latest = useRef({ text, onSave, settled: false });
+  // What the cleanup and the registered flush read: the text as last typed, the text Edit opened with and the text saved
+  // now, the save of that moment, and whether the draft was dealt with already, by Save or Cancel.
+  const latest = useRef({ text, opened, context, canEdit, onSave, settled: false });
   useEffect(() => {
     latest.current.text = text;
+    latest.current.context = context;
+    latest.current.canEdit = canEdit;
     latest.current.onSave = onSave;
   });
+
+  // Writes the draft and answers whether it landed, keeping the form and saying why when it didn't.
+  const commit = async (): Promise<boolean> => {
+    setPending(true);
+    setError(null);
+    try {
+      await latest.current.onSave(latest.current.text);
+    } catch (e) {
+      setError(itemProblem(e instanceof Error ? e : new Error(String(e))));
+      return false;
+    } finally {
+      setPending(false);
+    }
+    latest.current.settled = true;
+    return true;
+  };
+  // The draft as a save goes: nothing to write for an unchanged one, a question for one over someone else's change.
+  const attempt = async (): Promise<boolean> => {
+    const now = latest.current;
+    if (now.text === now.opened) return true;
+    if (now.context !== now.opened) {
+      setConflict(true);
+      return false;
+    }
+    return commit();
+  };
+  const saveAndClose = () => {
+    if (pending) return;
+    void attempt().then((saved) => saved && onDone());
+  };
+  const saveAnyway = () => {
+    latest.current.opened = latest.current.context;
+    setOpened(latest.current.context);
+    setConflict(false);
+    void commit().then((saved) => saved && onDone());
+  };
+  const discard = () => {
+    latest.current.settled = true;
+    onDone();
+  };
+
+  // A change that closes the item saves the draft first, through here.
+  useEffect(() => {
+    if (!register) return;
+    register(() => async () => {
+      const saved = await attempt();
+      // Saved, the draft is what Edit opened with now, so cancelling the change that follows leaves nothing to ask.
+      if (saved) {
+        latest.current.opened = latest.current.text;
+        setOpened(latest.current.text);
+      }
+      return saved;
+    });
+    return () => register(null);
+    // `attempt` reads only `latest` and state setters, so the first one registered serves for the form's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [register]);
   useEffect(
     () => () => {
-      if (!latest.current.settled && latest.current.text !== opened) latest.current.onSave(latest.current.text);
+      const now = latest.current;
+      if (!now.settled && now.canEdit && now.text !== now.opened && now.context === now.opened) {
+        now.onSave(now.text).catch(() => undefined);
+      }
     },
-    [opened],
+    [],
   );
   // With the caret at the end of the text.
   useEffect(() => {
@@ -107,20 +184,45 @@ function ContextForm({
     element.focus();
     element.setSelectionRange(element.value.length, element.value.length);
   }, []);
+  // An item that closed after the draft was saved (by the flush above) has nothing left to hold open.
+  const kept = !canEdit && text === context;
+  useEffect(() => {
+    if (kept) onDone();
+    // `onDone` is a fresh function each render and only closes the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kept]);
 
-  const settle = (save: boolean) => {
-    latest.current.settled = true;
-    if (save) onSave(text);
-    onDone();
-  };
+  if (!canEdit) {
+    if (kept) return null;
+    return (
+      <div className="flex flex-col gap-2">
+        <p role="status" className="text-sm text-muted">
+          The item was closed; your text wasn't saved.
+        </p>
+        <textarea
+          aria-label="Context"
+          readOnly
+          value={text}
+          rows={8}
+          className="field-sizing-content min-h-40 w-full rounded-lg border border-line bg-sunken px-2 py-1.5 text-sm outline-none pointer-coarse:text-base"
+        />
+        <div>
+          <button type="button" onClick={discard} className={compactButtonClass.quiet}>
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      settle(false);
+      discard();
     } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      settle(true);
+      saveAndClose();
     }
   };
 
@@ -135,11 +237,35 @@ function ContextForm({
         onKeyDown={onKeyDown}
         className="field-sizing-content min-h-40 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent pointer-coarse:text-base"
       />
+      {error !== null && (
+        <p role="alert" className="text-sm text-overdue-ink">
+          {error}
+        </p>
+      )}
+      {conflict && context !== opened && (
+        <div role="alert" className="flex flex-col gap-2 rounded-lg border border-line bg-sunken p-2">
+          <p className="text-sm font-medium text-ink">Someone else changed the context meanwhile.</p>
+          <details>
+            <summary className="cursor-pointer text-sm text-muted">Their text</summary>
+            <div className="pt-2">
+              {context === "" ? <p className="text-sm text-muted">Empty.</p> : <Markdown text={context} />}
+            </div>
+          </details>
+          <div className="flex gap-2">
+            <button type="button" disabled={pending} onClick={saveAnyway} className={compactButtonClass.primary}>
+              Save mine anyway
+            </button>
+            <button type="button" onClick={discard} className={compactButtonClass.quiet}>
+              Use theirs
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex gap-2">
-        <button type="button" onClick={() => settle(true)} className={compactButtonClass.primary}>
+        <button type="button" disabled={pending} onClick={saveAndClose} className={compactButtonClass.primary}>
           Save
         </button>
-        <button type="button" onClick={() => settle(false)} className={compactButtonClass.quiet}>
+        <button type="button" onClick={discard} className={compactButtonClass.quiet}>
           Cancel
         </button>
       </div>
@@ -152,17 +278,27 @@ function ContextForm({
  * saves as the sheet goes away, however it goes (✕, Escape, a tap outside, Back, a turn of the phone), and only if it was
  * changed, so an untouched sheet never writes back what it was opened with.
  */
-function ContextEditor({ context, onSave }: { context: string; onSave: (text: string) => void }) {
+function ContextEditor({
+  context,
+  canEdit,
+  onSave,
+}: {
+  context: string;
+  canEdit: boolean;
+  onSave: (text: string) => Promise<void>;
+}) {
   const [opened] = useState(context);
   const [text, setText] = useState(opened);
   // What the cleanup reads as the sheet goes away: the text as last typed, and the save of that moment.
-  const latest = useRef({ text, onSave });
+  const latest = useRef({ text, context, canEdit, onSave });
   useEffect(() => {
-    latest.current = { text, onSave };
+    latest.current = { text, context, canEdit, onSave };
   });
+  // Not when the text moved since the sheet opened or the item closed: see ContextForm.
   useEffect(
     () => () => {
-      if (latest.current.text !== opened) latest.current.onSave(latest.current.text);
+      const now = latest.current;
+      if (now.canEdit && now.text !== opened && now.context === opened) now.onSave(now.text).catch(() => undefined);
     },
     [opened],
   );

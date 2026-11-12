@@ -327,8 +327,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
     it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
     steps and the count to read, with no checkbox to change, no ⋯ and no Add.
-12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the one tinted, outlined
-    block at the top of the item, under the status line (the accent at a low fill, a 2 px accent border), the same on
+12. **Waits for you**, while the item is open and has open questions or a stuck agent turn, is the summary at the top of
+    the item, under the status line, a tinted, outlined block (the accent at a low fill, a 2 px accent border) like the
+    open-questions box in Questions, the same on
     the pane, the tablet panel and the phone sheet. A stuck turn is its first row (see Waiting for me, 7), with Retry
     and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
     **Answer ↓** on its right: it scrolls the first open question into view and focuses its first control. The reply

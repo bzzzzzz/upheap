@@ -256,10 +256,8 @@ test("the section is absent without open questions, and closing the item withdra
   await expect(answered(page)).toHaveCount(0);
 
   // Closing the item withdraws the question: it leaves Waits for you, and it reads, withdrawn, in Questions.
-  await changeState(page, "Start");
-  // Starting makes Done the main button; wait for that, as the helper looks for the label once.
-  await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Done");
-  await changeState(page, "Done");
+  await changeState(page, "Start", "main");
+  await changeState(page, "Done", "main");
   await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Reopen");
   await expect(waits(page)).toHaveCount(0);
   const folded = answered(page);
@@ -270,7 +268,7 @@ test("the section is absent without open questions, and closing the item withdra
   await expect(folded.getByRole("button", { name: "Reply" })).toHaveCount(0);
 
   // Reopening doesn't bring it back: it stays withdrawn, and the item waits for nobody.
-  await changeState(page, "Reopen");
+  await changeState(page, "Reopen", "main");
   await expect(waits(page)).toHaveCount(0);
   await expect(answered(page).locator("summary")).toHaveText("1 closed");
   await answered(page).locator("summary").click();

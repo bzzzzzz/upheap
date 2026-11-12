@@ -8,6 +8,7 @@ import { useItem, useUpdateItem } from "../api/queries";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
 import { InlineConfirm } from "./InlineConfirm";
+import { ContextDraft, type FlushDraft } from "./contextDraft";
 import { ItemContext } from "./ItemContext";
 import { ItemFieldList } from "./ItemFieldList";
 import { itemProblem } from "./itemProblems";
@@ -245,8 +246,18 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   // does the take back with the change.
   const [askState, setAskState] = useState<ItemState | null>(null);
   const asker = useRef<HTMLElement | null>(null);
+  // The context form's way to save its draft, while one is open. A change that closes the item goes after it, so text
+  // typed for the close isn't lost to the item turning read-only.
+  const [flushDraft, setFlushDraft] = useState<FlushDraft | null>(null);
   const changeState = (state: ItemState) => {
     if (state === item.state) return;
+    if (flushDraft !== null && (state === "done" || state === "wont_do")) {
+      void flushDraft().then((saved) => saved && changeStateNow(state));
+    } else {
+      changeStateNow(state);
+    }
+  };
+  const changeStateNow = (state: ItemState) => {
     if (takesBack(item, state)) {
       asker.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setAskState(state);
@@ -275,13 +286,14 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const focusMore = () =>
     focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane] button[aria-label='More']"));
 
-  const saveText = (field: "title" | "description", text: string) => {
-    if (field === "title") {
-      if (text.trim() !== "" && text !== item.title) save({ title: text });
-    } else {
-      const description = text.trim() === "" ? null : text;
-      if (description !== (item.description ?? null)) save({ description });
-    }
+  const saveTitle = (text: string) => {
+    if (text.trim() !== "" && text !== item.title) save({ title: text });
+  };
+  // Awaitable, and apart from `update`, so the context form says its own failure and the pane doesn't say it twice.
+  const saveDescription = useUpdateItem(heapRef);
+  const saveContext = async (text: string) => {
+    const description = text.trim() === "" ? null : text;
+    if (description !== (item.description ?? null)) await saveDescription.mutateAsync({ item, patch: { description } });
   };
 
   const actions = (variant: "inline" | "bar") => (
@@ -300,7 +312,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
             defaultValue={item.title}
             disabled={!canEdit}
             rows={1}
-            onBlur={(e) => saveText("title", e.target.value)}
+            onBlur={(e) => saveTitle(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -329,7 +341,9 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
         </p>
       )}
 
-      <ItemContext item={item} canEdit={canEdit} onSave={(text) => saveText("description", text)} />
+      <ContextDraft.Provider value={setFlushDraft}>
+        <ItemContext item={item} canEdit={canEdit} onSave={saveContext} />
+      </ContextDraft.Provider>
 
       <ItemSteps heapRef={heapRef} item={item} />
 

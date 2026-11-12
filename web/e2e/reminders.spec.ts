@@ -1,6 +1,17 @@
 // Reminders (design/ux.md: The list, The item, Adding an item), at each width: added with a date, out of the list
 // until it, found by Filters › Show and by search, and made a task once it has arrived.
-import { addDialog, closeField, expect, field, isPhone, itemPane, test, type Need } from "./fixtures";
+import {
+  addDialog,
+  closeField,
+  expect,
+  field,
+  isPhone,
+  itemPane,
+  moreEntry,
+  openMore,
+  test,
+  type Need,
+} from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /** Today's date in the tests' time zone (UTC), as the Add dialog's date field takes it. */
@@ -69,7 +80,10 @@ test("a reminder for a later date says when it joins the list, and stays out of 
   await expect(pane.getByLabel("Title", { exact: true })).toHaveValue("Renew the domain");
   await expect(pane).toContainText("Reminder · 12 March 2099");
   await expect(pane).toContainText("Joins the list on 12 March 2099");
-  await expect(pane.getByRole("button", { name: "Send to an agent" })).toHaveCount(0);
+  const more = await openMore(page);
+  await expect(moreEntry(page, more, "Send to an agent…")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(more).toHaveCount(0);
 
   // The date moves where due is edited, and can't be cleared.
   const dateField = await field(page, "Date");

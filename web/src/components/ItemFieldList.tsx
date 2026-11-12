@@ -69,8 +69,8 @@ export function ItemFieldList({
               value={item.need}
               onChange={(need) => {
                 if (need !== item.need) save({ need });
-                close();
               }}
+              onDone={close}
             />
           )}
         />
@@ -307,7 +307,7 @@ function Field({
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${label}: ${shown}`}
+        aria-label={`${label}: ${shown}${gap ? ", holds the rank back" : ""}`}
         data-gap={gap ? "true" : undefined}
         onClick={() => setOpen(true)}
         className={`group/value -mx-1.5 inline-flex min-h-8 max-w-full cursor-pointer items-center gap-1 rounded-md px-1.5 text-left text-sm outline-none hover:bg-sunken focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:min-h-11 ${
@@ -353,7 +353,7 @@ function Field({
 }
 
 /** The four needs as 52 px rows with what each means under it, for a phone's sheet; a pick saves and closes. */
-function NeedRows({ value, onChange }: { value: Need; onChange: (need: Need) => void }) {
+function NeedRows({ value, onChange, onDone }: { value: Need; onChange: (need: Need) => void; onDone: () => void }) {
   const id = useId();
   return (
     <ToggleButtonGroup
@@ -363,7 +363,9 @@ function NeedRows({ value, onChange }: { value: Need; onChange: (need: Need) => 
       selectedKeys={[value]}
       onSelectionChange={(keys) => {
         const [picked] = [...keys];
+        // An empty selection is the picked row tapped again: nothing to change.
         if (picked !== undefined) onChange(String(picked) as Need);
+        onDone();
       }}
       className="flex flex-col pb-1"
     >
