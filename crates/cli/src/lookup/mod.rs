@@ -437,6 +437,14 @@ pub fn find_parameter<'p>(
         })
 }
 
+/// The archived parameter that `name` names, by name ignoring case, or by ID. The first match wins.
+pub fn find_archived_parameter<'p>(name: &str, parameters: &'p ParameterListDto) -> Option<&'p ParameterDto> {
+    parameters
+        .archived
+        .iter()
+        .find(|parameter| is_named(name, &parameter.name, parameter.id))
+}
+
 /// The option in use of `parameter` that `name` names, by label ignoring case, or by ID.
 pub fn find_option<'p>(
     name: &str,

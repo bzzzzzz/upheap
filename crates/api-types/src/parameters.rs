@@ -99,7 +99,7 @@ pub struct ParameterListDto {
     pub allowed_actions: Vec<ParameterListActionDto>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = CreateParameterRequest)]
 pub struct CreateParameterDto {
@@ -117,7 +117,7 @@ pub struct CreateParameterDto {
 }
 
 /// A partial edit. Leave a field out to keep it.
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ParameterPatchRequest)]
 pub struct ParameterPatchDto {
@@ -127,7 +127,7 @@ pub struct ParameterPatchDto {
     pub weight: Option<i64>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = AddOptionRequest)]
 pub struct AddOptionDto {
@@ -137,7 +137,7 @@ pub struct AddOptionDto {
 }
 
 /// One option of a new arrangement.
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = OptionArrangement)]
 pub struct OptionArrangementDto {
@@ -145,7 +145,7 @@ pub struct OptionArrangementDto {
     pub label: String,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ArrangeOptionsRequest)]
 pub struct ArrangeOptionsDto {
@@ -153,7 +153,7 @@ pub struct ArrangeOptionsDto {
     pub options: Vec<OptionArrangementDto>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = ArchiveOptionRequest)]
 pub struct ArchiveOptionDto {
@@ -161,7 +161,7 @@ pub struct ArchiveOptionDto {
     pub replacement_option_id: Option<Uuid>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = LinkTagsRequest)]
 pub struct LinkTagsDto {

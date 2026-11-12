@@ -153,6 +153,25 @@ impl ApiClient {
         self.read_json(response).await
     }
 
+    /// `PUT /api/v1/<path>` with `body` as JSON, for the row at `version`, sent in `If-Match` as
+    /// [`ApiClient::patch`] sends it.
+    pub async fn put_at_version<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        body: &(impl Serialize + ?Sized),
+        version: u32,
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self
+            .http
+            .put(self.api_url(path))
+            .header(reqwest::header::IF_MATCH, format!("\"{version}\""))
+            .json(body)
+            .bearer_auth(token);
+        let response = self.send(request).await?;
+        self.read_json(response).await
+    }
+
     /// `POST /api/v1/<path>` with `body` as JSON, for the item or other row at `version`: the server wants it in
     /// `If-Match` as [`ApiClient::patch`] sends it.
     pub async fn post_at_version<T: DeserializeOwned>(

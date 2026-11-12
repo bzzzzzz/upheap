@@ -7,7 +7,8 @@ use clap::Args;
 use uuid::Uuid;
 
 use super::common::{
-    ParameterSetting, dedupe, describe_due_flag, locate_item, parameter_values, parse_parameter_setting, resolve_due,
+    ParameterSetting, describe_due_flag, locate_item, merge_tag_ids, parameter_values, parse_parameter_setting,
+    resolve_due,
 };
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, read_context, read_description};
@@ -189,8 +190,7 @@ fn clearing<T>(value: Option<T>, clear: bool) -> Option<Option<T>> {
 /// The item's tag IDs with `added` after them and `removed` taken out. Tags it has keep their order, new ones come
 /// in the order given, and none repeats.
 fn merge_tags(item: &ItemDto, added: Vec<Uuid>, removed: &[Uuid]) -> Vec<Uuid> {
-    let current = item.tags.iter().map(|tag| tag.id);
-    dedupe(current.chain(added).filter(|id| !removed.contains(id)).collect())
+    merge_tag_ids(item.tags.iter().map(|tag| tag.id), added, removed)
 }
 
 #[cfg(test)]

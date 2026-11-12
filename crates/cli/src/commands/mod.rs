@@ -73,6 +73,12 @@ pub enum UsageError {
     StepInOtherItem { step: String, item: String },
     #[error("{given} --step flags is too many: a task has at most {max} steps")]
     TooManySteps { given: usize, max: usize },
+    #[error("--order must name every option of {parameter} once: missing {}", missing.join(", "))]
+    OrderMissesOptions { parameter: String, missing: Vec<String> },
+    #[error("--order names {option} twice")]
+    OrderRepeatsOption { option: String },
+    #[error("--replace-with names {option}, the option being archived; name another option of {parameter}")]
+    ReplaceWithItself { option: String, parameter: String },
     #[error("UPHEAP_RUN isn't a run ID")]
     BadRunEnv,
     #[error("work claim starts a run; unset UPHEAP_RUN first")]

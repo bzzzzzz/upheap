@@ -598,8 +598,10 @@ section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
    task's steps (add, tick, drop, edit), an item's questions (ask, request), tags
-   (list, add, edit), heaps (list, pick a default) and signing in. Teams, members, heap settings, parameters and
-   saved-view editing stay in the web app.
+   (list, add, edit), parameters (list, add, edit, archive, and their options), heaps (list, pick a default) and
+   signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
+   write per kind of change (name and weight, tags, option order), each at the version the last returned, because
+   the API has no single endpoint for them; a failure midway leaves the earlier ones saved and the CLI says which.
 2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
    link without its `/h/`. A pasted link works, short or in the long form the address bar shows after the redirect;
    its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is

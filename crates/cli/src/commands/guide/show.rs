@@ -65,8 +65,8 @@ pub(crate) fn render(root: &Command) -> String {
     for category in root.get_subcommands() {
         lines.push(String::new());
         lines.push(with_about(category.get_name(), category));
-        for verb in category.get_subcommands() {
-            let mut usage = format!("  {name} {} {}", category.get_name(), verb.get_name());
+        for (path, verb) in verbs_of(category) {
+            let mut usage = format!("  {name} {} {path}", category.get_name());
             for input in verb.get_positionals() {
                 usage.push(' ');
                 usage.push_str(&label(input));
@@ -83,6 +83,22 @@ pub(crate) fn render(root: &Command) -> String {
     lines.push(String::new());
     lines.push(FOR_AGENTS.trim_end().to_owned());
     lines.join("\n")
+}
+
+/// The commands under `category` that run, each with its name after the category: a verb, or, for a group of verbs
+/// such as `parameter option`, the group's name and then each verb of it.
+fn verbs_of(category: &Command) -> Vec<(String, &Command)> {
+    let mut verbs = Vec::new();
+    for verb in category.get_subcommands() {
+        if verb.has_subcommands() {
+            for inner in verb.get_subcommands() {
+                verbs.push((format!("{} {}", verb.get_name(), inner.get_name()), inner));
+            }
+        } else {
+            verbs.push((verb.get_name().to_owned(), verb));
+        }
+    }
+    verbs
 }
 
 fn with_about(start: &str, command: &Command) -> String {

@@ -165,7 +165,7 @@ pub(super) fn describe_due_flag() -> String {
 }
 
 /// `ids` without repeats, in the order they first appear.
-pub(super) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
+pub(in crate::commands) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
     let mut seen = Vec::with_capacity(ids.len());
     for id in ids {
         if !seen.contains(&id) {
@@ -173,6 +173,22 @@ pub(super) fn dedupe(ids: Vec<Uuid>) -> Vec<Uuid> {
         }
     }
     seen
+}
+
+/// The tag IDs `current` with `added` after them and `removed` taken out. Tags already there keep their order, new
+/// ones come in the order given, and none repeats. Shared by the commands that take `--tag` and `--untag`.
+pub(in crate::commands) fn merge_tag_ids(
+    current: impl IntoIterator<Item = Uuid>,
+    added: Vec<Uuid>,
+    removed: &[Uuid],
+) -> Vec<Uuid> {
+    dedupe(
+        current
+            .into_iter()
+            .chain(added)
+            .filter(|id| !removed.contains(id))
+            .collect(),
+    )
 }
 
 /// A `--parameter NAME=OPTION` as typed: the parameter and the option, trimmed, each a name or an ID.
