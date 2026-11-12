@@ -566,6 +566,12 @@ impl Item {
             (Kind::Reminder, Some(Some(due))) => {
                 (Some(Due { firm: true, ..due }), patch.due_starts_at.or(self.arrives_at))
             }
+            // A reminder turned into a task joins the list now, so it ages from now at the latest, not from a date
+            // that may be months ahead.
+            (Kind::Task, due) if self.kind == Kind::Reminder => (
+                due.unwrap_or(self.due),
+                self.arrives_at.map(|arrives_at| arrives_at.min(now)),
+            ),
             (_, due) => (due.unwrap_or(self.due), self.arrives_at),
         };
 
@@ -1278,7 +1284,7 @@ mod tests {
     }
 
     #[gtest]
-    fn a_reminder_becomes_a_task_in_place_as_written_keeping_its_due_and_arrival() {
+    fn a_reminder_becomes_a_task_in_place_as_written_keeping_its_due() {
         let mut reminder = sample_reminder();
         reminder.stage = Stage::WithContext;
 
@@ -1291,6 +1297,28 @@ mod tests {
         expect_that!(task.stage, eq(Stage::AsWritten));
         expect_that!(task.key, eq(reminder.key));
         expect_that!(task.due, eq(reminder.due));
+        expect_that!(task.arrives_at, some(eq(at(1))));
+    }
+
+    #[gtest]
+    fn a_reminder_made_a_task_before_its_date_ages_from_the_change() {
+        let task = sample_reminder()
+            .apply_patch(&make_task_patch(), actor(), at(5))
+            .expect("allowed")
+            .expect("changed");
+
+        expect_that!(task.arrives_at, some(eq(at(5))));
+    }
+
+    #[gtest]
+    fn a_reminder_made_a_task_after_its_date_keeps_its_arrival() {
+        let reminder = sample_reminder();
+
+        let task = reminder
+            .apply_patch(&make_task_patch(), actor(), at(12))
+            .expect("allowed")
+            .expect("changed");
+
         expect_that!(task.arrives_at, eq(reminder.arrives_at));
     }
 

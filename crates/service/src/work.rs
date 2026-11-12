@@ -503,7 +503,7 @@ impl Services {
             let Some(candidates) = by_heap.remove(&queue.heap.id) else {
                 continue;
             };
-            let OpenRanking { items, ranking, .. } = rank_open_items(db, &queue.heap, now).await?;
+            let OpenRanking { items, ranking, .. } = rank_open_items(db, &queue.heap, now, now).await?;
             let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
             for ranked in &ranking {
                 let (Some(turn), Some(item)) = (candidates.get(&ranked.item_id), by_id.get(&ranked.item_id)) else {

@@ -288,6 +288,41 @@ async fn a_reminder_becomes_a_task_in_place_and_is_listed_at_once() -> Result<()
     expect_that!(made.body["due"]["date"], eq(&json!("2027-01-05")));
     expect_that!(made.body["due"]["firm"], eq(&json!(true)));
     expect_that!(w.ranked_row(key).await?, some(anything()));
+
+    // It ages from the change, not from the date it was set for, which is still ahead.
+    w.app.clock.advance(Duration::from_days(21));
+    let row = w.ranked_row(key).await?.context("listed")?;
+    let labels: Vec<&str> = row["contributors"]
+        .as_array()
+        .context("contributors")?
+        .iter()
+        .filter_map(|c| c["label"].as_str())
+        .collect();
+    expect_that!(labels, contains(starts_with("Waiting 3 weeks")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_list_frozen_before_a_reminders_date_ranks_it_once_the_date_has_come() -> Result<()> {
+    // Arrange: a list read before the date, then the date comes.
+    let w = world().await?;
+    let reminder = w.remind("Renew the domain", "2027-01-02").await?;
+    let key = reminder.body["key"].as_str().context("key")?;
+    let frozen = w.list("").await?["as_of"].as_i64().context("as_of")?;
+    w.app.clock.advance(Duration::from_hours(12));
+
+    // Act
+    let list = w.list(&format!("as_of={frozen}&reminders=shown")).await?;
+
+    // Assert: ranked as of the frozen time, but no longer to come.
+    expect_that!(list["as_of"], eq(&json!(frozen)));
+    expect_that!(list["reminders"], eq(&json!([])));
+    let ranked = list["ranked"].as_array().context("ranked")?;
+    expect_that!(
+        ranked.iter().filter(|row| row["item"]["key"] == json!(key)).count(),
+        eq(1)
+    );
     Ok(())
 }
 

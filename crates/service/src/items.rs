@@ -274,7 +274,7 @@ impl Services {
             parameters,
             ranking,
             to_come,
-        } = rank_open_items(&self.db, &heap, as_of).await?;
+        } = rank_open_items(&self.db, &heap, as_of, now).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
@@ -1032,18 +1032,19 @@ async fn build_question_views(
         .collect())
 }
 
-/// The open items of the heap (open, in progress, blocked) split into those that rank at `as_of` and its reminders
-/// to come, and its parameters in use. This is where reminders to come leave the ranking: every list, the agents'
-/// queue and Waiting for me read the heap's open items through it.
+/// The open items of the heap (open, in progress, blocked) split into those that rank and its reminders to come at
+/// `now`, and its parameters in use. This is where reminders to come leave the ranking: every list, the agents'
+/// queue and Waiting for me read the heap's open items through it. The split is at the server's `now`, not at the
+/// time a list ranks at, so a reminder whose date has come is ranked even in a list frozen from before it.
 async fn load_open_items(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
-    as_of: Timestamp,
+    now: Timestamp,
 ) -> Result<(Vec<Item>, Vec<Item>, Vec<Parameter>), StoreError> {
     let (to_come, items) = store::items::list_items_in_states(db, heap_id, &StateKind::OPEN)
         .await?
         .into_iter()
-        .partition(|item| item.is_to_come(as_of));
+        .partition(|item| item.is_to_come(now));
     let parameters = store::parameters::list_parameters(db, heap_id).await?;
     Ok((items, to_come, parameters))
 }
@@ -1052,9 +1053,9 @@ async fn load_open_items(
 async fn load_ranked_items(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
-    as_of: Timestamp,
+    now: Timestamp,
 ) -> Result<(Vec<Item>, Vec<Parameter>), StoreError> {
-    let (items, _, parameters) = load_open_items(db, heap_id, as_of).await?;
+    let (items, _, parameters) = load_open_items(db, heap_id, now).await?;
     Ok((items, parameters))
 }
 
@@ -1068,16 +1069,17 @@ pub(crate) struct OpenRanking {
     pub to_come: Vec<Item>,
 }
 
-/// Ranks every open item of the heap that isn't a reminder to come at `as_of` under its stored weights, as its list
-/// does, and returns the items and parameters with the ranking, and the reminders left out. Every ranked item is
+/// Ranks every open item of the heap that isn't a reminder to come at `now`, at `as_of` and under its stored
+/// weights, as its list does, and returns the items and parameters with the ranking, and the reminders left out. Every ranked item is
 /// ranked, because a blocker inherits from what it blocks even when that is left out of what a caller shows. The one
 /// place that says how a heap's current order is made, so no list drifts from another.
 pub(crate) async fn rank_open_items(
     db: &impl ConnectionTrait,
     heap: &Heap,
     as_of: Timestamp,
+    now: Timestamp,
 ) -> Result<OpenRanking, StoreError> {
-    let (items, to_come, parameters) = load_open_items(db, heap.id, as_of).await?;
+    let (items, to_come, parameters) = load_open_items(db, heap.id, now).await?;
     let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
     let ranking = rank(CURRENT_FORMULA, &heap.policy, &parameters, &inputs, as_of);
     Ok(OpenRanking {
@@ -1351,8 +1353,7 @@ const fn forbidden() -> ServiceError {
 }
 
 /// Refuses a patch made in a run unless it only sets the context, makes a note or a reminder a task, or starts the
-/// item (design,
-/// Queue and Runs). Any other field, or any other state, refuses the whole patch.
+/// item (design, Queue and Runs). Any other field, or any other state, refuses the whole patch.
 fn check_run_patch(patch: &ItemPatch) -> Result<(), ServiceError> {
     match patch.state {
         None | Some(StateKind::InProgress) => {}

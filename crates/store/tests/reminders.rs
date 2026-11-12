@@ -176,7 +176,7 @@ async fn a_reminders_arrival_reads_back() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_task_that_was_a_reminder_keeps_its_arrival() -> Result<()> {
+async fn a_task_that_was_a_reminder_keeps_the_arrival_it_was_given() -> Result<()> {
     // Arrange
     let w = world().await?;
     let reminder = w.add("k3x9a", Kind::Reminder, Some(5_000)).await?;
@@ -199,7 +199,7 @@ async fn a_task_that_was_a_reminder_keeps_its_arrival() -> Result<()> {
 
     // Assert
     expect_that!(read.kind, eq(Kind::Task));
-    expect_that!(read.arrives_at, some(eq(at(5_000)?)));
+    expect_that!(read.arrives_at, some(eq(at(1)?)));
     Ok(())
 }
 
