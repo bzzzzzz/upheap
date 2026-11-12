@@ -390,11 +390,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Escape does nothing, so a long draft is never lost to a stray key or closes the item. Save closes the form once
     the save has landed, the text is read-only while it is in flight, and a failed save keeps the draft and says why.
     When someone else saved a different context meanwhile, it shows above the draft under "Saved meanwhile", Save
-    reads Save again and replaces it, and Cancel keeps theirs. Dismissing the phone's sheet (✕, a swipe, a tap outside)
+    reads Save again and replaces it, and Cancel keeps theirs; until Save again, nothing else saves over theirs (Done
+    doesn't go on, and leaving doesn't save the draft). Dismissing the phone's sheet (✕ or a tap outside)
     with a changed draft saves it like Save, and stays open if that doesn't land; an unchanged draft just closes. Done
     and Won't do from the pane save a changed draft first, and don't go on if it can't be saved. Leaving the item with
     a changed draft, by closing it or walking on, saves it when nothing else changed meanwhile, and otherwise doesn't
-    save it; a failure of that save is said under the Context. When the item can no longer be edited (closed
+    save it; a failure of that save is said in a toast. When the item can no longer be edited (closed
     elsewhere, an archived heap, a changed role) the draft stays as read-only text that can be selected, with "This item
     can't be edited any more; your text wasn't saved." and a Close button.
 

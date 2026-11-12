@@ -342,13 +342,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       )}
 
       <ContextDraft.Provider value={setFlushDraft}>
-        <ItemContext
-          item={item}
-          canEdit={canEdit}
-          error={saveDescription.error}
-          onSave={saveContext}
-          onReset={saveDescription.reset}
-        />
+        <ItemContext item={item} canEdit={canEdit} onSave={saveContext} />
       </ContextDraft.Provider>
 
       <ItemSteps heapRef={heapRef} item={item} />

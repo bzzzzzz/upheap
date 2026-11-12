@@ -735,3 +735,37 @@ test("a context typed for the wrap-up is saved before Done closes the item", asy
   );
   await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
 });
+
+test("leaving with a conflict shown doesn't save the draft over theirs", async ({ page, heapPath }) => {
+  test.skip(isPhone(page), "the phone's sheet is checked in its own test");
+  await addItem(page, "Write the plan");
+  await openItem(page, "Write the plan");
+  const pane = itemPane(page);
+  await (await editContext(page)).fill("Mine");
+  await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed" });
+  await refetchShowing(page, "Renamed");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(pane.getByRole("heading", { name: "Saved meanwhile", exact: true })).toBeVisible();
+
+  await closeItem(page);
+  await openItem(page, "Renamed");
+  await expect(itemPane(page).getByRole("region", { name: "Context", exact: true })).toContainText("Theirs");
+  await expect(itemPane(page).getByRole("region", { name: "Context", exact: true })).not.toContainText("Mine");
+});
+
+test("on a phone the sheet of an item closed elsewhere shows the draft and still dismisses", async ({
+  page,
+  heapPath,
+}) => {
+  test.skip(!isPhone(page), "the sheet is the phone's form");
+  await addItem(page, "Ship the release");
+  await openItem(page, "Ship the release");
+  const sheet = page.getByRole("dialog", { name: "Context", exact: true });
+  await (await editContext(page)).fill("Wrap-up that never got saved");
+  await changeElsewhere(page, heapPath, { state: "done" });
+  await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
+  await expect(sheet.getByText("This item can't be edited any more; your text wasn't saved.")).toBeVisible();
+
+  await sheet.getByRole("button", { name: "Close", exact: true }).first().click();
+  await expect(sheet).toHaveCount(0);
+});
