@@ -74,9 +74,12 @@ pub struct RunArgs {
 
 /// Checks one allow rule as clap reads it. Claude's `--allowedTools` splits a value on commas and spaces, so a rule
 /// holding either would become several rules, or none. Each rule gets its own flag instead. The rule is not trimmed.
+/// A rule starting with `-` would reach `claude` as a flag of its own, not as a rule, so it is refused too.
 fn parse_allow_rule(raw: &str) -> Result<String, String> {
     if raw.is_empty() {
         Err("an allow rule can't be empty".to_owned())
+    } else if raw.starts_with('-') {
+        Err("an allow rule can't start with -".to_owned())
     } else if raw.contains(',') || raw.contains(char::is_whitespace) {
         Err("an allow rule can't hold a comma or whitespace: give each rule its own flag".to_owned())
     } else {

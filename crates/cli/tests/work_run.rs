@@ -1273,6 +1273,16 @@ async fn a_bad_allow_rule_is_refused_before_any_request() -> Result<()> {
             expect_that!(tool.starts().len(), eq(0), "{flag} {rule:?}");
             expect_that!(next.stdout.trim().is_empty(), eq(false), "{flag} {rule:?}");
         }
+        // A rule that would reach claude as a flag of its own.
+        let dash = format!("{flag}=--permission-mode");
+        let outcome = cli.run_work(&[ONCE, &[dash.as_str()]].concat(), &tool).await;
+        expect_that!(outcome.exited(2), eq(true), "{dash}");
+        expect_that!(
+            outcome.stderr,
+            contains_substring("an allow rule can't start with -"),
+            "{dash}"
+        );
+        expect_that!(tool.starts().len(), eq(0), "{dash}");
     }
     Ok(())
 }
