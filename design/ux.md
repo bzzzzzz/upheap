@@ -113,8 +113,9 @@ into More with the account pages.
 **Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
 me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
 the icon. There is no count at zero, and the entry stays. The count is the number of open questions across the
-person's heaps, fetched with the page, kept fresh for 30 seconds and fetched again on focus and after a reply or an
-item's change; nothing polls.
+person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the list is, so a
+question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and after a reply
+or an item's change.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now

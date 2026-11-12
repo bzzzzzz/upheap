@@ -833,7 +833,8 @@ Wide sidebar, tablet rail              Phone tabs
 │ Settings               │
 │ team, Teams, Account   │
 └────────────────────────┘
-States: no count at zero.
+States: no count at zero. The count is fetched again every 30 s on every page, as the list is, so it
+never lags a row that shows a question.
 ```
 
 ```
