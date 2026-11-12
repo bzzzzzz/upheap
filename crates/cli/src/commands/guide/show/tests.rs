@@ -60,7 +60,7 @@ fn every_command_is_listed_with_its_inputs_and_its_own_flags() {
     );
     expect_that!(
         guide,
-        contains_substring("  upheap heap show [HEAP]: A heap's name and context\n")
+        contains_substring("  upheap heap show [HEAP]: A heap's name, weights and context\n")
     );
     expect_that!(
         guide,
