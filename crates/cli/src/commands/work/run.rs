@@ -25,7 +25,7 @@ use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
-use crate::client::{ClientError, Fetched, NO_QUERY};
+use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
@@ -153,6 +153,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         interrupts,
         idle_wait,
         heartbeat_every,
+        heartbeat_check,
         finish_retry,
         sweep_every,
     } = work;
@@ -174,6 +175,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         tools,
         idle_wait,
         heartbeat_every,
+        heartbeat_check,
         finish_retry,
         sweep_every,
         last_sweep: Mutex::new(None),
@@ -260,6 +262,19 @@ pub(super) fn is_unreachable(err: &CliError) -> bool {
     err.exit_code() == 5
 }
 
+/// How many heartbeats in a row must fail before the loop says so on stderr. Every failure is logged.
+const FAILURES_TO_SAY: u32 = 2;
+
+/// How a heartbeat went.
+enum Heartbeat {
+    /// The server heard it.
+    Heard,
+    /// The server says the run is over.
+    Over,
+    /// It didn't get through, or the server refused it for another reason.
+    Failed(CliError),
+}
+
 /// How the tool's time ended, as far as the loop can tell.
 enum Driven {
     /// The tool ended on its own, or could not be started.
@@ -330,6 +345,7 @@ struct Shared<'a> {
     tools: Box<dyn AgentTools>,
     idle_wait: Duration,
     heartbeat_every: Duration,
+    heartbeat_check: Duration,
     finish_retry: Duration,
     sweep_every: Duration,
     /// When the root was last swept, or began to be; `None` before the first sweep. Taken by the worker that finds
@@ -838,26 +854,75 @@ impl Shared<'_> {
         Ok((heap.value, item.value))
     }
 
-    /// Waits for the tool, and while it runs says every `heartbeat_every` that the run is alive. Gives up the tool
-    /// (which stops it) when the server says the run is over, or when the stop signal says to stop now: the person's
-    /// second Ctrl-C or a request to stop now. The first Ctrl-C only keeps the loop from claiming again.
+    /// Waits for the tool, and while it runs says every `heartbeat_every` that the run is alive. The time is kept by
+    /// the wall clock and looked at every `heartbeat_check`, since the clock tokio keeps stands still while the
+    /// machine sleeps: a heartbeat then goes out soon after it wakes. A heartbeat that fails is tried again at the
+    /// next check until one is heard, and said once it has failed [`FAILURES_TO_SAY`] times in a row, so the one that
+    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat's request is on its
+    /// way, the tool ending and the stop signal are still watched. Gives up the tool (which stops it) when the server
+    /// says the run is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop
+    /// now. The first Ctrl-C only keeps the loop from claiming again.
     async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
         let mut tool = self.tools.run(start);
-        let mut heartbeat = tokio::time::interval_at(Instant::now() + self.heartbeat_every, self.heartbeat_every);
-        heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut check = tokio::time::interval_at(Instant::now() + self.heartbeat_check, self.heartbeat_check);
+        check.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut alive = true;
+        // When the last heartbeat was tried, or the tool started.
+        let mut last = self.app.now();
+        // How many heartbeats in a row have failed. While any has, the next is due at the next check.
+        let mut failures = 0_u32;
         loop {
             tokio::select! {
                 result = &mut tool => return Driven::Ended(result),
-                _ = heartbeat.tick(), if alive => {
-                    if self.is_run_over(run).await {
-                        // A run that said reached or handed back is over too, with its tool still on its way out:
-                        // that one is left to end, so its cost is recorded. Any other run that is over was taken
-                        // back or lapsed.
-                        if !self.has_ended_itself(run).await {
-                            return Driven::Over;
+                _ = check.tick(), if alive => {
+                    if failures == 0 && !self.heartbeat_is_due(last) {
+                        continue;
+                    }
+                    // The token is got first, whole (see `heartbeat_client`). The heartbeat can take as long as the
+                    // client's timeout, so the tool ending and the stop signal are watched meanwhile.
+                    let outcome = match self.heartbeat_client(run).await {
+                        Ok((client, token)) => tokio::select! {
+                            outcome = Self::send_heartbeat(&client, &token, run) => outcome,
+                            result = &mut tool => return Driven::Ended(result),
+                            () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
+                        },
+                        Err(err) => Heartbeat::Failed(err),
+                    };
+                    last = self.app.now();
+                    match outcome {
+                        Heartbeat::Heard => {
+                            if failures >= FAILURES_TO_SAY {
+                                self.note(&format!(
+                                    "{}  {}  The server hears the run again.",
+                                    self.local_time(last.as_millisecond()),
+                                    run.item.key
+                                ));
+                            }
+                            failures = 0;
                         }
-                        alive = false;
+                        Heartbeat::Failed(err) => {
+                            tracing::warn!(run_id = %run.id, item = %run.item.key, error = %err, "heartbeat failed");
+                            failures = failures.saturating_add(1);
+                            if failures == FAILURES_TO_SAY {
+                                self.note(&format!(
+                                    "{}  {}  warning: couldn't tell the server the run is still going: {}. \
+                                     Trying again every {}.",
+                                    self.local_time(last.as_millisecond()),
+                                    run.item.key,
+                                    one_line(&err.to_string()),
+                                    spoken_duration(self.heartbeat_check),
+                                ));
+                            }
+                        }
+                        Heartbeat::Over => {
+                            // A run that said reached or handed back is over too, with its tool still on its way
+                            // out: that one is left to end, so its cost is recorded. Any other run that is over was
+                            // taken back or lapsed.
+                            if !self.has_ended_itself(run).await {
+                                return Driven::Over;
+                            }
+                            alive = false;
+                        }
                     }
                 }
                 () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
@@ -865,22 +930,31 @@ impl Shared<'_> {
         }
     }
 
-    /// Sends a heartbeat. True when the server says the run is over; any other failure is left for the next tick,
-    /// since the agent's own writes keep the claim alive too.
-    async fn is_run_over(&self, run: &RunDto) -> bool {
+    /// Whether `heartbeat_every` has passed, by the wall clock, since `last`. A clock that has moved back counts as
+    /// passed, so a clock change never stops the heartbeats.
+    fn heartbeat_is_due(&self, last: jiff::Timestamp) -> bool {
+        let passed = self.app.now().as_millisecond() - last.as_millisecond();
+        let every = i64::try_from(self.heartbeat_every.as_millis()).unwrap_or(i64::MAX);
+        passed < 0 || passed >= every
+    }
+
+    /// A client in `run` and a token for its heartbeat. Kept apart from sending it: getting the token may refresh the
+    /// sign-in, which spends the old refresh token, so it must never be cut off halfway, while the heartbeat itself
+    /// can be dropped at any point and simply sent again.
+    async fn heartbeat_client(&self, run: &RunDto) -> Result<(ApiClient, String), CliError> {
+        let client = self.app.client(self.server.clone())?.in_run(Some(run.id.to_string()));
+        let token = self.app.access_token(&client).await?;
+        Ok((client, token))
+    }
+
+    /// Sends a heartbeat for `run` and says how it went. Any failure but the run being over is returned for the
+    /// caller to report, since the agent's own writes keep the claim alive too.
+    async fn send_heartbeat(client: &ApiClient, token: &str, run: &RunDto) -> Heartbeat {
         let id = run.id.to_string();
-        let sent = async {
-            let client = self.app.client(self.server.clone()).map_err(CliError::from)?;
-            let client = client.in_run(Some(id.clone()));
-            let token = self.app.access_token(&client).await?;
-            client
-                .post_empty(&["work", "runs", &id, "heartbeat"], &token)
-                .await
-                .map_err(CliError::from)
-        };
-        match sent.await {
-            Err(CliError::Client(ClientError::Problem { problem, .. })) => problem.code == "run_over",
-            Ok(()) | Err(_) => false,
+        match client.post_empty(&["work", "runs", &id, "heartbeat"], token).await {
+            Ok(()) => Heartbeat::Heard,
+            Err(ClientError::Problem { problem, .. }) if problem.code == "run_over" => Heartbeat::Over,
+            Err(err) => Heartbeat::Failed(err.into()),
         }
     }
 
@@ -1067,6 +1141,18 @@ fn local_time(ms: i64, zone: Option<&str>) -> String {
     }
 }
 
+/// `wait` for a person to read: `30 seconds`, `1 minute`, `5 minutes`; at least `1 second`.
+fn spoken_duration(wait: Duration) -> String {
+    let seconds = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
+    let seconds = seconds.max(1);
+    let (count, unit) = if seconds >= 60 && seconds.is_multiple_of(60) {
+        (seconds / 60, "minute")
+    } else {
+        (seconds, "second")
+    };
+    format!("{count} {unit}{}", if count == 1 { "" } else { "s" })
+}
+
 /// How long a run took, from its length in milliseconds: `0m40s`, `2m10s`, `1h05m`.
 fn format_duration(ms: i64) -> String {
     let seconds = ms.max(0) / 1000;
@@ -1101,6 +1187,16 @@ mod tests {
             }),
             body: String::new(),
         })
+    }
+
+    #[gtest]
+    fn a_wait_is_spoken_in_whole_seconds_or_minutes_and_at_least_a_second() {
+        let spoken = |millis| spoken_duration(Duration::from_millis(millis));
+        expect_that!(spoken(5), eq("1 second"));
+        expect_that!(spoken(30_000), eq("30 seconds"));
+        expect_that!(spoken(60_000), eq("1 minute"));
+        expect_that!(spoken(300_000), eq("5 minutes"));
+        expect_that!(spoken(90_000), eq("90 seconds"));
     }
 
     #[gtest]

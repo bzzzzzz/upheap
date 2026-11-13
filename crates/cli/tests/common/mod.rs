@@ -8,7 +8,7 @@ use std::future::Future;
 use std::io::Write;
 use std::pin::Pin;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
@@ -95,12 +95,50 @@ pub struct TestServer {
     pub url: String,
     http: reqwest::Client,
     clock: Arc<ManualClock>,
+    /// How many heartbeats the server has heard: answered `204`.
+    heard: Arc<AtomicUsize>,
 }
 
 /// A registered user, signed in to the web app.
 pub struct TestUser {
     pub username: String,
     pub session: String,
+}
+
+/// Counts the heartbeats the server answers `204`, so a test can wait for one it has heard.
+async fn count_heard_heartbeats(
+    heard: Arc<AtomicUsize>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let is_heartbeat = request.method() == axum::http::Method::POST && request.uri().path().ends_with("/heartbeat");
+    let response = next.run(request).await;
+    if is_heartbeat && response.status() == axum::http::StatusCode::NO_CONTENT {
+        heard.fetch_add(1, Ordering::SeqCst);
+    }
+    response
+}
+
+/// Stands in for Cloud Run's front end, which answers `411 Length Required` to a POST, PUT or PATCH that has neither
+/// a `Content-Length` nor a `Transfer-Encoding` header, before the request reaches the server. The router alone
+/// accepts one, so without this a client that forgot the length would pass every test and fail in production.
+async fn require_length(request: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    use axum::http::{Method, StatusCode, header};
+    use axum::response::IntoResponse;
+
+    let writes = matches!(*request.method(), Method::POST | Method::PUT | Method::PATCH);
+    let headers = request.headers();
+    let has_length = headers.contains_key(header::CONTENT_LENGTH) || headers.contains_key(header::TRANSFER_ENCODING);
+    if writes && !has_length {
+        let page = "<!DOCTYPE html><html><body><h1>Error: Length Required</h1>\n<h2>POST requests require a Content-length header.</h2></body></html>";
+        return (
+            StatusCode::LENGTH_REQUIRED,
+            [(header::CONTENT_TYPE, "text/html; charset=UTF-8")],
+            page,
+        )
+            .into_response();
+    }
+    next.run(request).await
 }
 
 impl TestServer {
@@ -132,6 +170,13 @@ impl TestServer {
                 max_age: std::time::Duration::from_secs(3600),
             },
         });
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counted = heard.clone();
+        let router = router
+            .layer(axum::middleware::from_fn(move |request, next| {
+                count_heard_heartbeats(counted.clone(), request, next)
+            }))
+            .layer(axum::middleware::from_fn(require_length));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);
         tokio::spawn(async move { axum::serve(listener, router).await });
@@ -139,7 +184,13 @@ impl TestServer {
             url,
             http: local_client()?,
             clock,
+            heard,
         })
+    }
+
+    /// How many heartbeats the server has heard so far.
+    pub fn heard_heartbeats(&self) -> usize {
+        self.heard.load(Ordering::SeqCst)
     }
 
     /// Moves the server's clock on by `by`. Tokens signed in before it may have expired by then.
@@ -198,9 +249,12 @@ impl TestServer {
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
+        // A write without a body still says so with `Content-Length: 0`, which the server's front end requires.
+        request = match body {
+            Some(body) => request.json(&body),
+            None if method == "GET" => request,
+            None => request.header("content-length", 0).body(Vec::new()),
+        };
         let response = request.send().await?;
         let status = response.status();
         let text = response.text().await?;
@@ -410,6 +464,10 @@ pub struct TestCli {
     /// How often `work run --root` sweeps its root after the sweep it does when it starts. Long by default, so a
     /// looping test doesn't ask the server about every kept directory between claims; a test of that shortens it.
     pub sweep_every: StdDuration,
+    /// How often `work run` looks at the clock for a heartbeat that is due, and waits to try a failed one again.
+    pub heartbeat_check: StdDuration,
+    /// Milliseconds the CLI's clock runs ahead of the real one, so a test can have the machine "sleep".
+    pub clock_offset: Arc<AtomicI64>,
     browser: Arc<dyn Browser>,
 }
 
@@ -435,6 +493,8 @@ impl TestCli {
             stdin: Vec::new(),
             heartbeat_every: StdDuration::from_secs(60),
             sweep_every: StdDuration::from_secs(60 * 60),
+            heartbeat_check: StdDuration::from_millis(5),
+            clock_offset: Arc::new(AtomicI64::new(0)),
             browser: Arc::new(NoBrowser),
         })
     }
@@ -477,6 +537,7 @@ impl TestCli {
         stderr: &Buffer,
         work: WorkDeps,
     ) -> Outcome {
+        let offset = self.clock_offset.clone();
         let deps = Deps {
             env: self.env.clone(),
             tokens: self.tokens.clone(),
@@ -484,7 +545,12 @@ impl TestCli {
             stdin: Box::new(std::io::Cursor::new(self.stdin.clone())),
             stdout,
             stderr: Box::new(stderr.clone()),
-            clock: Arc::new(jiff::Timestamp::now),
+            clock: Arc::new(move || {
+                let ahead = jiff::SignedDuration::from_millis(offset.load(Ordering::SeqCst));
+                jiff::Timestamp::now()
+                    .checked_add(ahead)
+                    .unwrap_or_else(|_| jiff::Timestamp::now())
+            }),
             work,
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
@@ -503,6 +569,7 @@ impl TestCli {
             interrupts: Box::new(move || interrupts),
             idle_wait: StdDuration::from_millis(20),
             heartbeat_every: self.heartbeat_every,
+            heartbeat_check: self.heartbeat_check,
             finish_retry: StdDuration::from_millis(5),
             sweep_every: self.sweep_every,
         }
@@ -794,6 +861,7 @@ impl Agent {
                 interrupts: Box::new(move || no_interrupts),
                 idle_wait: StdDuration::from_millis(1),
                 heartbeat_every: StdDuration::from_millis(1),
+                heartbeat_check: StdDuration::from_millis(1),
                 finish_retry: StdDuration::from_millis(1),
                 sweep_every: StdDuration::ZERO,
             },

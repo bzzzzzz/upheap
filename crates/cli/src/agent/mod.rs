@@ -146,8 +146,12 @@ pub struct WorkDeps {
     pub interrupts: ListenForInterrupts,
     /// How long to wait before asking again when nothing is left to do. 60 seconds in the binary.
     pub idle_wait: Duration,
-    /// How often a live run says so. 5 minutes in the binary: a run lapses after 30.
+    /// How often a live run says so, by the wall clock. 5 minutes in the binary: a run lapses after 30.
     pub heartbeat_every: Duration,
+    /// How often the loop looks at the clock to see whether a heartbeat is due, and so how often it tries again
+    /// while heartbeats fail (a try that ran into the client's timeout is followed by the next at once). 30 seconds
+    /// in the binary.
+    pub heartbeat_check: Duration,
     /// How long to wait between tries to record a run's end. 5 seconds in the binary.
     pub finish_retry: Duration,
     /// How long between sweeps of the `--root` for directories to remove. 1 hour in the binary.
@@ -162,6 +166,7 @@ impl WorkDeps {
             interrupts: Box::new(listen_for_signals),
             idle_wait: Duration::from_secs(60),
             heartbeat_every: Duration::from_secs(5 * 60),
+            heartbeat_check: Duration::from_secs(30),
             finish_retry: Duration::from_secs(5),
             sweep_every: Duration::from_secs(60 * 60),
         }
