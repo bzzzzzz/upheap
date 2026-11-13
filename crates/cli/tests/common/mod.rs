@@ -221,9 +221,12 @@ impl TestServer {
         for (name, value) in headers {
             request = request.header(*name, *value);
         }
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
+        // A write without a body still says so with `Content-Length: 0`, which the server's front end requires.
+        request = match body {
+            Some(body) => request.json(&body),
+            None if method == "GET" => request,
+            None => request.header("content-length", 0).body(Vec::new()),
+        };
         let response = request.send().await?;
         let status = response.status();
         let text = response.text().await?;
