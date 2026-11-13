@@ -262,6 +262,9 @@ pub(super) fn is_unreachable(err: &CliError) -> bool {
     err.exit_code() == 5
 }
 
+/// How many heartbeats in a row must fail before the loop says so on stderr. Every failure is logged.
+const FAILURES_TO_SAY: u32 = 2;
+
 /// How a heartbeat went.
 enum Heartbeat {
     /// The server heard it.
@@ -853,8 +856,10 @@ impl Shared<'_> {
 
     /// Waits for the tool, and while it runs says every `heartbeat_every` that the run is alive. The time is kept by
     /// the wall clock and looked at every `heartbeat_check`, since the clock tokio keeps stands still while the
-    /// machine sleeps: a heartbeat then goes out soon after it wakes. A heartbeat that fails is said once, and tried
-    /// again at the next check, until one is heard. Gives up the tool (which stops it) when the server says the run
+    /// machine sleeps: a heartbeat then goes out soon after it wakes. A heartbeat that fails is tried again at the
+    /// next check until one is heard, and said once it has failed [`FAILURES_TO_SAY`] times in a row, so the one that
+    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat is on its way, the tool
+    /// ending and the stop signal are still watched. Gives up the tool (which stops it) when the server says the run
     /// is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop now. The
     /// first Ctrl-C only keeps the loop from claiming again.
     async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
@@ -864,31 +869,37 @@ impl Shared<'_> {
         let mut alive = true;
         // When the last heartbeat was tried, or the tool started.
         let mut last = self.app.now();
-        // Whether the last heartbeat failed, so the next is due at once; and whether that has been said.
-        let mut failing = false;
+        // How many heartbeats in a row have failed. While any has, the next is due at the next check.
+        let mut failures = 0_u32;
         loop {
             tokio::select! {
                 result = &mut tool => return Driven::Ended(result),
                 _ = check.tick(), if alive => {
-                    if !failing && !self.heartbeat_is_due(last) {
+                    if failures == 0 && !self.heartbeat_is_due(last) {
                         continue;
                     }
-                    let outcome = self.heartbeat(run).await;
+                    // A heartbeat can take as long as the client's timeout, and longer with a sign-in to refresh.
+                    let outcome = tokio::select! {
+                        outcome = self.heartbeat(run) => outcome,
+                        result = &mut tool => return Driven::Ended(result),
+                        () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
+                    };
                     last = self.app.now();
                     match outcome {
                         Heartbeat::Heard => {
-                            if failing {
+                            if failures >= FAILURES_TO_SAY {
                                 self.note(&format!(
                                     "{}  {}  The server hears the run again.",
                                     self.local_time(last.as_millisecond()),
                                     run.item.key
                                 ));
                             }
-                            failing = false;
+                            failures = 0;
                         }
                         Heartbeat::Failed(err) => {
                             tracing::warn!(run_id = %run.id, item = %run.item.key, error = %err, "heartbeat failed");
-                            if !failing {
+                            failures = failures.saturating_add(1);
+                            if failures == FAILURES_TO_SAY {
                                 self.note(&format!(
                                     "{}  {}  warning: couldn't tell the server the run is still going: {}. Trying again every {}.",
                                     self.local_time(last.as_millisecond()),
@@ -897,7 +908,6 @@ impl Shared<'_> {
                                     spoken_duration(self.heartbeat_check),
                                 ));
                             }
-                            failing = true;
                         }
                         Heartbeat::Over => {
                             // A run that said reached or handed back is over too, with its tool still on its way

@@ -481,20 +481,18 @@ async fn a_heartbeat_goes_out_when_the_machine_wakes_from_sleep() -> Result<()> 
     let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
     let tool = waiting_agent(&cli.agent(), &entered, &release);
 
-    // Act: twice, the machine sleeps 20 minutes: both clocks move on, the CLI signs in again, and the test waits
-    // for the heartbeat that goes out on waking. Then the CLI's clock moves on a little more, so another is due;
-    // the loop sends one only when the first has been heard. Without it the run would have lapsed at 30 minutes.
+    // Act: twice, the machine sleeps 20 minutes: both clocks move on, the CLI signs in again (the server let the old
+    // access token expire), and the test waits for the server to hear the heartbeat that goes out on waking. Without
+    // those the run would have lapsed at 30 minutes: the test's real time never reaches the 10 minutes between beats.
     let running = cli.run_work(ONCE, &tool);
     let waiting = async {
         entered.notified().await;
         for _ in 0..2 {
             server.advance(Duration::from_minutes(20));
             cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
-            let loads = cli.tokens.loads();
+            let heard = server.heard_heartbeats();
             cli.clock_offset.fetch_add(20 * 60 * 1000, Ordering::SeqCst);
-            wait_until("the heartbeat on waking", || cli.tokens.loads() > loads).await?;
-            cli.clock_offset.fetch_add(11 * 60 * 1000, Ordering::SeqCst);
-            wait_until("the next heartbeat", || cli.tokens.loads() > loads + 1).await?;
+            wait_until("the heartbeat on waking", || server.heard_heartbeats() > heard).await?;
         }
         release.notify_one();
         anyhow::Ok(())

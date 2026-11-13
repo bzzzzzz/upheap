@@ -95,12 +95,28 @@ pub struct TestServer {
     pub url: String,
     http: reqwest::Client,
     clock: Arc<ManualClock>,
+    /// How many heartbeats the server has heard: answered `204`.
+    heard: Arc<AtomicUsize>,
 }
 
 /// A registered user, signed in to the web app.
 pub struct TestUser {
     pub username: String,
     pub session: String,
+}
+
+/// Counts the heartbeats the server answers `204`, so a test can wait for one it has heard.
+async fn count_heard_heartbeats(
+    heard: Arc<AtomicUsize>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let is_heartbeat = request.method() == axum::http::Method::POST && request.uri().path().ends_with("/heartbeat");
+    let response = next.run(request).await;
+    if is_heartbeat && response.status() == axum::http::StatusCode::NO_CONTENT {
+        heard.fetch_add(1, Ordering::SeqCst);
+    }
+    response
 }
 
 /// Stands in for Cloud Run's front end, which answers `411 Length Required` to a POST, PUT or PATCH that has neither
@@ -154,7 +170,13 @@ impl TestServer {
                 max_age: std::time::Duration::from_secs(3600),
             },
         });
-        let router = router.layer(axum::middleware::from_fn(require_length));
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counted = heard.clone();
+        let router = router
+            .layer(axum::middleware::from_fn(move |request, next| {
+                count_heard_heartbeats(counted.clone(), request, next)
+            }))
+            .layer(axum::middleware::from_fn(require_length));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);
         tokio::spawn(async move { axum::serve(listener, router).await });
@@ -162,7 +184,13 @@ impl TestServer {
             url,
             http: local_client()?,
             clock,
+            heard,
         })
+    }
+
+    /// How many heartbeats the server has heard so far.
+    pub fn heard_heartbeats(&self) -> usize {
+        self.heard.load(Ordering::SeqCst)
     }
 
     /// Moves the server's clock on by `by`. Tokens signed in before it may have expired by then.
