@@ -407,6 +407,9 @@ pub struct TestCli {
     /// How often `work run` tells the server a run is alive. Long by default, so a run that has said it reached its
     /// goal is not mistaken for one taken back while its tool is still ending; a test of heartbeats shortens it.
     pub heartbeat_every: StdDuration,
+    /// How often `work run --root` sweeps its root after the sweep it does when it starts. Long by default, so a
+    /// looping test doesn't ask the server about every kept directory between claims; a test of that shortens it.
+    pub sweep_every: StdDuration,
     browser: Arc<dyn Browser>,
 }
 
@@ -431,6 +434,7 @@ impl TestCli {
             config_dir,
             stdin: Vec::new(),
             heartbeat_every: StdDuration::from_secs(60),
+            sweep_every: StdDuration::from_secs(60 * 60),
             browser: Arc::new(NoBrowser),
         })
     }
@@ -500,8 +504,7 @@ impl TestCli {
             idle_wait: StdDuration::from_millis(20),
             heartbeat_every: self.heartbeat_every,
             finish_retry: StdDuration::from_millis(5),
-            // Sweep before every claim, so a test sees what a sweep does.
-            sweep_every: StdDuration::ZERO,
+            sweep_every: self.sweep_every,
         }
     }
 

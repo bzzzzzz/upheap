@@ -1132,6 +1132,64 @@ fn kept_directory(root: &std::path::Path, team: &str, heap: &str, key: &str, day
     Ok(dir)
 }
 
+#[gtest]
+#[tokio::test]
+async fn a_looping_run_sweeps_again_between_claims_when_a_sweep_is_due() -> Result<()> {
+    // Arrange: sweeps due before every claim. The one run makes a kept directory for an item that doesn't exist, after
+    // the sweep at the start has passed, so only a later sweep can remove it.
+    let (_server, _ada, mut cli, _note) = with_prepared_note().await?;
+    cli.sweep_every = StdDuration::ZERO;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let stray = root.join("ada").join("personal").join("zzzzz");
+    let tool = {
+        let (agent, stray) = (cli.agent(), stray.clone());
+        StandIn::new(move |start| {
+            let (agent, stray) = (agent.clone(), stray.clone());
+            async move {
+                std::fs::create_dir_all(&stray).expect("the stray directory");
+                std::fs::write(stray.join(".upheap-run"), "run x\nstarted y\n").expect("its marker");
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                Ok(ToolReport::default())
+            }
+        })
+    };
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let root_arg = root.to_string_lossy().into_owned();
+    let args = [LOOP, &["--root", &root_arg]].concat();
+
+    // Act: once the run has made the directory, wait for a sweep to remove it, then stop the loop.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let pressing = async {
+        wait_until("the run to make the stray directory", || tool.starts().len() == 1).await?;
+        wait_until("a later sweep to remove it", || {
+            stderr
+                .contents()
+                .contains("Removed ada/personal/zzzzz: the item can't be found.")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(stray.exists(), eq(false));
+    expect_that!(tool.starts().len(), eq(1));
+    Ok(())
+}
+
 /// A server with Ada, a heap that leaves its notes alone, the CLI signed in as Ada, and an open note in it. Nothing
 /// is claimed there, so a run only sweeps.
 async fn with_a_note_nobody_claims() -> Result<(TestServer, TestUser, TestCli, String)> {
