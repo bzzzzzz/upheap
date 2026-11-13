@@ -26,7 +26,7 @@ use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Owner, Verdict};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
-use crate::client::{ClientError, Fetched, NO_QUERY};
+use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
@@ -537,10 +537,10 @@ impl Shared<'_> {
         };
         let (heap, item, owner) = match self.read_before_start(&run, &handle).await {
             Ok(read) => read,
-            Err(err) => {
+            Err((what, err)) => {
                 let request = FinishRequestDto {
                     cost_usd: None,
-                    failure: Some(format!("Couldn't read the item before starting: {err}")),
+                    failure: Some(format!("Couldn't {what} before starting: {err}")),
                 };
                 self.finish_and_print(&run, &request).await?;
                 // An item that is gone, such as one moved to another heap since the claim, is that item's trouble:
@@ -693,16 +693,19 @@ impl Shared<'_> {
     /// fails: whatever goes wrong leaves a directory in place, or is a warning.
     async fn sweep(&self, root: &Path) {
         let now = SystemTime::from(self.app.now());
-        // Who is signed in now, since that can change under a running loop. If it can't be read, the server's answer
-        // removes nothing this time, as with any error that keeps directories; age still does.
-        let owner = match self.read_owner().await {
-            Ok(owner) => Some(owner),
+        // Who is signed in now, since that can change under a running loop, and the one token every item below is
+        // read with: a sign-in that lands during the sweep can't make another account's answers look like this one's.
+        // If the server is out of reach the sweep ends here. If it answered but who is signed in can't be read, its
+        // answers remove nothing this time, as with any error that keeps directories; age still does.
+        let signed_in = match self.signed_in().await {
+            Ok(signed_in) => Some(signed_in),
             Err(err) if is_unreachable(&err) => return,
             Err(err) => {
                 tracing::debug!(error = %err, "the sweep couldn't tell who is signed in");
                 None
             }
         };
+        let owner = signed_in.as_ref().map(|(_, _, owner)| owner.clone());
         let found = {
             let root = root.to_owned();
             tokio::task::spawn_blocking(move || {
@@ -725,11 +728,8 @@ impl Shared<'_> {
             }
             let reason = if kept::is_unused(directory.age) {
                 kept::Reason::Unused
-            } else if !directory.mine {
-                // Made through another server or account: its item may be fine, and this server can't say.
-                continue;
-            } else {
-                let read = self.read_closed_at(&directory).await;
+            } else if let (true, Some((client, token, _))) = (directory.mine, &signed_in) {
+                let read = read_closed_at(client, token, &directory).await;
                 match kept::verdict(read.as_ref().copied()) {
                     Verdict::Keep => {
                         if let Err(err) = &read {
@@ -740,27 +740,12 @@ impl Shared<'_> {
                     Verdict::KeepAndStop => return,
                     Verdict::Remove(reason) => reason,
                 }
+            } else {
+                // Made through another server or account: its item may be fine, and this server can't say.
+                continue;
             };
             self.remove_kept(root, &directory, reason).await;
         }
-    }
-
-    /// When the item of `directory` was closed, or `None` while it is open.
-    async fn read_closed_at(&self, directory: &Kept) -> Result<Option<i64>, CliError> {
-        let client = self.app.client(self.server.clone())?;
-        // A token for each request, so a long sweep never keeps one past its expiry.
-        let token = self.app.access_token(&client).await?;
-        let handle = HeapHandle {
-            team: directory.team.clone(),
-            heap: directory.heap.clone(),
-        };
-        let api = HeapApi {
-            client: &client,
-            token: &token,
-            heap: &handle,
-        };
-        let item = api.get_item(&directory.key, &directory.key).await?;
-        Ok(item.value.closed_at)
     }
 
     /// Renames `directory` out of the way and deletes it, then its heap and team directories if that left them empty.
@@ -791,48 +776,51 @@ impl Shared<'_> {
         }
     }
 
-    /// Who is signed in to the server now.
-    async fn read_owner(&self) -> Result<Owner, CliError> {
+    /// A client, one token, and who that token signs in as. Reads that decide what is whose are all made with the
+    /// one token, so a sign-in that replaces it meanwhile can't mix two accounts' answers.
+    async fn signed_in(&self) -> Result<(ApiClient, String, Owner), CliError> {
         let client = self.app.client(self.server.clone())?;
         let token = self.app.access_token(&client).await?;
         let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
-        Ok(Owner::new(self.server.as_str(), &me.value.user.id.to_string()))
+        let owner = Owner::new(self.server.as_str(), &me.value.user.id.to_string());
+        Ok((client, token, owner))
     }
 
     /// What a run reads before it starts: the heap and the item, and with a root, who is signed in now, whose
-    /// directory the run's will be.
+    /// directory the run's will be. All with one token, so the owner written into the directory is the account the
+    /// item was read as. A failure comes with what couldn't be read, for the run's failure text.
     async fn read_before_start(
         &self,
         run: &RunDto,
         handle: &HeapHandle,
-    ) -> Result<(HeapDto, ItemDto, Option<Owner>), CliError> {
-        let (heap, item) = self.read_heap_and_item(run, handle).await?;
-        let owner = match self.root {
-            Some(_) => Some(self.read_owner().await?),
-            None => None,
+    ) -> Result<(HeapDto, ItemDto, Option<Owner>), (&'static str, CliError)> {
+        let (client, token, owner) = if self.root.is_some() {
+            let (client, token, owner) = self.signed_in().await.map_err(|err| ("tell who is signed in", err))?;
+            (client, token, Some(owner))
+        } else {
+            let client = self
+                .app
+                .client(self.server.clone())
+                .map_err(|err| ("read the item", err.into()))?;
+            let token = self
+                .app
+                .access_token(&client)
+                .await
+                .map_err(|err| ("read the item", err))?;
+            (client, token, None)
         };
+        let api = HeapApi {
+            client: &client,
+            token: &token,
+            heap: handle,
+        };
+        let read = async {
+            let heap = api.get::<HeapDto>(&[], NO_QUERY).await?;
+            let item = api.get_item(&run.item.key, &run.item.key).await?;
+            Ok::<_, CliError>((heap.value, item.value))
+        };
+        let (heap, item) = read.await.map_err(|err| ("read the item", err))?;
         Ok((heap, item, owner))
-    }
-
-    /// The heap, for its context, and the item, as they are now.
-    async fn read_heap_and_item(&self, run: &RunDto, handle: &HeapHandle) -> Result<(HeapDto, ItemDto), CliError> {
-        let client = self.app.client(self.server.clone())?;
-        let token = self.app.access_token(&client).await?;
-        let api = HeapApi {
-            client: &client,
-            token: &token,
-            heap: handle,
-        };
-        let heap = api.get::<HeapDto>(&[], NO_QUERY).await?;
-        // A token for each request, so a long loop never keeps one past its expiry.
-        let token = self.app.access_token(&client).await?;
-        let api = HeapApi {
-            client: &client,
-            token: &token,
-            heap: handle,
-        };
-        let item = api.get_item(&run.item.key, &run.item.key).await?;
-        Ok((heap.value, item.value))
     }
 
     /// Waits for the tool, and while it runs says every `heartbeat_every` that the run is alive. Gives up the tool
@@ -1045,6 +1033,21 @@ impl Shared<'_> {
     fn local_time(&self, ms: i64) -> String {
         local_time(ms, self.app.env.time_zone.as_deref())
     }
+}
+
+/// When the item of `directory` was closed, or `None` while it is open, read with `token`.
+async fn read_closed_at(client: &ApiClient, token: &str, directory: &Kept) -> Result<Option<i64>, CliError> {
+    let handle = HeapHandle {
+        team: directory.team.clone(),
+        heap: directory.heap.clone(),
+    };
+    let api = HeapApi {
+        client,
+        token,
+        heap: &handle,
+    };
+    let item = api.get_item(&directory.key, &directory.key).await?;
+    Ok(item.value.closed_at)
 }
 
 /// Locks `mutex`. A worker that panicked while writing leaves nothing half-done worth refusing for, so poison is

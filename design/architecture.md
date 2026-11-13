@@ -684,7 +684,9 @@ section is how it maps onto this API.
    user, so a root shared by two servers or accounts never loses one's directories to the other's 404s; the others are
    kept until they are 7 days old. The user is whoever is signed in at the time: the loop reads `GET /me` at each
    sweep and before each run's marker is written, since `upheap auth login` as another account can change it under a
-   running loop; if the sweep can't read it, only the age rule applies. A run never uses a directory whose marker
+   running loop, and makes the reads that follow with the same token, so a sign-in landing meanwhile can't mix two
+   accounts' answers. If the server answers but `/me` can't be read, only the age rule applies to that sweep; if the
+   server is out of reach, the sweep ends before removing anything. A run never uses a directory whose marker
    names another server or account: it fails with a text that says so, the directory is left as it is, and the loop
    goes on to the next claim (the server makes the turn stuck after repeated failures, which tells the person). For
    the loop's own, the server answering 404 removes (the item is gone, moved to another heap, or in a heap the person
