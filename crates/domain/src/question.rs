@@ -495,6 +495,8 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         let mut item = Item::new(
             ItemId::from_uuid(Uuid::from_u128(3)),

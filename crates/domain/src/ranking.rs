@@ -1097,6 +1097,8 @@ mod tests {
             arrives_at: Some(day(arrives_day)),
             tags: Default::default(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         Item::new(
             id(1),

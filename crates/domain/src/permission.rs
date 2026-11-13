@@ -113,6 +113,9 @@ pub enum ItemAction {
     Reopen,
     /// Make a note or a reminder a task.
     MakeTask,
+    /// Close an open note as become, once items were made from it. Offered on any open note: whether something was
+    /// made is the endpoint's check.
+    Became,
     /// Add a step to a task.
     AddStep,
     /// Ask a question or make a request on an open item.
@@ -143,7 +146,8 @@ pub fn allowed_item_actions(
     if !item.is_closed() {
         let mut actions = vec![ItemAction::Edit, ItemAction::Move, ItemAction::ChangeState];
         match item.kind {
-            Kind::Note | Kind::Reminder => actions.push(ItemAction::MakeTask),
+            Kind::Note => actions.extend([ItemAction::MakeTask, ItemAction::Became]),
+            Kind::Reminder => actions.push(ItemAction::MakeTask),
             Kind::Task => actions.push(ItemAction::AddStep),
         }
         actions.push(ItemAction::AskQuestion);
@@ -661,6 +665,8 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         let mut item = Item::new(
             crate::ItemId::from_uuid(Uuid::from_u128(3)),
