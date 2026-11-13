@@ -1581,6 +1581,8 @@ export interface components {
         /** @description A claim: the run started on the first item of the queue. */
         Claim: {
             run?: null | components["schemas"]["Run"];
+            /** @description As in `WorkNext`. */
+            waiting?: components["schemas"]["WaitingInHeap"][];
             /**
              * Format: int32
              * @description As in `WorkNext`.
@@ -3226,6 +3228,15 @@ export interface components {
             /** @description The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. */
             item: components["schemas"]["ItemRef"];
         };
+        /** @description The items waiting for the person in one heap. */
+        WaitingInHeap: {
+            /**
+             * Format: int32
+             * @description At least 1.
+             */
+            count: number;
+            heap: components["schemas"]["ItemHeap"];
+        };
         /** @description The item a row is on. */
         WaitingItem: {
             /** Format: uuid */
@@ -3313,6 +3324,11 @@ export interface components {
         /** @description The first item of the queue, if there is one. */
         WorkNext: {
             item?: null | components["schemas"]["WorkItem"];
+            /**
+             * @description How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+             *     `waiting_count`.
+             */
+            waiting?: components["schemas"]["WaitingInHeap"][];
             /**
              * Format: int32
              * @description How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item

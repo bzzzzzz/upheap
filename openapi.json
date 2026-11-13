@@ -7734,6 +7734,13 @@
               }
             ]
           },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingInHeap"
+            },
+            "description": "As in `WorkNext`."
+          },
           "waiting_count": {
             "type": "integer",
             "format": "int32",
@@ -11757,6 +11764,25 @@
           }
         }
       },
+      "WaitingInHeap": {
+        "type": "object",
+        "description": "The items waiting for the person in one heap.",
+        "required": [
+          "heap",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "At least 1.",
+            "minimum": 0
+          },
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap"
+          }
+        }
+      },
       "WaitingItem": {
         "type": "object",
         "description": "The item a row is on.",
@@ -12009,6 +12035,13 @@
                 "description": "`null` when nothing in the given heaps waits for an agent."
               }
             ]
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingInHeap"
+            },
+            "description": "How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to\n`waiting_count`."
           },
           "waiting_count": {
             "type": "integer",
