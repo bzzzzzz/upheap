@@ -1313,7 +1313,8 @@ export interface paths {
          * Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a
          *     description and no open question; `defined` needs an open task with a description, a step that isn't dropped and no
          *     open question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the
-         *     item's stage becomes the goal, and `turn_reached` is recorded. A turn sent all the way opens the next turn at once,
+         *     item's stage becomes the goal, and `turn_reached` is recorded. A `stage` past the goal of a turn to `with_context`
+         *     (`defined`) checks the item against that stage instead and moves it there; any other `stage` is refused. A turn sent all the way opens the next turn at once,
          *     recorded as `turn_opened`. A miss is `not_reached` and names the first condition
          *     missed; the run stays live, so the agent can fix the item and say it again.
          */
@@ -2793,6 +2794,7 @@ export interface components {
             links?: string[];
             /** @description What the run did, in a line or two: plain text, 1 to 2,000 characters. */
             result: string;
+            stage?: null | components["schemas"]["Stage"];
         };
         /** @description Asks for changes to the work an agent brought to a stable state short of done. */
         RedoTurnRequest: {
@@ -7851,7 +7853,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, or a link that isn't an absolute `http` or `https` address */
+            /** @description `not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, a link that isn't an absolute `http` or `https` address, or a `stage` that is below the turn's goal or given for a turn to `done` */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -14,7 +14,7 @@ pub mod next;
 pub mod reached;
 pub mod run;
 
-use api_types::common::KindDto;
+use api_types::common::{KindDto, StageDto};
 use api_types::me::MeDto;
 use api_types::turns::GoalDto;
 use api_types::work::{RunEndDto, WorkItemDto};
@@ -106,14 +106,34 @@ pub(super) fn missing_agents(err: ClientError, run: Option<&str>) -> CliError {
 
 /// `note → with context`: where the item is going.
 pub(super) fn journey(item: &WorkItemDto) -> String {
-    let kind = match item.kind {
+    format!("{} → {}", kind_word(item), goal_phrase(item.goal))
+}
+
+/// `journey` for an ended run: `note → defined (skipped with context)` when it reached past its turn's goal.
+pub(super) fn ended_journey(item: &WorkItemDto, end: Option<RunEndDto>) -> String {
+    match skipped_phrase(item).filter(|_| end == Some(RunEndDto::Reached)) {
+        Some(phrase) => format!("{} → {phrase}", kind_word(item)),
+        None => journey(item),
+    }
+}
+
+fn kind_word(item: &WorkItemDto) -> &'static str {
+    match item.kind {
         KindDto::Note => "note",
         KindDto::Task => "task",
         // No turn opens on a reminder, so the queue never holds one; this keeps the match total.
         KindDto::Reminder => "reminder",
         KindDto::Unknown => "item",
-    };
-    format!("{kind} → {}", goal_phrase(item.goal))
+    }
+}
+
+/// `defined (skipped with context)` when the item went past the stage of its turn's goal, as a run that made a note a
+/// defined task in a turn to with context: the stage it reached, then the goal it went past. `None` otherwise.
+pub(super) fn skipped_phrase(item: &WorkItemDto) -> Option<String> {
+    match (item.goal, item.stage) {
+        (GoalDto::WithContext, StageDto::Defined) => Some(format!("defined (skipped {})", goal_phrase(item.goal))),
+        _ => None,
+    }
 }
 
 pub(super) const fn goal_phrase(goal: GoalDto) -> &'static str {

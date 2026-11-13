@@ -139,6 +139,11 @@ pub struct ReachedRequestDto {
     /// Up to 10 absolute `http` or `https` addresses of up to 2,000 characters.
     #[serde(default)]
     pub links: Vec<String>,
+    /// The stable state the item reached, when it went past the turn's goal: `defined`, for a note made a defined task
+    /// in a turn to `with_context`. Left out, the item is checked against the turn's goal. A stage below the goal, or
+    /// any stage in a turn to `done`, is refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<StageDto>,
 }
 
 /// Says a run found nothing to do for the turn's goal.

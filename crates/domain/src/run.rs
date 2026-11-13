@@ -296,6 +296,22 @@ pub fn reached_check(item: &Item, goal: Goal, open_questions: usize, live_steps:
     Ok(())
 }
 
+/// The goal a run's item is checked against when it reports reaching `stage` in a turn to `turn_goal`. No stage is the
+/// turn's goal. A stage is allowed when the goal is a stage and `stage` is at or past it; any other is
+/// [`ValidationError::NotAllowed`] on `stage`.
+pub fn reported_goal(turn_goal: Goal, stage: Option<Stage>) -> Result<Goal, ValidationError> {
+    let Some(stage) = stage else {
+        return Ok(turn_goal);
+    };
+    match turn_goal.stage() {
+        Some(goal) if stage >= goal => Ok(match stage {
+            Stage::AsWritten | Stage::WithContext => Goal::WithContext,
+            Stage::Defined => Goal::Defined,
+        }),
+        _ => Err(ValidationError::NotAllowed { field: Field::Stage }),
+    }
+}
+
 /// The failure text of a run that ended without saying it reached `goal` or asking a question.
 pub fn default_failure(goal: Goal) -> String {
     format!(
@@ -371,6 +387,31 @@ mod tests {
     fn with_context(mut item: Item) -> Item {
         item.description = Description::parse("Why and how").expect("valid");
         item
+    }
+
+    #[gtest]
+    fn a_reported_stage_must_be_at_or_past_the_goal() {
+        expect_that!(reported_goal(Goal::WithContext, None), ok(eq(&Goal::WithContext)));
+        expect_that!(reported_goal(Goal::Defined, None), ok(eq(&Goal::Defined)));
+        expect_that!(reported_goal(Goal::Done, None), ok(eq(&Goal::Done)));
+        expect_that!(
+            reported_goal(Goal::WithContext, Some(Stage::WithContext)),
+            ok(eq(&Goal::WithContext))
+        );
+        expect_that!(
+            reported_goal(Goal::WithContext, Some(Stage::Defined)),
+            ok(eq(&Goal::Defined))
+        );
+        let refused = ValidationError::NotAllowed { field: Field::Stage };
+        expect_that!(
+            reported_goal(Goal::Defined, Some(Stage::WithContext)),
+            err(eq(&refused))
+        );
+        expect_that!(
+            reported_goal(Goal::WithContext, Some(Stage::AsWritten)),
+            err(eq(&refused))
+        );
+        expect_that!(reported_goal(Goal::Done, Some(Stage::Defined)), err(eq(&refused)));
     }
 
     fn task(mut item: Item) -> Item {
