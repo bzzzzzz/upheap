@@ -2039,7 +2039,7 @@ async fn a_run_adds_a_task_with_steps_and_is_told_what_an_item_without_context_n
 
     // Assert
     expect_that!(ran.exited(0), eq(true));
-    let outcomes = outcomes.lock().map_err(|_| anyhow::anyhow!("poisoned"))?;
+    let outcomes = std::mem::take(&mut *outcomes.lock().map_err(|_| anyhow::anyhow!("poisoned"))?);
     expect_that!(outcomes[0].exited(0), eq(true));
     let added = server.read_item(&ada, HEAP, outcomes[0].stdout.trim()).await?;
     expect_that!(added["kind"], eq("task"));

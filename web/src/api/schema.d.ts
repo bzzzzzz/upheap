@@ -2032,6 +2032,8 @@ export interface components {
          */
         InviteViewerStatus: "not_member" | "member" | "removed";
         Item: {
+            /** @description Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin. */
+            added_in_run: boolean;
             allowed_actions: components["schemas"]["ItemAction"][];
             /**
              * Format: int64
@@ -2082,6 +2084,7 @@ export interface components {
             kind: components["schemas"]["Kind"];
             need: components["schemas"]["Need"];
             next_goal: null | components["schemas"]["Goal"];
+            origin: null | components["schemas"]["ItemOrigin"];
             /**
              * @description A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
              *     by parameter name.
@@ -2157,6 +2160,17 @@ export interface components {
             /** Format: uuid */
             id: string;
             label: string;
+        };
+        /** @description The item another item was made from, named where the second refers to it. */
+        ItemOrigin: {
+            /** @description The heap it is in now, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /** Format: uuid */
+            id: string;
+            /** @description Unique within the heap; the item's path is `…/items/{key}`. */
+            key: string;
+            kind: components["schemas"]["Kind"];
+            title: string;
         };
         /** @description An item's value for one custom parameter. */
         ItemParameter: {

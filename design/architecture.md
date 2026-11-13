@@ -163,10 +163,17 @@ The tables and columns are in the migrations. These are the conventions they fol
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, comments, and the run's own heartbeat, reached, hand-back and finish) or it is
+  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, and the run's own heartbeat, reached, hand-back and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
-  and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
+  and touches `heard_at`. Starting an item in a run keeps its turn.
+  **Adding an item in a run** (`check_run_add`) may target any heap the person can edit, in any of their teams. It
+  locks the heap of the run's item and the target heap in heap ID order (once when they are the same, as
+  `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
+  item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
+  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run (`check_run_step_add`),
+  and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  shows to everyone. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
   stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run

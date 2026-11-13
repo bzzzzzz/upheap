@@ -350,6 +350,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       <ItemSteps heapRef={heapRef} item={item} />
 
+      <ItemFrom item={item} />
+
       <ItemQuestions heapRef={heapRef} item={item} waits={waits} />
 
       {/* History starts collapsed and loads once opened; each item opens with it collapsed again. Who added the
@@ -445,6 +447,31 @@ function AddedBy({ item }: { item: Item }) {
   return (
     <p className="text-xs text-muted">
       Added{by && ` by ${by}`} <time dateTime={new Date(item.created_at).toISOString()}>{item.created_label}</time>
+    </p>
+  );
+}
+
+/**
+ * Where the item came from (work-with-agents, W8): `From: "Rotate the certs", a note`, linking to that item, and
+ * " · added by an agent" when a run added it. An item whose origin the viewer can't see shows "Added by an agent"
+ * alone. Nothing when it has neither.
+ */
+function ItemFrom({ item }: { item: Item }) {
+  const { origin, added_in_run: addedInRun } = item;
+  if (!origin && !addedInRun) return null;
+  if (!origin) return <p className="text-sm text-ink-soft">Added by an agent</p>;
+  return (
+    <p className="text-sm text-ink-soft">
+      From:{" "}
+      <Link
+        to="/teams/$team/heaps/$heap/items/$item"
+        params={{ team: origin.heap.team_slug, heap: origin.heap.slug, item: origin.key }}
+        search={true}
+        className="text-accent-ink underline"
+      >
+        “{origin.title}”, a {origin.kind}
+      </Link>
+      {addedInRun && " · added by an agent"}
     </p>
   );
 }
