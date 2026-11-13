@@ -22,6 +22,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   turn_item_blocked: "This item is blocked. Unblock it before sending it to an agent.",
   turn_open: "Someone already sent this to an agent.",
   turn_not_stuck: "Someone else changed this meanwhile.",
+  nothing_to_redo: "The agent's work changed meanwhile: there's nothing to send back.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };

@@ -1,10 +1,11 @@
-import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import type { HeapRef, Question, WaitingRow } from "../api/client";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { BlockerGoneRow, blockerGoneWord } from "../components/BlockerGoneRow";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
+import { proposalSummary } from "../components/proposalSummary";
 import { Markdown } from "../components/Markdown";
 import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
@@ -30,6 +31,7 @@ const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: 
 export function WaitingPage() {
   const { data: me } = useMe();
   const waiting = useWaiting();
+  const navigate = useNavigate();
   const heading = useRef<HTMLHeadingElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const [message, setMessage] = useState("");
@@ -159,13 +161,21 @@ export function WaitingPage() {
                 />
               ) : (
                 row.question && (
-                  <QuestionRow
+                  <QuestionOrProposal
                     key={rowKey(row)}
                     heapRef={heapOf(row)}
                     item={row.item}
                     question={row.question}
                     line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
                     context={<RowContext heapRef={heapOf(row)} itemKey={row.item.key} heapName={row.heap.name} />}
+                    title={row.item.title}
+                    openTo={() =>
+                      void navigate({
+                        to: "/teams/$team/heaps/$heap/items/$item",
+                        params: { ...heapOf(row), item: row.item.key },
+                        state: (prev) => ({ ...prev, closesBack: true }),
+                      })
+                    }
                     onReplied={(question: Question) => {
                       track(row);
                       setElsewhere([]);
@@ -194,6 +204,17 @@ export function WaitingPage() {
       )}
     </main>
   );
+}
+
+/** A question's row; a done proposal's has its summary too. */
+function QuestionOrProposal(props: ComponentProps<typeof QuestionRow>) {
+  return props.question.kind === "done_proposal" ? <ProposalRow {...props} /> : <QuestionRow {...props} />;
+}
+
+/** A done proposal's row, with its summary from the item, which is fetched for it alone (and shared with Context). */
+function ProposalRow(props: ComponentProps<typeof QuestionRow>) {
+  const item = useItem(props.heapRef, props.item.key);
+  return <QuestionRow {...props} summary={item.data ? proposalSummary(item.data) : undefined} />;
 }
 
 /**

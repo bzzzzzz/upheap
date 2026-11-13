@@ -890,10 +890,6 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Waiting for me · 5                 all heaps, most important first     │
 │                                                                        │
-│ Review, round 2 · Rotate the certs · Work                              │
-│   "The script and the runbook"   ↗ link to the work                    │
-│   [Approved] [Changes asked]     comment, optional                     │
-│                                                                        │
 │ Question · Paint the fence · House                                     │
 │   "Which colour?"                                          Details ▾   │
 │     "The fence is cedar, last stained in 2022. The shed beside it      │

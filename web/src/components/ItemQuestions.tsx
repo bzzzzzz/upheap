@@ -17,7 +17,9 @@ import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, isClosed } from "./labels";
 import { Markdown } from "./Markdown";
+import { proposalSummary } from "./proposalSummary";
 import { StuckRow } from "./StuckRow";
+import { useToast } from "./UndoToast";
 import { useUserName } from "./userName";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
@@ -40,6 +42,8 @@ const isAnsweredMeanwhile = (error: Error) =>
 
 /** "Question", "Question · pick any" or "Request": what the question is. */
 export function kindWord(question: Question) {
+  if (question.kind === "review") return `Review, round ${question.review?.round ?? 1}`;
+  if (question.kind === "done_proposal") return "Ready to close";
   return `${question.kind === "request" ? "Request" : "Question"}${question.many ? " · pick any" : ""}`;
 }
 
@@ -51,6 +55,26 @@ function kindLine(item: Item, question: Question) {
     parts.push(title ? `step “${title}”` : `step ${question.step}`);
   }
   return parts.join(" · ");
+}
+
+/** A review's link, which opens the work in a new tab, and its piece when that isn't the link itself. */
+function ReviewLink({ question }: { question: Question }) {
+  const review = question.review;
+  if (question.kind !== "review" || !review) return null;
+  return (
+    <>
+      <a
+        href={review.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open the work: ${review.link}`}
+        className={`text-sm break-all text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent self-start pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center`}
+      >
+        ↗ {review.link.replace(/^https?:\/\//, "")}
+      </a>
+      {review.piece !== review.link && <p className="text-xs break-words text-muted">Piece: {review.piece}</p>}
+    </>
+  );
 }
 
 /** A button that folds `children` open under it. */
@@ -84,11 +108,14 @@ function QuestionHead({
   line,
   question,
   context,
+  summary,
 }: {
   itemId: string;
   line: ReactNode;
   question: Question;
   context?: ReactNode;
+  /** A done proposal's summary line: its steps and reviews, when they are known. */
+  summary?: string | null;
 }) {
   const details = question.details ? <Markdown text={question.details} className="text-ink-soft" /> : null;
   let folded: ReactNode = null;
@@ -110,6 +137,8 @@ function QuestionHead({
       <p id={textId(itemId, question)} className="text-base leading-snug font-semibold break-words">
         {question.text}
       </p>
+      <ReviewLink question={question} />
+      {question.kind === "done_proposal" && summary && <p className="text-xs text-muted">{summary}</p>}
       {folded}
     </>
   );
@@ -338,6 +367,8 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
                 item={item}
                 line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
                 question={question}
+                summary={question.kind === "done_proposal" ? proposalSummary(item) : undefined}
+                title={item.title}
                 onReplied={waits.replied}
                 onElsewhere={waits.repliedElsewhere}
                 onRefused={waits.refusedReply}
@@ -375,6 +406,9 @@ export function QuestionRow({
   line,
   question,
   context,
+  summary,
+  title,
+  openTo,
   onReplied,
   onElsewhere,
   onRefused,
@@ -384,16 +418,29 @@ export function QuestionRow({
   line: ReactNode;
   question: Question;
   context?: ReactNode;
+  /** A done proposal's summary line, from the item. */
+  summary?: string | null;
+  /** The item's title, for the toast that says Close as done closed it. */
+  title: string;
+  /** Opens the closed item from that toast; none where the item is open already. */
+  openTo?: () => void;
   onReplied: (question: Question) => void;
   onElsewhere: (question: Question) => void;
   onRefused: (question: Question, comment: string | null) => void;
 }) {
   const reply = useReplyToQuestion(heapRef, item.key);
   const canReply = question.allowed_actions.includes("reply");
+  const setToast = useToast();
 
   const send = (body: QuestionReply) =>
     reply.mutateAsync({ question, reply: body }).then(
-      () => onReplied(question),
+      (saved) => {
+        onReplied(question);
+        // Close as done is the one reply with a toast: it ends the item.
+        if (question.kind === "done_proposal" && body.picked?.[0] === 0 && isClosed(saved.state)) {
+          setToast({ message: `“${title}” is done.`, action: openTo && { label: "Open", run: openTo } });
+        }
+      },
       (error: Error) => {
         if (isAnsweredMeanwhile(error)) onElsewhere(question);
         else if (isClosedMeanwhile(error)) onRefused(question, body.comment ?? null);
@@ -402,7 +449,7 @@ export function QuestionRow({
 
   return (
     <li data-item={item.id} data-question={question.number} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
-      <QuestionHead itemId={item.id} line={line} question={question} context={context} />
+      <QuestionHead itemId={item.id} line={line} question={question} context={context} summary={summary} />
       {canReply && (
         <ReplyControls
           describedBy={textId(item.id, question)}
@@ -444,10 +491,12 @@ function ReplyControls({
     </TextField>
   );
 
-  if (question.kind === "request") {
+  if (question.kind === "request" || question.kind === "review" || question.kind === "done_proposal") {
     return (
       <div className="flex flex-col gap-2">
-        {commentField("Comment, optional")}
+        {commentField(
+          question.kind === "done_proposal" ? "Comment, optional: what is left, if not yet" : "Comment, optional",
+        )}
         <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
           {question.choices.map((label, index) => (
             <Button
