@@ -3,7 +3,6 @@
 //! An agent writes to its item with the `Upheap-Run` header, which the
 //! extractor reads (`extract.rs`).
 
-use api_types::waiting::ItemHeapDto;
 use api_types::work::{
     ClaimDto, ClaimRequestDto, FinishRequestDto, HandBackRequestDto, ReachedRequestDto, RunDto, WaitingInHeapDto,
     WorkItemDto, WorkNextDto,
@@ -13,9 +12,7 @@ use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use domain::RunId;
-use domain::heap::Heap;
 use domain::run::{RunLink, RunResult, cut_failure, parse_cost_usd};
-use domain::team::Team;
 use serde::Deserialize;
 use service::ServiceError;
 use service::work::{RunView, WaitingInHeap, WorkItem};
@@ -24,6 +21,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
+use crate::dto::to_item_heap_dto;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, ApiQuery, CurrentUser};
 use crate::{ApiError, AppState};
@@ -74,21 +72,11 @@ impl FromRequestParts<AppState> for RunPath {
     }
 }
 
-fn item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
-    ItemHeapDto {
-        id: *heap.id.as_uuid(),
-        slug: heap.slug.to_string(),
-        name: heap.name.as_str().to_owned(),
-        team_slug: team.slug.to_string(),
-        team_name: team.name.as_str().to_owned(),
-    }
-}
-
 fn waiting_dtos(waiting: &[WaitingInHeap]) -> Vec<WaitingInHeapDto> {
     waiting
         .iter()
         .map(|in_heap| WaitingInHeapDto {
-            heap: item_heap_dto(&in_heap.heap, &in_heap.team),
+            heap: to_item_heap_dto(&in_heap.heap, &in_heap.team),
             count: in_heap.count,
         })
         .collect()
@@ -101,7 +89,7 @@ fn work_item_dto(work: &WorkItem) -> WorkItemDto {
         title: work.item.title.as_str().to_owned(),
         kind: work.item.kind.into(),
         stage: work.item.stage.into(),
-        heap: item_heap_dto(&work.heap, &work.team),
+        heap: to_item_heap_dto(&work.heap, &work.team),
         goal: work.turn.goal.into(),
         reach: work.turn.reach.into(),
         line: work.turn.line.as_ref().map(|line| line.as_str().to_owned()),
