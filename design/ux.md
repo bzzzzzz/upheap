@@ -301,7 +301,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens to read, in this order: the title with the main state button and ⋯ beside it (point 6), a status line, Waits for
    you when something does (point 12), the fields (point 16), the context (point 17), the comments (point 18), a task's Steps (point 11),
-   Questions (points 13 and 14) and History, collapsed until it's clicked, on every item it opens. On a phone the
+   what it came from and became (point 19), Questions (points 13 and 14) and History, collapsed until it's clicked, on every item it opens. On a phone the
    main button and ⋯ sit in a bar at the bottom of the sheet instead, the main one wider. The **status line** is one
    quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
@@ -449,6 +449,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     in it and a polite live region says "Comment added". If it fails, the field keeps its text and the reason shows
     under it. What is typed lives apart from the item, so another edit saving or a refetch doesn't touch it. Where
     `comment` isn't offered (an archived heap) the comments read with no field, and with none the section is absent.
+19. **From and Became** sit above Questions, only when they apply, and the items they name open in the pane. An item made
+    from another says "From: “<title>”, a note". A note that was split says "Became: 3 tasks" ("items" when the
+    kinds are mixed) and lists each, with its state. Each links to the heap that item is in now, and both show
+    read-only too.
 
 ## Adding an item
 
@@ -529,12 +533,12 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
    someone else took the turn back or retried it first, the row leaves and a note at the top says "Someone else
    changed this meanwhile." A reply draft in another row survives a stuck row leaving. On a phone both buttons are
    44 px, sharing a row.
-8. **A blocker row** is a blocked item whose blocker was closed as won't do, moved to another heap, or closed as done
+8. **A blocker row** is a blocked item whose blocker was closed as won't do or became, moved to another heap, or closed as done
    without freeing it (it was blocked before that rule, or its blocker had moved away)
    ([architecture.md](architecture.md#cycle-detection-and-locking) §3): it stays blocked, hidden from the list, until
    the person moves it on. It is ranked and counted as a stuck row is. Its head line reads "Blocker closed · <item> ·
    <heap> · <team>", or "Blocker moved · …" after a move; under it "Waits for “<blocker>”, closed as won't do" (or
-   "moved to <heap>"), the blocker's title a link to it, in the heap it is in now. Then **Unblock**, the primary
+   "which became other items", or "moved to <heap>"), the blocker's title a link to it, in the heap it is in now. Then **Unblock**, the primary
    button, which moves the item to open at once, and **Open**, which opens the item to close it or pick another
    blocker; closing it comes back here. Unblock makes the row leave as Retry does, and the live region says
    "Unblocked “<title>”."; if the item changed first, the note says "Someone else changed this meanwhile." In the item's
@@ -556,9 +560,9 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
 
 ## Closed
 
-Done and won't-do items, most recently closed first, under Today, This week and Earlier from each item's
+Done, won't-do and became items, most recently closed first, under Today, This week and Earlier from each item's
 `closed_group`. One intro line explains the week limit. Each row has the title, which opens the item, "Done · today
-by you" or "Won't do · 3 Nov by Sam", and Reopen while the item is inside its week, 44 px on a phone; once it can't
+by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items" when the kinds are mixed), and Reopen while the item is inside its week, 44 px on a phone; once it can't
 be reopened the row shows nothing more, with no per-row dates or "closed for good" labels. Load more pages. A
 closed item opens over the Open list, and closing it returns to Closed.
 

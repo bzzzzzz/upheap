@@ -25,6 +25,16 @@ export const NEED_HINTS: Record<Need, string> = {
 
 export const KIND_LABELS: Record<Kind, string> = { note: "Note", task: "Task", reminder: "Reminder" };
 
+/**
+ * What a note became, as a count: "3 tasks", "1 task", or "2 items" when the kinds are mixed (ux.md, Closed).
+ */
+export function becameWords(became: readonly { kind: Kind }[]): string {
+  const count = became.length;
+  const kinds = new Set(became.map(({ kind }) => kind));
+  const noun = kinds.size === 1 ? [...kinds][0] : "item";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 export const STAGE_LABELS: Record<Stage, string> = {
   as_written: "As written",
   with_context: "With context",
@@ -44,6 +54,7 @@ export const STATE_LABELS: Record<ItemState, string> = {
   blocked: "Blocked",
   done: "Done",
   wont_do: "Won't do",
+  became: "Became",
 };
 
 /** The headings of the closed list's sections, by the server's `closed_group`. */
@@ -53,10 +64,10 @@ export const CLOSED_GROUP_LABELS: Record<ClosedGroup, string> = {
   earlier: "Earlier",
 };
 
-export const STATES: readonly ItemState[] = ["open", "in_progress", "blocked", "done", "wont_do"];
+export const STATES: readonly ItemState[] = ["open", "in_progress", "blocked", "done", "wont_do", "became"];
 
-/** Done and won't do are the closed states. */
-export const isClosed = (state: ItemState) => state === "done" || state === "wont_do";
+/** Done, won't do and became are the closed states. */
+export const isClosed = (state: ItemState) => state === "done" || state === "wont_do" || state === "became";
 
 /**
  * A button that moves an item from `from` to `to`, named for what it does: Start, Block, Done, Won't do, and for
@@ -74,7 +85,10 @@ export function changeLabel(from: ItemState, to: ItemState): string {
  * The likeliest next state of a non-closed item, for the item's main button (ux.md, The item §6), then the
  * other states it can move to besides Won't do, which sits apart.
  */
-export const NEXT_STATES: Record<Exclude<ItemState, "done" | "wont_do">, readonly [ItemState, ...ItemState[]]> = {
+export const NEXT_STATES: Record<
+  Exclude<ItemState, "done" | "wont_do" | "became">,
+  readonly [ItemState, ...ItemState[]]
+> = {
   open: ["in_progress", "blocked", "done"],
   in_progress: ["done", "blocked", "open"],
   blocked: ["open", "in_progress", "done"],

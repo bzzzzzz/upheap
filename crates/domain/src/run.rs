@@ -7,7 +7,7 @@
 use std::fmt;
 
 use crate::handle::ItemKey;
-use crate::item::{Item, ItemState, Kind, Stage};
+use crate::item::{Item, Kind, Need, Stage};
 use crate::text::parse_required;
 use crate::turn::Goal;
 use crate::validation::Field;
@@ -236,24 +236,37 @@ pub enum RunForbidden {
     AddReminder,
     /// Adding an item with no context, which a run never does.
     AddNeedsContext,
+    /// A task made in a split with a need above the note's.
+    NeedAboveOrigin { highest: Need },
+    /// A block on an item that no run of this turn made from the run's item.
+    BlockerNotMade,
 }
 
 impl fmt::Display for RunForbidden {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Person => "Only the person does that.",
-            Self::Done => {
-                "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`."
-            }
-            Self::AddReminder => "A run adds tasks and notes, not reminders.",
-            Self::AddNeedsContext => "An item a run adds needs a context.",
-        })
+        match self {
+            Self::Person => f.write_str("Only the person does that."),
+            Self::Done => f.write_str(
+                "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`.",
+            ),
+            Self::AddReminder => f.write_str("A run adds tasks and notes, not reminders."),
+            Self::AddNeedsContext => f.write_str("An item a run adds needs a context."),
+            Self::NeedAboveOrigin { highest } => write!(
+                f,
+                "An agent never gives a need above the note's, which is {}.",
+                highest.code()
+            ),
+            Self::BlockerNotMade => f.write_str("An agent sets blocks only among the items it made in this turn."),
+        }
     }
 }
 
 /// The first condition of a goal that an item does not meet, as `work reached` reports it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum NotReached {
+    /// An open task made from the note, in a split, has no context or no step.
+    #[error("Task {key}, made from this item, needs a context and a step.")]
+    MadeTaskNotDefined { key: ItemKey },
     #[error("The item is closed.")]
     Closed,
     #[error("The item has no context yet.")]
@@ -278,7 +291,7 @@ pub fn reached_check(item: &Item, goal: Goal, open_questions: usize, live_steps:
     if goal == Goal::Done {
         return Err(NotReached::DoneByProposal);
     }
-    if matches!(item.state, ItemState::Done { .. } | ItemState::WontDo { .. }) {
+    if item.is_closed() {
         return Err(NotReached::Closed);
     }
     if goal == Goal::Defined && item.kind != Kind::Task {
@@ -294,6 +307,22 @@ pub fn reached_check(item: &Item, goal: Goal, open_questions: usize, live_steps:
         return Err(NotReached::OpenQuestion);
     }
     Ok(())
+}
+
+/// Checks that a note can become the items made from it: it has no open question (`open_questions`), and each open
+/// task in `made` (an item made from it with how many steps it has that are not dropped) has a description and a step.
+/// Closed items and notes made from it are not checked.
+pub fn split_reached_check(open_questions: usize, made: &[(Item, usize)]) -> Result<(), NotReached> {
+    if open_questions > 0 {
+        return Err(NotReached::OpenQuestion);
+    }
+    let undefined = made.iter().find(|(item, live_steps)| {
+        item.kind == Kind::Task && !item.is_closed() && (item.description.is_none() || *live_steps == 0)
+    });
+    match undefined {
+        Some((item, _)) => Err(NotReached::MadeTaskNotDefined { key: item.key }),
+        None => Ok(()),
+    }
 }
 
 /// The failure text of a run that ended without saying it reached `goal` or asking a question.
@@ -339,7 +368,7 @@ mod tests {
 
     use super::*;
     use crate::HeapId;
-    use crate::item::{Description, Need, NewItem, Title};
+    use crate::item::{Description, ItemState, Need, NewItem, Title};
 
     fn at(minutes: i64) -> Timestamp {
         Timestamp::from_millis(Duration::from_minutes(minutes).as_millis()).expect("in range")
@@ -357,6 +386,8 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         Item::new(
             ItemId::from_uuid(Uuid::from_u128(3)),
@@ -554,5 +585,51 @@ mod tests {
         }
         expect_that!(RunEnd::from_code("handed_back"), some(eq(RunEnd::HandedBack)));
         expect_that!(RunEnd::from_code("lapsed"), none());
+    }
+
+    fn made(kind: Kind, description: Option<&str>, key: &str) -> Item {
+        let mut item = item();
+        item.kind = kind;
+        item.description = description.map(|text| Description::parse(text).expect("valid").expect("some"));
+        item.key = ItemKey::parse(key).expect("valid");
+        item
+    }
+
+    #[gtest]
+    fn a_split_is_reached_when_every_made_task_has_a_context_and_a_step() {
+        let ready = made(Kind::Task, Some("Done when: certs rotate."), "a1a1a");
+
+        expect_that!(split_reached_check(0, &[(ready, 1)]), ok(()));
+    }
+
+    #[gtest]
+    fn a_split_is_not_reached_with_an_open_question() {
+        let ready = made(Kind::Task, Some("Done when: certs rotate."), "a1a1a");
+
+        expect_that!(split_reached_check(1, &[(ready, 1)]), err(eq(NotReached::OpenQuestion)));
+    }
+
+    #[gtest]
+    fn a_split_names_the_first_made_task_without_a_context_or_a_step() {
+        let ready = made(Kind::Task, Some("Done when: certs rotate."), "a1a1a");
+        let no_step = made(Kind::Task, Some("Done when: x."), "b2b2b");
+        let no_context = made(Kind::Task, None, "c3c3c");
+
+        expect_that!(
+            split_reached_check(0, &[(ready.clone(), 1), (no_step.clone(), 0), (no_context, 1)]),
+            err(eq(NotReached::MadeTaskNotDefined { key: no_step.key }))
+        );
+    }
+
+    #[gtest]
+    fn a_split_ignores_made_notes_and_closed_tasks() {
+        let note = made(Kind::Note, None, "a1a1a");
+        let mut closed = made(Kind::Task, None, "b2b2b");
+        closed.state = ItemState::WontDo {
+            closed_at: Timestamp::from_millis(1).expect("in range"),
+            closed_by: None,
+        };
+
+        expect_that!(split_reached_check(0, &[(note, 0), (closed, 0)]), ok(()));
     }
 }

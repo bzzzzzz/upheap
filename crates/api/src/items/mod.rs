@@ -32,6 +32,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_item, update_item))
         .routes(routes!(reopen_item))
         .routes(routes!(move_item))
+        .routes(routes!(became_item))
 }
 
 /// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
@@ -170,10 +171,10 @@ async fn list_closed(
     params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
     responses(
         (status = 201, body = ItemDto),
-        (status = 403, description = "From inside a run: `run_add_reminder` or `run_add_needs_context`", body = Problem),
+        (status = 403, description = "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
-        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem),
+        (status = 409, description = "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
+        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`)", body = Problem),
     ))]
 async fn create_item(
     State(state): State<AppState>,
@@ -185,7 +186,14 @@ async fn create_item(
     let view = state
         .services
         .create_item(path.principal, path.heap.heap_id, fields)
-        .await?;
+        .await
+        .map_err(|error| match error {
+            ServiceError::BlockerNotInHeap { .. } | ServiceError::BlockerClosed { .. } => ApiError::InField {
+                error,
+                field: "blocked_by",
+            },
+            other => other.into(),
+        })?;
     Ok((StatusCode::CREATED, Json(to_item_dto(view, state.services.now(), &tz))))
 }
 
@@ -208,7 +216,7 @@ async fn get_item(
         (status = 200, body = ItemDto),
         (status = 403, description = "From inside a run: `run_forbidden` (a field or state a run may not set), `run_wrong_item` (another item than the run's, named in `item_key`) or `run_done_needs_review`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, `became_needs_split` (`state` set to `became`: use `POST …/became`), or from inside a run `run_over`", body = Problem),
         (status = 422, description = "Invalid fields, `value_unknown` (a `kind` or `stage` the server doesn't know), `tag_not_in_heap`, `parameter_not_in_heap`, `option_not_in_parameter`, `reminder_needs_date` (`due` cleared on a reminder), `item_not_blocked`, `blocker_not_in_heap`, `blocker_closed` or `blocking_cycle`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
@@ -281,6 +289,31 @@ async fn move_item(
         .services
         .move_item(path.principal, path.item_id, HeapId::from_uuid(body.heap_id), expected)
         .await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Closes a note as became, because items were made from it (`POST …/items` with an `origin`). Declarative: it says
+/// what the note should end up as, so it takes no `If-Match` and a note that already became answers `200` unchanged.
+/// Open questions are withdrawn, as on any close, and a person's request takes back the note's open turn.
+///
+/// From inside a run it also reaches the turn: the note must be the run's item, every open task made from it needs a
+/// context and a step (`not_reached`), and on success those tasks become defined, the note closes, and the run and
+/// the turn end as reached, with no next turn. `POST /work/runs/{run}/reached` after it succeeds and does nothing.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/became", tag = "items", security(("session" = [])),
+    params(ItemParams, TimeZoneHeader),
+    responses(
+        (status = 200, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`)", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`became_needs_note` (a task or a reminder), `nothing_made` (no item was made from it), `item_closed` (done or won't do), `heap_archived`, or from inside a run `run_over`", body = Problem),
+        (status = 422, description = "From inside a run: `not_reached`, naming the first open question or made task that isn't ready", body = Problem),
+    ))]
+async fn became_item(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+) -> Result<Json<ItemDto>, ApiError> {
+    let view = state.services.became_item(path.principal, path.item_id).await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 

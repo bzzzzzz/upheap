@@ -1,7 +1,7 @@
 //! `upheap item add <title>`: add an item to a heap, and say where it landed, or when a reminder joins the list.
 
 use api_types::common::{ItemDto, KindDto, NeedDto, SizeDto};
-use api_types::items::{CreateItemDto, ItemPatchDto, RankedListDto, RankedQuery};
+use api_types::items::{AgeDto, CreateItemDto, ItemPatchDto, OriginInputDto, RankedListDto, RankedQuery};
 use api_types::steps::AddStepDto;
 use api_types::tags::TagListDto;
 use clap::Args;
@@ -12,10 +12,11 @@ use uuid::Uuid;
 use super::common::{
     ParameterSetting, dedupe, describe_due_flag, parameter_values, parse_parameter_setting, resolve_due,
 };
+use crate::client::ApiClient;
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, read_context, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::lookup::{LookupError, resolve_tags};
+use crate::lookup::{HeapHandle, ItemName, LookupError, resolve_tags};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -57,6 +58,16 @@ pub struct AddArgs {
     /// as next-week
     #[arg(long, value_name = "WHEN", conflicts_with_all = ["due", "task"])]
     pub reminder: Option<String>,
+    /// Make it from this note, to split the note into several items: its key, team/heap/key or link. It is added in
+    /// the note's heap, and needs --need and --age
+    #[arg(long, value_name = "ITEM", requires_all = ["need", "age"], conflicts_with = "reminder")]
+    pub from: Option<String>,
+    /// With --from: `keep` ranks it from the note's age, `new` from now
+    #[arg(long, value_name = "AGE", requires = "from", value_parser = parse_api_value::<AgeDto>)]
+    pub age: Option<AgeDto>,
+    /// Start it blocked by this item, named like ITEM. It must be in the same heap and not closed
+    #[arg(long, value_name = "ITEM")]
+    pub blocked_by: Option<String>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -79,7 +90,13 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         }
         .into());
     }
-    let name = named_heap(args.heap.name.as_deref(), app)?;
+    let from_name = args.from.as_deref().map(ItemName::parse).transpose()?;
+    let blocker_name = args.blocked_by.as_deref().map(ItemName::parse).transpose()?;
+    // The heap the item is added to: the one named, else the note's, else the default.
+    let named = match (&from_name, args.heap.name.as_deref()) {
+        (Some(ItemName::Full { .. }), None) => None,
+        (_, flag) => Some(named_heap(flag, app)?),
+    };
     let description = match (&args.description, &args.context_file) {
         (Some(raw), _) => Some(read_description(raw, app).await?),
         (None, Some(path)) => Some(read_context(path, app).await?),
@@ -87,7 +104,12 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     };
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
-    let heap = resolve_heap_handle(name, &client, &token).await?;
+    let heap = match (named, &from_name) {
+        (Some(name), _) => resolve_heap_handle(name, &client, &token).await?,
+        (None, Some(ItemName::Full { heap, .. })) => heap.clone(),
+        // `named` is only `None` for a `--from` that names its own heap.
+        (None, _) => resolve_heap_handle(named_heap(args.heap.name.as_deref(), app)?, &client, &token).await?,
+    };
     let api = HeapApi {
         client: &client,
         token: &token,
@@ -117,6 +139,17 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     } else {
         args.task.then_some(KindDto::Task)
     };
+    let origin = match (from_name, args.from.as_deref(), args.age) {
+        (Some(name), Some(typed), Some(age)) => Some(OriginInputDto {
+            item_id: item_id_of(name, typed, &heap, &client, &token).await?,
+            age,
+        }),
+        _ => None,
+    };
+    let blocked_by = match (blocker_name, args.blocked_by.as_deref()) {
+        (Some(name), Some(typed)) => Some(item_id_of(name, typed, &heap, &client, &token).await?),
+        _ => None,
+    };
     let body = CreateItemDto {
         title: args.title,
         description,
@@ -127,6 +160,8 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         due,
         tag_ids,
         parameter_values,
+        origin,
+        blocked_by,
     };
     let mut added = api.post::<ItemDto>(&["items"], &body).await?;
     if needs_task_patch(args.task, &added.value) {
@@ -196,6 +231,27 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         }
     }
     Ok(())
+}
+
+/// The ID of the item `typed` names (`name` is it, parsed): a key is in `heap`, the heap the new item goes to; a path
+/// or link names its own heap.
+async fn item_id_of(
+    name: ItemName,
+    typed: &str,
+    heap: &HeapHandle,
+    client: &ApiClient,
+    token: &str,
+) -> Result<Uuid, CliError> {
+    let (key, at) = match name {
+        ItemName::Key(key) => (key, heap.clone()),
+        ItemName::Full { heap, key } => (key, heap),
+    };
+    let api = HeapApi {
+        client,
+        token,
+        heap: &at,
+    };
+    Ok(api.get_item(typed, &key).await?.value.id)
 }
 
 /// Whether the server added a note although `--task` asked for a task, which only a server older than `kind` on

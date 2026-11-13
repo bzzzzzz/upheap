@@ -374,6 +374,29 @@ impl Turn {
         })
     }
 
+    /// The turn `task`, split from this turn's note, gets when the note becomes it: the same reach, line, source and
+    /// opener, going to the goal [`goal_for`] says for `task` (done, for the defined task a split leaves). `None`
+    /// unless this turn was sent all the way: a turn of one state gives nothing to what it made.
+    #[must_use]
+    pub fn passed_on(&self, id: TurnId, task: &Item, now: Timestamp) -> Option<Self> {
+        if self.reach != Reach::AllTheWay {
+            return None;
+        }
+        Some(Self {
+            id,
+            item_id: task.id,
+            reach: self.reach,
+            goal: goal_for(task),
+            line: self.line.clone(),
+            opened_by: self.opened_by,
+            source: self.source,
+            opened_at: now,
+            ended: None,
+            redone: None,
+            failed_runs: 0,
+        })
+    }
+
     /// Whether `stage` is at this turn's goal or past it, so there is nothing left for an agent to do: the goal is a
     /// stage and `stage` reaches it. Never for a turn to done, which closes the item.
     pub fn goal_met_by(&self, stage: Stage) -> bool {
@@ -523,6 +546,8 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         let mut item = Item::new(
             ItemId::from_uuid(Uuid::from_u128(3)),
@@ -765,6 +790,50 @@ mod tests {
     }
 
     #[gtest]
+    fn a_note_sent_all_the_way_passes_its_turn_on_to_a_defined_task_split_from_it() {
+        // Arrange
+        let turn = all_the_way(&item(Kind::Note, Stage::WithContext));
+        let task = Item {
+            id: ItemId::from_uuid(Uuid::from_u128(7)),
+            ..item(Kind::Task, Stage::Defined)
+        };
+        let id = TurnId::from_uuid(Uuid::from_u128(41));
+        let now = Timestamp::EPOCH;
+
+        // Act
+        let passed = turn.passed_on(id, &task, now);
+
+        // Assert
+        expect_that!(
+            passed,
+            some(eq(&Turn {
+                id,
+                item_id: task.id,
+                reach: Reach::AllTheWay,
+                goal: Goal::Done,
+                line: turn.line.clone(),
+                opened_by: turn.opened_by,
+                source: turn.source,
+                opened_at: now,
+                ended: None,
+                redone: None,
+                failed_runs: 0,
+            }))
+        );
+    }
+
+    #[gtest]
+    fn a_turn_of_one_state_passes_nothing_on() {
+        let mut one = all_the_way(&item(Kind::Note, Stage::WithContext));
+        one.reach = Reach::One;
+        let task = item(Kind::Task, Stage::Defined);
+        expect_that!(
+            one.passed_on(TurnId::from_uuid(Uuid::from_u128(41)), &task, Timestamp::EPOCH),
+            none()
+        );
+    }
+
+    #[gtest]
     fn taking_a_turn_back_ends_it() {
         let note = item(Kind::Note, Stage::AsWritten);
         let user = UserId::from_uuid(Uuid::from_u128(10));
@@ -925,6 +994,8 @@ mod run_tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         Item::new(
             ItemId::from_uuid(Uuid::from_u128(3)),

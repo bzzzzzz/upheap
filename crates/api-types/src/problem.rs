@@ -22,6 +22,9 @@ pub struct Problem {
     /// for `run_wrong_item`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_key: Option<String>,
+    /// The highest need code a run may give, for `run_need_above_origin`: the need of the note it splits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highest: Option<String>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,

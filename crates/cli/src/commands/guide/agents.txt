@@ -48,6 +48,11 @@ The usual order of work
    are never a reason to rewrite it.
    Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
    then a step for each part, ticked as each one is finished.
+   A note that is really several pieces of work is split. Make each task from it, giving its need and its age
+   (keep counts from the note's age, new from now):
+   `upheap item add "<title>" --task --from k3x9a --need expected --age keep`
+   and chain them with `--blocked-by <task>`. Then close the note with `upheap item became k3x9a`.
+   `upheap item show` lists what a note became, and where a task came from.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
    open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead,
    and `upheap work hand-back --reason "<why>"` gives the turn back when there is nothing to do and the goal

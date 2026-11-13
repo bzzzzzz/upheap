@@ -54,6 +54,28 @@ impl HeapApi<'_> {
         }
     }
 
+    /// `POST` to the item with `key`'s `became`: close the note as became. It says what the note should end up as, so
+    /// it takes no version. A `404` is reported like [`get_item`](Self::get_item)'s.
+    pub async fn became_item(&self, typed: &str, key: &str) -> Result<Fetched<ItemDto>, CliError> {
+        match self
+            .client
+            .post(
+                &self.path(&["items", key, "became"]),
+                &serde_json::json!({}),
+                self.token,
+            )
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => Err(CliError::NoSuchItem {
+                name: typed.to_owned(),
+                heap: self.heap.to_string(),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// `PATCH` of `body` to the item with `key`, which is at `version`. A stale or closed item's refusal names the
     /// item as `team/heap/key`, so the hint built from it works whatever heap is the default and is safe to paste.
     pub async fn patch_item(
@@ -280,6 +302,8 @@ pub(super) fn state_text(state: StateDto) -> &'static str {
         StateDto::Blocked => "blocked",
         StateDto::Done => "done",
         StateDto::WontDo => "won't do",
+        StateDto::Became => "became",
+        StateDto::Unknown => "unknown",
     }
 }
 

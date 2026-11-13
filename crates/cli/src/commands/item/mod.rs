@@ -3,6 +3,7 @@
 pub(super) mod common;
 
 pub mod add;
+pub mod became;
 pub mod edit;
 pub mod list;
 pub mod move_item;

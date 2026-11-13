@@ -23,6 +23,9 @@ pub(crate) fn describe_new_item(item: &Item) -> Value {
     if item.stage == Stage::AsWritten {
         fields.remove("stage");
     }
+    if let Some(origin) = item.origin_id {
+        fields.insert("origin".into(), json!(origin.to_string()));
+    }
     Value::Object(fields)
 }
 

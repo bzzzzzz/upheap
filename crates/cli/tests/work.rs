@@ -321,7 +321,7 @@ async fn what_a_run_is_refused_is_exit_3_with_the_servers_message_and_a_hint() -
     );
     expect_that!(
         not_reached.stderr,
-        contains_substring("hint: Fix what's missing and say reached again.")
+        contains_substring("hint: Fix what's missing, then run the same command again.")
     );
     expect_that!(finished.exited(0), eq(true));
     expect_that!(finished.stdout.starts_with("Run ended: failed: "), eq(true));

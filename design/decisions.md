@@ -405,13 +405,13 @@ backend, and a second end-to-end suite.
 and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19. §2, §12, §15 and §22 cite the local build in passing and stand on their other
 reasons.
 
-## 35. A gone blocker is read, not stored; done frees, won't do and a move wait for the person
+## 35. A gone blocker is read, not stored; done frees, won't do, became and a move wait for the person
 
 **Context.** Blocked items are hidden from the list. Closing their blocker changed nothing, so work free to go on
 stayed out of sight. Moving a blocker to another heap cleared the link, leaving items blocked by nothing.
 
 **Decision.** Closing a blocker as done moves what it blocks in its heap to open, in the same transaction, with an
-entry in each item's history. Closing it as won't do, or moving it to another heap, leaves the items blocked and
+entry in each item's history. Closing it as won't do or as became (§36), or moving it to another heap, leaves the items blocked and
 pointing at it, and they wait for the person. Whether a blocker is gone is read off the item and its blocker (closed,
 or in another heap), never stored, so reopening the blocker or moving it back ends the wait with no write. A move
 keeps the link across heaps of the team.
@@ -424,3 +424,20 @@ which loses what the item waited for.
 without a heap scope, while setting one still needs an open item of the same heap. Reopening a done blocker doesn't
 block what it freed again. A blocker moved away and then closed as done there doesn't free what it left behind; those
 items keep waiting ([architecture.md](architecture.md#cycle-detection-and-locking) §2–3).
+
+## 36. A closed state "became", not an open parent
+
+**Context.** A note that is really several pieces of work has to end somewhere. Left open it stays in the list as
+work nobody will do; closed as done it claims work that isn't finished; closed as won't do it says the work won't
+happen.
+
+**Decision.** Closing is a third outcome beside done and won't do: **became**, set when items were made from the note.
+Each item made from another keeps a link to it, its origin, so the trail runs both ways (From, Became). A note
+that became can be reopened within the week like any closed item, and what it became stays.
+
+**Instead of.** Keeping the note open as a parent that waits for its children. That brings a hierarchy of items, with
+its own ranking and its own questions of progress: does the parent rank by its children, and when is it done.
+
+**Consequences.** Ranking stays flat: the tasks rank as any other. Nothing tracks "how much of the note is done"; the
+note's page lists what it became with their states. A blocker that became leaves what it blocks waiting for the
+person, as one closed as won't do does (§35).

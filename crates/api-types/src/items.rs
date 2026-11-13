@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use domain::item::{BlockReason, Description, Due, ItemPatch, Kind, NewItem, Stage, StateKind, Title};
+use domain::item::{Age, BlockReason, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -316,6 +316,41 @@ pub struct CreateItemDto {
     /// An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameter_values: Option<BTreeMap<Uuid, Uuid>>,
+    /// Makes the item from another, which must be an open note of the same heap (a split): the item gets a link to
+    /// it, and is one of the items the note became. Not for a reminder. In a run it must be the run's item. A run that
+    /// leaves it out adds a follow-up instead, which links back to the run's item but isn't one of what it became.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<OriginInputDto>,
+    /// The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_by: Option<Uuid>,
+}
+
+/// The item a new item is made from, and whose age it takes.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[schema(as = OriginInput)]
+pub struct OriginInputDto {
+    pub item_id: Uuid,
+    /// Required: nothing is inherited silently. `keep` ranks the new item's age from the origin's, `new` from now.
+    pub age: AgeDto,
+}
+
+/// Whose age a new item made from another counts from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Age)]
+pub enum AgeDto {
+    Keep,
+    New,
+}
+
+impl From<AgeDto> for Age {
+    fn from(age: AgeDto) -> Self {
+        match age {
+            AgeDto::Keep => Self::Keep,
+            AgeDto::New => Self::New,
+        }
+    }
 }
 
 impl CreateItemDto {
@@ -353,6 +388,11 @@ impl CreateItemDto {
                 .flatten()
                 .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), OptionId::from_uuid(*option)))
                 .collect(),
+            origin: self.origin.as_ref().map(|origin| NewOrigin {
+                item_id: ItemId::from_uuid(origin.item_id),
+                age: origin.age.into(),
+            }),
+            blocked_by: self.blocked_by.map(ItemId::from_uuid),
         })
     }
 }
@@ -444,7 +484,7 @@ impl ItemPatchDto {
                 .flatten()
                 .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), option.map(OptionId::from_uuid)))
                 .collect(),
-            state: self.state.map(StateKind::from),
+            state: self.state.map(StateKind::try_from).transpose()?,
             blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
             blocked_reason: match &self.blocked_reason {
                 None => None,
@@ -518,6 +558,8 @@ mod tests {
             }),
             tag_ids: None,
             parameter_values: None,
+            origin: None,
+            blocked_by: None,
         };
 
         // Act

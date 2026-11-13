@@ -58,7 +58,17 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **A reminder's arrival** is its own column, `items.arrives_at`: the first millisecond of its date in the time zone
   of the request that set it, not worked out from the due's end of day (a day that changes the clocks is not 24
   hours long). It is `NULL` for an item that was never a reminder, and kept when the reminder becomes a task, so the
-  task's age still counts from it. A reminder's due is firm and ends the same day.
+  task's age still counts from it. A reminder's due is firm and ends the same day. Ranking reads
+  `arrives_at.unwrap_or(created_at)` as the item's age, so `arrives_at` has a second use: an item made from another
+  with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
+  It is still `NULL` for every other item, and the API shows it only for reminders.
+- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run
+  that added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what
+  the note became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the
+  Became list. All three are set when the item is made and never changed, and stay when either item later moves to
+  another heap, as a blocker's link does. An index on `origin_id` serves the lookup of what a note became, which the
+  item and the closed list show as `became`, each with the heap it is in now: a handful of items per note, and at
+  most one page of closed items, read in one query.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -163,7 +173,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, and the run's own heartbeat, reached, hand-back and finish) or it is
+  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, closing a note as became, and the run's own heartbeat, reached, hand-back and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
   and touches `heard_at`. Starting an item in a run keeps its turn.
@@ -171,9 +181,17 @@ The tables and columns are in the migrations. These are the conventions they fol
   locks the heap of the run's item and the target heap in heap ID order (once when they are the same, as
   `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
   item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
-  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run (`check_run_step_add`),
-  and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
-  shows to everyone. Audit entries of a write in a run carry
+  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
+  the run's item (`check_run_step_add`), and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
+  the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
+  from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
+  checks that no question is open and every open task split from the note, in the note's heap, has a context and
+  a step
+  (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
+  run and turn end as reached with no follow-on on the note. If that turn was sent all the way, each of those tasks
+  not started and without an open turn gets one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener,
+  to done); a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
   stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
@@ -183,8 +201,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   `redone` (`redone_at`, `redone_by`), puts the item's stage back to where the turn's first run found it, and opens a
   turn to the same reach and goal with the person's line, in one transaction. Only the item's latest turn can be
   redone, and only once; the kind isn't changed back and what the agent wrote stays.
-- **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
-  won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
+- **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done,
+  won't do or became (a note closed because items were made from it; only `POST …/became` sets it). In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
 - **Case-insensitive uniqueness** (tag names per heap) is a lowercased key column with a unique index rather than a
   collation, because MySQL compares case-insensitively by default and SQLite doesn't. Where an index can't express
@@ -381,11 +399,12 @@ a fixed time.
    refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
-   same heap when it is set. So is the reason in words (`blocked_reason`): leaving the state clears it, and a move to
-   another heap keeps it while the blocker is dropped. Closing a blocker as done frees what it blocks in its heap: in the same transaction,
+   same heap when it is set, also for an item made blocked (`blocked_by` on create). So is the reason in words
+   (`blocked_reason`): leaving the state clears it, and a move to another heap keeps it while the blocker is dropped.
+   Closing a blocker as done frees what it blocks in its heap: in the same transaction,
    under the heap lock, each item it blocks goes to open with its own `item_updated` entry naming the blocker
    (`blocker_done`), and gets its next version. Closing it as won't do writes nothing to them: an item whose blocker is
-   closed, or in another heap after a move (§2), stays blocked and waits for the person, which is read off the item
+   closed, closed as became, or in another heap after a move (§2), stays blocked and waits for the person, which is read off the item
    and its blocker, never stored (`Item::blocker_gone`). It shows in Waiting for me and its count, in the item's Waits
    for you, and in the agents' waiting count, until the person unblocks it, closes it or picks another blocker.
    Reopening the blocker makes it hold them again; an item it freed stays open, and its history says why. Items
@@ -740,10 +759,10 @@ section is how it maps onto this API.
    (`deserialize_with`), and `Factor` (contributors), `HeldBackGap`, `ClosedGroup` and the audit log's `AuditAction`
    read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
-   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
-   and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
+   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind`, `Stage` and
+   state (`ItemState`, which gained `became`), and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
    request when converting to the domain type, with `422 value_unknown` naming the field, rather than at parsing
-   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `ItemState`, `Role`,
+   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `Role`,
    and the list view's `StateMode`, `BlockedLayout` and `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
    would still stop an older CLI reading the heap's views; making them lenient the way `Kind` is, left for when it
    happens.

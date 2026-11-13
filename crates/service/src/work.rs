@@ -76,6 +76,13 @@ pub struct ClaimView {
     pub waiting: Vec<WaitingInHeap>,
 }
 
+/// The run a write is made in and the turn it works to.
+#[derive(Debug)]
+pub(crate) struct RunScope {
+    pub run: Run,
+    pub turn: Turn,
+}
+
 /// A heap the queue is asked about, with its team.
 struct QueueHeap {
     heap: Heap,
@@ -257,6 +264,11 @@ impl Services {
     ) -> Result<RunView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (run, heap) = self.lock_run(&txn, principal, run_id).await?;
+        // A run that already ended as reached, as `item became` ends it, has nothing more to do.
+        if run.ended.as_ref().is_some_and(|ended| ended.end == RunEnd::Reached) {
+            let view = self.run_view(&txn, run).await?;
+            return Ok(view);
+        }
         let now = self.now();
         let turn = self.ensure_live(&txn, &run, now).await?;
         let item = store::items::find_item_locking(&txn, run.item_id)
@@ -466,21 +478,22 @@ impl Services {
         principal: Principal,
         item_id: ItemId,
         now: Timestamp,
-    ) -> Result<Option<Run>, ServiceError> {
+    ) -> Result<Option<RunScope>, ServiceError> {
         self.check_run_item(txn, principal, item_id, None, now).await
     }
 
     /// [`Self::check_run_write`] for adding a step to `item`: it may also be an item this run added
-    /// (`created_run_id`), which is the only write a run has on one besides what it has on its own item.
+    /// (`created_run_id`), or one split from the run's item by anyone, so a run can finish a split a failed run or the
+    /// person started: `became` in a run needs a step on each. That is the only write a run has on them besides what it
+    /// has on its own item.
     pub(crate) async fn check_run_step_add(
         &self,
         txn: &impl ConnectionTrait,
         principal: Principal,
         item: &Item,
         now: Timestamp,
-    ) -> Result<Option<Run>, ServiceError> {
-        self.check_run_item(txn, principal, item.id, item.created_run_id, now)
-            .await
+    ) -> Result<Option<RunScope>, ServiceError> {
+        self.check_run_item(txn, principal, item.id, Some(item), now).await
     }
 
     async fn check_run_item(
@@ -488,9 +501,9 @@ impl Services {
         txn: &impl ConnectionTrait,
         principal: Principal,
         item_id: ItemId,
-        added_in: Option<RunId>,
+        made: Option<&Item>,
         now: Timestamp,
-    ) -> Result<Option<Run>, ServiceError> {
+    ) -> Result<Option<RunScope>, ServiceError> {
         let Some(run_id) = principal.run else {
             return Ok(None);
         };
@@ -498,15 +511,22 @@ impl Services {
             .await?
             .filter(|run| run.user_id == principal.user_id)
             .ok_or(ServiceError::NotFound)?;
-        self.ensure_live(txn, &run, now).await?;
-        if run.item_id != item_id && added_in != Some(run.id) {
+        let turn = self.ensure_live(txn, &run, now).await?;
+        let allowed = run.item_id == item_id
+            || match made {
+                Some(item) => {
+                    item.created_run_id == Some(run.id) || (item.made_in_split && item.origin_id == Some(run.item_id))
+                }
+                None => false,
+            };
+        if !allowed {
             let held = store::items::find_item(txn, run.item_id)
                 .await?
                 .ok_or(ServiceError::NotFound)?;
             return Err(RunError::WrongItem { key: held.key }.into());
         }
         store::runs::touch_run(txn, run.id, now).await?;
-        Ok(Some(run))
+        Ok(Some(RunScope { run, turn }))
     }
 
     /// Checks that the run `principal` carries may add `fields` to the heap `target`, and tells the run it was heard
@@ -799,4 +819,19 @@ impl Services {
             },
         })
     }
+}
+
+/// Whether `item` was split from `run`'s item by a run of the same turn: `run` itself, or one before it that failed
+/// or lapsed. A run may chain blocks on such items (Blocks §1).
+pub(crate) async fn split_in_turn(db: &impl ConnectionTrait, item: &Item, run: &Run) -> Result<bool, ServiceError> {
+    if !item.made_in_split || item.origin_id != Some(run.item_id) {
+        return Ok(false);
+    }
+    Ok(match item.created_run_id {
+        Some(maker) if maker == run.id => true,
+        Some(maker) => store::runs::find_run(db, maker)
+            .await?
+            .is_some_and(|maker| maker.turn_id == run.turn_id),
+        None => false,
+    })
 }

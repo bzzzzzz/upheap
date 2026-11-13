@@ -97,6 +97,7 @@ struct Classified {
     field: Option<&'static str>,
     hint: Option<String>,
     item_key: Option<String>,
+    highest: Option<String>,
     category: Category,
 }
 
@@ -108,6 +109,7 @@ fn classify(err: &ApiError) -> Classified {
         field: None,
         hint: None,
         item_key: None,
+        highest: None,
         category,
     };
     match err {
@@ -147,6 +149,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         field: None,
         hint: None,
         item_key: None,
+        highest: None,
         category,
     };
     match err {
@@ -198,6 +201,26 @@ fn classify_service(err: &ServiceError) -> Classified {
                 Category::Caller,
             )
         },
+        ServiceError::Item(ItemError::BecameNeedsSplit { .. }) => Classified {
+            field: Some("state"),
+            ..simple(StatusCode::CONFLICT, "became_needs_split", Category::Conflict)
+        },
+        ServiceError::Item(ItemError::BecameNeedsNote { .. }) => {
+            simple(StatusCode::CONFLICT, "became_needs_note", Category::Conflict)
+        }
+        ServiceError::OriginNotInHeap { .. } => Classified {
+            field: Some("origin"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "origin_not_in_heap", Category::Caller)
+        },
+        ServiceError::OriginNotANote { .. } => Classified {
+            field: Some("origin"),
+            ..simple(StatusCode::CONFLICT, "origin_not_a_note", Category::Conflict)
+        },
+        ServiceError::OriginClosed { .. } => Classified {
+            field: Some("origin"),
+            ..simple(StatusCode::CONFLICT, "origin_closed", Category::Conflict)
+        },
+        ServiceError::NothingMade { .. } => simple(StatusCode::CONFLICT, "nothing_made", Category::Conflict),
         ServiceError::Step(StepError::NeedsTask { .. }) => {
             simple(StatusCode::CONFLICT, "steps_need_task", Category::Conflict)
         }
@@ -267,6 +290,15 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Run(RunError::Forbidden(RunForbidden::AddNeedsContext)) => {
             simple(StatusCode::FORBIDDEN, "run_add_needs_context", Category::Permission)
         }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::NeedAboveOrigin { highest })) => Classified {
+            highest: Some(highest.code().to_owned()),
+            field: Some("need"),
+            ..simple(StatusCode::FORBIDDEN, "run_need_above_origin", Category::Permission)
+        },
+        ServiceError::Run(RunError::Forbidden(RunForbidden::BlockerNotMade)) => Classified {
+            field: Some("blocked_by"),
+            ..simple(StatusCode::FORBIDDEN, "run_blocker_not_made", Category::Permission)
+        },
         ServiceError::NotReached(_) => simple(StatusCode::UNPROCESSABLE_ENTITY, "not_reached", Category::Caller),
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),
@@ -354,6 +386,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 field: None,
                 hint: None,
                 item_key: None,
+                highest: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -471,6 +504,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         field,
         hint,
         item_key: None,
+        highest: None,
         category: Category::Caller,
     }
 }
@@ -483,6 +517,7 @@ fn unexpected() -> Classified {
         field: None,
         hint: None,
         item_key: None,
+        highest: None,
         category: Category::Unexpected,
     }
 }
@@ -511,6 +546,7 @@ impl IntoResponse for ApiError {
             field: classified.field.map(str::to_owned),
             hint: classified.hint,
             item_key: classified.item_key,
+            highest: classified.highest,
             request_id,
         };
         let mut response = (

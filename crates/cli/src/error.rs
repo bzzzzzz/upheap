@@ -314,7 +314,20 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
         "question_needs_task" | "question_needs_do_turn" => {
             Some("Only an agent doing a task asks for review or proposes closing.".to_owned())
         }
-        "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
+        "not_reached" => Some("Fix what's missing, then run the same command again.".to_owned()),
+        "run_need_above_origin" => Some(match &problem.highest {
+            Some(highest) => format!("Give --need {highest} or lower."),
+            None => "Give --need at or below the note's.".to_owned(),
+        }),
+        "run_blocker_not_made" => Some("Block only on a task you made from this item in this turn.".to_owned()),
+        "nothing_made" => Some(
+            "Make the tasks first: upheap item add \"<title>\" --task --from <key> --need <need> --age keep|new"
+                .to_owned(),
+        ),
+        "became_needs_note" => Some("Only a note becomes other items; a task or reminder stays one.".to_owned()),
+        "origin_not_a_note" => Some("Only a note can be split; make items from a note.".to_owned()),
+        "origin_closed" => Some("Reopen the note first, or make the items from another one.".to_owned()),
+        "became_needs_split" => Some("Make items from the note, then close it with `upheap item became`.".to_owned()),
         _ => None,
     }
 }
@@ -360,6 +373,8 @@ fn client_exit_code(err: &ClientError) -> u8 {
                     | "run_cost_recorded"
                     | "run_add_reminder"
                     | "run_add_needs_context"
+                    | "run_need_above_origin"
+                    | "run_blocker_not_made"
             ) =>
         {
             3
@@ -397,6 +412,7 @@ mod tests {
                 field: None,
                 hint: None,
                 item_key: None,
+                highest: None,
                 request_id: None,
             }),
             body: String::new(),
@@ -465,6 +481,14 @@ mod tests {
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
         let reminder = run_refusal(403, "run_add_reminder", "A run adds tasks and notes, not reminders.");
         let no_context = run_refusal(403, "run_add_needs_context", "An item a run adds needs a context.");
+        let too_high = {
+            let mut err = problem(403, "run_need_above_origin");
+            if let ClientError::Problem { problem, .. } = &mut err {
+                problem.highest = Some("expected".to_owned());
+            }
+            CliError::Client(err)
+        };
+        let not_made = run_refusal(403, "run_blocker_not_made", "Blocks only among the items it made.");
 
         for err in [
             &over,
@@ -475,6 +499,8 @@ mod tests {
             &missed,
             &reminder,
             &no_context,
+            &too_high,
+            &not_made,
         ] {
             expect_that!(err.exit_code(), eq(3));
         }
@@ -505,8 +531,16 @@ mod tests {
             ))
         );
         expect_that!(
+            too_high.to_message(),
+            contains(eq("hint: Give --need expected or lower."))
+        );
+        expect_that!(
+            not_made.to_message(),
+            contains(eq("hint: Block only on a task you made from this item in this turn."))
+        );
+        expect_that!(
             missed.to_message(),
-            contains(eq("hint: Fix what's missing and say reached again."))
+            contains(eq("hint: Fix what's missing, then run the same command again."))
         );
     }
 

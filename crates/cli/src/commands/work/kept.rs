@@ -354,6 +354,7 @@ mod tests {
                 field: None,
                 hint: None,
                 item_key: None,
+                highest: None,
                 request_id: None,
             }),
             body: String::new(),

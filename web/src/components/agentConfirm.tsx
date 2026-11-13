@@ -3,6 +3,7 @@ import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import type { Item, ItemState } from "../api/client";
 import { compactButtonClass } from "./buttons";
+import { isClosed } from "./labels";
 import { rowOf, type ChangeState } from "./ItemRow";
 import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
@@ -17,8 +18,7 @@ export const TAKE_BACK_QUESTION = "Take this back from the agent? It stops, and 
  * first. Blocking and reopening leave the turn alone.
  */
 export const takesBack = (item: Pick<Item, "turn" | "state">, state: ItemState) =>
-  item.turn != null &&
-  (state === "done" || state === "wont_do" || (state === "in_progress" && item.state !== "in_progress"));
+  item.turn != null && (isClosed(state) || (state === "in_progress" && item.state !== "in_progress"));
 
 /** The verb a change to `state` is named by in the questions: "Starting it" and "Closing it". */
 export const gerund = (state: ItemState) => (state === "in_progress" ? "Starting" : "Closing");

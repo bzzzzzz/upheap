@@ -218,16 +218,25 @@ pub enum StateKind {
     Blocked,
     Done,
     WontDo,
+    /// Closed because it was split: the items made from it carry on (Rules, Kinds and moves).
+    Became,
 }
 
 impl StateKind {
-    pub const ALL: [Self; 5] = [Self::Open, Self::InProgress, Self::Blocked, Self::Done, Self::WontDo];
+    pub const ALL: [Self; 6] = [
+        Self::Open,
+        Self::InProgress,
+        Self::Blocked,
+        Self::Done,
+        Self::WontDo,
+        Self::Became,
+    ];
 
     /// The states of an item that isn't closed, which are the ones that rank.
     pub const OPEN: [Self; 3] = [Self::Open, Self::InProgress, Self::Blocked];
 
     pub const fn is_closed(self) -> bool {
-        matches!(self, Self::Done | Self::WontDo)
+        matches!(self, Self::Done | Self::WontDo | Self::Became)
     }
 
     /// Stable code used in storage, audit diffs and the API. Never renamed.
@@ -238,6 +247,7 @@ impl StateKind {
             Self::Blocked => "blocked",
             Self::Done => "done",
             Self::WontDo => "wont_do",
+            Self::Became => "became",
         }
     }
 
@@ -266,6 +276,11 @@ pub enum ItemState {
     },
     /// As [`ItemState::Done`].
     WontDo {
+        closed_at: Timestamp,
+        closed_by: Option<UserId>,
+    },
+    /// As [`ItemState::Done`]. Only a note becomes, once something was made from it.
+    Became {
         closed_at: Timestamp,
         closed_by: Option<UserId>,
     },
@@ -300,6 +315,7 @@ impl ItemState {
             (StateKind::Blocked, None, None, by, reason) => Ok(Self::Blocked { by, reason }),
             (StateKind::Done, Some(closed_at), closed_by, None, None) => Ok(Self::Done { closed_at, closed_by }),
             (StateKind::WontDo, Some(closed_at), closed_by, None, None) => Ok(Self::WontDo { closed_at, closed_by }),
+            (StateKind::Became, Some(closed_at), closed_by, None, None) => Ok(Self::Became { closed_at, closed_by }),
             (kind, closed_at, closed_by, blocked_by, blocked_reason) => Err(InconsistentState {
                 kind,
                 closed_at,
@@ -317,13 +333,16 @@ impl ItemState {
             Self::Blocked { .. } => StateKind::Blocked,
             Self::Done { .. } => StateKind::Done,
             Self::WontDo { .. } => StateKind::WontDo,
+            Self::Became { .. } => StateKind::Became,
         }
     }
 
     /// `None` unless the state is closed.
     pub const fn closed_at(&self) -> Option<Timestamp> {
         match self {
-            Self::Done { closed_at, .. } | Self::WontDo { closed_at, .. } => Some(*closed_at),
+            Self::Done { closed_at, .. } | Self::WontDo { closed_at, .. } | Self::Became { closed_at, .. } => {
+                Some(*closed_at)
+            }
             Self::Open | Self::InProgress | Self::Blocked { .. } => None,
         }
     }
@@ -331,7 +350,9 @@ impl ItemState {
     /// Who closed the item. `None` unless the state is closed, and for an item closed before this was recorded.
     pub const fn closed_by(&self) -> Option<UserId> {
         match self {
-            Self::Done { closed_by, .. } | Self::WontDo { closed_by, .. } => *closed_by,
+            Self::Done { closed_by, .. } | Self::WontDo { closed_by, .. } | Self::Became { closed_by, .. } => {
+                *closed_by
+            }
             Self::Open | Self::InProgress | Self::Blocked { .. } => None,
         }
     }
@@ -340,7 +361,7 @@ impl ItemState {
     pub const fn blocked_by(&self) -> Option<ItemId> {
         match self {
             Self::Blocked { by, .. } => *by,
-            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } => None,
+            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } | Self::Became { .. } => None,
         }
     }
 
@@ -348,7 +369,7 @@ impl ItemState {
     pub const fn blocked_reason(&self) -> Option<&BlockReason> {
         match self {
             Self::Blocked { reason, .. } => reason.as_ref(),
-            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } => None,
+            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } | Self::Became { .. } => None,
         }
     }
 }
@@ -372,6 +393,39 @@ pub enum ItemError {
     /// A reminder's due is its date, so it can't be cleared.
     #[error("item {item_id} is a reminder, so it needs a date")]
     ReminderNeedsDate { item_id: ItemId },
+    /// A note becomes other items only through the became move, once something was made from it.
+    #[error("item {item_id} can only become other items through the became move, not by changing its state")]
+    BecameNeedsSplit { item_id: ItemId },
+    /// Only a note can become other items.
+    #[error("item {item_id} is a {kind}, and only a note can become other items", kind = .kind.code())]
+    BecameNeedsNote { item_id: ItemId, kind: Kind },
+}
+
+/// Whose age a new item made from another counts from: nothing is inherited silently, so a split says which.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Age {
+    /// The origin's: ranking counts the new item's age from when the origin joined the list.
+    Keep,
+    /// None: ranking counts it from now.
+    New,
+}
+
+impl Age {
+    /// The `arrives_at` of an item made from `origin` with this age: the origin's `arrives_at`, or its creation when
+    /// it has none, for [`Age::Keep`]; `None` for [`Age::New`], so its age counts from its own creation.
+    pub fn arrives_at(self, origin: &Item) -> Option<Timestamp> {
+        match self {
+            Self::Keep => Some(origin.arrives_at.unwrap_or(origin.created_at)),
+            Self::New => None,
+        }
+    }
+}
+
+/// The item a new item is made from, and which age it takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewOrigin {
+    pub item_id: ItemId,
+    pub age: Age,
 }
 
 /// The fields of a new item. Everything except the title and the need is optional.
@@ -392,6 +446,11 @@ pub struct NewItem {
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. The service checks they are in use in the heap.
     pub parameters: BTreeMap<ParameterId, OptionId>,
+    /// The item it is made from. The service checks it is an open note of the same heap, and sets `arrives_at` from
+    /// the age.
+    pub origin: Option<NewOrigin>,
+    /// The item the new one starts blocked by. The service checks it with the other blockers.
+    pub blocked_by: Option<ItemId>,
 }
 
 /// A partial edit. An outer `None` leaves the field unchanged; `Some(None)` clears it.
@@ -446,6 +505,7 @@ pub struct ItemSummary {
     pub heap_id: HeapId,
     pub key: ItemKey,
     pub title: Title,
+    pub kind: Kind,
     pub state: ItemState,
 }
 
@@ -456,6 +516,7 @@ impl From<&Item> for ItemSummary {
             heap_id: item.heap_id,
             key: item.key,
             title: item.title.clone(),
+            kind: item.kind,
             state: item.state.clone(),
         }
     }
@@ -470,6 +531,8 @@ pub enum BlockerGone {
     Done,
     /// The blocker was closed as won't do.
     WontDo,
+    /// The blocker was closed as became: other items carry on its work, and the person decides what this one waits for.
+    Became,
     /// The blocker was moved to another heap, and is still open there.
     Moved,
 }
@@ -506,8 +569,13 @@ pub struct Item {
     /// Who added it. `None` only for an item added before creators were stored whose `item_created` audit entry
     /// couldn't be found to fill it in.
     pub created_by: Option<UserId>,
-    /// The item this one was made from: the item of the run that added it. `None` for an item a person added.
+    /// The item this one was made from: the note it was split from (`NewItem::origin`), or the item of the run that
+    /// added it. Set when it is made and never changed; it stays when either item moves. `None` for an item a person
+    /// added without one.
     pub origin_id: Option<ItemId>,
+    /// Whether it was split from `origin_id` (`NewItem::origin`, `item add --from`): one of the items that note became.
+    /// An item a run adds without an origin links back to the run's item too, but isn't one of them.
+    pub made_in_split: bool,
     /// The run that added it. `None` for an item a person added. Set together with `origin_id` by
     /// [`Item::added_in_run`].
     pub created_run_id: Option<RunId>,
@@ -523,7 +591,13 @@ impl Item {
             key,
             title: fields.title,
             description: fields.description,
-            state: ItemState::Open,
+            state: match fields.blocked_by {
+                Some(by) => ItemState::Blocked {
+                    by: Some(by),
+                    reason: None,
+                },
+                None => ItemState::Open,
+            },
             kind: fields.kind,
             stage: Stage::AsWritten,
             need: fields.need,
@@ -535,7 +609,8 @@ impl Item {
             parameters: fields.parameters,
             created_at: now,
             created_by: Some(created_by),
-            origin_id: None,
+            origin_id: fields.origin.map(|origin| origin.item_id),
+            made_in_split: fields.origin.is_some(),
             created_run_id: None,
             version: Version::INITIAL,
         }
@@ -543,7 +618,8 @@ impl Item {
 
     /// This new item as added by `run`, held on the item `origin`: it links back to that item and records the run, and
     /// starts with its context written, since a run adds an item only with one. Origin and run are set together,
-    /// here only.
+    /// here only, except that a person's split sets the origin alone. In a run the item is made from the run's item, so
+    /// a split's origin is that item too.
     #[must_use]
     pub fn added_in_run(self, origin: ItemId, run: RunId) -> Self {
         Self {
@@ -602,9 +678,32 @@ impl Item {
         match blocker.state {
             ItemState::Done { .. } => Some(BlockerGone::Done),
             ItemState::WontDo { .. } => Some(BlockerGone::WontDo),
+            ItemState::Became { .. } => Some(BlockerGone::Became),
             ItemState::Open | ItemState::InProgress | ItemState::Blocked { .. } => {
                 (blocker.heap_id != self.heap_id).then_some(BlockerGone::Moved)
             }
+        }
+    }
+
+    /// The note after it became other items, closed by `actor` at `now`, or `None` when it already became. The
+    /// returned item keeps the old version; the store bumps it on write. The caller checks something was made from it.
+    pub fn became(&self, actor: UserId, now: Timestamp) -> Result<Option<Self>, ItemError> {
+        if self.kind != Kind::Note {
+            return Err(ItemError::BecameNeedsNote {
+                item_id: self.id,
+                kind: self.kind,
+            });
+        }
+        match self.state {
+            ItemState::Became { .. } => Ok(None),
+            ItemState::Done { .. } | ItemState::WontDo { .. } => Err(ItemError::Closed { item_id: self.id }),
+            ItemState::Open | ItemState::InProgress | ItemState::Blocked { .. } => Ok(Some(Self {
+                state: ItemState::Became {
+                    closed_at: now,
+                    closed_by: Some(actor),
+                },
+                ..self.clone()
+            })),
         }
     }
 
@@ -746,6 +845,9 @@ impl Item {
         if current == target {
             return Ok(self.state.clone());
         }
+        if target == StateKind::Became {
+            return Err(ItemError::BecameNeedsSplit { item_id: self.id });
+        }
         if let Some(closed_at) = self.state.closed_at() {
             if target.is_closed() {
                 return Err(ItemError::Closed { item_id: self.id });
@@ -769,6 +871,7 @@ impl Item {
                 closed_at: now,
                 closed_by: Some(actor),
             },
+            StateKind::Became => return Err(ItemError::BecameNeedsSplit { item_id: self.id }),
         })
     }
 }
@@ -784,8 +887,8 @@ mod tests {
         Timestamp::from_millis(Duration::from_days(days).as_millis()).expect("in range")
     }
 
-    fn sample_item() -> Item {
-        let fields = NewItem {
+    fn sample_new() -> NewItem {
+        NewItem {
             kind: Kind::Note,
             title: Title::parse("Write tests").expect("valid"),
             description: None,
@@ -796,12 +899,17 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: BTreeMap::new(),
-        };
+            origin: None,
+            blocked_by: None,
+        }
+    }
+
+    fn sample_item() -> Item {
         Item::new(
             ItemId::from_uuid(Uuid::nil()),
             HeapId::from_uuid(Uuid::nil()),
             crate::handle::ItemKey::parse("k3x9a").expect("valid"),
-            fields,
+            sample_new(),
             UserId::from_uuid(Uuid::nil()),
             at(0),
         )
@@ -1109,6 +1217,7 @@ mod tests {
             heap_id,
             key: crate::handle::ItemKey::parse("b7b7b").expect("valid"),
             title: Title::parse("Pick a host").expect("valid"),
+            kind: Kind::Note,
             state,
         };
         (blocked, summary)
@@ -1768,5 +1877,139 @@ mod tests {
 
         expect_that!(note.arrives_at, none());
         expect_that!(note.due.map(|due| due.firm), some(eq(false)));
+    }
+
+    #[gtest]
+    fn state_codes_round_trip_including_became() {
+        for kind in StateKind::ALL {
+            expect_that!(StateKind::from_code(kind.code()), some(eq(kind)));
+        }
+        expect_that!(StateKind::Became.code(), eq("became"));
+        expect_that!(StateKind::Became.is_closed(), eq(true));
+    }
+
+    #[gtest]
+    fn a_became_state_needs_a_close_time_and_no_blocker() {
+        expect_that!(
+            ItemState::from_parts(StateKind::Became, Some(at(1)), Some(actor()), None, None),
+            ok(eq(&ItemState::Became {
+                closed_at: at(1),
+                closed_by: Some(actor())
+            }))
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::Became, None, None, None, None),
+            err(anything())
+        );
+    }
+
+    #[gtest]
+    fn a_note_becomes_once_and_repeating_changes_nothing() {
+        let note = sample_item();
+
+        let became = note.became(actor(), at(2)).expect("a note").expect("changed");
+
+        expect_that!(
+            became.state,
+            eq(&ItemState::Became {
+                closed_at: at(2),
+                closed_by: Some(actor())
+            })
+        );
+        expect_that!(became.became(actor(), at(3)), ok(none()));
+    }
+
+    #[gtest]
+    fn only_an_open_note_becomes() {
+        let mut task = sample_item();
+        task.kind = Kind::Task;
+        let done = sample_item()
+            .apply_patch(&closing_patch(), actor(), at(1))
+            .expect("ok")
+            .expect("changed");
+
+        expect_that!(
+            task.became(actor(), at(1)),
+            err(eq(&ItemError::BecameNeedsNote {
+                item_id: task.id,
+                kind: Kind::Task
+            }))
+        );
+        expect_that!(
+            done.became(actor(), at(2)),
+            err(eq(&ItemError::Closed { item_id: done.id }))
+        );
+    }
+
+    #[gtest]
+    fn a_patch_cannot_close_an_item_as_became() {
+        let patch = ItemPatch {
+            state: Some(StateKind::Became),
+            ..ItemPatch::default()
+        };
+        let item = sample_item();
+
+        expect_that!(
+            item.apply_patch(&patch, actor(), at(1)),
+            err(eq(&ItemError::BecameNeedsSplit { item_id: item.id }))
+        );
+    }
+
+    #[gtest]
+    fn a_became_item_reopens_within_the_week_only() {
+        let became = sample_item().became(actor(), at(1)).expect("note").expect("changed");
+        let reopen = ItemPatch {
+            state: Some(StateKind::Open),
+            ..ItemPatch::default()
+        };
+
+        expect_that!(
+            became.apply_patch(&reopen, actor(), at(8)),
+            ok(some(field!(Item.state, eq(&ItemState::Open))))
+        );
+        expect_that!(
+            became.apply_patch(&reopen, actor(), at(9)),
+            err(eq(&ItemError::ReopenWindowExpired {
+                item_id: became.id,
+                closed_at: at(1)
+            }))
+        );
+    }
+
+    #[gtest]
+    fn a_blocker_that_became_is_gone() {
+        let here = HeapId::from_uuid(Uuid::nil());
+        let (blocked, summary) = blocked_and_blocker(
+            ItemState::Became {
+                closed_at: at(1),
+                closed_by: None,
+            },
+            here,
+        );
+
+        expect_that!(blocked.blocker_gone(&summary), some(eq(BlockerGone::Became)));
+    }
+
+    #[gtest]
+    fn an_item_made_with_a_blocker_starts_blocked() {
+        let mut fields = sample_new();
+        fields.blocked_by = Some(blocker());
+
+        let item = Item::new(
+            ItemId::from_uuid(Uuid::from_u128(5)),
+            HeapId::from_uuid(Uuid::nil()),
+            crate::handle::ItemKey::parse("k3x9b").expect("valid"),
+            fields,
+            actor(),
+            at(0),
+        );
+
+        expect_that!(
+            item.state,
+            eq(&ItemState::Blocked {
+                by: Some(blocker()),
+                reason: None
+            })
+        );
     }
 }

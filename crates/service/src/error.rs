@@ -73,6 +73,18 @@ pub enum ServiceError {
     /// The blocker in the request isn't an item of the blocked item's heap.
     #[error("item {item_id} is not an item of this heap")]
     BlockerNotInHeap { item_id: ItemId },
+    /// The item to make a new one from isn't an item of the heap the new one is made in.
+    #[error("item {item_id} is not an item of this heap")]
+    OriginNotInHeap { item_id: ItemId },
+    /// Only a note is split.
+    #[error("item {item_id} is not a note, so nothing is made from it")]
+    OriginNotANote { item_id: ItemId },
+    /// Nothing is made from an item that is done, won't do or became.
+    #[error("item {item_id} is closed, so nothing can be made from it")]
+    OriginClosed { item_id: ItemId },
+    /// A note can become other items only once something was made from it.
+    #[error("nothing was made from item {item_id}")]
+    NothingMade { item_id: ItemId },
     #[error("item {item_id} is closed, so nothing can wait for it")]
     BlockerClosed { item_id: ItemId },
     /// The blocker already waits, directly or through others, for the item being blocked.
