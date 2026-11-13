@@ -117,10 +117,11 @@ impl AllowRules {
 }
 
 /// Works the queue until stopped: claims an item, starts the tool on it, and records how the run ended. Prints a line
-/// for each run that ends, `14:02  k3x9a  Rotate the certs  Work  note → with context  reached  2m10s  $0.31`, and one
-/// when nothing is left to do. Ctrl-C once stops the loop after the current run, twice stops the run too. `--quiet`
-/// prints the key of each item worked, or `team/heap/key` with several heaps, `--json` each run as the server records its end. Exit 0 when stopped or
-/// `--once` is done, and 5 when the server can't be reached with `--once`. Refused inside a run.
+/// for each run that ends, `14:02  k3x9a  Rotate the certs  Work  note → with context  reached  2m10s  $0.31`, and
+/// one when nothing is left to do. Ctrl-C once stops the loop after the current run, twice stops the run too.
+/// `--quiet` prints the key of each item worked, or `team/heap/key` with several heaps, `--json` each run as the
+/// server records its end. Exit 0 when stopped or `--once` is done, and 5 when the server can't be reached with
+/// `--once`. Refused inside a run.
 ///
 /// With `--workers N`, up to N runs go at once, each on its own item, and a line is printed as each ends. One Ctrl-C
 /// reaches them all: no run starts, the live ones end, and a second Ctrl-C stops them now. With `--once`, each worker
@@ -1055,8 +1056,9 @@ impl Shared<'_> {
             .map_err(|err| missing_agents(err, Some(&id)))
     }
 
-    /// What a run that ended prints on stdout: its line, the key with `--quiet` (`team/heap/key` with several heaps), or the server's body with `--json`.
-    /// The line, the failure under it and the log under that are written together, under one lock.
+    /// What a run that ended prints on stdout: its line, the key with `--quiet` (`team/heap/key` with several heaps),
+    /// or the server's body with `--json`. The line, the failure under it and the log under that are written together,
+    /// under one lock.
     fn print_run(&self, finished: &Fetched<RunDto>, log: Option<&Path>) -> std::io::Result<()> {
         let run = &finished.value;
         self.write(|out| match self.mode {
