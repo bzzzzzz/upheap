@@ -2189,6 +2189,61 @@ async fn with_several_heaps_the_idle_line_says_where_the_items_wait() -> Result<
 
 #[gtest]
 #[tokio::test]
+async fn the_idle_line_is_said_again_when_the_split_changes_and_the_total_does_not() -> Result<()> {
+    // Arrange: one note waits in Personal; nothing is claimable, as no heap prepares its notes.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    add_house(&server, &ada).await?;
+    let in_personal = add_note(&server, &ada, "Rotate the certs").await?;
+    let in_house = server
+        .add_item(&ada, "ada/house", json!({ "title": "Fix the gutter" }))
+        .await?;
+    let in_house = key(&in_house)?.to_owned();
+    let cli = cli_in_heap(&server, &ada).await?;
+    cli.run(&["question", "ask", &in_personal, "Which CA?"]).await;
+    let tool = idle_agent(None);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let args = [LOOP, &["--heap", HEAP, "--heap", "ada/house"]].concat();
+
+    // Act: once the first idle line is shown, the note in Personal is answered and one in House is asked about.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let changing = async {
+        wait_until("the first idle line", || {
+            stdout.contents().contains("1 item waits for you: 1 in Personal.")
+        })
+        .await?;
+        reply(&server, &ada, &in_personal, 1, json!({ "comment": "Let's Encrypt" })).await?;
+        ask_in_house(&server, &ada, &in_house).await?;
+        wait_until("the second idle line", || {
+            stdout.contents().contains("1 item waits for you: 1 in House.")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, changed) = tokio::join!(looping, changing);
+
+    // Assert
+    changed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, "Nothing to do."),
+        elements_are![
+            matches_regex(
+                r"^\d\d:\d\d  Nothing to do\. 1 item waits for you: 1 in Personal\. Asking again in a minute\.$"
+            ),
+            matches_regex(
+                r"^\d\d:\d\d  Nothing to do\. 1 item waits for you: 1 in House\. Asking again in a minute\.$"
+            )
+        ]
+    );
+    expect_that!(tool.starts().len(), eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_server_that_cannot_be_reached_is_exit_5_with_once() -> Result<()> {
     // Arrange: signed in to a server, then pointed at a port nobody listens on.
     let (server, _ada, mut cli, _note) = with_prepared_note().await?;
