@@ -188,9 +188,12 @@ pub(super) fn waiting_by_heap_text(total: u32, by_heap: &[(&str, u32)]) -> Optio
 
 #[cfg(test)]
 mod tests {
+    use api_types::turns::ReachDto;
+    use api_types::waiting::ItemHeapDto;
     use googletest::prelude::*;
+    use uuid::Uuid;
 
-    use super::waiting_by_heap_text;
+    use super::*;
 
     #[gtest]
     fn one_heap_with_one_item_says_where_it_waits() {
@@ -217,16 +220,6 @@ mod tests {
     fn nothing_waiting_says_nothing() {
         expect_that!(waiting_by_heap_text(0, &[]), none());
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use api_types::turns::ReachDto;
-    use api_types::waiting::ItemHeapDto;
-    use googletest::prelude::*;
-    use uuid::Uuid;
-
-    use super::*;
 
     fn item(kind: KindDto, stage: StageDto, goal: GoalDto) -> WorkItemDto {
         WorkItemDto {
