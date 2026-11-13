@@ -17,6 +17,8 @@ struct Scene {
     heap: String,
     held: String,
     run: String,
+    /// The heap as `team/heap`, as a claim names it.
+    heap_ref: String,
 }
 
 async fn scene() -> Result<Scene> {
@@ -35,23 +37,29 @@ async fn scene() -> Result<Scene> {
         .strip_prefix("/api/v1/teams/")
         .context("heap url")?
         .replace("/heaps/", "/");
-    let claimed = app
-        .send(
-            Method::POST,
-            "/api/v1/work/runs",
-            Some(&session),
-            Some(json!({ "heaps": [heap_ref] })),
-        )
-        .await?;
-    anyhow::ensure!(claimed.status == StatusCode::CREATED, "claim failed: {}", claimed.body);
-    let run = claimed.body["run"]["id"].as_str().context("no run")?.to_owned();
+    let run = claim(&app, &session, &heap_ref).await?;
     Ok(Scene {
         app,
         session,
         heap,
         held,
         run,
+        heap_ref,
     })
+}
+
+/// Claims a run in the heap and returns its ID.
+async fn claim(app: &TestApp, session: &str, heap_ref: &str) -> Result<String> {
+    let claimed = app
+        .send(
+            Method::POST,
+            "/api/v1/work/runs",
+            Some(session),
+            Some(json!({ "heaps": [heap_ref] })),
+        )
+        .await?;
+    anyhow::ensure!(claimed.status == StatusCode::CREATED, "claim failed: {}", claimed.body);
+    Ok(claimed.body["run"]["id"].as_str().context("no run")?.to_owned())
 }
 
 impl Scene {
@@ -66,7 +74,6 @@ impl Scene {
             .await
     }
 
-    /// Adds an item to `heap` in the run.
     /// A patch in the run, with the item's current version.
     async fn patch_in_run(&self, path: &str, body: Value) -> Result<TestResponse> {
         let current = self.app.send(Method::GET, path, Some(&self.session), None).await?;
@@ -343,6 +350,44 @@ async fn a_run_adds_steps_to_what_it_added_and_nothing_else_there() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn a_later_run_on_the_same_item_cant_add_steps_to_what_an_earlier_run_added() -> Result<()> {
+    // Arrange: the first run adds a task and fails, so the turn stays open and a second run takes the item.
+    let s = scene().await?;
+    let added = s
+        .add(json!({ "title": "Follow up", "kind": "task", "description": "Context" }))
+        .await?;
+    anyhow::ensure!(added.status == StatusCode::CREATED, "add failed: {}", added.body);
+    let path = s.path_of(&s.heap, added.body["key"].as_str().context("key")?).await?;
+    let finished = s
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/work/runs/{}/finish", s.run),
+            Some(&s.session),
+            Some(json!({})),
+        )
+        .await?;
+    anyhow::ensure!(finished.status == StatusCode::OK, "finish failed: {}", finished.body);
+    let second = claim(&s.app, &s.session, &s.heap_ref).await?;
+
+    // Act
+    let step = s
+        .in_run_as(
+            &second,
+            Method::POST,
+            &format!("{path}/steps"),
+            Some(json!({ "title": "No" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(step.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&step), some(eq("run_wrong_item")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_run_adds_a_step_to_a_task_it_added_in_another_heap() -> Result<()> {
     // Arrange
     let s = scene().await?;
@@ -382,6 +427,52 @@ async fn a_run_adds_a_step_to_a_task_it_added_in_another_heap() -> Result<()> {
     // Assert
     expect_that!(step.status, eq(StatusCode::CREATED));
     expect_that!(step.body["steps"][0]["title"], eq(&json!("Do it")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_step_on_an_item_it_added_in_an_archived_heap_is_refused_as_archived_not_as_run_over() -> Result<()> {
+    // Arrange
+    let s = scene().await?;
+    let me = s.app.send(Method::GET, "/api/v1/me", Some(&s.session), None).await?;
+    let team_slug = me.body["teams"][0]["slug"].as_str().context("slug")?.to_owned();
+    let other = s
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/teams/{team_slug}/heaps"),
+            Some(&s.session),
+            Some(json!({ "name": "Ops" })),
+        )
+        .await?;
+    anyhow::ensure!(other.status == StatusCode::CREATED, "heap failed: {}", other.body);
+    let other_heap = other.body["id"].as_str().context("id")?.to_owned();
+    let added = s
+        .add_to(
+            &other_heap,
+            json!({ "title": "Follow up", "kind": "task", "description": "Context" }),
+        )
+        .await?;
+    anyhow::ensure!(added.status == StatusCode::CREATED, "add failed: {}", added.body);
+    let path = s
+        .path_of(&other_heap, added.body["key"].as_str().context("key")?)
+        .await?;
+    let archive_url = format!("{}/archive", s.app.heap_url(&other_heap).await?);
+    let archived = s.app.send(Method::POST, &archive_url, Some(&s.session), None).await?;
+    anyhow::ensure!(archived.status.is_success(), "archive failed: {}", archived.body);
+
+    // Act
+    let step = s
+        .in_run(
+            Method::POST,
+            &format!("{path}/steps"),
+            Some(json!({ "title": "Do it" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(code(&step), some(eq("heap_archived")));
     Ok(())
 }
 

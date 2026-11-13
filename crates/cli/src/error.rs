@@ -298,10 +298,9 @@ impl CliError {
 fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
     match problem.code.as_str() {
         "run_over" => Some("This run is over. Stop.".to_owned()),
-        "run_wrong_item" => problem
-            .item_key
-            .as_ref()
-            .map(|key| format!("This run holds {key}; write to it only.")),
+        "run_wrong_item" => problem.item_key.as_ref().map(|key| {
+            format!("This run holds {key}. Besides adding items, and steps to the items it added, write to {key} only.")
+        }),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
         "run_add_reminder" => Some("Add it as a task or a note; leave the date in its context.".to_owned()),
         "run_add_needs_context" => {
@@ -490,7 +489,9 @@ mod tests {
         expect_that!(over.to_message(), contains(eq("hint: This run is over. Stop.")));
         expect_that!(
             wrong.to_message(),
-            contains(eq("hint: This run holds k3x9a; write to it only."))
+            contains(eq(
+                "hint: This run holds k3x9a. Besides adding items, and steps to the items it added, write to k3x9a only."
+            ))
         );
         expect_that!(forbidden.to_message(), contains(eq("hint: Only the person does that.")));
         expect_that!(

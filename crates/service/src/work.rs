@@ -500,7 +500,9 @@ impl Services {
     /// `target` after.
     ///
     /// Fails with [`ServiceError::NotFound`] for a run that doesn't exist or is another user's, with
-    /// [`RunError::Over`] for one that has ended or lapsed or whose turn isn't open, and with
+    /// [`ServiceError::VersionConflict`] when the run's item moved to another heap while this waited for the lock (the
+    /// run goes on: trying again works), with [`RunError::Over`] for one that has ended or lapsed or whose turn isn't
+    /// open, and with
     /// [`RunForbidden::AddReminder`] or [`RunForbidden::AddNeedsContext`] for an item a run doesn't add.
     pub(crate) async fn check_run_add(
         &self,

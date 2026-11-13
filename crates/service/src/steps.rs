@@ -32,13 +32,27 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        // In a run the heap of the run's item locks first, then this item's, in heap ID order, as every run write does.
-        if let Some(run_id) = principal.run {
-            self.lock_run_and(&txn, principal, run_id, Some(found.heap_id)).await?;
-        }
+        // In a run the heap of the run's item and this item's lock in heap ID order, as `claim_run`, `move_item` and
+        // `create_item` do: the step may go on an item the run added in another heap.
+        let run_heap = match principal.run {
+            Some(run_id) => Some(
+                self.lock_run_and(&txn, principal, run_id, Some(found.heap_id))
+                    .await?
+                    .1
+                    .id,
+            ),
+            None => None,
+        };
+        // Only the run's own heap being archived means the run is over; another archived heap is just archived.
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
-            .map_err(|error| in_run(principal, error))?;
+            .map_err(|error| {
+                if run_heap == Some(found.heap_id) {
+                    in_run(principal, error)
+                } else {
+                    error
+                }
+            })?;
         // A run may add steps to an item it added, as well as to its own.
         self.check_run_step_add(&txn, principal, &found, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by

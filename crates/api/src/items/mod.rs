@@ -172,7 +172,7 @@ async fn list_closed(
         (status = 201, body = ItemDto),
         (status = 403, description = "From inside a run: `run_add_reminder` or `run_add_needs_context`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`heap_archived`, or from inside a run `run_over`", body = Problem),
+        (status = 409, description = "`heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
         (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`", body = Problem),
     ))]
 async fn create_item(

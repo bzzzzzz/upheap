@@ -306,7 +306,7 @@ async fn what_a_run_is_refused_is_exit_3_with_the_servers_message_and_a_hint() -
     expect_that!(wrong_item.stderr, contains_substring("(run_wrong_item)"));
     expect_that!(
         wrong_item.stderr,
-        contains_substring(format!("hint: This run holds {note}; write to it only.").as_str())
+        contains_substring(format!("hint: This run holds {note}. Besides adding items, and steps to the items it added, write to {note} only.").as_str())
     );
     expect_that!(done.exited(3), eq(true));
     expect_that!(done.stderr, contains_substring("(run_done_needs_review)"));
