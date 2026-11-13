@@ -58,20 +58,30 @@ impl World {
 
     /// Adds a note, sends it to an agent and claims it. Returns the note and the run's ID.
     async fn note_in_a_run(&self, need: &str) -> Result<(Value, String)> {
+        self.note_in_a_run_reaching(need, "one").await
+    }
+
+    /// Like `note_in_a_run`, with the note's turn sent to `reach`.
+    async fn note_in_a_run_reaching(&self, need: &str, reach: &str) -> Result<(Value, String)> {
         let note = self.add_note("Certs are a mess", need).await?;
-        self.send_turn(note["key"].as_str().context("key")?).await?;
+        self.send_turn_reaching(note["key"].as_str().context("key")?, reach)
+            .await?;
         let run = self.claimed().await?;
         Ok((note, run))
     }
 
     async fn send_turn(&self, key: &str) -> Result<()> {
+        self.send_turn_reaching(key, "one").await
+    }
+
+    async fn send_turn_reaching(&self, key: &str, reach: &str) -> Result<()> {
         let sent = self
             .app
             .send(
                 Method::POST,
                 &format!("{}/turn", self.item_path(key).await?),
                 Some(&self.session),
-                Some(json!({ "reach": "one" })),
+                Some(json!({ "reach": reach })),
             )
             .await?;
         anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
@@ -281,6 +291,108 @@ async fn a_run_splits_a_note_into_two_tasks_and_the_note_became() -> Result<()> 
     // Assert: B is open.
     expect_that!(done.status, eq(StatusCode::OK));
     expect_that!(w.get(key_of(&b.body)).await?["state"], eq(&json!("open")));
+    Ok(())
+}
+
+/// A note sent to `reach` and split in its run into task A, task B blocked by A (both `--from` the note) and a
+/// follow-up C (no origin), then became. Returns the world, the note and the three tasks.
+async fn split_and_became(reach: &str) -> Result<(World, Value, Value, Value, Value)> {
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", reach).await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    let b = w
+        .split_in_run(
+            &run,
+            &note,
+            "Rotate production",
+            json!({ "blocked_by": id(&a.body), "need": "critical" }),
+        )
+        .await?;
+    w.add_step_in_run(&run, key_of(&b.body)).await?;
+    let c = w
+        .in_run(
+            &run,
+            Method::POST,
+            &w.items_path().await?,
+            Some(json!({
+                "title": "Check the alarms",
+                "need": "expected",
+                "kind": "task",
+                "description": "Done when: they fire.",
+            })),
+        )
+        .await?;
+    anyhow::ensure!(c.status == StatusCode::CREATED, "follow-up failed: {}", c.body);
+    w.add_step_in_run(&run, key_of(&c.body)).await?;
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+    anyhow::ensure!(became.status == StatusCode::OK, "became failed: {}", became.body);
+    Ok((w, note, a.body, b.body, c.body))
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_sent_all_the_way_passes_its_turn_to_the_tasks_split_from_it() -> Result<()> {
+    // Arrange, act: the note sent all the way is split and became.
+    let (w, note, a, b, c) = split_and_became("all_the_way").await?;
+
+    // Assert: A and B have a turn all the way to done; the follow-up C has none.
+    for task in [&a, &b] {
+        let turn = &w.get(key_of(task)).await?["turn"];
+        expect_that!(turn["reach"], eq(&json!("all_the_way")));
+        expect_that!(turn["goal"], eq(&json!("done")));
+    }
+    expect_that!(w.get(key_of(&c)).await?["turn"], eq(&Value::Null));
+
+    // Assert: no turn stays on the note.
+    expect_that!(w.get(key_of(&note)).await?["turn"], eq(&Value::Null));
+
+    // Assert: B is blocked, so A is next.
+    let next_path = format!("/api/v1/work/next?heaps={}", w.heap_ref().await?);
+    let next = w.app.send(Method::GET, &next_path, Some(&w.session), None).await?;
+    expect_that!(next.body["item"]["key"], eq(&a["key"]));
+
+    // Act: the person closes A as done.
+    let done = w.edit(key_of(&a), json!({ "state": "done" })).await?;
+
+    // Assert: B is freed, keeps its turn, and is next.
+    expect_that!(done.status, eq(StatusCode::OK));
+    let b_now = w.get(key_of(&b)).await?;
+    expect_that!(b_now["state"], eq(&json!("open")));
+    expect_that!(b_now["turn"]["reach"], eq(&json!("all_the_way")));
+    let next = w.app.send(Method::GET, &next_path, Some(&w.session), None).await?;
+    expect_that!(next.body["item"]["key"], eq(&b["key"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, and the person sends A on, one state, before it became.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    w.send_turn(key_of(&a.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"]["reach"], eq(&json!("one")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_sent_one_state_gives_its_split_tasks_no_turn() -> Result<()> {
+    // Arrange, act
+    let (w, _, a, b, _) = split_and_became("one").await?;
+
+    // Assert
+    expect_that!(w.get(key_of(&a)).await?["turn"], eq(&Value::Null));
+    expect_that!(w.get(key_of(&b)).await?["turn"], eq(&Value::Null));
     Ok(())
 }
 
