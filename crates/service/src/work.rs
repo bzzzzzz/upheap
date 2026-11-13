@@ -227,9 +227,9 @@ impl Services {
 
     /// Says the run `run_id` reached its turn's goal, or the later `stage` it reports (see [`reported_goal`]). If the
     /// item is at that goal as it is now, the run ends as reached, the turn ends as reached and the item's stage
-    /// becomes the goal; for a turn sent all the way, the next
-    /// turn opens in the same transaction. Otherwise it fails with
-    /// [`ServiceError::NotReached`], naming the first condition missed, and the run stays live.
+    /// becomes that goal; for a turn sent all the way, the next turn opens in the same transaction. Otherwise it fails
+    /// with [`ServiceError::NotReached`], naming the first condition missed, and the run stays live. A `stage` below
+    /// the turn's goal, or any in a turn to done, fails with a validation error and writes nothing.
     ///
     /// Fails with [`RunError::Over`] when the run has ended or lapsed or its turn was taken back.
     pub async fn reached(

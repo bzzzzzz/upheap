@@ -1,4 +1,5 @@
-//! `upheap work reached --result <text> [--link <url>]...`: the run says it reached the turn's goal.
+//! `upheap work reached --result <text> [--link <url>]... [--stage with_context|defined]`: the run says it reached the
+//! turn's goal, or, in a turn to with context, that it went on to defined.
 //!
 //! It takes no item: the run knows it. The server checks the item as it is now; when it misses a condition the
 //! refusal names it, and the run, still live, can fix the item and say reached again.
@@ -37,10 +38,9 @@ pub enum ReportedStage {
     Defined,
 }
 
-/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`, or `Reached: defined (skipped
-/// with context). ...` when it went past the goal, or `... k3x9a goes on, all the
-/// way.` when the turn was sent all the way and didn't reach done; `--quiet` prints nothing and
-/// `--json` the run. Needs `UPHEAP_RUN`.
+/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`, `Reached: defined (skipped
+/// with context). ...` when it went past the goal, or `... k3x9a goes on, all the way.` when the turn was sent all
+/// the way and didn't reach done; `--quiet` prints nothing and `--json` the run. Needs `UPHEAP_RUN`.
 pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let run = current_run(app, "reached")?.to_owned();
     let client = app.client(app.server(&args.shared)?)?;

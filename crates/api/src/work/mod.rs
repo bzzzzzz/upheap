@@ -204,9 +204,9 @@ async fn heartbeat(State(state): State<AppState>, path: RunPath) -> Result<Statu
 /// description and no open question; `defined` needs an open task with a description, a step that isn't dropped and no
 /// open question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the
 /// item's stage becomes the goal, and `turn_reached` is recorded. A `stage` past the goal of a turn to `with_context`
-/// (`defined`) checks the item against that stage instead and moves it there; any other `stage` is refused. A turn sent all the way opens the next turn at once,
-/// recorded as `turn_opened`. A miss is `not_reached` and names the first condition
-/// missed; the run stays live, so the agent can fix the item and say it again.
+/// (`defined`) checks the item against that stage instead and moves it there; any other `stage` is refused. A turn
+/// sent all the way opens the next turn at once, recorded as `turn_opened`. A miss is `not_reached` and names the
+/// first condition missed; the run stays live, so the agent can fix the item and say it again.
 #[utoipa::path(post, path = "/work/runs/{run}/reached", tag = "work", security(("session" = [])),
     params(RunParams), request_body = ReachedRequestDto,
     responses(
