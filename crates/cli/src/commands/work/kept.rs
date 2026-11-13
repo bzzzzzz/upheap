@@ -228,6 +228,8 @@ fn retry_not_empty(
                 tried += 1;
                 std::thread::sleep(pause);
             }
+            // Gone since the last try: another loop on the same root cleared it as a leftover.
+            Err(err) if err.kind() == ErrorKind::NotFound && tried > 1 => return Ok(()),
             done => return done,
         }
     }
@@ -722,6 +724,17 @@ mod tests {
 
         verify_that!(deleted.map_err(|err| err.kind()), err(eq(ErrorKind::DirectoryNotEmpty)))?;
         verify_that!(calls, eq(3))
+    }
+
+    #[gtest]
+    fn a_directory_gone_by_the_next_try_counts_as_deleted() -> googletest::Result<()> {
+        let mut calls = 0;
+        let errors = [ErrorKind::DirectoryNotEmpty, ErrorKind::NotFound];
+
+        let deleted = retry_not_empty(3, Duration::ZERO, || failing(&mut calls, &errors));
+
+        verify_that!(deleted, ok(()))?;
+        verify_that!(calls, eq(2))
     }
 
     #[gtest]
