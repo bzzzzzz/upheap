@@ -51,8 +51,8 @@ pub struct ToolStart {
     pub brief: String,
     /// Variables to add to the tool's environment: the run, the server and the heap.
     pub env: Vec<(String, String)>,
-    /// A directory for the tool to make, set up for itself and run in: one that doesn't exist yet. `None` to run
-    /// in the directory `work run` was started in, as it is.
+    /// A directory for the tool to set up for itself and run in, made if it is missing. It may hold an earlier run's
+    /// work, which is kept. `None` to run in the directory `work run` was started in, as it is.
     pub dir: Option<PathBuf>,
     /// Allow rules the person added for this run's access (`--allow` and the turn's own flag), in the tool's syntax,
     /// on top of the tool's own. Already checked to be one rule each.
@@ -150,6 +150,8 @@ pub struct WorkDeps {
     pub heartbeat_every: Duration,
     /// How long to wait between tries to record a run's end. 5 seconds in the binary.
     pub finish_retry: Duration,
+    /// How long between sweeps of the `--root` for directories to remove. 1 hour in the binary.
+    pub sweep_every: Duration,
 }
 
 impl WorkDeps {
@@ -161,6 +163,7 @@ impl WorkDeps {
             idle_wait: Duration::from_secs(60),
             heartbeat_every: Duration::from_secs(5 * 60),
             finish_retry: Duration::from_secs(5),
+            sweep_every: Duration::from_secs(60 * 60),
         }
     }
 }

@@ -134,7 +134,7 @@ mod processes {
             args.display()
         );
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
-        let run_dir = dir.path().join("root").join("k3x9a-the-run");
+        let run_dir = dir.path().join("root").join("ada").join("work").join("k3x9a");
 
         // Act
         let report = tools
@@ -152,7 +152,7 @@ mod processes {
         )?;
         verify_that!(
             std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
-            contains_substring("for one run on one Upheap item")
+            contains_substring("keeps this directory for one Upheap item")
         )?;
         // No settings file: Claude would ignore its allow rules in a directory nobody has trusted.
         verify_that!(run_dir.join(".claude").exists(), eq(false))?;
@@ -193,13 +193,19 @@ mod processes {
 
     #[gtest]
     #[tokio::test]
-    async fn a_directory_that_is_there_already_is_left_alone_and_the_script_never_starts() -> googletest::Result<()> {
-        // Arrange
+    async fn a_directory_that_is_there_already_is_reused_with_its_files_and_a_fresh_claude_md() -> googletest::Result<()>
+    {
+        // Arrange: an earlier run left a file and its own instructions.
         let dir = tempfile::tempdir()?;
-        let started = dir.path().join("started");
-        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo > '{}'", started.display()))?);
+        let seen = dir.path().join("seen");
+        let tools = SystemTools::with_claude(script(
+            dir.path(),
+            &format!("pwd -P > '{}'\nprintf '%s' '{{\"is_error\":false}}'", seen.display()),
+        )?);
         let run_dir = dir.path().join("taken");
         std::fs::create_dir(&run_dir)?;
+        std::fs::write(run_dir.join("left.txt"), "what the last run left")?;
+        std::fs::write(run_dir.join("CLAUDE.md"), "old instructions")?;
 
         // Act
         let result = tools
@@ -210,8 +216,43 @@ mod processes {
             .await;
 
         // Assert
+        verify_that!(result?.failure, none())?;
+        verify_that!(
+            PathBuf::from(std::fs::read_to_string(&seen)?.trim_end()),
+            eq(&run_dir.canonicalize()?)
+        )?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("left.txt"))?,
+            eq("what the last run left")
+        )?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
+            eq(claude::WORKSPACE_INSTRUCTIONS)
+        )
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_file_where_the_directory_should_be_is_no_directory_and_the_script_never_starts() -> googletest::Result<()>
+    {
+        // Arrange
+        let dir = tempfile::tempdir()?;
+        let started = dir.path().join("started");
+        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo > '{}'", started.display()))?);
+        let in_the_way = dir.path().join("taken");
+        std::fs::write(&in_the_way, "a file")?;
+
+        // Act
+        let result = tools
+            .run(ToolStart {
+                dir: Some(in_the_way.clone()),
+                ..start(Access::Do)
+            })
+            .await;
+
+        // Assert
         verify_that!(result, err(matches_pattern!(ToolError::NoDirectory { .. })))?;
-        verify_that!(std::fs::read_dir(&run_dir)?.count(), eq(0))?;
+        verify_that!(std::fs::read_to_string(&in_the_way)?, eq("a file"))?;
         verify_that!(started.exists(), eq(false))
     }
 

@@ -6,10 +6,10 @@
 //! The tool sits behind [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass
 //! their own.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use api_types::common::ItemDto;
 use api_types::heaps::HeapDto;
@@ -22,12 +22,14 @@ use tokio::sync::watch;
 use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
+use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
+use crate::config::server_key;
 use crate::lookup::HeapHandle;
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
@@ -48,8 +50,9 @@ pub struct RunArgs {
     /// Do one run, or nothing when there is nothing to do, and exit. With --workers, one run for each worker
     #[arg(long)]
     pub once: bool,
-    /// Start each run in a new directory under this one, made with the tool's instructions and settings for working
-    /// there. Left out, every run starts in this directory, as it is
+    /// Run each item in a directory of its own under this one, `<team>/<heap>/<key>`, kept for its next run and made
+    /// with the tool's instructions and settings for working there. Left out, every run starts in this directory, as
+    /// it is
     #[arg(long, value_name = "DIR")]
     pub root: Option<PathBuf>,
     /// How many runs to keep going at once, each on its own item. Above 1, needs --root
@@ -120,8 +123,10 @@ impl AllowRules {
 /// reaches them all: no run starts, the live ones end, and a second Ctrl-C stops them now. With `--once`, each worker
 /// does one pass, so up to N runs. Above 1 it needs `--root`, since runs in one directory would trample each other.
 ///
-/// With `--root`, each run gets a directory of its own under it, named by the item's key and the run's ID, which the
-/// tool sets up and starts in. Nothing removes them: what a run left there is the person's to look at and clear.
+/// With `--root`, each item gets a directory of its own under it, `<team>/<heap>/<key>`, which the tool sets up and
+/// starts in. It is the same one for every run on the item, as the last run left it. The loop removes it once the
+/// item is closed or can't be found, or when no run has been in it for 7 days. Directories from before, named by
+/// an item's key and a run's ID, are never touched.
 pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     if app.env.run.is_some() {
         return Err(UsageError::RunInRun.into());
@@ -149,6 +154,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         idle_wait,
         heartbeat_every,
         finish_retry,
+        sweep_every,
     } = work;
     let (stop, _) = watch::channel(Stop::No);
     let shared = Shared {
@@ -169,6 +175,9 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         idle_wait,
         heartbeat_every,
         finish_retry,
+        sweep_every,
+        last_sweep: Mutex::new(None),
+        live_dirs: LiveDirs::default(),
         mode,
         out: Mutex::new(out),
         noted: Mutex::new(Noted::default()),
@@ -211,13 +220,6 @@ fn join_names(names: &[&str]) -> String {
     }
 }
 
-/// The name of a run's own directory: `k3x9a-<run id>`, so a person finds an item's runs by its key and no two runs
-/// share one. The key comes from the server, so only its letters and digits are used: it can't name another path.
-fn directory_name(run: &RunDto) -> String {
-    let key: String = run.item.key.chars().filter(char::is_ascii_alphanumeric).collect();
-    format!("{key}-{}", run.id)
-}
-
 /// What a worker does next.
 enum Next {
     /// Claim again at once.
@@ -254,7 +256,7 @@ fn is_about_the_item(err: &CliError) -> bool {
 }
 
 /// Whether the failure is the server being out of reach or unavailable (exit code 5).
-fn is_unreachable(err: &CliError) -> bool {
+pub(super) fn is_unreachable(err: &CliError) -> bool {
     err.exit_code() == 5
 }
 
@@ -319,7 +321,7 @@ struct Shared<'a> {
     once: bool,
     /// How many workers there are.
     workers: u8,
-    /// Where each run's own directory is made; `None` when runs start in this directory.
+    /// Where each item's directory is kept; `None` when runs start in this directory.
     root: Option<PathBuf>,
     /// The runner's own instructions, for every run's brief.
     instructions: Option<String>,
@@ -329,6 +331,12 @@ struct Shared<'a> {
     idle_wait: Duration,
     heartbeat_every: Duration,
     finish_retry: Duration,
+    sweep_every: Duration,
+    /// When the root was last swept, or began to be; `None` before the first sweep. Taken by the worker that finds
+    /// a sweep due, so the others go on claiming.
+    last_sweep: Mutex<Option<Instant>>,
+    /// The directories runs are in, which a sweep leaves alone.
+    live_dirs: LiveDirs,
     mode: Mode,
     /// Locked only to write, never across an `.await`, so lines from two workers never tear or interleave.
     out: Mutex<&'a mut Output>,
@@ -437,6 +445,7 @@ impl Shared<'_> {
             if self.is_stopping() {
                 return;
             }
+            self.sweep_if_due().await;
             let next = match self.work_a_pass().await {
                 Ok(next) => next,
                 Err(err) if after_failure(&err, self.once) == AfterFailure::TryAgain => {
@@ -563,15 +572,52 @@ impl Shared<'_> {
                 ("UPHEAP_SERVER".to_owned(), self.server.to_string()),
                 ("UPHEAP_HEAP".to_owned(), handle.to_string()),
             ],
-            dir: self.root.as_ref().map(|root| root.join(directory_name(&run))),
+            dir: None,
             allow: self.allow.for_access(goal.access()),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
-        let driven = self.drive_tool(&run, start).await;
+        // Registered before the directory is made or touched, and kept until the run is recorded below, so a sweep
+        // never takes the directory of a run that is starting or running.
+        let dir = self.root.as_deref().map(|root| {
+            kept::item_directory(root, &handle.team, &handle.heap, &run.item.key).map_err(|source| {
+                ToolError::NoDirectory {
+                    dir: root.to_owned(),
+                    source,
+                }
+            })
+        });
+        let _live = dir
+            .as_ref()
+            .and_then(|dir| dir.as_ref().ok())
+            .map(|dir| self.live_dirs.register(dir.clone()));
+        // The marker stays open and locked until the tool is gone, so no sweep, in this loop or another, takes the
+        // directory meanwhile.
+        let mut marker = None;
+        let driven = match dir {
+            None => self.drive_tool(&run, start).await,
+            Some(Ok(dir)) => match self.prepare_directory(&run, &dir).await {
+                Ok(locked) => {
+                    marker = Some(locked);
+                    let start = ToolStart {
+                        dir: Some(dir),
+                        ..start
+                    };
+                    self.drive_tool(&run, start).await
+                }
+                Err(err) => Driven::Ended(Err(err)),
+            },
+            Some(Err(err)) => Driven::Ended(Err(err)),
+        };
         // A tool that was stopped is still ending, and in a directory shared with the next run (no `--root`) two agents
         // would work at once. So the run is recorded, and the next one claimed, only once the tool is gone.
         if matches!(driven, Driven::Over | Driven::Stopped) {
             self.tools.settled().await;
+        }
+        // Used until now, so a run longer than the unused period doesn't lose its directory the moment it ends.
+        if let Some(marker) = marker
+            && let Err(err) = marker.set_modified(SystemTime::from(self.app.now()))
+        {
+            tracing::warn!(run_id = %run.id, error = %err, "couldn't mark the run's directory as used");
         }
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
@@ -604,6 +650,171 @@ impl Shared<'_> {
             return Err(err.into());
         }
         Ok(Next::Again)
+    }
+
+    /// Makes `dir` if it isn't there and writes the marker that says a run started in it now. Returns the marker, which
+    /// holds a lock for as long as it is kept.
+    async fn prepare_directory(&self, run: &RunDto, dir: &Path) -> Result<std::fs::File, ToolError> {
+        let (id, started) = (
+            run.id.to_string(),
+            jiff::Timestamp::from_second(self.app.now().as_second()),
+        );
+        let made = {
+            let dir = dir.to_owned();
+            let started = started.map_or_else(|_| String::new(), |at| at.to_string());
+            let server = server_key(&self.server);
+            tokio::task::spawn_blocking(move || kept::prepare(&dir, &id, &started, &server)).await
+        };
+        made.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked)))
+            .map_err(|source| ToolError::NoDirectory {
+                dir: dir.to_owned(),
+                source,
+            })
+    }
+
+    /// Sweeps the root if it has been `sweep_every` since the last sweep, or never has been. A worker that finds one
+    /// due marks it started and sweeps; the others find it done and carry on.
+    async fn sweep_if_due(&self) {
+        let Some(root) = &self.root else {
+            return;
+        };
+        {
+            let mut last = lock(&self.last_sweep);
+            if last.is_some_and(|at| at.elapsed() < self.sweep_every) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        self.sweep(root).await;
+    }
+
+    /// Removes the kept directories of closed and missing items, and those unused for 7 days; see [`kept`]. Never
+    /// fails: whatever goes wrong leaves a directory in place, or is a warning.
+    async fn sweep(&self, root: &Path) {
+        let now = SystemTime::from(self.app.now());
+        let found = {
+            let root = root.to_owned();
+            tokio::task::spawn_blocking(move || {
+                // What an interrupted sweep renamed and did not finish deleting.
+                for left in kept::leftovers(&root) {
+                    let removed = if left.is_dir() {
+                        std::fs::remove_dir_all(&left)
+                    } else {
+                        std::fs::remove_file(&left)
+                    };
+                    if let Err(err) = removed {
+                        tracing::warn!(dir = %left.display(), error = %err, "couldn't clear a half-removed directory");
+                    }
+                }
+                kept::list(&root, now)
+            })
+            .await
+        };
+        let Ok(found) = found else {
+            return;
+        };
+        let server = server_key(&self.server);
+        for directory in found {
+            if self.is_stopping() {
+                return;
+            }
+            if self.live_dirs.is_live(&directory.dir) {
+                continue;
+            }
+            let reason = if kept::is_unused(directory.age) {
+                kept::Reason::Unused
+            } else if directory.server.as_deref() != Some(server.as_str()) {
+                // Another server's item: this one can't say whether it is closed.
+                continue;
+            } else {
+                let read = self.read_closed_at(&directory).await;
+                match kept::verdict(read.as_ref().copied()) {
+                    Verdict::Keep => {
+                        if let Err(err) = &read {
+                            tracing::debug!(dir = %directory.dir.display(), error = %err, "kept a directory: its item couldn't be read");
+                        }
+                        continue;
+                    }
+                    Verdict::KeepAndStop => return,
+                    Verdict::Remove(kept::Reason::NotFound) => {
+                        // The server answers 404 for a heap the caller can't see as well, such as another account's
+                        // on a shared root. Only a heap that reads fine says the item itself is gone.
+                        match self.read_heap_of(&directory).await {
+                            Ok(()) => kept::Reason::NotFound,
+                            Err(err) if is_unreachable(&err) => return,
+                            Err(err) => {
+                                tracing::debug!(dir = %directory.dir.display(), error = %err, "kept a directory: its heap couldn't be read");
+                                continue;
+                            }
+                        }
+                    }
+                    Verdict::Remove(reason) => reason,
+                }
+            };
+            self.remove_kept(root, &directory, reason).await;
+        }
+    }
+
+    /// When the item of `directory` was closed, or `None` while it is open.
+    async fn read_closed_at(&self, directory: &Kept) -> Result<Option<i64>, CliError> {
+        let client = self.app.client(self.server.clone())?;
+        // A token for each request, so a long sweep never keeps one past its expiry.
+        let token = self.app.access_token(&client).await?;
+        let handle = HeapHandle {
+            team: directory.team.clone(),
+            heap: directory.heap.clone(),
+        };
+        let api = HeapApi {
+            client: &client,
+            token: &token,
+            heap: &handle,
+        };
+        let item = api.get_item(&directory.key, &directory.key).await?;
+        Ok(item.value.closed_at)
+    }
+
+    /// Reads the heap of `directory`, to tell an item that is gone from a heap the caller can't see.
+    async fn read_heap_of(&self, directory: &Kept) -> Result<(), CliError> {
+        let client = self.app.client(self.server.clone())?;
+        let token = self.app.access_token(&client).await?;
+        let handle = HeapHandle {
+            team: directory.team.clone(),
+            heap: directory.heap.clone(),
+        };
+        let api = HeapApi {
+            client: &client,
+            token: &token,
+            heap: &handle,
+        };
+        api.get::<HeapDto>(&[], NO_QUERY).await.map(|_| ())
+    }
+
+    /// Renames `directory` out of the way and deletes it, then its heap and team directories if that left them empty.
+    /// The rename is what the lock covers: deleting a clone and its caches takes long.
+    async fn remove_kept(&self, root: &Path, directory: &Kept, reason: kept::Reason) {
+        let warn = |err: &dyn std::fmt::Display| {
+            self.note(&format!("warning: couldn't remove {}: {err}", directory.dir.display()));
+        };
+        let away = match self.live_dirs.rename_away(root, &directory.dir, directory.modified) {
+            // A run is in it, or started in it since the sweep listed it.
+            None => return,
+            Some(Ok(away)) => away,
+            Some(Err(err)) => return warn(&err),
+        };
+        let deleted = {
+            let away = away.clone();
+            tokio::task::spawn_blocking(move || std::fs::remove_dir_all(away)).await
+        };
+        // A directory left half-deleted under its new name is cleared by the next sweep.
+        if let Err(err) = deleted.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked))) {
+            return warn(&err);
+        }
+        self.live_dirs.remove_emptied_parents(&directory.dir);
+        tracing::info!(dir = %directory.dir.display(), reason = reason.text(), "removed a kept directory");
+        if self.mode == Mode::Human {
+            let now = self.local_time(self.app.now().as_millisecond());
+            self.note(&format!("{now}  Removed {}: {}", directory.name(), reason.text()));
+        }
     }
 
     /// The heap, for its context, and the item, as they are now.
