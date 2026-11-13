@@ -367,6 +367,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::TurnReached, _) => ("reached the goal of a turn on", true),
         (AuditAction::TurnHandedBack, _) => ("handed back a turn on", true),
         (AuditAction::TurnRetried, _) => ("let agents try again on", true),
+        (AuditAction::TurnRedone, _) => ("asked for changes on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
@@ -430,6 +431,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::ItemUpdated
         | AuditAction::ItemMoved
         | AuditAction::TurnReached
+        | AuditAction::TurnRedone
         | AuditAction::StepUpdated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewUpdated
@@ -601,6 +603,9 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "question_choices" => "Choices",
         "question_many" => "Pick any",
         "question_step" => "Step",
+        "question_link" => "Link",
+        "question_piece" => "Piece",
+        "question_round" => "Round",
         "comment" => "Comment",
         "comment_text" => "Comment text",
         "reply" => "Reply",
@@ -725,6 +730,8 @@ const fn describe_question_kind(kind: QuestionKind) -> &'static str {
     match kind {
         QuestionKind::Question => "Question",
         QuestionKind::Request => "Request",
+        QuestionKind::Review => "Review",
+        QuestionKind::DoneProposal => "Done proposal",
     }
 }
 

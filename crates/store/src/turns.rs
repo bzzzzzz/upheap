@@ -2,9 +2,11 @@
 //! item has at most one open turn (`ended_at` is `NULL`), which the service keeps under the heap lock. Turns are
 //! never deleted: a taken-back one keeps its row.
 
-use domain::turn::{Ended, Goal, Reach, Turn, TurnEnd, TurnLine, TurnSource};
+use domain::turn::{Ended, Goal, Reach, Redone, Turn, TurnEnd, TurnLine, TurnSource};
 use domain::{HeapId, ItemId, TurnId, UserId};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QuerySelect};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
+};
 use std::collections::HashMap;
 
 use crate::StoreError;
@@ -46,6 +48,41 @@ async fn read_open_turn(db: &impl ConnectionTrait, item_id: ItemId, lock: bool) 
         .filter(item_turns::Column::EndedAt.is_null());
     let row = crate::items::shared_if(query, lock).one(db).await?;
     row.map(to_turn).transpose()
+}
+
+/// The latest turn of `item_id`, open or ended: the one opened last, ties broken by ID. A locking read (see
+/// [`find_open_turn_locking`]) when `lock` is set.
+pub async fn find_latest_turn(
+    db: &impl ConnectionTrait,
+    item_id: ItemId,
+    lock: bool,
+) -> Result<Option<Turn>, StoreError> {
+    let query = item_turns::Entity::find()
+        .filter(item_turns::Column::ItemId.eq(id_to_db(item_id.as_uuid())))
+        .order_by_desc(item_turns::Column::OpenedAt)
+        .order_by_desc(item_turns::Column::Id);
+    let row = crate::items::shared_if(query, lock).one(db).await?;
+    row.map(to_turn).transpose()
+}
+
+/// Writes that `turn` was redone, if it ended as reached and isn't redone in the store. Returns whether it was:
+/// `false` means someone redid it first, and nothing is written.
+pub async fn mark_turn_redone(db: &impl ConnectionTrait, turn: &Turn) -> Result<bool, StoreError> {
+    let Some(redone) = turn.redone else {
+        return Ok(false);
+    };
+    let result = item_turns::Entity::update_many()
+        .set(item_turns::ActiveModel {
+            redone_at: Set(Some(redone.at.as_millis())),
+            redone_by: Set(redone.by.map(|user| id_to_db(user.as_uuid()))),
+            ..Default::default()
+        })
+        .filter(item_turns::Column::Id.eq(id_to_db(turn.id.as_uuid())))
+        .filter(item_turns::Column::EndKind.eq(TurnEnd::Reached.code()))
+        .filter(item_turns::Column::RedoneAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
 }
 
 /// The open turn of each of `item_ids` that has one, in one query per [`IN_LIST_CHUNK`] items. Items with none are
@@ -191,6 +228,11 @@ fn to_row(turn: &Turn) -> item_turns::ActiveModel {
         ended_at: Set(ended.map(|ended| ended.at.as_millis())),
         ended_by: Set(ended.and_then(|ended| ended.by).map(|user| id_to_db(user.as_uuid()))),
         end_kind: Set(ended.map(|ended| ended.end.code().to_owned())),
+        redone_at: Set(turn.redone.map(|redone| redone.at.as_millis())),
+        redone_by: Set(turn
+            .redone
+            .and_then(|redone| redone.by)
+            .map(|user| id_to_db(user.as_uuid()))),
         failed_runs: Set(i32::try_from(turn.failed_runs).unwrap_or(i32::MAX)),
     }
 }
@@ -221,6 +263,17 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
         }),
         _ => return Err(read.corrupt("ended_at and end_kind disagree".to_owned())),
     };
+    let redone = match row.redone_at {
+        None => None,
+        Some(at) => Some(Redone {
+            at: read.timestamp(at)?,
+            by: row
+                .redone_by
+                .as_deref()
+                .map(|user| read.uuid(user).map(UserId::from_uuid))
+                .transpose()?,
+        }),
+    };
     Ok(Turn {
         id: TurnId::from_uuid(read.uuid(&row.id)?),
         item_id: ItemId::from_uuid(read.uuid(&row.item_id)?),
@@ -235,6 +288,7 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
         source,
         opened_at: read.timestamp(row.opened_at)?,
         ended,
+        redone,
         failed_runs: u32::try_from(row.failed_runs)
             .map_err(|_| read.corrupt(format!("failed_runs {} is negative", row.failed_runs)))?,
     })

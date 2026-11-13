@@ -798,7 +798,7 @@ async fn defined_needs_a_task_with_context_and_a_step() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn reaching_done_never_passes_yet() -> Result<()> {
+async fn an_agent_neither_reaches_done_nor_closes_a_task() -> Result<()> {
     // Arrange: a defined task, whose turn goes to done.
     let w = world().await?;
     let key = w
@@ -825,7 +825,7 @@ async fn reaching_done_never_passes_yet() -> Result<()> {
     expect_that!(
         reached.body["title"],
         eq(&json!(
-            "Reaching done takes an approved review, which isn't available yet."
+            "A task reaches done when the person agrees to close it. Propose it with `upheap question propose-done`."
         ))
     );
     expect_that!(done.status, eq(StatusCode::FORBIDDEN));
@@ -833,7 +833,7 @@ async fn reaching_done_never_passes_yet() -> Result<()> {
     expect_that!(
         done.body["title"],
         eq(&json!(
-            "An agent closes a task as done only after an approved review, which isn't available yet."
+            "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`."
         ))
     );
     Ok(())

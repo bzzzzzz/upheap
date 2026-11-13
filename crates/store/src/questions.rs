@@ -3,8 +3,10 @@
 
 use domain::item::StateKind;
 use domain::question::{
-    Choices, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, Reply, Withdrawal,
+    Choices, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, Reply, ReviewOf, ReviewPiece,
+    Withdrawal,
 };
+use domain::run::RunLink;
 use domain::step::StepNumber;
 use domain::text::Context;
 use domain::validation::Field;
@@ -210,6 +212,11 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
         .step
         .map(|step| i32::try_from(step.get()).map_err(|_| StoreError::corrupt(TABLE, &id, "step number overflow")))
         .transpose()?;
+    let review_round = question
+        .review
+        .as_ref()
+        .map(|review| i32::try_from(review.round).map_err(|_| StoreError::corrupt(TABLE, &id, "round overflow")))
+        .transpose()?;
     let reply = question.reply.as_ref();
     let withdrawal = question.withdrawal.as_ref();
     Ok(item_questions::ActiveModel {
@@ -237,6 +244,9 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
             .map(|user| id_to_db(user.as_uuid()))),
         withdrawn_at: Set(withdrawal.map(|withdrawal| withdrawal.withdrawn_at.as_millis())),
         run_id: Set(question.run_id.map(|run| id_to_db(run.as_uuid()))),
+        review_link: Set(question.review.as_ref().map(|review| review.link.as_str().to_owned())),
+        review_piece: Set(question.review.as_ref().map(|review| review.piece.as_str().to_owned())),
+        review_round: Set(review_round),
     })
 }
 
@@ -302,6 +312,26 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
         }
         _ => return Err(read.corrupt("the state and the reply disagree".to_owned())),
     };
+    let review = match (
+        kind,
+        row.review_link.as_deref(),
+        row.review_piece.as_deref(),
+        row.review_round,
+    ) {
+        (QuestionKind::Review, Some(link), Some(piece), Some(round)) => Some(ReviewOf {
+            link: RunLink::parse_as(link, Field::Link).map_err(|e| read.corrupt(e.to_string()))?,
+            piece: ReviewPiece::parse(piece)
+                .map_err(|e| read.corrupt(e.to_string()))?
+                .ok_or_else(|| read.corrupt("the review's piece is blank".to_owned()))?,
+            round: u32::try_from(round)
+                .ok()
+                .filter(|round| *round > 0)
+                .ok_or_else(|| read.corrupt(format!("round {round} is not positive")))?,
+        }),
+        (QuestionKind::Review, ..) => return Err(read.corrupt("a review lacks its link, piece or round".to_owned())),
+        (_, None, None, None) => None,
+        _ => return Err(read.corrupt("only a review has a link, piece and round".to_owned())),
+    };
     Ok(Question {
         id: QuestionId::from_uuid(read.uuid(&row.id)?),
         item_id: ItemId::from_uuid(read.uuid(&row.item_id)?),
@@ -312,6 +342,7 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
         choices: Choices::from_stored(choices),
         many: row.many,
         step,
+        review,
         asked_by: row
             .asked_by
             .as_deref()

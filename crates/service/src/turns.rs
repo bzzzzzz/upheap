@@ -11,13 +11,14 @@ use domain::heap::Heap;
 use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{Run, RunEnd};
-use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
+use domain::turn::{Reach, RedoError, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource, check_redo, redo_stage};
 use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::{
-    GoalMetHow, describe_goal_met, describe_new_turn, describe_retry, describe_take_back, describe_withdrawal,
+    GoalMetHow, describe_goal_met, describe_new_turn, describe_reached, describe_redone, describe_retry, describe_take_back,
+    describe_withdrawal,
 };
 use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
@@ -194,6 +195,121 @@ impl Services {
             return Ok(false);
         };
         self.take_back_turn(txn, heap, principal, &turn, why, now).await
+    }
+
+    /// Asks for changes to an item whose latest turn reached a stable state short of done: that turn is marked redone,
+    /// the item's stage goes back to where the turn's first run found it, and a new turn opens to the same reach and
+    /// goal with the person's `line`. The kind isn't changed back, and what the agent wrote (context, steps) stays.
+    /// `turn_redone` and `turn_opened` are recorded. Any member who may edit items may.
+    ///
+    /// Fails with [`ItemError::Closed`] on a closed item, [`TurnError::Blocked`] on a blocked one,
+    /// [`ServiceError::HeapArchived`] in an archived heap, and [`TurnError::NothingToRedo`] when the item is a
+    /// reminder, has an open turn, or its latest turn wasn't reached or is redone already.
+    pub async fn redo_turn(
+        &self,
+        principal: Principal,
+        item_id: ItemId,
+        line: TurnLine,
+    ) -> Result<ItemView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let found = store::items::find_item(&txn, item_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
+        let latest = store::turns::find_latest_turn(&txn, item.id, true).await?;
+        let reached = check_redo(&item, latest.as_ref()).map_err(|error| match error {
+            RedoError::Item(error) => ServiceError::Item(error),
+            RedoError::Turn(error) => ServiceError::Turn(error),
+        })?;
+
+        let now = self.now();
+        let earliest = store::runs::find_earliest_run_for_turn_locking(&txn, reached.id).await?;
+        let before = item.stage;
+        let after = redo_stage(&item, earliest.as_ref());
+        let redone = reached.redone_by(principal.user_id, now);
+        if !store::turns::mark_turn_redone(&txn, &redone).await? {
+            return Err(TurnError::NothingToRedo { item_id: item.id }.into());
+        }
+        let item = if after == before {
+            item
+        } else {
+            let edited = Item {
+                stage: after,
+                ..item.clone()
+            };
+            store::items::update_item(&txn, &edited, item.version, now)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected: item.version,
+                    current: item.version.next(),
+                })?
+        };
+        let entry = self.item_audit_entry(
+            &access.heap,
+            principal,
+            AuditAction::TurnRedone,
+            &item,
+            describe_redone(reached, before, after, line.as_str()),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let next = reached.redo(TurnId::from_uuid(self.new_id(now)), line, principal.user_id, now);
+        store::turns::insert_turn(&txn, &next).await?;
+        let entry = self.item_audit_entry(
+            &access.heap,
+            principal,
+            AuditAction::TurnOpened,
+            &item,
+            describe_new_turn(&next),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let children = ItemChildren::read_locking(&txn, item.id).await?;
+        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %access.heap.id,
+            item_id = %item_id,
+            goal = next.goal.code(),
+            user_id = %principal.user_id,
+            "turn redone"
+        );
+        Ok(view)
+    }
+
+    /// Ends the open turn of `item`, if it has one, as reached by the person: the person agreed to a done proposal.
+    /// It writes a `turn_reached` entry (the stage doesn't change) and ends the turn's runs that haven't ended as
+    /// asked, since the proposal was asked in one. Says whether there was an open turn. The caller holds the heap
+    /// lock.
+    pub(crate) async fn reach_open_turn(
+        &self,
+        txn: &impl ConnectionTrait,
+        heap: &Heap,
+        principal: Principal,
+        item: &Item,
+        now: Timestamp,
+    ) -> Result<bool, ServiceError> {
+        let Some(turn) = store::turns::find_open_turn_locking(txn, item.id).await? else {
+            return Ok(false);
+        };
+        if !store::turns::end_turn(txn, &turn.reached(principal.user_id, now)).await? {
+            return Ok(false);
+        }
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::TurnReached,
+            item,
+            describe_reached(turn.goal, item.stage, item.stage),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        for run in store::runs::list_unended_runs_for_turn_locking(txn, turn.id).await? {
+            store::runs::end_run(txn, &run.ended_as(RunEnd::Asked, now, None, Vec::new(), None)).await?;
+        }
+        Ok(true)
     }
 
     /// Ends `turn`, which the caller read under the heap lock, with its `turn_taken_back` entry. Says whether it

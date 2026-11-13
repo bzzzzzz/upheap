@@ -4,8 +4,8 @@
 //! Data model). An item has at most one open turn. Turns are never deleted: a taken-back one keeps its row.
 
 use crate::heap::Heap;
-use crate::item::{Item, Kind, Stage};
-use crate::run::STUCK_AFTER;
+use crate::item::{Item, ItemError, Kind, Stage, StateKind};
+use crate::run::{Run, STUCK_AFTER};
 use crate::text::parse_optional;
 use crate::validation::Field;
 use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
@@ -204,6 +204,14 @@ pub struct Ended {
     pub by: Option<UserId>,
 }
 
+/// When and by whom a turn that reached a stable state short of done was sent back for changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Redone {
+    pub at: Timestamp,
+    /// `None` when it can't be traced.
+    pub by: Option<UserId>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Turn {
     pub id: TurnId,
@@ -218,6 +226,8 @@ pub struct Turn {
     pub opened_at: Timestamp,
     /// `None` while the turn is open.
     pub ended: Option<Ended>,
+    /// Set only on a turn that ended as reached: the person asked for changes, and a new turn went to the same goal.
+    pub redone: Option<Redone>,
     /// How many of its runs in a row failed. A run that asked a question sets it back to 0. At [`STUCK_AFTER`] the
     /// turn is stuck.
     pub failed_runs: u32,
@@ -237,6 +247,43 @@ pub enum TurnError {
     /// A go-ahead on a blocked item. It must be unblocked first.
     #[error("item {item_id} is blocked; unblock it before sending it to an agent")]
     Blocked { item_id: ItemId },
+    /// Changes asked on an item whose latest turn didn't end as reached, or was redone already, or that has an open
+    /// turn, or is a reminder.
+    #[error("item {item_id} has no reached turn to ask changes of")]
+    NothingToRedo { item_id: ItemId },
+}
+
+/// Checks that changes may be asked on `item`, whose latest turn (by when it opened, then by ID) is `latest`, and
+/// returns that turn. The heap being active and the caller's role are checked by the caller.
+///
+/// Fails with [`ItemError::Closed`] on a closed item, with [`TurnError::Blocked`] on a blocked one, and with
+/// [`TurnError::NothingToRedo`] on a reminder, an item with no turn, one whose latest turn is open, was taken back or
+/// is redone already.
+pub fn check_redo<'a>(item: &Item, latest: Option<&'a Turn>) -> Result<&'a Turn, RedoError> {
+    if item.is_closed() {
+        return Err(ItemError::Closed { item_id: item.id }.into());
+    }
+    if item.state.kind() == StateKind::Blocked {
+        return Err(TurnError::Blocked { item_id: item.id }.into());
+    }
+    latest
+        .filter(|turn| item.kind != Kind::Reminder && turn.is_redoable())
+        .ok_or_else(|| TurnError::NothingToRedo { item_id: item.id }.into())
+}
+
+/// Why changes can't be asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RedoError {
+    #[error(transparent)]
+    Item(#[from] ItemError),
+    #[error(transparent)]
+    Turn(#[from] TurnError),
+}
+
+/// The stage an item goes back to when changes are asked: where it was when the turn's earliest run started, or its
+/// own stage when the turn has no run (a reached turn always has one).
+pub fn redo_stage(item: &Item, earliest_run: Option<&Run>) -> Stage {
+    earliest_run.map_or(item.stage, |run| run.from_stage)
 }
 
 impl Turn {
@@ -260,6 +307,7 @@ impl Turn {
             source,
             opened_at: now,
             ended: None,
+            redone: None,
             failed_runs: 0,
         }
     }
@@ -318,6 +366,7 @@ impl Turn {
             source: self.source,
             opened_at: now,
             ended: None,
+            redone: None,
             failed_runs: 0,
         })
     }
@@ -338,6 +387,39 @@ impl Turn {
                 by: Some(by),
             }),
             ..self.clone()
+        }
+    }
+
+    /// Whether the person may ask for changes to this turn: it ended as reached and isn't redone yet.
+    pub fn is_redoable(&self) -> bool {
+        self.redone.is_none() && self.ended.is_some_and(|ended| ended.end == TurnEnd::Reached)
+    }
+
+    /// This turn marked redone by `by` at `now`.
+    #[must_use]
+    pub fn redone_by(&self, by: UserId, now: Timestamp) -> Self {
+        Self {
+            redone: Some(Redone { at: now, by: Some(by) }),
+            ..self.clone()
+        }
+    }
+
+    /// The turn that opens when the person asks for changes to this one: the same reach and goal, with the person's
+    /// `line`, opened by `by` as a go-ahead.
+    #[must_use]
+    pub fn redo(&self, id: TurnId, line: TurnLine, by: UserId, now: Timestamp) -> Self {
+        Self {
+            id,
+            item_id: self.item_id,
+            reach: self.reach,
+            goal: self.goal,
+            line: Some(line),
+            opened_by: Some(by),
+            source: TurnSource::GoAhead,
+            opened_at: now,
+            ended: None,
+            redone: None,
+            failed_runs: 0,
         }
     }
 
@@ -519,6 +601,7 @@ mod tests {
                 source: TurnSource::GoAhead,
                 opened_at: now,
                 ended: None,
+                redone: None,
                 failed_runs: 0,
             }))
         );
@@ -572,6 +655,117 @@ mod tests {
         expect_that!(ended.is_open(), eq(false));
         expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::TakenBack)));
         expect_that!(ended.goal, eq(Goal::WithContext));
+    }
+
+    fn reached_turn(note: &Item) -> Turn {
+        let user = UserId::from_uuid(Uuid::from_u128(10));
+        Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            note,
+            Reach::AllTheWay,
+            None,
+            TurnSource::Prepare,
+            user,
+            Timestamp::EPOCH,
+        )
+        .reached(user, Timestamp::EPOCH)
+    }
+
+    #[gtest]
+    fn a_redo_opens_a_turn_to_the_same_goal_and_reach_with_the_line() {
+        let note = item(Kind::Note, Stage::AsWritten);
+        let turn = reached_turn(&note);
+        let person = UserId::from_uuid(Uuid::from_u128(11));
+        let line = TurnLine::parse("Use the new CA.").expect("valid").expect("given");
+
+        let next = turn.redo(
+            TurnId::from_uuid(Uuid::from_u128(41)),
+            line.clone(),
+            person,
+            Timestamp::EPOCH,
+        );
+        let redone = turn.redone_by(person, Timestamp::EPOCH);
+
+        expect_that!(next.goal, eq(Goal::WithContext));
+        expect_that!(next.reach, eq(Reach::AllTheWay));
+        expect_that!(next.line, some(eq(&line)));
+        expect_that!(next.source, eq(TurnSource::GoAhead));
+        expect_that!(next.opened_by, some(eq(person)));
+        expect_that!(next.is_open(), eq(true));
+        expect_that!(redone.is_redoable(), eq(false));
+        expect_that!(redone.redone.and_then(|r| r.by), some(eq(person)));
+    }
+
+    #[gtest]
+    fn only_a_reached_turn_that_is_not_redone_can_be_redone() {
+        let note = item(Kind::Note, Stage::AsWritten);
+        let reached = reached_turn(&note);
+        let person = UserId::from_uuid(Uuid::from_u128(11));
+        let taken_back = Turn {
+            ended: Some(Ended {
+                end: TurnEnd::TakenBack,
+                at: Timestamp::EPOCH,
+                by: Some(person),
+            }),
+            ..reached.clone()
+        };
+        let open = Turn {
+            ended: None,
+            ..reached.clone()
+        };
+
+        expect_that!(check_redo(&note, Some(&reached)), ok(eq(&reached)));
+        let nothing = RedoError::Turn(TurnError::NothingToRedo { item_id: note.id });
+        expect_that!(check_redo(&note, Some(&taken_back)), err(eq(nothing)));
+        expect_that!(check_redo(&note, Some(&open)), err(eq(nothing)));
+        expect_that!(check_redo(&note, None), err(eq(nothing)));
+        expect_that!(
+            check_redo(&note, Some(&reached.redone_by(person, Timestamp::EPOCH))),
+            err(eq(nothing))
+        );
+        let reminder = item(Kind::Reminder, Stage::AsWritten);
+        expect_that!(
+            check_redo(&reminder, Some(&reached)),
+            err(eq(RedoError::Turn(TurnError::NothingToRedo { item_id: reminder.id })))
+        );
+    }
+
+    #[gtest]
+    fn a_closed_or_blocked_item_is_not_redone() {
+        let mut closed = item(Kind::Note, Stage::AsWritten);
+        closed.state = ItemState::Done {
+            closed_at: Timestamp::EPOCH,
+            closed_by: None,
+        };
+        let reached = reached_turn(&closed);
+        expect_that!(
+            check_redo(&closed, Some(&reached)),
+            err(eq(RedoError::Item(ItemError::Closed { item_id: closed.id })))
+        );
+        let mut blocked = item(Kind::Note, Stage::AsWritten);
+        blocked.state = ItemState::Blocked {
+            by: Some(ItemId::from_uuid(Uuid::from_u128(99))),
+        };
+        expect_that!(
+            check_redo(&blocked, Some(&reached)),
+            err(eq(RedoError::Turn(TurnError::Blocked { item_id: blocked.id })))
+        );
+    }
+
+    #[gtest]
+    fn a_redo_goes_back_to_the_stage_the_first_run_started_at() {
+        let task = item(Kind::Task, Stage::Defined);
+        let mut run = Run::start(
+            crate::RunId::from_uuid(Uuid::from_u128(50)),
+            &item(Kind::Task, Stage::AsWritten),
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+        run.from_stage = Stage::AsWritten;
+
+        expect_that!(redo_stage(&task, Some(&run)), eq(Stage::AsWritten));
+        expect_that!(redo_stage(&task, None), eq(Stage::Defined));
     }
 }
 

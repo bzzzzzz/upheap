@@ -16,6 +16,8 @@ pub struct Model {
     pub ended_at: Option<i64>,
     pub ended_by: Option<String>,
     pub end_kind: Option<String>,
+    pub redone_at: Option<i64>,
+    pub redone_by: Option<String>,
     pub failed_runs: i32,
 }
 

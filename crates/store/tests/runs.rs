@@ -296,7 +296,7 @@ async fn a_turns_failed_runs_are_stored_and_only_an_open_turn_takes_them() -> Re
 #[tokio::test]
 async fn a_question_remembers_the_run_it_was_asked_in() -> Result<()> {
     use domain::QuestionId;
-    use domain::question::{NewQuestion, Question, QuestionKind, QuestionNumber, QuestionText};
+    use domain::question::{NewQuestion, Question, QuestionKind, QuestionNumber, QuestionText, ReviewInput};
 
     // Arrange
     let world = world().await?;
@@ -309,6 +309,7 @@ async fn a_question_remembers_the_run_it_was_asked_in() -> Result<()> {
             &[],
             false,
             None,
+            ReviewInput::default(),
         )?)
     };
     let new_question = |number: u32, text: &str, run: Option<RunId>| -> Result<Question> {

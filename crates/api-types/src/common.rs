@@ -264,6 +264,10 @@ pub enum ItemActionDto {
     /// Let the agents try again, on `POST …/turn/retry`. Offered for an open item the caller may edit whose turn is
     /// stuck.
     Retry,
+    /// Ask for changes, on `POST …/turn/redo`. Offered for an open item the caller may edit that has no open turn and
+    /// whose latest turn reached a stable state short of done and was not redone yet. Only an item's own response
+    /// carries it, not a list row.
+    RedoTurn,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -280,6 +284,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::SendToAgent => Self::SendToAgent,
             ItemAction::TakeBack => Self::TakeBack,
             ItemAction::Retry => Self::Retry,
+            ItemAction::RedoTurn => Self::RedoTurn,
         }
     }
 }
@@ -387,6 +392,12 @@ impl StepDto {
 pub enum QuestionKindDto {
     Question,
     Request,
+    /// A link to work for the person to look at, replied to with `Approved` or `Changes asked`. Asked only by an agent
+    /// doing a task.
+    Review,
+    /// The agent says nothing is left, replied to with `Close as done` or `Not yet`. Asked only by an agent doing a
+    /// task. Agreeing closes the task.
+    DoneProposal,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -398,6 +409,8 @@ impl From<QuestionKind> for QuestionKindDto {
         match kind {
             QuestionKind::Question => Self::Question,
             QuestionKind::Request => Self::Request,
+            QuestionKind::Review => Self::Review,
+            QuestionKind::DoneProposal => Self::DoneProposal,
         }
     }
 }
@@ -410,6 +423,8 @@ impl TryFrom<QuestionKindDto> for QuestionKind {
         match kind {
             QuestionKindDto::Question => Ok(Self::Question),
             QuestionKindDto::Request => Ok(Self::Request),
+            QuestionKindDto::Review => Ok(Self::Review),
+            QuestionKindDto::DoneProposal => Ok(Self::DoneProposal),
             QuestionKindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
         }
     }
@@ -474,7 +489,19 @@ pub struct QuestionReplyDto {
     pub replied_label: String,
 }
 
-/// One question or request on an item.
+/// What a review asks about.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Review)]
+pub struct ReviewDto {
+    /// The address of the work to look at: an absolute `http` or `https` link.
+    pub link: String,
+    /// The piece of work the review is about, which numbers its rounds. The link itself when the asker named none.
+    pub piece: String,
+    /// 1 plus the answered reviews of the same piece when this was asked; fixed then.
+    pub round: u32,
+}
+
+/// One question, request, review or done proposal on an item.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Question)]
 pub struct QuestionDto {
@@ -487,12 +514,18 @@ pub struct QuestionDto {
     /// The long version, Markdown; `null` when there is none.
     pub details: Option<String>,
     /// The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
-    /// `Can't be done`.
+    /// `Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`.
     pub choices: Vec<String>,
     /// Whether any number of choices may be picked, not just one.
     pub many: bool,
     /// The number of the item's step this is about, which may have been dropped since.
     pub step: Option<u32>,
+    /// What a `review` asks about; `null` for every other kind.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub review: Option<ReviewDto>,
     pub state: QuestionStateDto,
     /// Who asked. `null` when it can't be traced.
     pub asked_by: Option<UserRefDto>,

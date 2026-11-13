@@ -1,7 +1,7 @@
 //! Request types of the question endpoints. They answer with the whole item (`ItemDto`).
 
 use domain::ValidationError;
-use domain::question::{NewQuestion, QuestionKind, QuestionText};
+use domain::question::{NewQuestion, QuestionKind, QuestionText, ReviewInput};
 use domain::step::StepNumber;
 use domain::text::Context;
 use domain::validation::Field;
@@ -10,7 +10,8 @@ use utoipa::ToSchema;
 
 use crate::common::QuestionKindDto;
 
-/// A question or request to put on an item.
+/// A question, request, review or done proposal to put on an item. A review and a done proposal are accepted only
+/// from an agent doing a task (a run whose turn goes to done); a person asking by hand is `question_needs_do_turn`.
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 #[schema(as = AskQuestionRequest)]
@@ -32,6 +33,15 @@ pub struct AskQuestionDto {
     #[schema(minimum = 1)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step: Option<u32>,
+    /// For a `review`, required: the address of the work to look at, an absolute `http` or `https` link of up to 2,000
+    /// characters. Not for any other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    /// For a `review`: the piece of work it is about, one line of 1 to 2,000 characters, which numbers its rounds;
+    /// blank or `null` means the link itself. Not for any other kind. The server works out the round: 1 plus the
+    /// answered reviews of the same piece.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub piece: Option<String>,
 }
 
 impl AskQuestionDto {
@@ -51,6 +61,10 @@ impl AskQuestionDto {
             self.step
                 .map(|number| StepNumber::new(number).ok_or(ValidationError::ValueUnknown { field: Field::Step }))
                 .transpose()?,
+            ReviewInput {
+                link: self.link.as_deref(),
+                piece: self.piece.as_deref(),
+            },
         )
     }
 }
