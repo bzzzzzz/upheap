@@ -11,6 +11,7 @@ use axum::Json;
 use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
+use domain::item::Stage;
 use domain::run::{RunLink, RunResult, check_tool_times, cut_failure, parse_cost_usd};
 use domain::{RunId, Timestamp, ValidationError};
 use serde::Deserialize;
@@ -213,9 +214,10 @@ async fn heartbeat(State(state): State<AppState>, path: RunPath) -> Result<Statu
 /// Says the run reached the turn's goal. The item is checked as it is now: `with_context` needs an open item with a
 /// description and no open question; `defined` needs an open task with a description, a step that isn't dropped and no
 /// open question; `done` never passes until reviews exist. On a pass the run ends as `reached`, the turn ends, the
-/// item's stage becomes the goal, and `turn_reached` is recorded. A turn sent all the way opens the next turn at once,
-/// recorded as `turn_opened`. A miss is `not_reached` and names the first condition
-/// missed; the run stays live, so the agent can fix the item and say it again.
+/// item's stage becomes the goal, and `turn_reached` is recorded. A `stage` past the goal of a turn to `with_context`
+/// (`defined`) checks the item against that stage instead and moves it there; any other `stage` is refused. A turn
+/// sent all the way opens the next turn at once, recorded as `turn_opened`. A miss is `not_reached` and names the
+/// first condition missed; the run stays live, so the agent can fix the item and say it again.
 #[utoipa::path(post, path = "/work/runs/{run}/reached", tag = "work", security(("session" = [])),
     params(RunParams), request_body = ReachedRequestDto,
     responses(
@@ -223,7 +225,7 @@ async fn heartbeat(State(state): State<AppState>, path: RunPath) -> Result<Statu
         (status = 400, description = "`invalid_body`", body = Problem),
         (status = 404, description = "No such run, or not the caller's", body = Problem),
         (status = 409, description = "`run_over`: the run has ended or lapsed, or its turn was taken back", body = Problem),
-        (status = 422, description = "`not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, or a link that isn't an absolute `http` or `https` address", body = Problem),
+        (status = 422, description = "`not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, a link that isn't an absolute `http` or `https` address, or a `stage` that is below the turn's goal or given for a turn to `done`", body = Problem),
     ))]
 async fn reached(
     State(state): State<AppState>,
@@ -232,9 +234,14 @@ async fn reached(
 ) -> Result<Json<RunDto>, ApiError> {
     let result = RunResult::parse(&body.result).map_err(ServiceError::from)?;
     let links = RunLink::parse_all(&body.links).map_err(ServiceError::from)?;
+    let stage = body
+        .stage
+        .map(Stage::try_from)
+        .transpose()
+        .map_err(ServiceError::from)?;
     let view = state
         .services
-        .reached(path.principal, path.run_id, result, links)
+        .reached(path.principal, path.run_id, result, links, stage)
         .await?;
     Ok(Json(run_dto(&view)))
 }

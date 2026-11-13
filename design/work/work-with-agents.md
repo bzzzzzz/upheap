@@ -152,8 +152,10 @@ is resolved or turned into a task.
    task, with its checklist and context, ready to be done; done. A note too big for a task goes to a defined
    heap instead: a new heap with its context, tasks and notes. A heap whose tasks are all done is stable too.
 2. **Core.** An agent's turn takes one item from one stable state to the next, and stops there. It never goes
-   further on its own. The one exception is the person's choice: a note as written may be sent straight to
-   defined, in one turn.
+   further on its own, with two exceptions. The person may choose to send a note as written straight to
+   defined, in one turn. And an agent in a turn to with context may take a note on to defined when it comes out
+   defined enough: one piece of work, a clear "Done when", steps plain from what is known, and nothing to ask.
+   In any doubt it stops at with context. So "one state" on a note as written may end two states on.
 3. **Core.** An item with an open question or request is not at a stable state. The agent is in the middle of
    its turn, and carries on with it once the person has answered.
 4. At a stable state the person decides: send it on, change it, leave it, or close it.
@@ -167,7 +169,8 @@ is resolved or turned into a task.
    its defined state, for the person to send on. How far it reaches when work spawns more work is settled while
    building it, not here.
 2. **Core.** A heap can be set so agents prepare what's added without being asked: each new item is taken one
-   stable state forward, and stops there. Preparing never includes doing a defined task; that always needs the
+   stable state forward, and stops there, except that a note that comes out defined enough becomes a defined
+   task in the same turn (Stable states 2). Preparing never includes doing a defined task; that always needs the
    person's word.
 3. **Core.** Outside those two cases an agent never picks an item up.
 4. **Core.** At any moment an item is with the person or with an agent, and the list shows which.
@@ -461,7 +464,9 @@ state, or by the person by hand, and never worked out from what the item happens
 An item is at a **stable state** when it has no open turn and no open question. Then its stable state is its
 stage, or done or became once it's closed. The next stable state is the next row; for a task as written it is
 defined, in one turn; after defined it is done. A note as written may also be sent straight to defined, in one
-turn, skipping the stop at with context. A note with context goes on by becoming one task, several, a
+turn, skipping the stop at with context; and a turn to with context may end at defined when the agent makes the
+note a defined task (Stable states 2): its run says so with `work reached --stage defined`, and the check is
+defined's row. The turn's goal stays with context. A note with context goes on by becoming one task, several, a
 step or a heap (Kinds and moves).
 
 **Who has it.** Read off the item, never set by hand:
@@ -574,7 +579,9 @@ change it makes carries the run it was made in.
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
    So does a run whose tool showed no activity for 30 minutes: the loop stops it and fails it with its own reason.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
-   in the table and has no open question. Otherwise the run counts as failed.
+   in the table and has no open question. Otherwise the run counts as failed. The stage checked is the turn's
+   goal, or defined when a run in a turn to with context says it went on to defined; any other stage a run
+   names is refused. The stage moves to the one checked.
 7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
    wrong. Both kinds of failure, a lapsed claim and a silent tool, count toward stuck. The person retries it or takes
    it back.
@@ -650,7 +657,9 @@ change it makes carries the run it was made in.
 **History**
 
 1. The agents' progress is the runs that ended as reached, newest first, each with its item, the state reached
-   and its result. Asked and failed runs are on the item only.
+   and its result. Asked and failed runs are on the item only. A run that went past its turn's goal shows the
+   state it reached and the one it skipped: "defined (skipped with context)". Until the progress is built, the
+   `turn_reached` audit entry of the run holds the stage before and after, and `work run` prints the line.
 2. Costs are added up per item and per heap, by the unit the agent tool reported them in.
 3. Every change an agent makes is in the audit log as the person's, marked as made by an agent, with its run.
 4. Contexts are part of the audit log like any field: each change keeps the text before and after.
@@ -1078,7 +1087,8 @@ $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
 14:02  k3x9a  Rotate the certs    Work    note → with context    reached   2m10s   $0.31
 14:05  p2m4q  Paint the fence     House   note → with context    asked     0m40s   $0.08
-14:06  Nothing to do. 1 item waits for you: 1 in House. Asking again in a minute.
+14:06  w7d2c  Fix the footer      Work    task → defined (skipped with context)    reached   1m30s   $0.12
+14:07  Nothing to do. 1 item waits for you: 1 in House. Asking again in a minute.
 
 --heap    repeatable; with none, the default heap. Heaps agents make from these are included.
 --once    do one run, or nothing when there is nothing, and exit.
@@ -1173,6 +1183,9 @@ upheap item became n8c2d                                   after making things f
 upheap question propose-done k3x9a "Merged; nothing left" [--details-file f]
                                                            when steps and reviews are done
 upheap work reached --result "Rotation script merged." [--link https://example.com/pull/12]...
+upheap work reached --result "Made it a defined task." --stage defined
+                                                           in a turn to with context, when the note came
+                                                           out defined enough
 upheap work hand-back --reason "Already fixed in #123; nothing left to prepare."
 
 --from     what the new thing was made from. With it, --need and --age are required: nothing is

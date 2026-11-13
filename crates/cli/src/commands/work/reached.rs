@@ -1,13 +1,15 @@
-//! `upheap work reached --result <text> [--link <url>]...`: the run says it reached the turn's goal.
+//! `upheap work reached --result <text> [--link <url>]... [--stage defined]`: the run says it reached the
+//! turn's goal, or, in a turn to with context, that it went on to defined.
 //!
 //! It takes no item: the run knows it. The server checks the item as it is now; when it misses a condition the
 //! refusal names it, and the run, still live, can fix the item and say reached again.
 
+use api_types::common::StageDto;
 use api_types::turns::{GoalDto, ReachDto};
 use api_types::work::{ReachedRequestDto, RunDto};
 use clap::Args;
 
-use super::{current_run, goal_phrase, missing_agents};
+use super::{current_run, goal_phrase, missing_agents, skipped_phrase};
 use crate::commands::SharedArgs;
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
@@ -20,13 +22,23 @@ pub struct ReachedArgs {
     /// A link to what it made, such as a pull request. Repeat for more, up to 10
     #[arg(long = "link", value_name = "URL")]
     pub links: Vec<String>,
+    /// The stable state the item reached, when it went past the turn's goal: `defined`, for a note made a defined task
+    /// in a turn to with context
+    #[arg(long, value_enum)]
+    pub stage: Option<ReportedStage>,
     #[command(flatten)]
     pub shared: SharedArgs,
 }
 
-/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`, or `... k3x9a goes on, all the
-/// way.` when the turn was sent all the way and didn't reach done; `--quiet` prints nothing and
-/// `--json` the run. Needs `UPHEAP_RUN`.
+/// The stage a run may report past its turn's goal: defined, from a turn to with context.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum ReportedStage {
+    Defined,
+}
+
+/// Says the run reached its goal. Prints `Reached: with context. k3x9a is yours again.`, `Reached: defined (skipped
+/// with context). ...` when it went past the goal, or `... k3x9a goes on, all the way.` when the turn was sent all
+/// the way and didn't reach done; `--quiet` prints nothing and `--json` the run. Needs `UPHEAP_RUN`.
 pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let run = current_run(app, "reached")?.to_owned();
     let client = app.client(app.server(&args.shared)?)?;
@@ -34,6 +46,7 @@ pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), C
     let body = ReachedRequestDto {
         result: args.result,
         links: args.links,
+        stage: args.stage.map(|ReportedStage::Defined| StageDto::Defined),
     };
     let reached = client
         .post::<RunDto>(&["work", "runs", &run, "reached"], &body, &token)
@@ -51,7 +64,8 @@ pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), C
             } else {
                 "is yours again"
             };
-            out.line(&format!("Reached: {}. {} {ending}.", goal_phrase(item.goal), item.key))?;
+            let reached = skipped_phrase(item).unwrap_or_else(|| goal_phrase(item.goal).to_owned());
+            out.line(&format!("Reached: {reached}. {} {ending}.", item.key))?;
         }
     }
     Ok(())

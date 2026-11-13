@@ -196,7 +196,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   to done); a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
-  stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
+  stage to the goal, unless the person has taken it further meanwhile: it never moves back. A run may name a stage
+  at or past the goal (`reported_goal`): in a turn to with context, `defined` checks and moves to defined instead, so
+  a note that comes out defined enough is a defined task in one turn. The turn's goal doesn't change; the
+  `turn_reached` entry's stages before and after show the skip. Each refusal of a run
   has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
   never has to read a message.
   **Redo** is the person's way to say a turn that reached a stable state short of done isn't right: it marks that turn

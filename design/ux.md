@@ -145,7 +145,8 @@ it; when only the heap's other settings changed, the message says so and Save ag
 Cancel give focus back to Edit.
 
 The **Agents** card, on General under Details, has a switch, "Agents prepare new notes", with the line "Each note added here is
-sent to an agent to fill in its context, then comes back to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
+sent to an agent to fill in its context, or to make it a defined task when it's small and clear, then comes back
+to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
 switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
 "off".
 

@@ -25,7 +25,8 @@ use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::logs;
 use super::{
-    HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text, waiting_text,
+    HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text,
+    waiting_text,
 };
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
@@ -1095,7 +1096,7 @@ impl Shared<'_> {
                     Cell::toned(run.item.key.clone(), Tone::Strong),
                     Cell::new(shorten(&run.item.title, TITLE_WIDTH)),
                     Cell::new(run.item.heap.name.clone()),
-                    Cell::new(journey(&run.item)),
+                    Cell::new(ended_journey(&run.item, run.end)),
                     Cell::toned(end_word(run.end).unwrap_or("ended"), tone),
                 ];
                 if let Some(ended_at) = run.ended_at {

@@ -11,11 +11,11 @@ use std::collections::{HashMap, HashSet};
 use domain::audit::AuditAction;
 use domain::handle::Handle;
 use domain::heap::Heap;
-use domain::item::{Item, Kind, NewItem, StateKind};
+use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{
     LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunResult, default_failure,
-    reached_check,
+    reached_check, reported_goal,
 };
 use domain::step::StepState;
 use domain::team::Team;
@@ -249,10 +249,11 @@ impl Services {
         Ok(())
     }
 
-    /// Says the run `run_id` reached its turn's goal. If the item is at the goal as it is now, the run ends as
-    /// reached, the turn ends as reached and the item's stage becomes the goal; for a turn sent all the way, the next
-    /// turn opens in the same transaction. Otherwise it fails with
-    /// [`ServiceError::NotReached`], naming the first condition missed, and the run stays live.
+    /// Says the run `run_id` reached its turn's goal, or the later `stage` it reports (see [`reported_goal`]). If the
+    /// item is at that goal as it is now, the run ends as reached, the turn ends as reached and the item's stage
+    /// becomes that goal; for a turn sent all the way, the next turn opens in the same transaction. Otherwise it fails
+    /// with [`ServiceError::NotReached`], naming the first condition missed, and the run stays live. A `stage` below
+    /// the turn's goal, or any in a turn to done, fails with a validation error and writes nothing.
     ///
     /// Fails with [`RunError::Over`] when the run has ended or lapsed or its turn was taken back.
     pub async fn reached(
@@ -261,6 +262,7 @@ impl Services {
         run_id: RunId,
         result: RunResult,
         links: Vec<RunLink>,
+        stage: Option<Stage>,
     ) -> Result<RunView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (run, heap) = self.lock_run(&txn, principal, run_id).await?;
@@ -271,6 +273,7 @@ impl Services {
         }
         let now = self.now();
         let turn = self.ensure_live(&txn, &run, now).await?;
+        let goal = reported_goal(turn.goal, stage)?;
         let item = store::items::find_item_locking(&txn, run.item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
@@ -284,7 +287,7 @@ impl Services {
             .iter()
             .filter(|step| step.state != StepState::Dropped)
             .count();
-        if let Err(missed) = reached_check(&item, turn.goal, open_questions, live_steps) {
+        if let Err(missed) = reached_check(&item, goal, open_questions, live_steps) {
             // The run is plainly still going, so it was heard from.
             store::runs::touch_run(&txn, run.id, now).await?;
             txn.commit().await.map_err(StoreError::from)?;
@@ -297,7 +300,7 @@ impl Services {
         store::turns::end_turn(&txn, &ended_turn).await?;
         // A goal that is not a stage never passes the check, so there is a stage to move to. The person may have
         // taken the item further than the goal while the agent worked, and reaching never moves it back.
-        let after = turn.goal.stage().map_or(item.stage, |goal| goal.max(item.stage));
+        let after = goal.stage().map_or(item.stage, |goal| goal.max(item.stage));
         let before = item.stage;
         let item = if after == before {
             item

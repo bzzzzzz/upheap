@@ -219,7 +219,8 @@ function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: 
         <p className="mt-3 text-sm font-medium">Agents prepare new notes: {on ? "on" : "off"}</p>
       )}
       <p className="mt-2 text-sm/normal text-ink-soft">
-        Each note added here is sent to an agent to fill in its context, then comes back to you.
+        Each note added here is sent to an agent to fill in its context, or to make it a defined task when it's small
+        and clear, then comes back to you.
       </p>
       <ProblemText error={update.error} className="mt-2 text-overdue-ink" />
     </section>
