@@ -9,7 +9,9 @@ done looks like, under a line starting "Done when:". Add a step for each part of
 clear (`upheap item edit <key> --effort s|m|l|xl`).
 
 If the item is really several pieces of work, split it instead. First look at "Became" under the item: an earlier
-run may have made some of the tasks already, so carry on from them and make only what is missing.
+run or the person may have made some of the tasks already, so carry on from them and make only what is missing.
+Give one with no step its steps (`upheap step add`). On those tasks you can only add steps: if one has no context,
+ask on the note (`upheap question ask <key>`) and stop.
 1. Make each task, one at a time and in order, with its context (a line starting "Done when:") and its steps:
    `upheap item add "<title>" --task --from <key> --need <need> --age keep|new --context-file - --step "<title>"`,
    with the context on stdin. `--age keep` ranks it from the note's age, `--age new` from now.

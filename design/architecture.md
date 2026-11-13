@@ -181,12 +181,13 @@ The tables and columns are in the migrations. These are the conventions they fol
   locks the heap of the run's item and the target heap in heap ID order (once when they are the same, as
   `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
   item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
-  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run (`check_run_step_add`),
-  and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
+  the run's item (`check_run_step_add`), and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
   shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
-  the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn made
-  from the note (`origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
-  checks that no question is open and every open task made from the note has a context and a step
+  the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
+  from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
+  checks that no question is open and every open task split from the note, in the note's heap, has a context and
+  a step
   (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
   run and turn end as reached with no follow-on. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks

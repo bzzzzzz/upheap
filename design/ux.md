@@ -449,7 +449,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     `comment` isn't offered (an archived heap) the comments read with no field, and with none the section is absent.
 19. **From and Became** sit above Questions, only when they apply, and the items they name open in the pane. An item made
     from another says "From: “<title>”, a note". A note that was split says "Became: 3 tasks" ("items" when the
-    kinds are mixed) and lists each, with its state. Both are links in the item's heap, and show read-only too.
+    kinds are mixed) and lists each, with its state. Each links to the heap that item is in now, and both show
+    read-only too.
 
 ## Adding an item
 

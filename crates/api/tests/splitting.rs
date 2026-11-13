@@ -696,7 +696,7 @@ async fn in_a_prepare_heap_a_run_s_items_get_no_turn_and_a_persons_do() -> Resul
 
 #[gtest]
 #[tokio::test]
-async fn a_run_adds_steps_to_the_tasks_it_made_but_not_earlier_ones_and_writes_nothing_else_on_them() -> Result<()> {
+async fn a_run_adds_steps_to_the_tasks_split_from_its_note_and_writes_nothing_else_on_them() -> Result<()> {
     // Arrange: a task made by the person before the turn, and one made by the run.
     let w = world().await?;
     let note = w.add_note("Certs are a mess", "expected").await?;
@@ -736,8 +736,8 @@ async fn a_run_adds_steps_to_the_tasks_it_made_but_not_earlier_ones_and_writes_n
 
     // Assert
     expect_that!(step_on_made.status, eq(StatusCode::CREATED));
-    expect_that!(step_on_earlier.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(code(&step_on_earlier), some(eq("run_wrong_item")));
+    // A task the person split earlier needs a step too before the note can become.
+    expect_that!(step_on_earlier.status, eq(StatusCode::CREATED));
     expect_that!(comment_on_made.status, eq(StatusCode::FORBIDDEN));
     expect_that!(code(&comment_on_made), some(eq("run_wrong_item")));
     expect_that!(question_on_made.status, eq(StatusCode::FORBIDDEN));

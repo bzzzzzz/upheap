@@ -314,7 +314,7 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
         "question_needs_task" | "question_needs_do_turn" => {
             Some("Only an agent doing a task asks for review or proposes closing.".to_owned())
         }
-        "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
+        "not_reached" => Some("Fix what's missing, then run the same command again.".to_owned()),
         "run_need_above_origin" => Some(match &problem.highest {
             Some(highest) => format!("Give --need {highest} or lower."),
             None => "Give --need at or below the note's.".to_owned(),
@@ -540,7 +540,7 @@ mod tests {
         );
         expect_that!(
             missed.to_message(),
-            contains(eq("hint: Fix what's missing and say reached again."))
+            contains(eq("hint: Fix what's missing, then run the same command again."))
         );
     }
 
