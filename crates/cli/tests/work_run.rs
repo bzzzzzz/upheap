@@ -1214,6 +1214,133 @@ async fn with_a_root_each_item_runs_in_root_team_heap_key() -> Result<()> {
     Ok(())
 }
 
+/// The run id a tool was started with.
+fn run_id_of(start: &ToolStart) -> String {
+    start
+        .env
+        .iter()
+        .find(|(name, _)| name == "UPHEAP_RUN")
+        .map(|(_, id)| id.clone())
+        .unwrap_or_default()
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_tool_is_given_a_log_named_by_the_run_in_the_runs_directory_of_the_config() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let start = &tool.starts()[0];
+    let expected = cli
+        .config_dir
+        .path()
+        .join("runs")
+        .join(format!("{}.jsonl", run_id_of(start)));
+    expect_that!(start.log, some(eq(&expected)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_that_showed_no_activity_fails_with_that_text_and_points_to_its_log_when_there_is_one() -> Result<()> {
+    // Arrange: the tool leaves its log, as a real one does, and reports the silence stop.
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let silent = StandIn::new(|start: ToolStart| async move {
+        if let Some(log) = &start.log {
+            std::fs::create_dir_all(log.parent().expect("a directory")).expect("the runs directory");
+            std::fs::write(log, "{\"type\":\"system\"}\n").expect("the log");
+        }
+        Ok(ToolReport {
+            failure: Some("The agent showed no activity for 30 minutes.".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+    let no_log = StandIn::new(|_| async {
+        Ok(ToolReport {
+            failure: Some("The agent showed no activity for 30 minutes.".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+
+    // Act
+    let with_log = cli.run_work(ONCE, &silent).await;
+    let without_log = cli.run_work(ONCE, &no_log).await;
+    let json = cli.run_work(&[ONCE, &["--json"]].concat(), &silent).await;
+
+    // Assert
+    let path = cli
+        .config_dir
+        .path()
+        .join("runs")
+        .join(format!("{}.jsonl", run_id_of(&silent.starts()[0])));
+    let lines: Vec<&str> = with_log.stdout.lines().skip(1).collect();
+    expect_that!(lines[0], contains_substring("failed"));
+    expect_that!(lines[1], eq("       The agent showed no activity for 30 minutes."));
+    expect_that!(lines[2], eq(&format!("       Log: {}", path.display())));
+    expect_that!(lines.len(), eq(3));
+    let lines: Vec<&str> = without_log.stdout.lines().skip(1).collect();
+    expect_that!(lines.len(), eq(2));
+    expect_that!(json.stdout, not(contains_substring("Log:")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_header_is_followed_by_a_note_of_where_the_logs_go_in_human_mode_only() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let human = cli.run_work(ONCE, &tool).await;
+    let json = cli.run_work(&[ONCE, &["--json"]].concat(), &tool).await;
+
+    // Assert
+    let note = format!(
+        "Each run's claude output is saved in {}, as <run id>.jsonl.",
+        cli.config_dir.path().join("runs").display()
+    );
+    expect_that!(lines_with(&human.stderr, "Each run's"), elements_are![eq(&note)]);
+    expect_that!(json.stderr, not(contains_substring("Each run's")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn logs_older_than_seven_days_are_removed_when_the_loop_starts_and_nothing_else() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let runs = cli.config_dir.path().join("runs");
+    std::fs::create_dir_all(&runs)?;
+    let (old, new, other) = (runs.join("old.jsonl"), runs.join("new.jsonl"), runs.join("old.txt"));
+    let eight_days = StdDuration::from_secs(8 * 24 * 60 * 60);
+    for path in [&old, &new, &other] {
+        std::fs::write(path, "{}\n")?;
+    }
+    for path in [&old, &other] {
+        std::fs::File::options()
+            .write(true)
+            .open(path)?
+            .set_modified(std::time::SystemTime::now() - eight_days)?;
+    }
+
+    // Act
+    let outcome = cli.run_work(ONCE, &idle_agent(None)).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(old.exists(), eq(false));
+    expect_that!(new.exists(), eq(true));
+    expect_that!(other.exists(), eq(true));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn a_later_run_on_the_same_item_starts_in_the_same_directory_with_what_was_left() -> Result<()> {

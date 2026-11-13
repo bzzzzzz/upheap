@@ -688,7 +688,12 @@ section is how it maps onto this API.
    sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
    machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again at each
    check until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes out
-   before the network is back after a wake isn't a false alarm. The loop stops the tool when the server answers
+   before the network is back after a wake isn't a false alarm. The heartbeat says the loop is up. Claude's streamed
+   output says claude is working: it is read by the loop only, saved to the run's log
+   (`<config dir>/runs/<run id>.jsonl`, pruned after 7 days) and never sent to the server. When the tool shows no
+   output for 30 minutes the loop stops it and fails the run with its own message, "The agent showed no activity
+   for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
+   claude does, so a sleep isn't silence. The loop stops the tool when the server answers
    `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
    failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
