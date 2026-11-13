@@ -757,12 +757,15 @@ impl Shared<'_> {
                 // What an interrupted sweep renamed and did not finish deleting.
                 for left in kept::leftovers(&root) {
                     let removed = if left.is_dir() {
-                        std::fs::remove_dir_all(&left)
+                        kept::delete(&left)
                     } else {
                         std::fs::remove_file(&left)
                     };
-                    if let Err(err) = removed {
-                        tracing::warn!(dir = %left.display(), error = %err, "couldn't clear a half-removed directory");
+                    match removed {
+                        Ok(()) => tracing::info!(dir = %left.display(), "cleared a half-removed directory"),
+                        Err(err) => {
+                            tracing::warn!(dir = %left.display(), error = %err, "couldn't clear a half-removed directory");
+                        }
                     }
                 }
                 kept::list(&root, now)
@@ -862,11 +865,15 @@ impl Shared<'_> {
         };
         let deleted = {
             let away = away.clone();
-            tokio::task::spawn_blocking(move || std::fs::remove_dir_all(away)).await
+            tokio::task::spawn_blocking(move || kept::delete(&away)).await
         };
         // A directory left half-deleted under its new name is cleared by the next sweep.
         if let Err(err) = deleted.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked))) {
-            return warn(&err);
+            return self.note(&format!(
+                "warning: couldn't remove {}: {err}. What's left is in {}; the next sweep tries again.",
+                directory.dir.display(),
+                away.display()
+            ));
         }
         self.live_dirs.remove_emptied_parents(&directory.dir);
         tracing::info!(dir = %directory.dir.display(), reason = reason.text(), "removed a kept directory");

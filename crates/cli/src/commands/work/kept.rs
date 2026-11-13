@@ -202,6 +202,37 @@ pub fn leftovers(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// How many times [`delete`] tries before it gives up, and how long it waits between tries.
+const DELETE_TRIES: u32 = 3;
+const DELETE_PAUSE: Duration = Duration::from_millis(200);
+
+/// Deletes the directory `path` and everything in it, trying again when it is found not empty at the end.
+///
+/// On macOS, unlinking entries while reading a very large directory (a `target/debug/deps` with 100,000 files) can
+/// skip some, and a process left running can write into the tree while it is deleted. Either way the last `rmdir`
+/// fails with "Directory not empty", and a fresh pass reads what the last one missed.
+pub fn delete(path: &Path) -> std::io::Result<()> {
+    retry_not_empty(DELETE_TRIES, DELETE_PAUSE, || std::fs::remove_dir_all(path))
+}
+
+/// Runs `attempt` up to `tries` times while it fails with "Directory not empty", pausing between tries.
+fn retry_not_empty(
+    tries: u32,
+    pause: Duration,
+    mut attempt: impl FnMut() -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let mut tried = 1;
+    loop {
+        match attempt() {
+            Err(err) if err.kind() == ErrorKind::DirectoryNotEmpty && tried < tries => {
+                tried += 1;
+                std::thread::sleep(pause);
+            }
+            done => return done,
+        }
+    }
+}
+
 /// The directories runs of this loop are in, or about to start in. The sweep leaves them alone.
 ///
 /// One lock guards both the set and the sweep's rename (and the removal of an emptied parent), so a run can't start
@@ -662,6 +693,47 @@ mod tests {
         std::fs::create_dir(root.path().join("ada"))?;
 
         verify_that!(leftovers(root.path()), eq(&[left]))
+    }
+
+    /// An attempt that fails with `errors` in turn, then succeeds, counting its calls in `calls`.
+    fn failing(calls: &mut u32, errors: &[ErrorKind]) -> std::io::Result<()> {
+        let at = *calls as usize;
+        *calls += 1;
+        errors.get(at).map_or(Ok(()), |kind| Err(Error::from(*kind)))
+    }
+
+    #[gtest]
+    fn a_delete_found_not_empty_is_tried_again_until_it_succeeds() -> googletest::Result<()> {
+        let mut calls = 0;
+        let not_empty = [ErrorKind::DirectoryNotEmpty, ErrorKind::DirectoryNotEmpty];
+
+        let deleted = retry_not_empty(3, Duration::ZERO, || failing(&mut calls, &not_empty));
+
+        verify_that!(deleted, ok(()))?;
+        verify_that!(calls, eq(3))
+    }
+
+    #[gtest]
+    fn a_delete_still_not_empty_after_every_try_fails_with_that_error() -> googletest::Result<()> {
+        let mut calls = 0;
+        let not_empty = [ErrorKind::DirectoryNotEmpty; 5];
+
+        let deleted = retry_not_empty(3, Duration::ZERO, || failing(&mut calls, &not_empty));
+
+        verify_that!(deleted.map_err(|err| err.kind()), err(eq(ErrorKind::DirectoryNotEmpty)))?;
+        verify_that!(calls, eq(3))
+    }
+
+    #[gtest]
+    fn a_delete_that_fails_for_another_reason_is_not_tried_again() -> googletest::Result<()> {
+        let mut calls = 0;
+
+        let deleted = retry_not_empty(3, Duration::ZERO, || {
+            failing(&mut calls, &[ErrorKind::PermissionDenied])
+        });
+
+        verify_that!(deleted.map_err(|err| err.kind()), err(eq(ErrorKind::PermissionDenied)))?;
+        verify_that!(calls, eq(1))
     }
 
     #[gtest]
