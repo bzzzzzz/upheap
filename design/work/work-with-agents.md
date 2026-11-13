@@ -110,6 +110,12 @@ is resolved or turned into a task.
 6. A question comes short and long. The short version is a line that someone who knows the work can answer
    at once. The long version adds what anyone else needs to know first, and the item's context and the heap's
    are one step away from it.
+7. Giving a note its context asks only what the context can't be written without: the note has two readings that
+   lead to different items, or it points at something only the person has (a link, a name, a file, an account).
+   Scope, details, choices and how to do it wait: they go in the context's "Still open", one line each, and the
+   turn that defines the task settles what it can from the code and docs and asks the rest. There is no cap on
+   the number; the test decides. This holds for a `with context` run and for the do-next and add skills. A
+   question that can't wait holds the note, as any open question does.
 
 **Review**
 
