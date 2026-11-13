@@ -514,7 +514,8 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
 
 /**
  * The way to unblock a blocked item, to open: a closed padlock in a circle, in the blocked colour the swipe's Blocked
- * uses, the row's one sign that it waits on something. Its tooltip carries the reason in words, when there is one. It is drawn open while the row is hovered or focused, and always with a finger.
+ * uses, the row's one sign that it waits on something. Its tooltip carries the reason in words, when there is one. It
+ * is drawn open while the row is hovered or focused, and always with a finger.
  */
 function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
   const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";

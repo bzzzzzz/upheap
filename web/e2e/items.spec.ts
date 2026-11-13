@@ -399,6 +399,19 @@ test("a blocked item shows why in words, in the pane and on the row's padlock", 
     ", blocked: Waiting for the registrar's invoice",
   );
 
+  // Unblocking from the row clears the reason; Undo puts it back with the state.
+  const padlock = row(page, "Renew the domain").getByRole("button", { name: "Unblock Renew the domain" });
+  await padlock.click();
+  await expect(padlock).toHaveCount(0);
+  await page
+    .getByRole("status")
+    .filter({ hasText: "“Renew the domain” is open." })
+    .getByRole("button", { name: "Undo" })
+    .click();
+  await expect(padlock).toHaveAttribute("title", "Unblock. Blocked: Waiting for the registrar's invoice");
+  // The open row leaves as the blocked one comes back: wait until only one is there.
+  await expect(row(page, "Renew the domain")).toHaveCount(1);
+
   // With a blocker named too, both show: who blocks it, then why.
   await openItem(page, "Renew the domain");
   await moreEntry(page, await openMore(page), "Change blocker…").click();

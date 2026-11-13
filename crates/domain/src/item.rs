@@ -701,8 +701,8 @@ impl Item {
 
     /// The item as it is after it moves to `heap_id` under `key`, carrying `tags` and `parameters` of that heap (see
     /// [`crate::item_move::carry_over`]). Everything else stays, and so does the version, which the store bumps on
-    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it left. Its reason
-    /// stays: it is about the world outside the heap.
+    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it
+    /// left. Its reason stays: it is about the world outside the heap.
     /// The items that waited for this one keep it as their blocker, now gone ([`Item::blocker_gone`]).
     pub fn moved_to(
         &self,
