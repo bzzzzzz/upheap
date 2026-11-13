@@ -225,7 +225,7 @@ async fn the_line_is_bounded_and_blank_means_none() -> Result<()> {
     )
     .await?;
     let unknown_reach = send(&app, &session, &heap, &key, json!({ "reach": "far" })).await?;
-    let unknown_field = send(&app, &session, &heap, &key, json!({ "reach": "one", "goal": "done" })).await?;
+    let unknown_field = send(&app, &session, &heap, &key, json!({ "reach": "one", "stage": "done" })).await?;
     let at_the_limit = send(
         &app,
         &session,
@@ -707,5 +707,158 @@ async fn someone_outside_the_team_finds_nothing() -> Result<()> {
     // Assert
     expect_that!(sent.status, eq(StatusCode::NOT_FOUND));
     expect_that!(taken.status, eq(StatusCode::NOT_FOUND));
+    Ok(())
+}
+
+/// Adds a task and returns its key.
+async fn add_task(app: &TestApp, session: &str, heap: &str, title: &str) -> Result<String> {
+    let key = add(app, session, heap, title).await?;
+    patch_item(app, session, heap, &key, json!({ "kind": "task" })).await?;
+    Ok(key)
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_lists_the_goals_it_may_be_sent_to() -> Result<()> {
+    // Arrange
+    let (app, session, heap, note_key) = note().await?;
+    let task = add_task(&app, &session, &heap, "A task").await?;
+    let reminder = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Renew", "kind": "reminder", "due": { "date": "2027-01-01", "firm": false } }),
+        )
+        .await?;
+
+    // Act
+    let note = get(&app, &session, &heap, &note_key).await?;
+    let task = get(&app, &session, &heap, &task).await?;
+
+    // Assert
+    expect_that!(note["goal_choices"], eq(&json!(["with_context", "defined"])));
+    expect_that!(task["goal_choices"], eq(&json!(["defined"])));
+    expect_that!(reminder["goal_choices"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_as_written_may_be_sent_straight_to_defined_in_one_turn() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let before = get(&app, &session, &heap, &key).await?;
+
+    // Act
+    let sent = send(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "reach": "one", "goal": "defined" }),
+    )
+    .await?;
+    let entries = app.audit_entries(before["id"].as_str().context("no id")?).await?;
+
+    // Assert
+    expect_that!(sent.status, eq(StatusCode::CREATED));
+    expect_that!(sent.body["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(sent.body["turn"]["reach"], eq(&json!("one")));
+    let last = entries.last().context("no entries")?;
+    expect_that!(last.0, eq("turn_opened"));
+    expect_that!(last.1["goal"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn going_past_the_next_state_with_all_the_way_is_refused_and_opens_no_turn() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+
+    // Act
+    let refused = send(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "reach": "all_the_way", "goal": "defined" }),
+    )
+    .await?;
+    let after = get(&app, &session, &heap, &key).await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(refused.body["code"], eq(&json!("field_not_allowed")));
+    expect_that!(refused.body["field"], eq(&json!("goal")));
+    expect_that!(after["turn"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_default_goal_may_be_sent_with_either_reach() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let with_context = add(&app, &session, &heap, "With context").await?;
+    patch_item(&app, &session, &heap, &with_context, json!({ "stage": "with_context" })).await?;
+
+    // Act
+    let one = send(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "reach": "one", "goal": "with_context" }),
+    )
+    .await?;
+    let all = send(
+        &app,
+        &session,
+        &heap,
+        &with_context,
+        json!({ "reach": "all_the_way", "goal": "defined" }),
+    )
+    .await?;
+
+    // Assert
+    expect_that!(one.status, eq(StatusCode::CREATED));
+    expect_that!(one.body["turn"]["goal"], eq(&json!("with_context")));
+    expect_that!(all.status, eq(StatusCode::CREATED));
+    expect_that!(all.body["turn"]["goal"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_goal_the_item_cannot_go_to_is_refused_and_an_unknown_one_is_unknown() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let with_context = add(&app, &session, &heap, "With context").await?;
+    patch_item(&app, &session, &heap, &with_context, json!({ "stage": "with_context" })).await?;
+    let task = add_task(&app, &session, &heap, "A task").await?;
+
+    // Act
+    let done_on_note = send(&app, &session, &heap, &key, json!({ "reach": "one", "goal": "done" })).await?;
+    let earlier = send(
+        &app,
+        &session,
+        &heap,
+        &with_context,
+        json!({ "reach": "one", "goal": "with_context" }),
+    )
+    .await?;
+    let done_on_task = send(&app, &session, &heap, &task, json!({ "reach": "one", "goal": "done" })).await?;
+    let unknown = send(&app, &session, &heap, &key, json!({ "reach": "one", "goal": "far" })).await?;
+
+    // Assert
+    for refused in [&done_on_note, &earlier, &done_on_task] {
+        expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+        expect_that!(refused.body["code"], eq(&json!("field_not_allowed")));
+        expect_that!(refused.body["field"], eq(&json!("goal")));
+    }
+    expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(unknown.body["code"], eq(&json!("value_unknown")));
+    expect_that!(unknown.body["field"], eq(&json!("goal")));
     Ok(())
 }

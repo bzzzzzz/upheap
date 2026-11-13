@@ -847,6 +847,11 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub next_goal: Option<GoalDto>,
+    /// The goals the caller may send the item to, `next_goal` first: also `defined` on a note as written. Empty when
+    /// `next_goal` is null.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub goal_choices: Vec<GoalDto>,
     /// Whether an agent has the item: it is open, its heap is active, it has an open turn, and it doesn't wait for
     /// the caller. Who has an item never changes its place in the list. On every response, lists included; always
     /// `false` on a closed item and in an archived heap.

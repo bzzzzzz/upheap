@@ -125,6 +125,8 @@ pub enum Field {
     Line,
     /// How far a turn goes.
     Reach,
+    /// Where a turn goes to.
+    Goal,
     /// The heaps an agent asks the queue about.
     Heaps,
     /// What a run says it reached.
@@ -173,6 +175,7 @@ impl Field {
             Self::Reply => "reply",
             Self::Line => "line",
             Self::Reach => "reach",
+            Self::Goal => "goal",
             Self::Heaps => "heaps",
             Self::Result => "result",
             Self::Reason => "reason",

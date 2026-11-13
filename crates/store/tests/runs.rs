@@ -10,7 +10,7 @@ use domain::item::{Item, Kind, Need, NewItem, Title};
 use domain::run::{Run, RunEnd, RunLink, RunResult};
 use domain::team::Team;
 use domain::text::Name;
-use domain::turn::{Reach, Turn, TurnSource};
+use domain::turn::{Reach, Turn, TurnSource, goal_for};
 use domain::user::{DisplayName, Email, User};
 use domain::validation::Field;
 use domain::{HeapId, RunId, TeamId, Timestamp, TurnId, UserId, Version};
@@ -94,6 +94,7 @@ async fn run_on_new_item(world: &World, key: &str, started: i64) -> Result<(Item
         TurnId::from_uuid(Uuid::now_v7()),
         &item,
         Reach::One,
+        goal_for(&item),
         None,
         TurnSource::GoAhead,
         world.user,

@@ -146,14 +146,17 @@ is resolved or turned into a task.
    task, with its checklist and context, ready to be done; done. A note too big for a task goes to a defined
    heap instead: a new heap with its context, tasks and notes. A heap whose tasks are all done is stable too.
 2. **Core.** An agent's turn takes one item from one stable state to the next, and stops there. It never goes
-   further on its own.
+   further on its own. The one exception is the person's choice: a note as written may be sent straight to
+   defined, in one turn.
 3. **Core.** An item with an open question or request is not at a stable state. The agent is in the middle of
    its turn, and carries on with it once the person has answered.
 4. At a stable state the person decides: send it on, change it, leave it, or close it.
 
 **Handing work to an agent**
 
-1. **Core.** The person sends an item on by telling the agent to go one stable state further, or all the way.
+1. **Core.** The person sends an item on by telling the agent to go one stable state further, or all the way. A
+   note as written can also be sent straight to defined, in one turn: for a small, clear note the person wants to
+   see as a task before it is worked. Going all the way and stopping at defined can't be combined.
    "All the way" covers the item and the tasks made from it, up to done. A new heap made on the way is left at
    its defined state, for the person to send on. How far it reaches when work spawns more work is settled while
    building it, not here.
@@ -451,7 +454,8 @@ state, or by the person by hand, and never worked out from what the item happens
 
 An item is at a **stable state** when it has no open turn and no open question. Then its stable state is its
 stage, or done or became once it's closed. The next stable state is the next row; for a task as written it is
-defined, in one turn; after defined it is done. A note with context goes on by becoming one task, several, a
+defined, in one turn; after defined it is done. A note as written may also be sent straight to defined, in one
+turn, skipping the stop at with context. A note with context goes on by becoming one task, several, a
 step or a heap (Kinds and moves).
 
 **Who has it.** Read off the item, never set by hand:
@@ -956,8 +960,8 @@ WIDE PANE, TABLET PANEL, PHONE SHEET · Item (W4 to W9, W17)   constant · core
 │    only on a task). A stage change saves silently.                     │
 └────────────────────────────────────────────────────────────────────────┘
 Who has it, by state:
-  Yours, open:           "With you."  [Send to an agent ▾]  to <the next state>, or all the way,
-                         with an optional line. A defined task has one choice: do it.
+  Yours, open:           "With you."  [Send to an agent ▾]  to <the next state>, to defined on a note as written, or all
+                         the way, with an optional line. A defined task has one choice: do it.
   An agent brought it:   "An agent brought this to: with context, 2 h ago."
                          [Send on ▾] [Changes asked…]  Changes asked takes a line saying what's wrong.
   With an agent:         "With an agent since 14:02, going to: defined."  [Take back]
