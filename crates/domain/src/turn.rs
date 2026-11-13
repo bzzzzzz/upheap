@@ -109,18 +109,22 @@ impl TurnSource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TurnEnd {
     TakenBack,
-    /// A run said the turn's goal was reached, and the check passed.
+    /// A run said the turn's goal was reached and the check passed, or the person set the item's stage to the goal
+    /// or past it, or a claim found it there already.
     Reached,
+    /// A run found nothing to do for the goal and gave the turn back to the person. Not a failure.
+    HandedBack,
 }
 
 impl TurnEnd {
-    pub const ALL: [Self; 2] = [Self::TakenBack, Self::Reached];
+    pub const ALL: [Self; 3] = [Self::TakenBack, Self::Reached, Self::HandedBack];
 
     /// Stable code used in storage. Never renamed.
     pub const fn code(self) -> &'static str {
         match self {
             Self::TakenBack => "taken_back",
             Self::Reached => "reached",
+            Self::HandedBack => "handed_back",
         }
     }
 
@@ -129,7 +133,8 @@ impl TurnEnd {
     }
 }
 
-/// Why a turn was taken back, as its audit entry says.
+/// Why a turn was taken back, as its audit entry says, or why a question was withdrawn: the last two codes are only
+/// ever a question's `why`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TakeBackWhy {
     /// The person took it back.
@@ -140,10 +145,21 @@ pub enum TakeBackWhy {
     Closed,
     /// The heap was archived.
     HeapArchived,
+    /// Only for withdrawn questions: the turn ended because the item reached its goal.
+    GoalMet,
+    /// Only for withdrawn questions: the run handed the turn back.
+    HandedBack,
 }
 
 impl TakeBackWhy {
-    pub const ALL: [Self; 4] = [Self::TakeBack, Self::Started, Self::Closed, Self::HeapArchived];
+    pub const ALL: [Self; 6] = [
+        Self::TakeBack,
+        Self::Started,
+        Self::Closed,
+        Self::HeapArchived,
+        Self::GoalMet,
+        Self::HandedBack,
+    ];
 
     /// Stable code used in audit diffs. Never renamed.
     pub const fn code(self) -> &'static str {
@@ -152,6 +168,8 @@ impl TakeBackWhy {
             Self::Started => "started",
             Self::Closed => "closed",
             Self::HeapArchived => "heap_archived",
+            Self::GoalMet => "goal_met",
+            Self::HandedBack => "handed_back",
         }
     }
 
@@ -302,6 +320,25 @@ impl Turn {
             ended: None,
             failed_runs: 0,
         })
+    }
+
+    /// Whether `stage` is at this turn's goal or past it, so there is nothing left for an agent to do: the goal is a
+    /// stage and `stage` reaches it. Never for a turn to done, which closes the item.
+    pub fn goal_met_by(&self, stage: Stage) -> bool {
+        self.goal.stage().is_some_and(|goal| stage >= goal)
+    }
+
+    /// This turn handed back by the run of `by` at `now`.
+    #[must_use]
+    pub fn handed_back(&self, by: UserId, now: Timestamp) -> Self {
+        Self {
+            ended: Some(Ended {
+                end: TurnEnd::HandedBack,
+                at: now,
+                by: Some(by),
+            }),
+            ..self.clone()
+        }
     }
 
     /// This turn taken back by `by` at `now`.
@@ -608,6 +645,29 @@ mod run_tests {
         expect_that!(ended.is_open(), eq(false));
         expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::Reached)));
         expect_that!(TurnEnd::from_code("reached"), some(eq(TurnEnd::Reached)));
+    }
+
+    #[gtest]
+    fn a_goal_is_met_by_its_stage_or_past_it_and_done_never() {
+        let mut turn = open_turn();
+        turn.goal = Goal::WithContext;
+        expect_that!(turn.goal_met_by(Stage::AsWritten), eq(false));
+        expect_that!(turn.goal_met_by(Stage::WithContext), eq(true));
+        expect_that!(turn.goal_met_by(Stage::Defined), eq(true));
+        turn.goal = Goal::Defined;
+        expect_that!(turn.goal_met_by(Stage::WithContext), eq(false));
+        expect_that!(turn.goal_met_by(Stage::Defined), eq(true));
+        turn.goal = Goal::Done;
+        expect_that!(turn.goal_met_by(Stage::Defined), eq(false));
+    }
+
+    #[gtest]
+    fn handing_a_turn_back_ends_it() {
+        let ended = open_turn().handed_back(UserId::from_uuid(Uuid::from_u128(10)), Timestamp::EPOCH);
+
+        expect_that!(ended.is_open(), eq(false));
+        expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::HandedBack)));
+        expect_that!(TurnEnd::from_code("handed_back"), some(eq(TurnEnd::HandedBack)));
     }
 
     #[gtest]

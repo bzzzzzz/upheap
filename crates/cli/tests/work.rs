@@ -1,4 +1,4 @@
-//! `upheap work next | claim | reached | finish`, the writes an agent makes in a run, and what a run is refused.
+//! `upheap work next | claim | reached | hand-back | finish`, the writes an agent makes in a run, and what a run is refused.
 
 mod common;
 
@@ -88,6 +88,43 @@ async fn a_script_that_plays_the_agent_takes_a_note_to_with_context() -> Result<
     expect_that!(item["stage"], eq("with_context"));
     expect_that!(item["turn"], eq(&Value::Null));
     expect_that!(empty.stdout, eq("Nothing to do.\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn hand_back_gives_the_turn_back_with_a_reason() -> Result<()> {
+    // Arrange
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    let without_run = cli.run(&["work", "hand-back", "--reason", "Nothing to do"]).await;
+    let claim = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claim.stdout.trim().to_owned());
+
+    // Act
+    let handed = cli
+        .run(&[
+            "work",
+            "hand-back",
+            "--reason",
+            "Already fixed in #123; nothing left to prepare",
+        ])
+        .await;
+    let again = cli.run(&["work", "hand-back", "--reason", "Again", "--json"]).await;
+    let finished = cli.run(&["work", "finish", "--cost-usd", "0.12"]).await;
+    let item = server.read_item(&ada, HEAP, &note).await?;
+
+    // Assert
+    expect_that!(without_run.exited(2), eq(true));
+    expect_that!(
+        without_run.stderr,
+        contains_substring("work hand-back runs inside a run: set UPHEAP_RUN")
+    );
+    expect_that!(handed.exited(0), eq(true));
+    expect_that!(handed.stdout, eq(&format!("Handed back: {note} is yours again.\n")));
+    expect_that!(again.exited(3), eq(true));
+    expect_that!(finished.stdout, eq("Run ended: handed back. ($0.12)\n"));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(item["stage"], eq("as_written"));
     Ok(())
 }
 

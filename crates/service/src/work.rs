@@ -1,12 +1,14 @@
 //! The agent's queue and its runs: what to work on next, claiming it, and how a run ends.
 //!
 //! A run is claimed from the queue of some heaps, holds one item for as long as it is heard from, and ends by
-//! reaching the turn's goal, by asking a question, by failing, or by the person taking the turn back. There is no
+//! reaching the turn's goal, by asking a question, by failing, by handing the turn back, or by the person taking
+//! it back. A turn whose item is already at its goal is never claimed: the claim ends it as reached. There is no
 //! lock to give up: a run nobody has heard from for [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and
 //! is written as failed the next time a claim, its own `finish` or a take back touches it (architecture.md, Runs).
 
 use std::collections::{HashMap, HashSet};
 
+use domain::audit::AuditAction;
 use domain::handle::Handle;
 use domain::heap::Heap;
 use domain::item::{Item, StateKind};
@@ -16,13 +18,13 @@ use domain::run::{
 };
 use domain::step::StepState;
 use domain::team::Team;
-use domain::turn::Turn;
+use domain::turn::{TakeBackWhy, Turn};
 use domain::validation::Field;
 use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
-use crate::audit::{describe_new_turn, describe_reached};
+use crate::audit::{GoalMetHow, describe_hand_back, describe_new_turn, describe_reached};
 use crate::items::{OpenRanking, rank_open_items};
 use crate::waiting::list_gone_blockers;
 use crate::{Principal, ServiceError, Services};
@@ -69,6 +71,8 @@ struct QueueHeap {
 /// What the queue holds right now.
 struct Queue {
     first: Option<WorkItem>,
+    /// Candidates whose item is already at the turn's goal, by heap index. They are never `first`: a claim ends them.
+    met: Vec<(usize, Item, Turn)>,
     waiting_count: u32,
 }
 
@@ -95,7 +99,8 @@ fn parse_heap_refs(refs: &[String]) -> Result<Vec<(Handle, Handle)>, ValidationE
 
 impl Services {
     /// The first item of the queue over `heaps` (each `team/heap` by slug) and how many items wait for the person.
-    /// Writes nothing: a lapsed run counts as ended, failed, but isn't written (decision: lapses are written lazily).
+    /// A turn whose item is already at its goal is skipped, not ended. Writes nothing: a lapsed run counts as ended,
+    /// failed, but isn't written (decision: lapses are written lazily).
     ///
     /// Fails with a validation error unless `heaps` names 1 to 20 well-formed heaps, [`ServiceError::NotFound`] for a
     /// heap outside the caller's teams, [`ServiceError::HeapArchived`] for an archived one, and
@@ -122,7 +127,9 @@ impl Services {
 
     /// Does what [`next_for_agent`](Self::next_for_agent) does under the locks of every given heap, taken in heap ID
     /// order, and starts a run on the first item. Before choosing, it writes every lapsed run on those heaps' items as
-    /// failed. The run belongs to the caller. Fails as `next_for_agent` does.
+    /// failed, and ends every candidate turn whose item is already at its goal as reached, credited to the caller,
+    /// so no run is spent on it (a turn sent all the way may open a next one, which is then a candidate). The run
+    /// belongs to the caller. Fails as `next_for_agent` does.
     pub async fn claim_run(&self, principal: Principal, heaps: &[String]) -> Result<ClaimView, ServiceError> {
         let mut heaps = self.resolve_queue_heaps(principal, heaps).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -148,7 +155,31 @@ impl Services {
             }
         }
         // Every lapsed run was written above, so none is left to count.
-        let queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
+        let mut queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
+        // Each pass ends at least one turn, and a follow-on goes past the stage, so it is never met itself.
+        let person = Principal { run: None, ..principal };
+        while !queue.met.is_empty() {
+            let mut opened = false;
+            for (heap_index, item, turn) in &queue.met {
+                let next = self
+                    .end_met_turn(
+                        &txn,
+                        &heaps[*heap_index].heap,
+                        person,
+                        turn,
+                        item,
+                        item.stage,
+                        GoalMetHow::AlreadyMet,
+                        now,
+                    )
+                    .await?;
+                opened |= next.is_some();
+            }
+            if !opened {
+                break;
+            }
+            queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
+        }
         let Some(mut work) = queue.first else {
             // Lapsed runs written above stay written.
             txn.commit().await.map_err(StoreError::from)?;
@@ -259,7 +290,7 @@ impl Services {
         let entry = self.item_audit_entry(
             &heap,
             in_run,
-            domain::audit::AuditAction::TurnReached,
+            AuditAction::TurnReached,
             &item,
             describe_reached(turn.goal, before, after),
             now,
@@ -273,7 +304,7 @@ impl Services {
             let entry = self.item_audit_entry(
                 &heap,
                 in_run,
-                domain::audit::AuditAction::TurnOpened,
+                AuditAction::TurnOpened,
                 &item,
                 describe_new_turn(next),
                 now,
@@ -291,6 +322,55 @@ impl Services {
             next_goal = next.map_or("none", |next| next.goal.code()),
             user_id = %principal.user_id,
             "turn reached"
+        );
+        Ok(view)
+    }
+
+    /// Says the run `run_id` found nothing to do for its turn's goal, with `reason`: the run ends as handed back, with
+    /// the reason as its result, and the turn ends as handed back, so the item is the person's again. Not a failure.
+    /// The item's stage doesn't change and no next turn opens. Other runs of the turn that haven't ended end as taken
+    /// back, and open questions asked in the turn's runs are withdrawn.
+    ///
+    /// Fails with [`RunError::Over`] when the run has ended or lapsed or its turn was taken back.
+    pub async fn hand_back(
+        &self,
+        principal: Principal,
+        run_id: RunId,
+        reason: RunResult,
+    ) -> Result<RunView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (run, heap) = self.lock_run(&txn, principal, run_id).await?;
+        let now = self.now();
+        let turn = self.ensure_live(&txn, &run, now).await?;
+
+        let ended_run = run.ended_as(RunEnd::HandedBack, now, Some(reason.clone()), Vec::new(), None);
+        store::runs::end_run(&txn, &ended_run).await?;
+        store::turns::end_turn(&txn, &turn.handed_back(principal.user_id, now)).await?;
+        let in_run = Principal {
+            run: Some(run.id),
+            ..principal
+        };
+        let entry = self.item_audit_entry_for(
+            &heap,
+            in_run,
+            AuditAction::TurnHandedBack,
+            run.item_id,
+            describe_hand_back(&turn, reason.as_str()),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        self.release_turn_work(&txn, &heap, in_run, &turn, TakeBackWhy::HandedBack, now)
+            .await?;
+        let view = self.run_view(&txn, ended_run).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %heap.id,
+            item_id = %run.item_id,
+            run_id = %run_id,
+            goal = turn.goal.code(),
+            user_id = %principal.user_id,
+            "turn handed back"
         );
         Ok(view)
     }
@@ -520,6 +600,7 @@ impl Services {
         }
 
         // (score, heap index, position) of the best candidate so far, and the candidate.
+        let mut met = Vec::new();
         let mut best: Option<((f64, usize, u32), Item, Turn)> = None;
         for (heap_index, queue) in heaps.iter().enumerate() {
             let Some(candidates) = by_heap.remove(&queue.heap.id) else {
@@ -532,6 +613,10 @@ impl Services {
                     continue;
                 };
                 if item.state.kind() == StateKind::Blocked {
+                    continue;
+                }
+                if turn.goal_met_by(item.stage) {
+                    met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
                 let key = (ranked.score, heap_index, ranked.position);
@@ -567,7 +652,11 @@ impl Services {
             }
             None => None,
         };
-        Ok(Queue { first, waiting_count })
+        Ok(Queue {
+            first,
+            met,
+            waiting_count,
+        })
     }
 
     /// `run` with the item it holds, its heap, team and turn.

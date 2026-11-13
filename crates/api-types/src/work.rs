@@ -62,6 +62,8 @@ pub enum RunEndDto {
     Asked,
     Failed,
     TakenBack,
+    /// The run found nothing to do and handed the turn back. Not a failure.
+    HandedBack,
     /// An end this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -75,6 +77,7 @@ impl From<RunEnd> for RunEndDto {
             RunEnd::Asked => Self::Asked,
             RunEnd::Failed => Self::Failed,
             RunEnd::TakenBack => Self::TakenBack,
+            RunEnd::HandedBack => Self::HandedBack,
         }
     }
 }
@@ -97,7 +100,8 @@ pub struct RunDto {
     pub ended_at: Option<i64>,
     /// `null` while the run has not ended.
     pub end: Option<RunEndDto>,
-    /// What the run said it reached; `null` unless it ended as `reached`.
+    /// What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or
+    /// `handed_back`.
     pub result: Option<String>,
     pub links: Vec<String>,
     /// Why the run failed; `null` unless it ended as `failed`.
@@ -135,6 +139,15 @@ pub struct ReachedRequestDto {
     /// Up to 10 absolute `http` or `https` addresses of up to 2,000 characters.
     #[serde(default)]
     pub links: Vec<String>,
+}
+
+/// Says a run found nothing to do for the turn's goal.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = HandBackRequest)]
+pub struct HandBackRequestDto {
+    /// Why there was nothing to do, in a line or two: plain text, 1 to 2,000 characters.
+    pub reason: String,
 }
 
 /// Ends a run that has not ended, and records what it cost.

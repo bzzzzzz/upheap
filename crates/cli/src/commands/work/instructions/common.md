@@ -38,3 +38,7 @@ Ending the run
   anything you made that has an address. If it is refused, the message names what's missing: fix it and say
   reached again.
 - Then stop. Don't go further than the goal.
+- If the item already has what the goal needs (it was written that way), say reached, with a result that says so.
+- If there is nothing to do and the goal needn't be reached (the work was done or dropped elsewhere), give the turn
+  back: `upheap work hand-back --reason "<why, in a line>"`, and stop. The item goes back to the person as it is.
+  Blocked is not nothing to do: ask the person instead.

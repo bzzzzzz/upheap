@@ -173,6 +173,43 @@ pub(crate) fn describe_reached(goal: Goal, before: Stage, after: Stage) -> Value
     })
 }
 
+/// How a turn came to end because its item was at the goal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GoalMetHow {
+    /// The person set the item's stage to the goal or past it.
+    StageSet,
+    /// A claim found the item already there.
+    AlreadyMet,
+}
+
+impl GoalMetHow {
+    /// Stable code used in audit diffs. Never renamed.
+    pub(crate) const fn code(self) -> &'static str {
+        match self {
+            Self::StageSet => "stage_set",
+            Self::AlreadyMet => "already_met",
+        }
+    }
+}
+
+/// A turn that ended because its item was at the goal, for its `turn_reached` entry: the run path's diff, and how.
+/// The stage is left out when it didn't change, as for a claim that found the item already there.
+pub(crate) fn describe_goal_met(goal: Goal, before: Stage, after: Stage, how: GoalMetHow) -> Value {
+    if before == after {
+        return json!({ "goal": goal.code(), "how": how.code() });
+    }
+    json!({
+        "goal": goal.code(),
+        "stage": { "before": before.code(), "after": after.code() },
+        "how": how.code(),
+    })
+}
+
+/// A turn a run handed back, for its `turn_handed_back` entry.
+pub(crate) fn describe_hand_back(turn: &Turn, reason: &str) -> Value {
+    json!({ "goal": turn.goal.code(), "reason": reason })
+}
+
 /// A stuck turn let go again, for its `turn_retried` entry.
 pub(crate) fn describe_retry(turn: &Turn) -> Value {
     json!({ "goal": turn.goal.code() })

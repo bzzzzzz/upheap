@@ -554,6 +554,17 @@ impl TestApp {
         Ok(made.token.expose().to_owned())
     }
 
+    /// Sets an item's stage straight in the database, without the version change, turn handling or audit entry of the
+    /// edit, so a test can put an item at a turn's goal the way the edit never would. `stage` is a stage code.
+    pub async fn set_item_stage(&self, item_id: &str, stage: &str) -> Result<()> {
+        let id: uuid::Uuid = item_id.parse()?;
+        self.db
+            .execute_unprepared(&format!("UPDATE items SET stage = '{stage}' WHERE id = '{id}'"))
+            .await
+            .context("set item stage")?;
+        Ok(())
+    }
+
     /// Archives or unarchives a heap straight in the database, without the version change or audit entry of the
     /// endpoints, so the access-control test can wrap any call in it.
     pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {

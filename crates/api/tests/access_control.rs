@@ -130,6 +130,7 @@ enum RequestBody {
     Claim,
     /// A run reaching its goal.
     Reached,
+    HandBack,
     /// A run finishing.
     Finish,
     /// A tag name no other request used, since names are unique per heap.
@@ -691,6 +692,14 @@ fn endpoints() -> Vec<Endpoint> {
             Access::OwnRun,
             Target::OwnRun,
             RequestBody::Reached,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/work/runs/{run}/hand-back",
+            Access::OwnRun,
+            Target::OwnRun,
+            RequestBody::HandBack,
             StatusCode::OK,
         ),
         row(
@@ -1328,6 +1337,7 @@ impl World {
             RequestBody::Reached => {
                 Some(json!({ "result": "Added the context", "links": ["https://example.test/pr/1"] }))
             }
+            RequestBody::HandBack => Some(json!({ "reason": "Nothing to do" })),
             RequestBody::Finish => Some(json!({})),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),

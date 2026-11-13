@@ -1,11 +1,13 @@
 //! The work commands, for the agent's queue and its runs: their args and flows, and what they share.
 //!
-//! `next` and `claim` look for work in some heaps; `reached` and `finish` belong to a run, named by `UPHEAP_RUN`,
-//! which `claim` prints for a script to export, and `run` is the loop that does all of it for an agent tool.
+//! `next` and `claim` look for work in some heaps; `reached`, `hand-back` and `finish` belong to a run, named by
+//! `UPHEAP_RUN`, which `claim` prints for a script to export, and `run` is the loop that does all of it for an agent
+//! tool.
 
 mod brief;
 pub mod claim;
 pub mod finish;
+pub mod hand_back;
 pub mod next;
 pub mod reached;
 pub mod run;
@@ -121,14 +123,15 @@ pub(super) const fn goal_phrase(goal: GoalDto) -> &'static str {
     }
 }
 
-/// How a run ended in a word: `reached`, `asked`, `failed` or `taken back`. `None` while it hasn't ended, and for an
-/// end this version doesn't know.
+/// How a run ended in a word: `reached`, `asked`, `failed`, `taken back` or `handed back`. `None` while it hasn't
+/// ended, and for an end this version doesn't know.
 pub(super) const fn end_word(end: Option<RunEndDto>) -> Option<&'static str> {
     match end {
         Some(RunEndDto::Reached) => Some("reached"),
         Some(RunEndDto::Asked) => Some("asked"),
         Some(RunEndDto::Failed) => Some("failed"),
         Some(RunEndDto::TakenBack) => Some("taken back"),
+        Some(RunEndDto::HandedBack) => Some("handed back"),
         Some(RunEndDto::Unknown) | None => None,
     }
 }

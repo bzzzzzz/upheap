@@ -675,19 +675,35 @@ async fn the_next_turn_goes_where_the_item_is_after_the_person_went_past_the_goa
             json!({ "description": "Rotate them before Friday", "kind": "task" }),
         )
         .await?;
-    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
+    let still_open = w.get(&key).await?;
 
     // Act
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
     let reached = w.reached(&run).await?;
     let item = w.get(&key).await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
 
-    // Assert
+    // Assert: the edit ended the turn that went to with context, and the one to done opened from the item as it is.
     expect_that!(described.status, eq(StatusCode::OK));
+    expect_that!(still_open["turn"]["goal"], eq(&json!("with_context")));
     expect_that!(defined.status, eq(StatusCode::OK));
-    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&reached), some(eq("run_over")));
     expect_that!(item["stage"], eq(&json!("defined")));
     expect_that!(item["turn"]["goal"], eq(&json!("done")));
     expect_that!(item["turn"]["reach"], eq(&json!("all_the_way")));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"turn_opened"),
+            eq(&"item_updated"),
+            eq(&"item_updated"),
+            eq(&"turn_reached"),
+            eq(&"turn_opened"),
+        ]
+    );
     Ok(())
 }
 
@@ -1403,7 +1419,7 @@ async fn a_write_in_a_run_counts_as_hearing_from_it() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn reaching_a_goal_the_person_went_past_keeps_the_stage() -> Result<()> {
+async fn going_past_the_goal_by_hand_ends_the_turn_and_a_late_reached_is_run_over() -> Result<()> {
     // Arrange: a note sent for context, whose person makes it a defined task while the agent works.
     let w = world().await?;
     let key = w.add_sent("Rotate the certs").await?;
@@ -1414,26 +1430,436 @@ async fn reaching_a_goal_the_person_went_past_keeps_the_stage() -> Result<()> {
             json!({ "description": "Rotate them before Friday", "kind": "task" }),
         )
         .await?;
-    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
 
     // Act
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
     let reached = w.reached(&run).await?;
+    let finished = w.finish(&run, json!({ "cost_usd": 0.1 })).await?;
     let item = w.get(&key).await?;
     let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
 
     // Assert
     expect_that!(described.status, eq(StatusCode::OK));
     expect_that!(defined.status, eq(StatusCode::OK));
-    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&reached), some(eq("run_over")));
+    expect_that!(finished.body["end"], eq(&json!("taken_back")));
     expect_that!(item["stage"], eq(&json!("defined")));
+    expect_that!(item["turn"], eq(&Value::Null));
     let reached_diff = &entries
         .iter()
         .find(|(action, _)| action == "turn_reached")
         .context("no turn_reached entry")?
         .1;
     expect_that!(reached_diff["goal"], eq(&json!("with_context")));
-    expect_that!(reached_diff["stage"]["before"], eq(&json!("defined")));
+    expect_that!(reached_diff["stage"]["before"], eq(&json!("as_written")));
     expect_that!(reached_diff["stage"]["after"], eq(&json!("defined")));
+    expect_that!(reached_diff["how"], eq(&json!("stage_set")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_task_set_to_defined_by_hand_after_agents_prepared_it_costs_no_run() -> Result<()> {
+    // Arrange: a heap that prepares every new item; a task is added, so a turn to defined opens.
+    let w = world().await?;
+    let path = w.app.heap_url(&w.heap).await?;
+    let heap = w.app.send(Method::GET, &path, Some(&w.session), None).await?;
+    w.app
+        .patch(
+            &w.session,
+            &path,
+            &heap.body["version"],
+            json!({ "agents_prepare": true }),
+        )
+        .await?;
+    let key = w
+        .add(
+            "Rotate the certs",
+            json!({ "kind": "task", "description": "Why and how" }),
+        )
+        .await?;
+    let opened = w.get(&key).await?;
+    let step = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/steps", w.item_path(&key).await?),
+            Some(&w.session),
+            Some(json!({ "title": "Order the certs" })),
+        )
+        .await?;
+
+    // Act
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
+    let item = w.get(&key).await?;
+    let claim = w.claim().await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
+    let runs = w.app.audit_runs(item["id"].as_str().context("id")?).await?;
+    let history = w
+        .app
+        .send(
+            Method::GET,
+            &format!(
+                "{}/audit?entity_id={}",
+                w.app.heap_url(&w.heap).await?,
+                item["id"].as_str().context("id")?
+            ),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(opened["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    expect_that!(defined.status, eq(StatusCode::OK));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(item["with_agent"], eq(false));
+    expect_that!(claim.status, eq(StatusCode::OK));
+    expect_that!(claim.body["run"], eq(&Value::Null));
+    expect_that!(w.app.count_rows("item_runs").await?, eq(0));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"turn_opened"),
+            eq(&"step_added"),
+            eq(&"item_updated"),
+            eq(&"turn_reached"),
+        ]
+    );
+    let diff = &entries[4].1;
+    expect_that!(diff["goal"], eq(&json!("defined")));
+    expect_that!(
+        diff["stage"],
+        eq(&json!({ "before": "as_written", "after": "defined" }))
+    );
+    expect_that!(diff["how"], eq(&json!("stage_set")));
+    // The person did it, outside any run.
+    expect_that!(runs[4].1, none());
+    let latest = &history.body["entries"][0];
+    expect_that!(latest["phrase"], eq(&json!("reached the goal of a turn on")));
+    expect_that!(
+        latest["changes"],
+        eq(&json!([
+            { "field": "goal", "label": "Goal", "before": null, "after": "Defined" },
+            { "field": "how", "label": "How", "before": null, "after": "Stage set by hand" },
+            { "field": "stage", "label": "Stage", "before": "As written", "after": "Defined" },
+        ]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_sent_all_the_way_to_defined_opens_the_one_to_done_when_set_by_hand() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add("Rotate the certs", json!({ "kind": "task" })).await?;
+    w.send_all_the_way(&key).await?;
+
+    // Act
+    let defined = w.edit(&key, json!({ "stage": "defined" })).await?;
+    let item = w.get(&key).await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
+    let claim = w.claim().await?;
+
+    // Assert
+    expect_that!(defined.status, eq(StatusCode::OK));
+    expect_that!(item["turn"]["goal"], eq(&json!("done")));
+    expect_that!(item["turn"]["line"], eq(&json!("Use the new CA.")));
+    expect_that!(item["with_agent"], eq(true));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"turn_opened"),
+            eq(&"item_updated"),
+            eq(&"turn_reached"),
+            eq(&"turn_opened"),
+        ]
+    );
+    expect_that!(claim.status, eq(StatusCode::CREATED));
+    expect_that!(claim.body["run"]["item"]["goal"], eq(&json!("done")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn setting_the_stage_to_the_goal_mid_run_takes_the_run_back_and_withdraws_its_questions() -> Result<()> {
+    // Arrange: the agent asks a question; the person has an open question of their own.
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let path = w.item_path(&key).await?;
+    let run = w.claimed().await?;
+    let agent = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{path}/questions"),
+            None,
+            Some(json!({ "kind": "question", "text": "Which CA?" })),
+        )
+        .await?;
+    let person = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{path}/questions"),
+            Some(&w.session),
+            Some(json!({ "kind": "question", "text": "My own question" })),
+        )
+        .await?;
+
+    // Act
+    let set = w.edit(&key, json!({ "stage": "with_context" })).await?;
+    let reached = w.reached(&run).await?;
+    let finished = w.finish(&run, json!({})).await?;
+    let item = w.get(&key).await?;
+    let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
+
+    // Assert
+    expect_that!(agent.status, eq(StatusCode::CREATED));
+    expect_that!(person.status, eq(StatusCode::CREATED));
+    expect_that!(set.status, eq(StatusCode::OK));
+    expect_that!(reached.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&reached), some(eq("run_over")));
+    expect_that!(finished.body["end"], eq(&json!("taken_back")));
+    expect_that!(item["turn"], eq(&Value::Null));
+    let states: Vec<(&str, &str)> = item["questions"]
+        .as_array()
+        .context("questions")?
+        .iter()
+        .map(|q| {
+            (
+                q["text"].as_str().unwrap_or_default(),
+                q["state"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    expect_that!(states, contains(eq(&("Which CA?", "withdrawn"))));
+    expect_that!(states, contains(eq(&("My own question", "open"))));
+    let withdrawn: Vec<&Value> = entries
+        .iter()
+        .filter(|(action, _)| action == "question_withdrawn")
+        .map(|(_, diff)| diff)
+        .collect();
+    expect_that!(withdrawn.len(), eq(1));
+    expect_that!(withdrawn[0]["why"], eq(&json!("goal_met")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_edit_that_does_not_reach_the_goal_leaves_the_turn_open() -> Result<()> {
+    // Arrange: a note going to with context, and a task going to defined.
+    let w = world().await?;
+    let note = w.add_sent("A note").await?;
+    let task = w.add("A task", json!({ "kind": "task" })).await?;
+    w.send_turn(&task).await?;
+
+    // Act
+    let retitled = w.edit(&note, json!({ "description": "More about it" })).await?;
+    let short = w.edit(&task, json!({ "stage": "with_context" })).await?;
+
+    // Assert
+    expect_that!(retitled.status, eq(StatusCode::OK));
+    expect_that!(short.status, eq(StatusCode::OK));
+    expect_that!(w.get(&note).await?["turn"]["goal"], eq(&json!("with_context")));
+    expect_that!(w.get(&task).await?["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(w.get(&task).await?["with_agent"], eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_claim_ends_a_turn_already_at_its_goal_and_takes_the_next_item() -> Result<()> {
+    // Arrange: two sent notes, the first more important and put at its goal behind the edit's back.
+    let w = world().await?;
+    let met = w.add("Met", json!({ "need": "critical" })).await?;
+    w.send_turn(&met).await?;
+    let other = w.add_sent("Other").await?;
+    let met_id = w.get(&met).await?["id"].as_str().context("id")?.to_owned();
+    w.app.set_item_stage(&met_id, "with_context").await?;
+
+    // Act
+    let offered = w.next().await?;
+    let claimed = w.claim().await?;
+    let entries = w.app.audit_entries(&met_id).await?;
+    let item = w.get(&met).await?;
+
+    // Assert
+    expect_that!(offered.body["item"]["key"], eq(&json!(other)));
+    expect_that!(claimed.status, eq(StatusCode::CREATED));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(other)));
+    expect_that!(w.app.count_rows("item_runs").await?, eq(1));
+    expect_that!(item["turn"], eq(&Value::Null));
+    let reached = entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?;
+    expect_that!(reached.1["how"], eq(&json!("already_met")));
+    // The stage didn't change, so the entry doesn't say it did.
+    expect_that!(reached.1.get("stage"), none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_claim_with_only_a_met_turn_ends_it_and_starts_nothing() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Met").await?;
+    let id = w.get(&key).await?["id"].as_str().context("id")?.to_owned();
+    w.app.set_item_stage(&id, "with_context").await?;
+
+    // Act
+    let offered = w.next().await?;
+    let entries_after_next = w.app.audit_entries(&id).await?.len();
+    let claimed = w.claim().await?;
+
+    // Assert
+    expect_that!(offered.body["item"], eq(&Value::Null));
+    // `next` writes nothing: the turn is still open until a claim ends it.
+    expect_that!(entries_after_next, eq(2));
+    expect_that!(claimed.status, eq(StatusCode::OK));
+    expect_that!(claimed.body["run"], eq(&Value::Null));
+    expect_that!(w.app.count_rows("item_runs").await?, eq(0));
+    expect_that!(w.get(&key).await?["turn"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_claim_starts_a_run_on_the_follow_on_of_a_met_turn() -> Result<()> {
+    // Arrange: a task sent all the way to defined, put at defined behind the edit's back.
+    let w = world().await?;
+    let key = w.add("Rotate the certs", json!({ "kind": "task" })).await?;
+    w.send_all_the_way(&key).await?;
+    let id = w.get(&key).await?["id"].as_str().context("id")?.to_owned();
+    w.app.set_item_stage(&id, "defined").await?;
+
+    // Act
+    let claimed = w.claim().await?;
+
+    // Assert
+    expect_that!(claimed.status, eq(StatusCode::CREATED));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(key)));
+    expect_that!(claimed.body["run"]["item"]["goal"], eq(&json!("done")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_hands_the_turn_back_and_it_is_no_failure() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+    let id = w.get(&key).await?["id"].as_str().context("id")?.to_owned();
+
+    // Act
+    let handed = w
+        .run_call(
+            &run,
+            "hand-back",
+            Some(json!({ "reason": "  Already has its context  " })),
+        )
+        .await?;
+    let item = w.get(&key).await?;
+    let again = w
+        .run_call(&run, "hand-back", Some(json!({ "reason": "Again" })))
+        .await?;
+    let reached = w.reached(&run).await?;
+    let finished = w.finish(&run, json!({ "cost_usd": 0.2 })).await?;
+    let entries = w.app.audit_entries(&id).await?;
+    let runs = w.app.audit_runs(&id).await?;
+    let history = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={id}", w.app.heap_url(&w.heap).await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(handed.status, eq(StatusCode::OK));
+    expect_that!(handed.body["end"], eq(&json!("handed_back")));
+    expect_that!(handed.body["result"], eq(&json!("Already has its context")));
+    expect_that!(handed.body["failure"], eq(&Value::Null));
+    expect_that!(item["stage"], eq(&json!("as_written")));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(item["with_agent"], eq(false));
+    expect_that!(again.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&again), some(eq("run_over")));
+    expect_that!(reached.status, eq(StatusCode::CONFLICT));
+    expect_that!(finished.status, eq(StatusCode::OK));
+    expect_that!(finished.body["end"], eq(&json!("handed_back")));
+    expect_that!(finished.body["cost_usd"], eq(&json!(0.2)));
+    let entry = entries
+        .iter()
+        .find(|(action, _)| action == "turn_handed_back")
+        .context("no turn_handed_back entry")?;
+    expect_that!(
+        entry.1,
+        eq(&json!({ "goal": "with_context", "reason": "Already has its context" }))
+    );
+    let made_in: Vec<Option<&str>> = runs
+        .iter()
+        .filter(|(action, _)| action == "turn_handed_back")
+        .map(|(_, run_id)| run_id.as_deref())
+        .collect();
+    expect_that!(made_in, elements_are![some(eq(&run.as_str()))]);
+    // The history reads as a sentence with labelled fields.
+    let latest = &history.body["entries"][0];
+    expect_that!(latest["phrase"], eq(&json!("handed back a turn on")));
+    expect_that!(
+        latest["changes"],
+        eq(&json!([
+            { "field": "goal", "label": "Goal", "before": null, "after": "With context" },
+            { "field": "reason", "label": "Reason", "before": null, "after": "Already has its context" },
+        ]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_hand_back_needs_a_reason_and_the_callers_own_run() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+    let (other, _) = w.app.register("bob@example.test").await?;
+
+    // Act
+    let empty = w.run_call(&run, "hand-back", Some(json!({ "reason": "  " }))).await?;
+    let long = w
+        .run_call(&run, "hand-back", Some(json!({ "reason": "x".repeat(2_001) })))
+        .await?;
+    let theirs = w
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/work/runs/{run}/hand-back"),
+            Some(&other),
+            Some(json!({ "reason": "Mine now" })),
+        )
+        .await?;
+    let still_live = w.run_call(&run, "heartbeat", None).await?;
+
+    // Assert
+    expect_that!(empty.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(empty.body["field"], eq(&json!("reason")));
+    expect_that!(long.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(long.body["field"], eq(&json!("reason")));
+    expect_that!(theirs.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(still_live.status, eq(StatusCode::NO_CONTENT));
     Ok(())
 }
 

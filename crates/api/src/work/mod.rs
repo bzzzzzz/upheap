@@ -5,7 +5,8 @@
 
 use api_types::waiting::ItemHeapDto;
 use api_types::work::{
-    ClaimDto, ClaimRequestDto, FinishRequestDto, ReachedRequestDto, RunDto, WorkItemDto, WorkNextDto,
+    ClaimDto, ClaimRequestDto, FinishRequestDto, HandBackRequestDto, ReachedRequestDto, RunDto, WorkItemDto,
+    WorkNextDto,
 };
 use axum::Json;
 use axum::extract::{FromRequestParts, State};
@@ -31,6 +32,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(claim_run))
         .routes(routes!(heartbeat))
         .routes(routes!(reached))
+        .routes(routes!(hand_back))
         .routes(routes!(finish_run))
 }
 
@@ -223,6 +225,29 @@ async fn reached(
         .services
         .reached(path.principal, path.run_id, result, links)
         .await?;
+    Ok(Json(run_dto(&view)))
+}
+
+/// Says the run has nothing to do and the turn's goal needn't be reached, such as when the work was done elsewhere.
+/// An item that already has what the goal needs is `reached`, not handed back. The run ends as `handed_back` with
+/// the reason as its result, the turn ends as handed back, and `turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the
+/// item is the person's again.
+#[utoipa::path(post, path = "/work/runs/{run}/hand-back", tag = "work", security(("session" = [])),
+    params(RunParams), request_body = HandBackRequestDto,
+    responses(
+        (status = 200, body = RunDto),
+        (status = 400, description = "`invalid_body`", body = Problem),
+        (status = 404, description = "No such run, or not the caller's", body = Problem),
+        (status = 409, description = "`run_over`: the run has ended or lapsed, or its turn was taken back", body = Problem),
+        (status = 422, description = "`field_empty` or `field_too_long` (`field` `reason`): empty or over 2,000 characters", body = Problem),
+    ))]
+async fn hand_back(
+    State(state): State<AppState>,
+    path: RunPath,
+    ApiJson(body): ApiJson<HandBackRequestDto>,
+) -> Result<Json<RunDto>, ApiError> {
+    let reason = RunResult::parse_reason(&body.reason).map_err(ServiceError::from)?;
+    let view = state.services.hand_back(path.principal, path.run_id, reason).await?;
     Ok(Json(run_dto(&view)))
 }
 
