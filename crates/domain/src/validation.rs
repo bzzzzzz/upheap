@@ -145,6 +145,8 @@ pub enum Field {
     Origin,
     /// Why an item is blocked, in words.
     BlockedReason,
+    /// When a run's agent tool exited.
+    ToolEndedAt,
 }
 
 impl Field {
@@ -189,6 +191,7 @@ impl Field {
             Self::Piece => "piece",
             Self::Origin => "origin",
             Self::BlockedReason => "blocked_reason",
+            Self::ToolEndedAt => "tool_ended_at",
         }
     }
 }

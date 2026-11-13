@@ -5,11 +5,14 @@ use api_types::common::{
     ItemDto, KindDto, MadeItemDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
+use api_types::work::ItemRunDto;
 use clap::Args;
 
 use super::common::{locate_item, state_text};
 use crate::commands::comment::comment_lines;
 use crate::commands::heap_api::{HeapApi, indented_context};
+use crate::commands::work::end_word;
+use crate::commands::work::run::format_duration;
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
 use crate::output::{Cell, Mode, Output, Tone};
@@ -138,7 +141,61 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     }
     render_comments(item, out)?;
     render_steps(item, out)?;
-    render_questions(item, out)
+    render_questions(item, out)?;
+    render_runs(item, out)
+}
+
+/// The item's runs, newest first, when it has any: a heading with their count and cost, and a line for each with when
+/// it started, how long the tool ran, from stage to goal, how it ended and what it cost, then the result or failure
+/// and the links under it.
+fn render_runs(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
+    // `null` (a list row) reads as no runs; `item show` reads a single item, which always has the array.
+    let runs = item.runs.as_deref().unwrap_or_default();
+    if runs.is_empty() {
+        return Ok(());
+    }
+    out.line("")?;
+    let heading = match item.runs_cost_usd {
+        Some(cost) => format!("Runs {} · ${cost:.2}", runs.len()),
+        None => format!("Runs {}", runs.len()),
+    };
+    out.line_toned(&heading, Tone::Strong)?;
+    let rows: Vec<Vec<Cell>> = runs
+        .iter()
+        .map(|run| {
+            vec![
+                Cell::new(run.started_label.clone()),
+                Cell::new(run_duration(run)),
+                Cell::new(format!("{} → {}", stage_text(run.from_stage), goal_text(run.goal))),
+                Cell::new(end_word(run.end).unwrap_or(if run.end.is_none() { "running" } else { "unknown" })),
+                Cell::new(run.cost_usd.map(|cost| format!("${cost:.2}")).unwrap_or_default()),
+            ]
+        })
+        .collect();
+    for (run, line) in runs.iter().zip(out.render_table(&rows)) {
+        out.table_line("  ", &line)?;
+        let text = run.result.as_deref().or(run.failure.as_deref());
+        for text_line in text.iter().flat_map(|text| text.lines()) {
+            out.line(&format!("    {}", text_line.replace('\t', "    ")))?;
+        }
+        for link in &run.links {
+            out.line(&format!("    {link}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// How long the run's tool ran, from the tool's own start and exit when both were recorded, else from the run's own.
+/// Blank while the run hasn't ended.
+fn run_duration(run: &ItemRunDto) -> String {
+    let (start, end) = match (run.tool_started_at, run.tool_ended_at) {
+        (Some(start), Some(end)) => (start, Some(end)),
+        _ => (run.started_at, run.ended_at),
+    };
+    match end {
+        Some(end) if run.end.is_some() => format_duration(end - start),
+        _ => String::new(),
+    }
 }
 
 /// An item a note became as one phrase: `n8c2d "Rotate staging" (task, open)`.

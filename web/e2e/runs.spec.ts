@@ -265,3 +265,26 @@ test("the item list says a stuck item waits for you", async ({ page, heapPath })
   await expect(listed.getByRole("link", { name: /waits for you/ })).toBeVisible();
   await expect(listed.getByRole("link", { name: /with an agent/ })).toHaveCount(0);
 });
+
+test("the item's Runs section shows a run with its cost, how it ended and why", async ({ page, heapPath }) => {
+  const certs = await seed(page, heapPath, "Rotate the certs");
+  const claimed = await page.request.post("/api/v1/work/runs", { headers, data: { heaps: [refOf(heapPath)] } });
+  expect(claimed.status()).toBe(201);
+  const { run } = await claimed.json();
+  const finished = await page.request.post(`/api/v1/work/runs/${run.id}/finish`, {
+    headers,
+    data: { failure: "The tool crashed", cost_usd: 0.31 },
+  });
+  expect(finished.status()).toBe(200);
+
+  await page.goto(`${heapPath}/items/${certs.key}`);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
+
+  const runs = itemPane(page).getByRole("region", { name: "Runs", exact: true });
+  await runs.locator("summary", { hasText: "Runs 1 · $0.31" }).click();
+  const row = runs.getByRole("listitem");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("failed");
+  await expect(row).toContainText("$0.31");
+  await expect(row).toContainText("The tool crashed");
+});

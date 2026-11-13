@@ -302,7 +302,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens to read, in this order: the title with the main state button and ⋯ beside it (point 6), a status line, Waits for
    you when something does (point 12), the fields (point 16), the context (point 17), the comments (point 18), a task's Steps (point 11),
-   what it came from and became (point 19), Questions (points 13 and 14) and History, collapsed until it's clicked, on every item it opens. On a phone the
+   what it came from and became (point 19), Questions (points 13 and 14), Runs (point 20) and History, collapsed until it's clicked, on every item it opens. On a phone the
    main button and ⋯ sit in a bar at the bottom of the sheet instead, the main one wider. The **status line** is one
    quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
@@ -454,6 +454,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     from another says "From: “<title>”, a note". A note that was split says "Became: 3 tasks" ("items" when the
     kinds are mixed) and lists each, with its state. Each links to the heap that item is in now, and both show
     read-only too.
+20. **Runs** is a folded section after Questions and before History, shown only when the item has runs, under the
+    heading "Runs 3 · $1.20": the count and the runs' total cost, with no cost part when no run reported one. Opened,
+    a row for each run, newest first: when it started (the time today, else the date as the server words it), "from →
+    to" (the stage it started at and the goal), how it ended ("reached", "asked", "failed", "taken back", "handed
+    back", or "running"), and its cost on the right, blank when unknown. Under it the result or the failure, and the
+    links. It only reads, for every role, so it has no controls.
 
 ## Adding an item
 

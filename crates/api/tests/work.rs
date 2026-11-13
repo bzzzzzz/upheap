@@ -2516,3 +2516,149 @@ async fn a_run_comments_on_its_own_item_and_not_on_another() -> Result<()> {
     expect_that!(w.get(&other).await?["comments"], eq(&json!([])));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn finish_records_the_tools_times_once_and_the_item_read_returns_them() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let finished = w
+        .finish(
+            &run,
+            json!({ "failure": "The tool crashed", "tool_started_at": 1_000, "tool_ended_at": 5_000 }),
+        )
+        .await?;
+    let again = w
+        .finish(&run, json!({ "tool_started_at": 2_000, "tool_ended_at": 9_000 }))
+        .await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(finished.status, eq(StatusCode::OK));
+    expect_that!(again.status, eq(StatusCode::OK));
+    expect_that!(item["runs"][0]["tool_started_at"], eq(&json!(1_000)));
+    expect_that!(item["runs"][0]["tool_ended_at"], eq(&json!(5_000)));
+    // The run's own times are the claim and the end, not the tool's.
+    expect_that!(item["runs"][0]["started_at"], not(eq(&json!(1_000))));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn finish_without_tool_times_leaves_them_null_and_an_end_before_the_start_is_refused() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let plain_run = w.fail_once().await?;
+    let second = w.claimed().await?;
+
+    // Act
+    let backwards = w
+        .finish(&second, json!({ "tool_started_at": 5_000, "tool_ended_at": 4_000 }))
+        .await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(plain_run, not(eq(&second)));
+    expect_that!(backwards.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&backwards), some(eq("invalid_fields")));
+    expect_that!(backwards.body["field"], eq(&json!("tool_ended_at")));
+    expect_that!(item["runs"][0]["tool_started_at"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["tool_ended_at"], eq(&Value::Null));
+    expect_that!(item["runs"][1]["tool_started_at"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_read_lists_its_runs_newest_first_with_their_total_cost() -> Result<()> {
+    // Arrange: a failed run that cost something, then a run that reached the goal with a link, and a third item.
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let free = w.add("Nothing yet", json!({})).await?;
+    let first = w.claimed().await?;
+    let failed = w
+        .finish(&first, json!({ "failure": "The tool crashed", "cost_usd": 0.1 }))
+        .await?;
+    expect_that!(failed.status, eq(StatusCode::OK));
+    w.app.clock.advance(Duration::from_minutes(5));
+    let second = w.claimed().await?;
+    w.write_context(&second, &key, "The certs expire on Friday").await?;
+    let reached = w
+        .run_call(
+            &second,
+            "reached",
+            Some(json!({ "result": "Added the context", "links": ["https://example.test/pull/1"] })),
+        )
+        .await?;
+    expect_that!(reached.status, eq(StatusCode::OK));
+    let costed = w.finish(&second, json!({ "cost_usd": 0.2 })).await?;
+    expect_that!(costed.status, eq(StatusCode::OK));
+
+    // Act
+    let item = w.get(&key).await?;
+    let untouched = w.get(&free).await?;
+    let listed = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/items", w.app.heap_url(&w.heap).await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    let runs = &item["runs"];
+    expect_that!(runs.as_array().map(Vec::len), some(eq(2)));
+    expect_that!(runs[0]["id"], eq(&json!(second)));
+    expect_that!(runs[0]["end"], eq(&json!("reached")));
+    expect_that!(runs[0]["goal"], eq(&json!("with_context")));
+    expect_that!(runs[0]["from_stage"], eq(&json!("as_written")));
+    expect_that!(runs[0]["result"], eq(&json!("Added the context")));
+    expect_that!(runs[0]["links"], eq(&json!(["https://example.test/pull/1"])));
+    expect_that!(runs[0]["cost_usd"], eq(&json!(0.2)));
+    expect_that!(runs[0]["ended_at"].is_i64(), eq(true));
+    expect_that!(runs[0]["started_label"].is_string(), eq(true));
+    expect_that!(runs[1]["id"], eq(&json!(first)));
+    expect_that!(runs[1]["end"], eq(&json!("failed")));
+    expect_that!(runs[1]["failure"], eq(&json!("The tool crashed")));
+    expect_that!(runs[1]["cost_usd"], eq(&json!(0.1)));
+    expect_that!(item["runs_cost_usd"], eq(&json!(0.3)));
+    expect_that!(untouched["runs"], eq(&json!([])));
+    expect_that!(untouched["runs_cost_usd"], eq(&Value::Null));
+    let rows = listed.body["items"]
+        .as_array()
+        .or_else(|| listed.body["ranked"].as_array())
+        .context("no rows")?;
+    expect_that!(rows.is_empty(), eq(false));
+    for row in rows {
+        expect_that!(row["item"]["runs"], eq(&Value::Null));
+        expect_that!(row["item"]["runs_cost_usd"], eq(&Value::Null));
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_in_progress_is_listed_with_no_end_and_no_cost() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(item["runs"][0]["id"], eq(&json!(run)));
+    expect_that!(item["runs"][0]["end"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["ended_at"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["cost_usd"], eq(&Value::Null));
+    expect_that!(item["runs_cost_usd"], eq(&Value::Null));
+    Ok(())
+}

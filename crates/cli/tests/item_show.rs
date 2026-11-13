@@ -100,6 +100,70 @@ async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<
 
 #[gtest]
 #[tokio::test]
+async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_none() -> Result<()> {
+    // Arrange: a note an agent reached the goal of, with a link and a cost, and a note nobody worked.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    let (worked, idle) = (key(&items[0])?.to_owned(), key(&items[1])?.to_owned());
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{worked}/turn"),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claimed.stdout.trim().to_owned());
+    cli.run(&[
+        "item",
+        "edit",
+        &worked,
+        "--description",
+        "The certs expire on Friday.",
+        "-q",
+    ])
+    .await;
+    cli.run(&[
+        "work",
+        "reached",
+        "--result",
+        "Wrote the context",
+        "--link",
+        "https://example.test/pull/12",
+    ])
+    .await;
+    cli.run(&["work", "finish", "--cost-usd", "0.31"]).await;
+    cli.env.run = None;
+
+    // Act
+    let shown = cli.run(&["item", "show", &worked]).await;
+    let without = cli.run(&["item", "show", &idle]).await;
+
+    // Assert
+    expect_that!(shown.exited(0), eq(true));
+    let (_, runs) = shown
+        .stdout
+        .split_once("\nRuns 1 · $0.31\n")
+        .context("a Runs section")?;
+    let mut lines = runs.lines();
+    expect_that!(
+        lines.next(),
+        some(all![
+            contains_substring("as written → with context"),
+            contains_substring("reached"),
+            ends_with("$0.31")
+        ])
+    );
+    expect_that!(lines.next(), some(eq("    Wrote the context")));
+    expect_that!(lines.next(), some(eq("    https://example.test/pull/12")));
+    expect_that!(without.stdout, not(contains_substring("Runs")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_show_prints_crlf_and_tabs_in_a_description_as_text() -> Result<()> {
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;

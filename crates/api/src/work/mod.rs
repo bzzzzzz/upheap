@@ -11,9 +11,9 @@ use axum::Json;
 use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
-use domain::RunId;
 use domain::item::Stage;
-use domain::run::{RunLink, RunResult, cut_failure, parse_cost_usd};
+use domain::run::{RunLink, RunResult, check_tool_times, cut_failure, parse_cost_usd};
+use domain::{RunId, Timestamp, ValidationError};
 use serde::Deserialize;
 use service::ServiceError;
 use service::work::{RunView, WaitingInHeap, WorkItem};
@@ -115,8 +115,13 @@ fn run_dto(view: &RunView) -> RunDto {
             .map(|ended| ended.links.iter().map(|link| link.as_str().to_owned()).collect())
             .unwrap_or_default(),
         failure: ended.and_then(|ended| ended.failure.clone()),
-        cost_usd: run.cost_micro_usd.map(|micro| micro as f64 / 1_000_000.0),
+        cost_usd: run.cost_micro_usd.map(crate::dto::micro_usd_to_usd),
     }
+}
+
+/// A tool time sent as UTC milliseconds.
+fn parse_tool_time(millis: i64) -> Result<Timestamp, ServiceError> {
+    Timestamp::from_millis(millis).ok_or_else(|| ValidationError::TimestampOutOfRange.into())
 }
 
 /// The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
@@ -268,6 +273,7 @@ async fn hand_back(
 /// asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
 /// stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
 /// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
+/// The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
 #[utoipa::path(post, path = "/work/runs/{run}/finish", tag = "work", security(("session" = [])),
     params(RunParams), request_body = FinishRequestDto,
     responses(
@@ -275,7 +281,7 @@ async fn hand_back(
         (status = 400, description = "`invalid_body`", body = Problem),
         (status = 404, description = "No such run, or not the caller's", body = Problem),
         (status = 409, description = "`run_cost_recorded`: the cost was already set", body = Problem),
-        (status = 422, description = "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000", body = Problem),
+        (status = 422, description = "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000; or (`field` `tool_ended_at`) before `tool_started_at`; `timestamp_out_of_range`", body = Problem),
     ))]
 async fn finish_run(
     State(state): State<AppState>,
@@ -287,10 +293,20 @@ async fn finish_run(
         .map(parse_cost_usd)
         .transpose()
         .map_err(ServiceError::from)?;
+    let tool_started_at = body.tool_started_at.map(parse_tool_time).transpose()?;
+    let tool_ended_at = body.tool_ended_at.map(parse_tool_time).transpose()?;
+    check_tool_times(tool_started_at, tool_ended_at).map_err(ServiceError::from)?;
     let failure = body.failure.as_deref().and_then(cut_failure);
     let view = state
         .services
-        .finish_run(path.principal, path.run_id, cost, failure)
+        .finish_run(
+            path.principal,
+            path.run_id,
+            cost,
+            tool_started_at,
+            tool_ended_at,
+            failure,
+        )
         .await?;
     Ok(Json(run_dto(&view)))
 }

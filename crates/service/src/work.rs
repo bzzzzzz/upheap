@@ -416,12 +416,16 @@ impl Services {
     ///   whatever was sent.
     /// - A run that has ended keeps its end; only the cost is recorded.
     ///
-    /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::CostRecorded`].
+    /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::CostRecorded`]. The
+    /// tool's start and exit times (already checked by [`domain::run::check_tool_times`]) are each set once too, but a
+    /// second one is ignored without an error.
     pub async fn finish_run(
         &self,
         principal: Principal,
         run_id: RunId,
         cost_micro_usd: Option<i64>,
+        tool_started_at: Option<Timestamp>,
+        tool_ended_at: Option<Timestamp>,
         failure: Option<String>,
     ) -> Result<RunView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -457,6 +461,9 @@ impl Services {
             store::runs::set_run_cost(&txn, run.id, cost).await?;
             run.cost_micro_usd = Some(cost);
         }
+        store::runs::set_run_tool_times(&txn, run.id, tool_started_at, tool_ended_at).await?;
+        run.tool_started_at = run.tool_started_at.or(tool_started_at);
+        run.tool_ended_at = run.tool_ended_at.or(tool_ended_at);
         let view = self.run_view(&txn, run).await?;
         txn.commit().await.map_err(StoreError::from)?;
 

@@ -2513,3 +2513,53 @@ async fn a_run_adds_a_task_with_steps_and_is_told_what_an_item_without_context_n
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_run_sends_the_tools_own_start_and_exit_times_with_finish() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let tool = context_writing_agent(&cli.agent(), 0.05);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert: the run on the item has both times, in order.
+    expect_that!(outcome.exited(0), eq(true));
+    let item = server
+        .send(&ada, "GET", &format!("/teams/ada/heaps/personal/items/{note}"), None)
+        .await?;
+    let run = &item["runs"][0];
+    let (started, ended) = (
+        run["tool_started_at"].as_i64().context("tool_started_at")?,
+        run["tool_ended_at"].as_i64().context("tool_ended_at")?,
+    );
+    expect_that!(started, le(ended));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_tool_that_cannot_start_sends_no_tool_times() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let tool = StandIn::new(|_start| async {
+        Err(ToolError::WouldNotStart {
+            tool: Tool::Claude,
+            source: std::io::Error::other("no such luck"),
+        })
+    });
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(false));
+    let item = server
+        .send(&ada, "GET", &format!("/teams/ada/heaps/personal/items/{note}"), None)
+        .await?;
+    expect_that!(item["runs"][0]["end"], eq("failed"));
+    expect_that!(item["runs"][0]["tool_started_at"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["tool_ended_at"], eq(&Value::Null));
+    Ok(())
+}

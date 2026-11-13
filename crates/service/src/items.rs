@@ -19,7 +19,7 @@ use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
-use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_agent};
+use domain::turn::{Goal, Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_agent};
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
@@ -85,6 +85,8 @@ pub struct ItemView {
     pub questions: Option<Vec<QuestionView>>,
     /// The item's comments in number order, or `None` in a list, which doesn't carry them.
     pub comments: Option<Vec<CommentView>>,
+    /// The item's runs, newest first, or `None` in a list, which doesn't carry them.
+    pub runs: Option<Vec<ItemRunView>>,
     /// Whether the item is open, in an active heap, and has an open question, a stuck turn or a gone blocker (see
     /// [`domain::question::waits_for_you`]).
     pub waits_for_you: bool,
@@ -159,6 +161,13 @@ pub struct CommentView {
     pub comment: Comment,
     /// Who wrote it. `None` only if the user can't be found, which users never being deleted rules out.
     pub created_by: Option<User>,
+}
+
+/// A run of an item with the goal of its turn: where the run was going.
+#[derive(Debug)]
+pub struct ItemRunView {
+    pub run: Run,
+    pub goal: Goal,
 }
 
 /// An item's value for one custom parameter, ready to show.
@@ -375,6 +384,7 @@ impl Services {
                 step_actions,
                 questions: None,
                 comments: None,
+                runs: None,
                 // Set below, from one count for the entries that are listed.
                 waits_for_you: false,
                 turn: None,
@@ -592,6 +602,7 @@ impl Services {
                     step_actions,
                     questions: None,
                     comments: None,
+                    runs: None,
                     // Closed items never wait, and no agent has them.
                     waits_for_you: false,
                     turn: None,
@@ -760,6 +771,7 @@ impl Services {
             step_actions,
             questions: Some(Vec::new()),
             comments: Some(Vec::new()),
+            runs: Some(Vec::new()),
             waits_for_you: false,
             // A new item has no questions, so an open turn is an agent having it.
             with_agent: turn.is_some(),
@@ -801,6 +813,7 @@ impl Services {
         let steps = store::steps::list_steps(&self.db, item.id).await?;
         let questions = store::questions::list_questions(&self.db, item.id).await?;
         let comments = store::comments::list_comments(&self.db, item.id).await?;
+        let runs = store::runs::list_runs_for_item(&self.db, item.id, false).await?;
         let open_turn = store::turns::find_open_turn(&self.db, item.id).await?;
         build_item_view(
             &self.db,
@@ -811,6 +824,7 @@ impl Services {
                 steps,
                 questions,
                 comments,
+                runs,
                 open_turn,
                 locking: false,
             },
@@ -1107,6 +1121,8 @@ pub(crate) struct ItemChildren {
     pub steps: Vec<Step>,
     pub questions: Vec<Question>,
     pub comments: Vec<Comment>,
+    /// The item's runs with their goals, newest first.
+    pub runs: Vec<(Run, Goal)>,
     /// The item's open turn, if it has one.
     pub open_turn: Option<Turn>,
     /// Whether these were read with locking reads after the heap lock, so the turn's runs are read the same way.
@@ -1122,6 +1138,7 @@ impl ItemChildren {
             steps: store::steps::list_steps_locking(db, item_id).await?,
             questions: store::questions::list_questions_locking(db, item_id).await?,
             comments: store::comments::list_comments_locking(db, item_id).await?,
+            runs: store::runs::list_runs_for_item(db, item_id, true).await?,
             open_turn: store::turns::find_open_turn_locking(db, item_id).await?,
             locking: true,
         })
@@ -1175,6 +1192,7 @@ pub(crate) async fn build_item_view(
         steps,
         questions,
         comments,
+        runs,
         open_turn,
         locking,
     } = children;
@@ -1222,6 +1240,7 @@ pub(crate) async fn build_item_view(
     );
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     let comments = build_comment_views(db, comments).await?;
+    let runs = runs.into_iter().map(|(run, goal)| ItemRunView { run, goal }).collect();
     let origin = find_origin(db, membership.user_id, &item).await?;
     Ok(ItemView {
         origin,
@@ -1240,6 +1259,7 @@ pub(crate) async fn build_item_view(
         step_actions,
         questions: Some(questions),
         comments: Some(comments),
+        runs: Some(runs),
         waits_for_you,
         turn,
         with_agent,

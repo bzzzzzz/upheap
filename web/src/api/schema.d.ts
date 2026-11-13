@@ -1274,6 +1274,7 @@ export interface paths {
          *     asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
          *     stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
          *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
+         *     The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
          */
         post: operations["finish_run"];
         delete?: never;
@@ -1814,6 +1815,18 @@ export interface components {
              *     characters. Ignored for a run that ended another way.
              */
             failure?: string | null;
+            /**
+             * Format: int64
+             * @description When the run's agent tool exited, in UTC milliseconds; not before `tool_started_at` when both are sent. Set
+             *     once: a later value for a run that has one is ignored.
+             */
+            tool_ended_at?: number | null;
+            /**
+             * Format: int64
+             * @description When the run's agent tool started, in UTC milliseconds. Set once: a later value for a run that has one is
+             *     ignored.
+             */
+            tool_started_at?: number | null;
         };
         /**
          * @description The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
@@ -2150,6 +2163,17 @@ export interface components {
              *     closed list: read the item for its questions.
              */
             questions?: components["schemas"]["Question"][] | null;
+            /**
+             * @description The item's runs, newest first by when they started; `[]` when it has none. `null` in the ranked list and the
+             *     closed list: read the item for its runs.
+             */
+            runs: components["schemas"]["ItemRun"][] | null;
+            /**
+             * Format: double
+             * @description What the runs cost in US dollars: the sum of those that reported a cost. `null` in the ranked list and the
+             *     closed list, and when no run has a cost.
+             */
+            runs_cost_usd: number | null;
             stage?: null | components["schemas"]["Stage"];
             /**
              * @description The stages the caller may set now, in table order: all three on an open task, the first two on an open note.
@@ -2286,6 +2310,55 @@ export interface components {
             kind: components["schemas"]["Kind"];
             state: components["schemas"]["ItemState"];
             title: string;
+        };
+        /** @description A run as an item's page lists it: when it ran, how it ended and what it cost. */
+        ItemRun: {
+            /**
+             * Format: double
+             * @description What the run cost in US dollars; `null` when it wasn't reported.
+             */
+            cost_usd?: number | null;
+            end?: null | components["schemas"]["RunEnd"];
+            /**
+             * Format: int64
+             * @description UTC milliseconds; `null` while the run has not ended.
+             */
+            ended_at?: number | null;
+            /** @description Why the run failed; `null` unless it ended as `failed`. */
+            failure?: string | null;
+            /** @description The item's stage when the run started. */
+            from_stage: components["schemas"]["Stage"];
+            /** @description Where the run was going: the goal of its turn. */
+            goal: components["schemas"]["Goal"];
+            /** Format: uuid */
+            id: string;
+            links: string[];
+            /**
+             * @description What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or
+             *     `handed_back`.
+             */
+            result?: string | null;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the run was claimed.
+             */
+            started_at: number;
+            /**
+             * @description When the run started, ready to show: the time ("14:02") if it was today, else the date ("yesterday", "3 Nov"),
+             *     in the request's timezone.
+             */
+            started_label: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the run's agent tool exited. `null` when not recorded.
+             */
+            tool_ended_at?: number | null;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the run's agent tool started, as the loop reported it. `null` when not recorded: a run
+             *     made before this was kept, or whose tool never started.
+             */
+            tool_started_at?: number | null;
         };
         /**
          * @description Item state. `done`, `wont_do` and `became` are closed.
@@ -7842,7 +7915,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000 */
+            /** @description `invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000; or (`field` `tool_ended_at`) before `tool_started_at`; `timestamp_out_of_range` */
             422: {
                 headers: {
                     [name: string]: unknown;
