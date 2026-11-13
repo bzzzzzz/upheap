@@ -5,7 +5,8 @@
 //! The path is the whole record. There is no index file to fall out of step with the directories.
 
 use std::collections::HashSet;
-use std::io::{Error, ErrorKind};
+use std::fs::{File, TryLockError};
+use std::io::{Error, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -52,12 +53,63 @@ pub fn item_directory(root: &Path, team: &str, heap: &str, key: &str) -> std::io
     }
 }
 
-/// Makes `dir` and its parents if they aren't there, and writes the marker. A directory that is there is used as it
-/// is. `started` is an RFC 3339 UTC time, for a person reading the file.
-pub fn prepare(dir: &Path, run_id: &str, started: &str) -> std::io::Result<()> {
+/// How many times [`prepare`] tries again when a sweep took the directory away while it was making it.
+const PREPARE_TRIES: usize = 5;
+
+/// Makes `dir` and its parents if they aren't there, and writes the marker, naming `server`. A directory that is there
+/// is used as it is. `started` is an RFC 3339 UTC time, for a person reading the file.
+///
+/// Returns the marker, open and holding a shared lock: keep it for as long as the run goes on. A sweep, in this loop
+/// or another one on the same root, takes the lock exclusively before it removes a directory, so it skips this one.
+pub fn prepare(dir: &Path, run_id: &str, started: &str, server: &str) -> std::io::Result<File> {
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        match lock_marker(dir) {
+            Ok(Some(mut marker)) => {
+                // Written whole every time, so its modification time moves even though the text may not.
+                marker.set_len(0)?;
+                marker.write_all(format!("run {run_id}\nstarted {started}\nserver {server}\n").as_bytes())?;
+                return Ok(marker);
+            }
+            // A sweep renamed the directory, or removed an emptied parent, between the steps: make it again.
+            Ok(None) if tries < PREPARE_TRIES => {}
+            Err(err) if err.kind() == ErrorKind::NotFound && tries < PREPARE_TRIES => {}
+            Ok(None) => return Err(Error::other("the directory kept being removed while it was made")),
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+/// Makes `dir`, opens its marker and takes a shared lock on it. `None` when, once the lock is held, the marker at
+/// `dir` is no longer the file that was locked: a sweep renamed the directory away meanwhile.
+fn lock_marker(dir: &Path) -> std::io::Result<Option<File>> {
     std::fs::create_dir_all(dir)?;
-    // Written whole every time, so its modification time moves even though the text may not.
-    std::fs::write(dir.join(MARKER), format!("run {run_id}\nstarted {started}\n"))
+    let path = dir.join(MARKER);
+    let marker = File::options().create(true).truncate(false).write(true).open(&path)?;
+    marker.lock_shared()?;
+    Ok(is_same_file(&marker, &path)?.then_some(marker))
+}
+
+/// Whether `path` still names the file `file` has open.
+#[cfg(unix)]
+fn is_same_file(file: &File, path: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+    let (open, named) = (file.metadata()?, std::fs::symlink_metadata(path)?);
+    Ok(open.dev() == named.dev() && open.ino() == named.ino())
+}
+
+/// Whether `path` still names the file `file` has open. Without inode numbers, whether a file is there at all.
+#[cfg(not(unix))]
+fn is_same_file(_file: &File, path: &Path) -> std::io::Result<bool> {
+    std::fs::symlink_metadata(path).map(|_| true)
+}
+
+/// The server a marker's text names, from its `server` line.
+fn marker_server(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|line| line.strip_prefix("server "))
+        .map(str::to_owned)
 }
 
 /// A directory the sweep looks at.
@@ -69,6 +121,11 @@ pub struct Kept {
     pub key: String,
     /// How long ago a run last started here. Zero for a marker dated in the future, as after a clock change.
     pub age: Duration,
+    /// When the marker was last written, as listed. A sweep removes the directory only if it still is.
+    pub modified: Option<SystemTime>,
+    /// The server the last run here worked with, from the marker. Only that server is asked about the item: another
+    /// server, or none, can't say whether it is closed, so only age removes the directory.
+    pub server: Option<String>,
 }
 
 impl Kept {
@@ -110,17 +167,21 @@ pub fn list(root: &Path, now: SystemTime) -> Vec<Kept> {
                 if !metadata.is_file() {
                     continue;
                 }
-                let age = metadata
-                    .modified()
-                    .ok()
+                let modified = metadata.modified().ok();
+                let age = modified
                     .and_then(|modified| now.duration_since(modified).ok())
                     .unwrap_or_default();
+                let server = std::fs::read_to_string(&marker)
+                    .ok()
+                    .and_then(|text| marker_server(&text));
                 kept.push(Kept {
                     dir,
                     team: team.clone(),
                     heap: heap.clone(),
                     key,
                     age,
+                    modified,
+                    server,
                 });
             }
         }
@@ -178,14 +239,28 @@ impl LiveDirs {
     }
 
     /// Renames `dir` to a name of its own under `root`, unless a run is in it, so it can be deleted without the lock
-    /// held. `None` when a run is in it, else the new path or why the rename failed.
-    pub fn rename_away(&self, root: &Path, dir: &Path) -> Option<std::io::Result<PathBuf>> {
+    /// held. `None` when a run is in it, in this loop or another (its marker is locked), or a run started there since
+    /// it was listed (its marker was written after `listed`), or its marker is gone. Else the new path or why the
+    /// rename failed.
+    pub fn rename_away(&self, root: &Path, dir: &Path, listed: Option<SystemTime>) -> Option<std::io::Result<PathBuf>> {
         let live = self.lock();
         if live.contains(dir) {
             return None;
         }
+        let marker = File::open(dir.join(MARKER)).ok()?;
+        match marker.try_lock() {
+            Ok(()) => {}
+            Err(TryLockError::WouldBlock) => return None,
+            Err(TryLockError::Error(err)) => return Some(Err(err)),
+        }
+        if marker.metadata().ok()?.modified().ok() != listed {
+            return None;
+        }
         let away = root.join(format!("{REMOVING}{}", unique_suffix()));
-        Some(std::fs::rename(dir, &away).map(|()| away))
+        // The lock is held across the rename, so a run that opened the marker just before waits, then finds it moved.
+        let renamed = std::fs::rename(dir, &away).map(|()| away);
+        drop(marker);
+        Some(renamed)
     }
 
     /// Removes the heap directory above `dir`, then the team directory above that, each only if it is empty and no
@@ -383,6 +458,62 @@ mod tests {
         Ok(dir)
     }
 
+    /// When the marker in `dir` was last written.
+    fn modified(dir: &Path) -> Option<SystemTime> {
+        std::fs::metadata(dir.join(MARKER)).ok()?.modified().ok()
+    }
+
+    #[gtest]
+    fn a_directory_whose_marker_another_run_holds_is_not_renamed_away() -> googletest::Result<()> {
+        // The marker is locked as a run in another loop on the same root holds it: this loop's set doesn't know it.
+        let root = tempfile::tempdir()?;
+        let dir = root.path().join("ada/work/k3x9a");
+        let marker = prepare(&dir, "run-1", "t", "s")?;
+        let listed = modified(&dir);
+        let live = LiveDirs::default();
+
+        verify_that!(live.rename_away(root.path(), &dir, listed).is_none(), eq(true))?;
+        drop(marker);
+        verify_that!(live.rename_away(root.path(), &dir, listed).is_some(), eq(true))
+    }
+
+    #[gtest]
+    fn a_directory_a_run_started_in_since_it_was_listed_is_not_renamed_away() -> googletest::Result<()> {
+        let root = tempfile::tempdir()?;
+        let dir = keep(root.path(), &["ada", "work", "k3x9a"])?;
+        let listed = SystemTime::now() - Duration::from_secs(8 * 24 * 60 * 60);
+        std::fs::File::options()
+            .write(true)
+            .open(dir.join(MARKER))?
+            .set_modified(listed)?;
+        // Another run starts there after the sweep listed it.
+        drop(prepare(&dir, "run-2", "t", "s")?);
+
+        verify_that!(
+            LiveDirs::default()
+                .rename_away(root.path(), &dir, Some(listed))
+                .is_none(),
+            eq(true)
+        )?;
+        verify_that!(dir.join(MARKER).is_file(), eq(true))
+    }
+
+    #[gtest]
+    fn preparing_after_the_directory_was_renamed_away_makes_a_fresh_one() -> googletest::Result<()> {
+        let root = tempfile::tempdir()?;
+        let dir = root.path().join("ada/work/k3x9a");
+        drop(prepare(&dir, "run-1", "t", "s")?);
+        let live = LiveDirs::default();
+        let away = live.rename_away(root.path(), &dir, modified(&dir)).expect("not live")?;
+        live.remove_emptied_parents(&dir);
+
+        let marker = prepare(&dir, "run-2", "t", "s")?;
+
+        verify_that!(dir.join(MARKER).is_file(), eq(true))?;
+        verify_that!(away.join(MARKER).is_file(), eq(true))?;
+        verify_that!(is_same_file(&marker, &dir.join(MARKER))?, eq(true))
+    }
+
     #[gtest]
     fn kept_directories_have_a_marker_and_sit_at_team_heap_key() -> googletest::Result<()> {
         let root = tempfile::tempdir()?;
@@ -456,13 +587,27 @@ mod tests {
         let root = tempfile::tempdir()?;
         let dir = root.path().join("ada/work/k3x9a");
 
-        prepare(&dir, "run-1", "2026-11-12T10:00:00Z")?;
+        drop(prepare(
+            &dir,
+            "run-1",
+            "2026-11-12T10:00:00Z",
+            "https://upheap.example",
+        )?);
         std::fs::write(dir.join("left.txt"), "kept")?;
-        prepare(&dir, "run-2", "2026-11-12T11:00:00Z")?;
+        drop(prepare(
+            &dir,
+            "run-2",
+            "2026-11-12T11:00:00Z",
+            "https://upheap.example",
+        )?);
 
         verify_that!(
             std::fs::read_to_string(dir.join(MARKER))?,
-            eq("run run-2\nstarted 2026-11-12T11:00:00Z\n")
+            eq("run run-2\nstarted 2026-11-12T11:00:00Z\nserver https://upheap.example\n")
+        )?;
+        verify_that!(
+            list(root.path(), SystemTime::now())[0].server.as_deref(),
+            some(eq("https://upheap.example"))
         )?;
         verify_that!(std::fs::read_to_string(dir.join("left.txt"))?, eq("kept"))
     }
@@ -473,7 +618,10 @@ mod tests {
         std::fs::create_dir_all(root.path().join("ada/work"))?;
         std::fs::write(root.path().join("ada/work/k3x9a"), "")?;
 
-        verify_that!(prepare(&root.path().join("ada/work/k3x9a"), "r", "t"), err(anything()))
+        verify_that!(
+            prepare(&root.path().join("ada/work/k3x9a"), "r", "t", "s"),
+            err(anything())
+        )
     }
 
     #[gtest]
@@ -493,7 +641,10 @@ mod tests {
         let live = LiveDirs::default();
         let _guard = live.register(live_dir.clone());
 
-        verify_that!(live.rename_away(root.path(), &live_dir).is_none(), eq(true))?;
+        verify_that!(
+            live.rename_away(root.path(), &live_dir, modified(&live_dir)).is_none(),
+            eq(true)
+        )?;
         live.remove_emptied_parents(&live_dir.join("nothing"));
         verify_that!(live_dir.is_dir(), eq(true))
     }
@@ -506,7 +657,7 @@ mod tests {
         let live = LiveDirs::default();
         drop(live.register(dir.clone()));
 
-        let away = live.rename_away(root.path(), &dir).expect("not live")?;
+        let away = live.rename_away(root.path(), &dir, modified(&dir)).expect("not live")?;
         live.remove_emptied_parents(&dir);
 
         verify_that!(dir.exists(), eq(false))?;
@@ -523,7 +674,7 @@ mod tests {
         let dir = keep(root.path(), &["ada", "work", "k3x9a"])?;
         let live = LiveDirs::default();
         let _next = live.register(root.path().join("ada/work/bbbbb"));
-        let away = live.rename_away(root.path(), &dir).expect("not live")?;
+        let away = live.rename_away(root.path(), &dir, modified(&dir)).expect("not live")?;
         drop(away);
 
         live.remove_emptied_parents(&dir);

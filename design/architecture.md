@@ -673,18 +673,23 @@ section is how it maps onto this API.
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
    item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
    person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names one
-   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run, and the tool makes it if it is
-   missing, writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
+   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run; the loop makes it if it is
+   missing and the tool writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
    record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
    left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
-   `.upheap-run` in it, and that file's modification time is when a run last started there. The loop sweeps the
+   `.upheap-run` in it, naming the server, and that file's modification time is when a run last started there. The
+   run holds a shared lock on that file until it ends. The loop sweeps the
    root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
-   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's). Any
-   other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
+   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's) while
+   its heap still reads fine: the server answers 404 for a heap the caller can't see too, so another account's
+   directories on a shared root are left alone. Only the server the marker names is asked; another server's
+   directories go only for age. Any other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
    and a server out of reach ends the sweep. Only directories at that depth with a marker are looked at, so the
    old `<key>-<run id>` ones and anything else are never touched, and a directory a run of this loop is in or
-   about to start in is skipped. A removal renames the directory away under the lock that guards that set and
-   deletes it after releasing it, since deleting a clone is slow. There the tool is allowed any command, edit and read, passed on its
+   about to start in is skipped. A removal takes the marker's lock exclusively, so a run in another loop on the same
+   root keeps its directory too, checks the marker wasn't rewritten since the sweep listed it, renames the directory
+   away under the lock that guards that set, and deletes it after releasing both, since deleting a clone is slow. A
+   run that opened the marker just before finds it moved once it gets the lock, and makes the directory again. There the tool is allowed any command, edit and read, passed on its
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
    wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
    `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's

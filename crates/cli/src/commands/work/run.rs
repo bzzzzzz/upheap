@@ -29,6 +29,7 @@ use crate::client::{ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
+use crate::config::server_key;
 use crate::lookup::HeapHandle;
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
@@ -592,7 +593,8 @@ impl Shared<'_> {
         let driven = match dir {
             None => self.drive_tool(&run, start).await,
             Some(Ok(dir)) => match self.prepare_directory(&run, &dir).await {
-                Ok(()) => {
+                // The marker stays open and locked until the tool is gone, so no sweep takes the directory meanwhile.
+                Ok(_marker) => {
                     let start = ToolStart {
                         dir: Some(dir),
                         ..start
@@ -641,8 +643,9 @@ impl Shared<'_> {
         Ok(Next::Again)
     }
 
-    /// Makes `dir` if it isn't there and writes the marker that says a run started in it now.
-    async fn prepare_directory(&self, run: &RunDto, dir: &Path) -> Result<(), ToolError> {
+    /// Makes `dir` if it isn't there and writes the marker that says a run started in it now. Returns the marker, which
+    /// holds a lock for as long as it is kept.
+    async fn prepare_directory(&self, run: &RunDto, dir: &Path) -> Result<std::fs::File, ToolError> {
         let (id, started) = (
             run.id.to_string(),
             jiff::Timestamp::from_second(self.app.now().as_second()),
@@ -650,7 +653,8 @@ impl Shared<'_> {
         let made = {
             let dir = dir.to_owned();
             let started = started.map_or_else(|_| String::new(), |at| at.to_string());
-            tokio::task::spawn_blocking(move || kept::prepare(&dir, &id, &started)).await
+            let server = server_key(&self.server);
+            tokio::task::spawn_blocking(move || kept::prepare(&dir, &id, &started, &server)).await
         };
         made.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked)))
             .map_err(|source| ToolError::NoDirectory {
@@ -684,7 +688,12 @@ impl Shared<'_> {
             tokio::task::spawn_blocking(move || {
                 // What an interrupted sweep renamed and did not finish deleting.
                 for left in kept::leftovers(&root) {
-                    if let Err(err) = std::fs::remove_dir_all(&left) {
+                    let removed = if left.is_dir() {
+                        std::fs::remove_dir_all(&left)
+                    } else {
+                        std::fs::remove_file(&left)
+                    };
+                    if let Err(err) = removed {
                         tracing::warn!(dir = %left.display(), error = %err, "couldn't clear a half-removed directory");
                     }
                 }
@@ -695,12 +704,19 @@ impl Shared<'_> {
         let Ok(found) = found else {
             return;
         };
+        let server = server_key(&self.server);
         for directory in found {
-            if self.is_stopping() || self.live_dirs.is_live(&directory.dir) {
+            if self.is_stopping() {
+                return;
+            }
+            if self.live_dirs.is_live(&directory.dir) {
                 continue;
             }
             let reason = if kept::is_unused(directory.age) {
                 kept::Reason::Unused
+            } else if directory.server.as_deref() != Some(server.as_str()) {
+                // Another server's item: this one can't say whether it is closed.
+                continue;
             } else {
                 let read = self.read_closed_at(&directory).await;
                 match kept::verdict(read.as_ref().copied()) {
@@ -711,6 +727,18 @@ impl Shared<'_> {
                         continue;
                     }
                     Verdict::KeepAndStop => return,
+                    Verdict::Remove(kept::Reason::NotFound) => {
+                        // The server answers 404 for a heap the caller can't see as well, such as another account's
+                        // on a shared root. Only a heap that reads fine says the item itself is gone.
+                        match self.read_heap_of(&directory).await {
+                            Ok(()) => kept::Reason::NotFound,
+                            Err(err) if is_unreachable(&err) => return,
+                            Err(err) => {
+                                tracing::debug!(dir = %directory.dir.display(), error = %err, "kept a directory: its heap couldn't be read");
+                                continue;
+                            }
+                        }
+                    }
                     Verdict::Remove(reason) => reason,
                 }
             };
@@ -736,14 +764,30 @@ impl Shared<'_> {
         Ok(item.value.closed_at)
     }
 
+    /// Reads the heap of `directory`, to tell an item that is gone from a heap the caller can't see.
+    async fn read_heap_of(&self, directory: &Kept) -> Result<(), CliError> {
+        let client = self.app.client(self.server.clone())?;
+        let token = self.app.access_token(&client).await?;
+        let handle = HeapHandle {
+            team: directory.team.clone(),
+            heap: directory.heap.clone(),
+        };
+        let api = HeapApi {
+            client: &client,
+            token: &token,
+            heap: &handle,
+        };
+        api.get::<HeapDto>(&[], NO_QUERY).await.map(|_| ())
+    }
+
     /// Renames `directory` out of the way and deletes it, then its heap and team directories if that left them empty.
     /// The rename is what the lock covers: deleting a clone and its caches takes long.
     async fn remove_kept(&self, root: &Path, directory: &Kept, reason: kept::Reason) {
         let warn = |err: &dyn std::fmt::Display| {
             self.note(&format!("warning: couldn't remove {}: {err}", directory.dir.display()));
         };
-        let away = match self.live_dirs.rename_away(root, &directory.dir) {
-            // A run started in it since the sweep listed it.
+        let away = match self.live_dirs.rename_away(root, &directory.dir, directory.modified) {
+            // A run is in it, or started in it since the sweep listed it.
             None => return,
             Some(Ok(away)) => away,
             Some(Err(err)) => return warn(&err),
