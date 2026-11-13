@@ -63,7 +63,7 @@ impl Services {
         let mut turns_taken_back = 0_usize;
         let mut questions_withdrawn = 0_usize;
         let mut defined: Vec<&Item> = Vec::new();
-        if let Some(scope) = &scope {
+        if scope.is_some() {
             let open_questions = store::questions::list_questions_locking(&txn, note.id)
                 .await?
                 .iter()
