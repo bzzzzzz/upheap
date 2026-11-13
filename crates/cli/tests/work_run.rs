@@ -420,6 +420,99 @@ async fn heartbeats_keep_a_long_run_alive_past_the_lapse() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_heartbeat_the_server_refuses_is_said_once_and_again_when_heard() -> Result<()> {
+    // Arrange: an agent that waits for the test.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: the server's clock runs 20 minutes without a new sign-in. The access token has expired there, so the
+    // heartbeats are refused, and the run has not lapsed. The test waits for several tries, signs in again, and waits for one to be heard.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let waiting = async {
+        entered.notified().await;
+        server.advance(Duration::from_minutes(20));
+        let loads = cli.tokens.loads();
+        wait_until("the first refused heartbeat to be said", || {
+            stderr.contents().contains("couldn't tell the server")
+        })
+        .await?;
+        wait_until("more tries", || cli.tokens.loads() >= loads + 4).await?;
+        cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
+        wait_until("the heartbeat to be heard", || {
+            stderr.contents().contains("The server hears the run again.")
+        })
+        .await?;
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stderr, "couldn't tell the server the run is still going"),
+        elements_are![all![
+            contains_substring(note.as_str()),
+            contains_substring("Trying again every 1 second.")
+        ]]
+    );
+    expect_that!(
+        lines_with(&outcome.stderr, "The server hears the run again."),
+        elements_are![contains_substring(note.as_str())]
+    );
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heartbeat_goes_out_when_the_machine_wakes_from_sleep() -> Result<()> {
+    // Arrange: heartbeats far apart by any clock the test waits on, checked often. An agent that waits.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_secs(10 * 60);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+
+    // Act: twice, the machine sleeps 20 minutes: both clocks move on, the CLI signs in again, and the test waits
+    // for the heartbeat that goes out on waking. Then the CLI's clock moves on a little more, so another is due;
+    // the loop sends one only when the first has been heard. Without it the run would have lapsed at 30 minutes.
+    let running = cli.run_work(ONCE, &tool);
+    let waiting = async {
+        entered.notified().await;
+        for _ in 0..2 {
+            server.advance(Duration::from_minutes(20));
+            cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
+            let loads = cli.tokens.loads();
+            cli.clock_offset.fetch_add(20 * 60 * 1000, Ordering::SeqCst);
+            wait_until("the heartbeat on waking", || cli.tokens.loads() > loads).await?;
+            cli.clock_offset.fetch_add(11 * 60 * 1000, Ordering::SeqCst);
+            wait_until("the next heartbeat", || cli.tokens.loads() > loads + 1).await?;
+        }
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn taking_the_turn_back_mid_run_stops_the_tool_and_the_line_says_so() -> Result<()> {
     // Arrange: an agent that never ends on its own.
     let (server, ada, mut cli, note) = with_prepared_note().await?;

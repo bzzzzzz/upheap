@@ -678,8 +678,9 @@ section is how it maps onto this API.
 7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
-   sends a heartbeat every 5 minutes, six chances inside the 30 minutes after which a run lapses, and stops the tool
-   when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
+   sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
+   machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is said on stderr and
+   tried again every 30 seconds until one is heard. The loop stops the tool when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
    only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because

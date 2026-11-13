@@ -8,7 +8,7 @@ use std::future::Future;
 use std::io::Write;
 use std::pin::Pin;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
@@ -433,6 +433,10 @@ pub struct TestCli {
     /// How often `work run --root` sweeps its root after the sweep it does when it starts. Long by default, so a
     /// looping test doesn't ask the server about every kept directory between claims; a test of that shortens it.
     pub sweep_every: StdDuration,
+    /// How often `work run` looks at the clock for a heartbeat that is due, and waits to try a failed one again.
+    pub heartbeat_check: StdDuration,
+    /// Milliseconds the CLI's clock runs ahead of the real one, so a test can have the machine "sleep".
+    pub clock_offset: Arc<AtomicI64>,
     browser: Arc<dyn Browser>,
 }
 
@@ -458,6 +462,8 @@ impl TestCli {
             stdin: Vec::new(),
             heartbeat_every: StdDuration::from_secs(60),
             sweep_every: StdDuration::from_secs(60 * 60),
+            heartbeat_check: StdDuration::from_millis(5),
+            clock_offset: Arc::new(AtomicI64::new(0)),
             browser: Arc::new(NoBrowser),
         })
     }
@@ -500,6 +506,7 @@ impl TestCli {
         stderr: &Buffer,
         work: WorkDeps,
     ) -> Outcome {
+        let offset = self.clock_offset.clone();
         let deps = Deps {
             env: self.env.clone(),
             tokens: self.tokens.clone(),
@@ -507,7 +514,12 @@ impl TestCli {
             stdin: Box::new(std::io::Cursor::new(self.stdin.clone())),
             stdout,
             stderr: Box::new(stderr.clone()),
-            clock: Arc::new(jiff::Timestamp::now),
+            clock: Arc::new(move || {
+                let ahead = jiff::SignedDuration::from_millis(offset.load(Ordering::SeqCst));
+                jiff::Timestamp::now()
+                    .checked_add(ahead)
+                    .unwrap_or_else(|_| jiff::Timestamp::now())
+            }),
             work,
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
@@ -526,6 +538,7 @@ impl TestCli {
             interrupts: Box::new(move || interrupts),
             idle_wait: StdDuration::from_millis(20),
             heartbeat_every: self.heartbeat_every,
+            heartbeat_check: self.heartbeat_check,
             finish_retry: StdDuration::from_millis(5),
             sweep_every: self.sweep_every,
         }
@@ -817,6 +830,7 @@ impl Agent {
                 interrupts: Box::new(move || no_interrupts),
                 idle_wait: StdDuration::from_millis(1),
                 heartbeat_every: StdDuration::from_millis(1),
+                heartbeat_check: StdDuration::from_millis(1),
                 finish_retry: StdDuration::from_millis(1),
                 sweep_every: StdDuration::ZERO,
             },
