@@ -1132,7 +1132,7 @@ fn local_time(ms: i64, zone: Option<&str>) -> String {
 fn spoken_duration(wait: Duration) -> String {
     let seconds = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
     let seconds = seconds.max(1);
-    let (count, unit) = if seconds >= 60 && seconds % 60 == 0 {
+    let (count, unit) = if seconds >= 60 && seconds.is_multiple_of(60) {
         (seconds / 60, "minute")
     } else {
         (seconds, "second")
@@ -1174,6 +1174,16 @@ mod tests {
             }),
             body: String::new(),
         })
+    }
+
+    #[gtest]
+    fn a_wait_is_spoken_in_whole_seconds_or_minutes_and_at_least_a_second() {
+        let spoken = |millis| spoken_duration(Duration::from_millis(millis));
+        expect_that!(spoken(5), eq("1 second"));
+        expect_that!(spoken(30_000), eq("30 seconds"));
+        expect_that!(spoken(60_000), eq("1 minute"));
+        expect_that!(spoken(300_000), eq("5 minutes"));
+        expect_that!(spoken(90_000), eq("90 seconds"));
     }
 
     #[gtest]
