@@ -2111,3 +2111,93 @@ async fn a_worker_claims_again_while_another_run_goes_on() -> Result<()> {
     expect_that!(tool.starts().len(), eq(3));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_sign_in_that_changes_under_the_loop_does_not_make_the_sweep_remove_the_first_accounts_directories()
+-> Result<()> {
+    // Arrange: sweeps before every claim, and Ada's kept directory for her open item. Bob can't see that item, so
+    // asked with his token the server answers 404, as it does for any item that is not the asker's.
+    let (server, ada, mut cli, note) = with_a_note_nobody_claims().await?;
+    cli.sweep_every = StdDuration::ZERO;
+    let marker = owner_marker(&server, &ada).await?;
+    let bob = server.register("bob", "Bob").await?;
+    let bobs_tokens = server.sign_in_cli(&bob).await?;
+    let parent = tempfile::tempdir()?;
+    let adas = kept_directory(parent.path(), &marker, "ada", "personal", &note, 1)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+    let args = [LOOP, &["--root", &root_arg]].concat();
+    let tool = idle_agent(None);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+
+    // Act: once the loop has swept and found nothing to do as Ada, `upheap auth login` as Bob replaces the stored
+    // token. The next sweep is Bob's; his claim after it is refused, which ends the loop.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let swapping = async {
+        wait_until("the loop to have swept and found nothing", || {
+            stdout.contents().contains("Nothing to do")
+        })
+        .await?;
+        cli.tokens.save(&server.url, &bobs_tokens)?;
+        // Long enough for several rounds of sweep and claim; the refused claim ends the loop sooner.
+        tokio::time::sleep(StdDuration::from_millis(500)).await;
+        // Sent only in case the loop is still going; it has usually ended on its own by now.
+        let _ = interrupt.send(Interrupt::CtrlC);
+        anyhow::Ok(())
+    };
+    let (_outcome, swapped) = tokio::join!(looping, swapping);
+
+    // Assert
+    swapped?;
+    expect_that!(
+        std::fs::read_to_string(adas.join("work.txt")).ok(),
+        some(eq("what the agent left"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_directory_holding_another_accounts_work_is_not_used_and_the_loop_goes_on() -> Result<()> {
+    // Arrange: a claimable note, and a kept directory for it whose marker names another server.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let other_server = marker_for("http://other.example", "u-9");
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let held = kept_directory(root, &other_server, "ada", "personal", &note, 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+    let tool = idle_agent(None);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let args = [LOOP, &["--root", &root_arg]].concat();
+    let text = format!(
+        "{} holds work made through another server or account; clear it or use another --root.",
+        held.display()
+    );
+
+    // Act: the turn is claimed again after the first failure (it is stuck only after three), so a second failure
+    // shows the loop went on.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let pressing = async {
+        let waited = wait_until("the held directory to fail a second run", || {
+            stdout.contents().matches(text.as_str()).count() >= 2
+        })
+        .await;
+        // Always sent, so a failed wait ends the test instead of hanging it.
+        interrupt.send(Interrupt::CtrlC)?;
+        waited
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+
+    // Assert: the tool never started, the directory is as it was, and nothing ended the loop but the Ctrl-C.
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(std::fs::read_to_string(held.join(".upheap-run"))?, eq(&other_server));
+    expect_that!(
+        std::fs::read_to_string(held.join("work.txt"))?,
+        eq("what the agent left")
+    );
+    Ok(())
+}

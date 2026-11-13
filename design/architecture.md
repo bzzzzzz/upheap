@@ -671,29 +671,34 @@ section is how it maps onto this API.
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
-   item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
-   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names one
-   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run, and the tool makes it if it is
-   missing, writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
-   record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
-   left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
-   `.upheap-run` in it: the server and user's id the loop works as, the run, and when it started, with the file's
-   modification time as when a run last started there. The loop sweeps the root when it starts and about hourly
-   before a claim, one worker at a time. It removes a directory whose marker is 7 days old, with no request. It asks
-   the server only about directories whose marker names this server and this user, so a root shared by two servers
-   or accounts never loses one's directories to the other's 404s; the others are kept until they are 7 days old.
-   For those, the server answering 404 removes (the item is gone, moved to another heap, or in a heap the person
-   can no longer see, which it also answers 404), and so does a closed item. Any other failure to read an item,
-   403 included, keeps the directory, and a server out of reach ends the sweep. Only directories at that depth with
-   a marker are looked at, so the old `<key>-<run id>` ones and anything else are never touched, and a directory a
-   run of this loop is in or about to start in is skipped. A removal renames the directory away under the lock that
-   guards that set and deletes it after releasing it, since deleting a clone is slow.
-   There the tool is allowed any command, edit and read, passed on its
-   command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
-   wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
-   `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's
-   own and before the deny of `upheap auth` that every run gets, so a tool the runner's instructions ask for can be
-   allowed for the loop without loosening every session on the machine. With `--instructions` the brief also carries
+   item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do
+   a task it may also edit files, and every other command follows the person's own Claude settings, since Upheap keeps
+   no tool list of its own. With `--root` the loop names one directory for each item, `<root>/<team>/<heap>/<key>`
+   from the claimed run, and the tool makes it if it is missing, writes its own instructions into it (for Claude,
+   `CLAUDE.md`), and starts there. The path is the whole record, with no index file to fall out of step. Later runs on
+   the item start in the same directory as it was left, so a clone and its caches are paid for once; the agent's
+   session does not carry over. Each start rewrites `.upheap-run` in it: the server and user's id the loop works as,
+   the run, and when it started, with the file's modification time as when a run last started there. The loop sweeps
+   the root when it starts and about hourly before a claim, one worker at a time. It removes a directory whose marker
+   is 7 days old, with no request. It asks the server only about directories whose marker names this server and this
+   user, so a root shared by two servers or accounts never loses one's directories to the other's 404s; the others are
+   kept until they are 7 days old. The user is whoever is signed in at the time: the loop reads `GET /me` at each
+   sweep and before each run's marker is written, since `upheap auth login` as another account can change it under a
+   running loop; if the sweep can't read it, only the age rule applies. A run never uses a directory whose marker
+   names another server or account: it fails with a text that says so, the directory is left as it is, and the loop
+   goes on to the next claim (the server makes the turn stuck after repeated failures, which tells the person). For
+   the loop's own, the server answering 404 removes (the item is gone, moved to another heap, or in a heap the person
+   can no longer see, which it also answers 404), and so does a closed item. Any other failure to read an item, 403
+   included, keeps the directory, and a server out of reach ends the sweep. Only directories at that depth with a
+   marker are looked at, so the old `<key>-<run id>` ones and anything else are never touched, and a directory a run
+   of this loop is in or about to start in is skipped. A removal renames the directory away under the lock that guards
+   that set and deletes it after releasing it, since deleting a clone is slow. There the tool is allowed any command,
+   edit and read, passed on its command line, since Claude ignores a settings file's allow rules in a directory nobody
+   has trusted. That is wide for now, so in such a directory the limits above don't hold. The runner can add allow
+   rules of their own with `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the
+   command line after Upheap's own and before the deny of `upheap auth` that every run gets, so a tool the runner's
+   instructions ask for can be allowed for the loop without loosening every session on the machine. With
+   `--instructions` the brief also carries
    the runner's own instructions, between Upheap's and the heap's context: a heap's context is shared by everyone who
    works the heap and says what the work is, and how it is done is for the one who does it, so each
    runner keeps that in a file of its own and it wins over the context on how. The tool runs in its own process

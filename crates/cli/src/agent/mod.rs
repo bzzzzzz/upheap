@@ -88,6 +88,12 @@ pub enum ToolError {
         #[source]
         source: std::io::Error,
     },
+    /// The run's directory holds work made through another server or account. About that item alone.
+    #[error(
+        "{} holds work made through another server or account; clear it or use another --root.",
+        dir.display()
+    )]
+    DirectoryHeld { dir: PathBuf },
 }
 
 /// `root` as an absolute path, made if it isn't there: where `work run --root` puts each run's directory. Checked
