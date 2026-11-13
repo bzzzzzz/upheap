@@ -49,7 +49,8 @@ The usual order of work
    Work with parts is a task: `upheap item add --task`, or `upheap item to-task` for a note that turns out to be one,
    then a step for each part, ticked as each one is finished.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
-   open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead.
+   open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead,
+   and `upheap work hand-back --reason "<why>"` gives the turn back when there is nothing to do.
    `upheap parameter list` shows the heap's parameters and their options; give an item one with
    `--parameter NAME=OPTION` on `upheap item add` or `upheap item edit`. An admin sets a heap's parameters up with
    `upheap parameter add` and `upheap parameter edit`, and their options with `upheap parameter option add`, `edit`

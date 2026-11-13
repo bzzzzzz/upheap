@@ -1,6 +1,6 @@
 //! Runs: one go an agent has at the turn of an item (Work with agents, Runs and The agent loop).
 //!
-//! A run is claimed from the queue, holds one item, and ends one of four ways. An agent that goes quiet is not waited
+//! A run is claimed from the queue, holds one item, and ends one of five ways. An agent that goes quiet is not waited
 //! for: a run nobody has heard from in [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written
 //! as failed the next time something touches it (architecture.md, Runs).
 
@@ -36,10 +36,18 @@ pub enum RunEnd {
     Failed,
     /// The person took the turn back while the run was live. Not a failure.
     TakenBack,
+    /// It found nothing to do for the goal and gave the turn back to the person. Not a failure.
+    HandedBack,
 }
 
 impl RunEnd {
-    pub const ALL: [Self; 4] = [Self::Reached, Self::Asked, Self::Failed, Self::TakenBack];
+    pub const ALL: [Self; 5] = [
+        Self::Reached,
+        Self::Asked,
+        Self::Failed,
+        Self::TakenBack,
+        Self::HandedBack,
+    ];
 
     /// Stable code used in storage and the API. Never renamed.
     pub const fn code(self) -> &'static str {
@@ -48,6 +56,7 @@ impl RunEnd {
             Self::Asked => "asked",
             Self::Failed => "failed",
             Self::TakenBack => "taken_back",
+            Self::HandedBack => "handed_back",
         }
     }
 
@@ -56,7 +65,7 @@ impl RunEnd {
     }
 }
 
-/// What a run says it reached: trimmed, 1 to 2,000 characters.
+/// What a run says it reached, or why it handed the turn back: trimmed, 1 to 2,000 characters.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunResult(String);
 
@@ -65,6 +74,11 @@ impl RunResult {
 
     pub fn parse(raw: &str) -> Result<Self, ValidationError> {
         parse_required(raw, Field::Result, Self::MAX_CHARS).map(Self)
+    }
+
+    /// Why a run handed the turn back, which is stored as its result: the same text rules, reported as `reason`.
+    pub fn parse_reason(raw: &str) -> Result<Self, ValidationError> {
+        parse_required(raw, Field::Reason, Self::MAX_CHARS).map(Self)
     }
 
     pub fn as_str(&self) -> &str {
@@ -114,7 +128,7 @@ impl RunLink {
 pub struct RunEnded {
     pub end: RunEnd,
     pub at: Timestamp,
-    /// What the run said it reached. Set exactly when it ended as [`RunEnd::Reached`].
+    /// What the run said it reached. Set exactly when it ended as [`RunEnd::Reached`] or [`RunEnd::HandedBack`], where it is the reason.
     pub result: Option<RunResult>,
     pub links: Vec<RunLink>,
     /// Why it failed. Set exactly when it ended as [`RunEnd::Failed`].
@@ -524,6 +538,7 @@ mod tests {
         for end in RunEnd::ALL {
             expect_that!(RunEnd::from_code(end.code()), some(eq(end)));
         }
+        expect_that!(RunEnd::from_code("handed_back"), some(eq(RunEnd::HandedBack)));
         expect_that!(RunEnd::from_code("lapsed"), none());
     }
 }

@@ -1232,6 +1232,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work/runs/{run}/hand-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Says the run found nothing to do for the turn's goal, because the item is already there or the work was done
+         *     elsewhere. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and
+         *     `turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the
+         *     item is the person's again.
+         */
+        post: operations["hand_back"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/work/runs/{run}/heartbeat": {
         parameters: {
             query?: never;
@@ -1437,7 +1459,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -1721,6 +1743,11 @@ export interface components {
          * @enum {string}
          */
         Goal: "with_context" | "defined" | "done";
+        /** @description Says a run found nothing to do for the turn's goal. */
+        HandBackRequest: {
+            /** @description Why there was nothing to do, in a line or two: plain text, 1 to 2,000 characters. */
+            reason: string;
+        };
         Heap: {
             /**
              * @description Whether every item added to the heap is sent to an agent to take it one stable state forward: a note to with
@@ -2741,7 +2768,7 @@ export interface components {
             /** @description The item the run holds. */
             item: components["schemas"]["WorkItem"];
             links: string[];
-            /** @description What the run said it reached; `null` unless it ended as `reached`. */
+            /** @description What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or `handed_back`. */
             result?: string | null;
             /**
              * Format: int64
@@ -2758,7 +2785,7 @@ export interface components {
          *     - `taken_back`: the person took the turn back while the run was live. Not a failure.
          * @enum {string}
          */
-        RunEnd: "reached" | "asked" | "failed" | "taken_back";
+        RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back";
         SavedView: {
             allowed_actions: components["schemas"]["SavedViewAction"][];
             /**
@@ -7483,6 +7510,68 @@ export interface operations {
                 };
             };
             /** @description `invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    hand_back: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The run's ID, from the claim. */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandBackRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such run, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `run_over`: the run has ended or lapsed, or its turn was taken back */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `reason`): empty or over 2,000 characters */
             422: {
                 headers: {
                     [name: string]: unknown;

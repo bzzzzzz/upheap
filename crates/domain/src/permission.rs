@@ -78,6 +78,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
         | AuditAction::TurnReached
+        | AuditAction::TurnHandedBack
         | AuditAction::TurnRetried
         | AuditAction::TagCreated
         | AuditAction::TagUpdated

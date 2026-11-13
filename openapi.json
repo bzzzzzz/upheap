@@ -6751,6 +6751,96 @@
         ]
       }
     },
+    "/api/v1/work/runs/{run}/hand-back": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Says the run found nothing to do for the turn's goal, because the item is already there or the work was done\nelsewhere. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and\n`turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the\nitem is the person's again.",
+        "operationId": "hand_back",
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "description": "The run's ID, from the claim.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandBackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_over`: the run has ended or lapsed, or its turn was taken back",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `reason`): empty or over 2,000 characters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/work/runs/{run}/heartbeat": {
       "post": {
         "tags": [
@@ -7255,6 +7345,7 @@
           "turn_opened",
           "turn_taken_back",
           "turn_reached",
+          "turn_handed_back",
           "turn_retried",
           "tag_created",
           "tag_updated",
@@ -8000,6 +8091,20 @@
           "defined",
           "done"
         ]
+      },
+      "HandBackRequest": {
+        "type": "object",
+        "description": "Says a run found nothing to do for the turn's goal.",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Why there was nothing to do, in a line or two: plain text, 1 to 2,000 characters."
+          }
+        },
+        "additionalProperties": false
       },
       "Heap": {
         "type": "object",
@@ -10532,7 +10637,7 @@
               "string",
               "null"
             ],
-            "description": "What the run said it reached; `null` unless it ended as `reached`."
+            "description": "What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or `handed_back`."
           },
           "started_at": {
             "type": "integer",
@@ -10548,7 +10653,8 @@
           "reached",
           "asked",
           "failed",
-          "taken_back"
+          "taken_back",
+          "handed_back"
         ]
       },
       "SavedView": {

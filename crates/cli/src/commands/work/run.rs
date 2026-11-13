@@ -2,7 +2,7 @@
 //!
 //! It claims the next item of the queue, starts the agent tool on it with a brief, keeps the claim alive, records
 //! how the run ended and what it cost, and waits when there is nothing to do. The server decides how a run ended
-//! (it reached its goal, it asked, or it failed); the loop only reports what the tool did. The tool sits behind
+//! (it reached its goal, it handed the turn back, it asked, or it failed); the loop only reports what the tool did. The tool sits behind
 //! [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass their own.
 
 use std::path::PathBuf;
@@ -639,9 +639,10 @@ impl Shared<'_> {
                 result = &mut tool => return Driven::Ended(result),
                 _ = heartbeat.tick(), if alive => {
                     if self.is_run_over(run).await {
-                        // A run that said reached is over too, with its tool still on its way out: that one is left
-                        // to end, so its cost is recorded. Any other run that is over was taken back or lapsed.
-                        if !self.has_reached(run).await {
+                        // A run that said reached or handed back is over too, with its tool still on its way out:
+                        // that one is left to end, so its cost is recorded. Any other run that is over was taken
+                        // back or lapsed.
+                        if !self.has_ended_itself(run).await {
                             return Driven::Over;
                         }
                         alive = false;
@@ -671,11 +672,11 @@ impl Shared<'_> {
         }
     }
 
-    /// Whether `run` ended as reached. Asked through `finish` with nothing to record, which leaves a run that has
-    /// ended as it is and answers with it.
-    async fn has_reached(&self, run: &RunDto) -> bool {
+    /// Whether `run` ended by the agent's own say: as reached, or handed back. Asked through `finish` with nothing to
+    /// record, which leaves a run that has ended as it is and answers with it.
+    async fn has_ended_itself(&self, run: &RunDto) -> bool {
         match self.finish(run, &FinishRequestDto::default()).await {
-            Ok(finished) => finished.value.end == Some(RunEndDto::Reached),
+            Ok(finished) => matches!(finished.value.end, Some(RunEndDto::Reached | RunEndDto::HandedBack)),
             Err(_) => false,
         }
     }

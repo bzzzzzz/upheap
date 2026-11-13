@@ -3,11 +3,12 @@
 //! A turn write never changes the item's version, and an item write never changes a turn's, so sending an item
 //! doesn't conflict with someone editing it (architecture.md, Data model). Both use cases return the whole item, so
 //! a client re-renders from one response. Starting or closing an item, and archiving its heap, take its turn back
-//! too, through [`Services::take_back_open_turn`].
+//! too, through [`Services::take_back_open_turn`]; a turn whose item is at its goal ends as reached through
+//! [`Services::end_met_turn`].
 
 use domain::audit::AuditAction;
 use domain::heap::Heap;
-use domain::item::{ItemError, Kind, StateKind};
+use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{Run, RunEnd};
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource};
@@ -15,7 +16,9 @@ use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
-use crate::audit::{describe_new_turn, describe_retry, describe_take_back, describe_withdrawal};
+use crate::audit::{
+    GoalMetHow, describe_goal_met, describe_new_turn, describe_retry, describe_take_back, describe_withdrawal,
+};
 use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
 
@@ -221,6 +224,83 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(txn, &entry).await?;
+        self.release_turn_work(txn, heap, principal, turn, why, now).await?;
+        Ok(true)
+    }
+
+    /// Ends `turn`, which the caller read under the heap lock, as reached because its item is at the goal: `by` the
+    /// person (`principal`, outside a run), with a `turn_reached` entry saying how. `item_after` is the item as it
+    /// stands, and `before` its stage before the edit that moved it (the same stage, for a claim that found it there).
+    /// Says nothing was done, with `None`, when the turn had already ended.
+    ///
+    /// Like [`Self::take_back_turn`], the turn's unended runs end as taken back and the open questions asked in them
+    /// are withdrawn, with `goal_met`. A turn sent all the way opens the next one, and it is returned. The caller holds
+    /// the heap lock and writes the item's own entry first, so the history reads in the order things happened.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the two callers.
+    pub(crate) async fn end_met_turn(
+        &self,
+        txn: &impl ConnectionTrait,
+        heap: &Heap,
+        principal: Principal,
+        turn: &Turn,
+        item_after: &Item,
+        before: Stage,
+        how: GoalMetHow,
+        now: Timestamp,
+    ) -> Result<Option<Turn>, ServiceError> {
+        let ended = turn.reached(principal.user_id, now);
+        if !store::turns::end_turn(txn, &ended).await? {
+            return Ok(None);
+        }
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::TurnReached,
+            item_after,
+            describe_goal_met(turn.goal, before, item_after.stage, how),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        self.release_turn_work(txn, heap, principal, turn, TakeBackWhy::GoalMet, now)
+            .await?;
+        let next = turn.follow_on(TurnId::from_uuid(self.new_id(now)), item_after, now);
+        if let Some(next) = &next {
+            store::turns::insert_turn(txn, next).await?;
+            let entry = self.item_audit_entry(
+                heap,
+                principal,
+                AuditAction::TurnOpened,
+                item_after,
+                describe_new_turn(next),
+                now,
+            );
+            store::audit::insert_audit_entry(txn, &entry).await?;
+        }
+
+        tracing::info!(
+            heap_id = %heap.id,
+            item_id = %item_after.id,
+            goal = turn.goal.code(),
+            how = how.code(),
+            next_goal = next.as_ref().map_or("none", |next| next.goal.code()),
+            user_id = %principal.user_id,
+            "turn ended at its goal"
+        );
+        Ok(next)
+    }
+
+    /// Ends the unended runs of `turn`, which has just ended, as taken back (not a failure, live or lapsed), and
+    /// withdraws the open questions asked in them, each with its `question_withdrawn` entry and `why`; the person's
+    /// own questions stay open.
+    pub(crate) async fn release_turn_work(
+        &self,
+        txn: &impl ConnectionTrait,
+        heap: &Heap,
+        principal: Principal,
+        turn: &Turn,
+        why: TakeBackWhy,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
         for run in store::runs::list_unended_runs_for_turn_locking(txn, turn.id).await? {
             let ended = run.ended_as(RunEnd::TakenBack, now, None, Vec::new(), None);
             store::runs::end_run(txn, &ended).await?;
@@ -244,6 +324,6 @@ impl Services {
             );
             store::audit::insert_audit_entry(txn, &entry).await?;
         }
-        Ok(true)
+        Ok(())
     }
 }

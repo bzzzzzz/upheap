@@ -116,7 +116,7 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
   person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
-  prepare setting did, then when and by whom it ended and how (taken back, or reached) and how many of its runs in a
+  prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached) and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
   with someone editing it, and sending and taking back need no `If-Match`. A turn sent all the way still goes one
@@ -131,7 +131,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   changes ranking.
 - **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
-  ended (`reached`, `asked`, `failed` or `taken_back`), what it said it reached and made (`result`, `links`), why it
+  ended (`reached`, `asked`, `failed`, `taken_back` or `handed_back`), what it said it reached and made (`result`, `links`), why it
   failed, and its cost in micro-dollars. Like turns, runs are never deleted and never bump the item's `version`.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
@@ -147,9 +147,14 @@ The tables and columns are in the migrations. These are the conventions they fol
   has claimed since. Retry writes that lapsed run as failed, then resets the count, so it doesn't count twice. A stuck
   turn is out of the queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of
   its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
-  failure, and withdraws the open questions asked in a run of it; the person's own stay open.
+  failure, and withdraws the open questions asked in a run of it; the person's own stay open. A turn also ends as
+  reached, with no run, when its item's stage is at the turn's goal (`Turn::goal_met_by`; never for done): at the
+  person's edit that sets the stage (`how: stage_set`), or, as a safety net for any other way an item got there, when
+  a claim finds it (`already_met`) before choosing, so a met turn never costs a run; `next` skips such turns without
+  writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
+  ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, comments, and the run's own heartbeat, reached and finish) or it is
+  `extract.rs` (the item's `PATCH`, steps, questions, comments, and the run's own heartbeat, reached, hand-back and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
   and touches `heard_at`. Starting an item in a run keeps its turn. Audit entries of a write in a run carry
@@ -662,7 +667,7 @@ section is how it maps onto this API.
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
    sends a heartbeat every 5 minutes, six chances inside the 30 minutes after which a run lapses, and stops the tool
    when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
-   only if the tool itself failed, why: the server decides whether the run reached its goal, asked, or failed, and
+   only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an

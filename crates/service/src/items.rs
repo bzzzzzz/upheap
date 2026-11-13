@@ -30,7 +30,7 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
-use crate::audit::{describe_new_item, describe_new_turn, describe_withdrawal, diff_freed, diff_items};
+use crate::audit::{GoalMetHow, describe_new_item, describe_new_turn, describe_withdrawal, diff_freed, diff_items};
 use crate::{Principal, RandomSource, ServiceError, Services};
 
 /// A client may keep ranking at an `as_of` for at most this long. Older values are replaced by the current time.
@@ -807,6 +807,26 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        // A person setting the stage to a turn's goal or past it is the agent's work done by hand: the turn ends as
+        // reached, after the item's entry so the history reads in order. Starting or closing took the turn back above.
+        if principal.run.is_none() && saved.stage != current.stage {
+            let open = store::turns::find_open_turn_locking(&txn, saved.id)
+                .await?
+                .filter(|turn| turn.goal_met_by(saved.stage));
+            if let Some(turn) = open {
+                self.end_met_turn(
+                    &txn,
+                    &access.heap,
+                    principal,
+                    &turn,
+                    &saved,
+                    current.stage,
+                    GoalMetHow::StageSet,
+                    now,
+                )
+                .await?;
+            }
+        }
         let children = ItemChildren::read_locking(&txn, saved.id).await?;
         let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;

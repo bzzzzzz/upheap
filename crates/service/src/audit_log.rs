@@ -365,6 +365,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::TurnOpened, _) => ("opened a turn on", true),
         (AuditAction::TurnTakenBack, _) => ("took back a turn on", true),
         (AuditAction::TurnReached, _) => ("reached the goal of a turn on", true),
+        (AuditAction::TurnHandedBack, _) => ("handed back a turn on", true),
         (AuditAction::TurnRetried, _) => ("let agents try again on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
@@ -409,6 +410,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::CommentAdded
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
+        | AuditAction::TurnHandedBack
         | AuditAction::TurnRetried
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
@@ -440,7 +442,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 50] = [
+const FIELD_ORDER: [&str; 52] = [
     "step",
     "step_title",
     "step_context",
@@ -461,6 +463,8 @@ const FIELD_ORDER: [&str; 50] = [
     "line",
     "source",
     "why",
+    "how",
+    "reason",
     "blocker_done",
     "title",
     "heap",
@@ -606,6 +610,8 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "line" => "Line",
         "source" => "Source",
         "why" => "Why",
+        "how" => "How",
+        "reason" => "Reason",
         "blocker_done" => "Blocker done",
         "agents_prepare" => "Agents prepare new notes",
         "title" => "Title",
@@ -660,6 +666,7 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "goal" => describe_goal(Goal::from_code(value.as_str()?)?).to_owned(),
         "source" => describe_turn_source(TurnSource::from_code(value.as_str()?)?).to_owned(),
         "why" => describe_why(TakeBackWhy::from_code(value.as_str()?)?).to_owned(),
+        "how" => describe_how(value.as_str()?)?.to_owned(),
         "question_kind" => describe_question_kind(QuestionKind::from_code(value.as_str()?)?).to_owned(),
         "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
@@ -750,6 +757,17 @@ const fn describe_why(why: TakeBackWhy) -> &'static str {
         TakeBackWhy::Started => "Started",
         TakeBackWhy::Closed => "Closed",
         TakeBackWhy::HeapArchived => "Heap archived",
+        TakeBackWhy::GoalMet => "Goal met",
+        TakeBackWhy::HandedBack => "Handed back",
+    }
+}
+
+/// How a turn came to be reached without a run saying so, as the entry's `how` records it.
+fn describe_how(code: &str) -> Option<&'static str> {
+    match code {
+        "stage_set" => Some("Stage set by hand"),
+        "already_met" => Some("Already at the goal"),
+        _ => None,
     }
 }
 

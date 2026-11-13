@@ -482,12 +482,13 @@ rendered and edits them as Markdown; the command-line client reads and writes th
 
 **Turn.** One piece of an agent's work on one item: from the stable state it's at to the next. It has a
 **reach** (one state, or all the way) and is opened by the person's go-ahead or by the heap's prepare setting. It
-is open, then ends as reached or taken back. A reached turn can later be marked **redone**. An open turn can be
+is open, then ends as reached, handed back or taken back. It also ends as reached when the person sets the item's
+stage to the turn's goal or past it. A reached turn can later be marked **redone**. An open turn can be
 **stuck**. An item has at most one open turn. A go-ahead can carry a line from the person, shown to the turn's
 runs.
 
 **Run.** One start of the agent tool on one item, inside a turn. It records when it started and ended, how it
-ended (reached, asked, failed), the state it started from and reached, a **result** (a line or two and links to
+ended (reached, asked, failed, handed back), the state it started from and reached, a **result** (a line or two and links to
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
@@ -544,13 +545,16 @@ change it makes carries the run it was made in.
    formula, like the others.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
-5. A run ends in one of three ways: **reached**, with its result; **asked**, having attached at least one
-   question; or **failed**. A claim that lapses counts as failed.
+5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
+   question; **handed back**, with a reason, when it finds nothing to do for the goal (the turn goes back to the
+   person, and it isn't a failure); or **failed**. A claim that lapses counts as failed.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
    in the table and has no open question. Otherwise the run counts as failed.
 7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
    wrong. The person retries it or takes it back.
-8. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
+8. A turn whose item is already at its goal stage or past it is never claimed: the claim ends it as reached,
+   credited to the person, and takes the next item. A goal of done is never met this way.
+9. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
 
 **All the way**
 
@@ -606,8 +610,9 @@ change it makes carries the run it was made in.
 1. Take back: the turn ends as taken back, the claim is dropped, and the agent's open questions on the item are
    withdrawn. What the agent wrote stays. A run still going has its next write refused.
 2. Starting, closing or reopening an item by hand takes it back first.
-3. Editing an item an agent holds is allowed and doesn't take it back. The agent's write on the stale version
-   is refused, and it reads the item again.
+3. Editing an item an agent holds is allowed and doesn't take it back, except that setting its stage to the turn's
+   goal or past it ends the turn as reached by the person (All the way §1 then applies). The agent's write on the
+   stale version is refused, and it reads the item again.
 4. Archiving a heap takes back every open turn in it.
 
 **History**
@@ -786,7 +791,8 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | Constant | Core | Filling in context is the first turn of every note |
 | C5 | `step add`, `tick`, `drop`, `edit` | A1 | Constant | Core | Doing a task is ticking its steps |
 | C6 | `question ask`, `request`, `review` | A2, A6 | Constant | Core | The agent's only way to reach the person |
-| C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | A turn ends no other way |
+| C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | A turn ends no other way, bar a hand-back (C7a) |
+| C7a | `work hand-back`: the run found nothing to do and gives the turn back | A1 | Weekly | Enabler | Without it a run that finds the work done must say reached, or fail |
 | C8 | `item to-task` | A1 | Daily | Core | Golden path step 6 |
 | C9 | Splitting: `item add --from`, `item became` | A4 | Weekly | Core | Golden path step 6 |
 | C10 | `item to-step` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
@@ -1047,7 +1053,7 @@ Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after 
 --workers keep up to N runs going at once (1 to 8, default 1), each on its own item. Above 1, needs --root.
 The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
 prints, the state to reach, and the person's line.
-How a run ended is read off it: it said `work reached` and the check passed; or it left an open
+How a run ended is read off it: it said `work reached` and the check passed; or `work hand-back`; or it left an open
 question; otherwise it failed. Cost is what the tool reported, or blank.
 Ctrl-C: once, the current run (every current run, with --workers) finishes and the loop stops; twice, the runs are
 stopped and count as failed.
@@ -1129,6 +1135,7 @@ upheap item became n8c2d                                   after making things f
 
 upheap item done k3x9a                                     a task, once its reviews are approved
 upheap work reached --result "Rotation script merged." [--link https://example.com/pull/12]...
+upheap work hand-back --reason "It already has its context."
 
 --from     what the new thing was made from. With it, --need and --age are required: nothing is
            inherited silently. --age keep counts from the note's creation, --age new from now.
@@ -1140,7 +1147,7 @@ The quoted text is the short version, one line. --details-file is the long one, 
 instructions tell the agent to sum up there what the person needs from the item's context and the heap's.
 Each prints one line saying what changed, and --quiet prints the key of what was made.
 `item became` is refused while nothing was made from the item.
-`work reached` takes no item: the run knows it.
+`work reached` and `work hand-back` take no item: the run knows it.
 ```
 
 ```

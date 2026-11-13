@@ -129,6 +129,8 @@ pub enum Field {
     Heaps,
     /// What a run says it reached.
     Result,
+    /// Why a run handed the turn back.
+    Reason,
     /// The links a run reached with.
     Links,
     /// What a run cost, in US dollars.
@@ -169,6 +171,7 @@ impl Field {
             Self::Reach => "reach",
             Self::Heaps => "heaps",
             Self::Result => "result",
+            Self::Reason => "reason",
             Self::Links => "links",
             Self::CostUsd => "cost_usd",
         }

@@ -38,3 +38,5 @@ Ending the run
   anything you made that has an address. If it is refused, the message names what's missing: fix it and say
   reached again.
 - Then stop. Don't go further than the goal.
+- When there is nothing to do for this goal (the item is already at it, or the work was done elsewhere), say so with
+  `upheap work hand-back --reason "<why, in a line>"` and stop. Don't say reached for work you didn't do.
