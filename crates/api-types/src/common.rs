@@ -176,7 +176,7 @@ impl TryFrom<StageDto> for Stage {
     }
 }
 
-/// Item state. `done` and `wont_do` are closed.
+/// Item state. `done`, `wont_do` and `became` are closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = ItemState)]
@@ -186,6 +186,9 @@ pub enum StateDto {
     Blocked,
     Done,
     WontDo,
+    /// A note closed because it was split: the items made from it (`became` on the item) carry on. Set only by
+    /// `POST …/became`, never by `PATCH`.
+    Became,
 }
 
 impl From<StateKind> for StateDto {
@@ -196,6 +199,7 @@ impl From<StateKind> for StateDto {
             StateKind::Blocked => Self::Blocked,
             StateKind::Done => Self::Done,
             StateKind::WontDo => Self::WontDo,
+            StateKind::Became => Self::Became,
         }
     }
 }
@@ -208,6 +212,7 @@ impl From<StateDto> for StateKind {
             StateDto::Blocked => Self::Blocked,
             StateDto::Done => Self::Done,
             StateDto::WontDo => Self::WontDo,
+            StateDto::Became => Self::Became,
         }
     }
 }
@@ -247,6 +252,9 @@ pub enum ItemActionDto {
     Move,
     ChangeState,
     Reopen,
+    /// Close the note as became, on `POST …/became`. Offered for an open note the caller may edit; it is refused
+    /// until something is made from the note.
+    Became,
     /// Make a note or a reminder a task. Offered for an open note or reminder the caller may edit.
     MakeTask,
     /// Add a step to a task. Offered for an open task the caller may edit.
@@ -273,6 +281,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::Move => Self::Move,
             ItemAction::ChangeState => Self::ChangeState,
             ItemAction::Reopen => Self::Reopen,
+            ItemAction::Became => Self::Became,
             ItemAction::MakeTask => Self::MakeTask,
             ItemAction::AddStep => Self::AddStep,
             ItemAction::AskQuestion => Self::AskQuestion,
@@ -584,6 +593,7 @@ pub struct ItemRefDto {
     /// Unique within the heap; the item's path is `…/items/{key}`.
     pub key: String,
     pub title: String,
+    pub kind: KindDto,
     pub state: StateDto,
 }
 
@@ -597,6 +607,8 @@ pub enum BlockerGoneHowDto {
     Done,
     /// Closed as won't do.
     WontDo,
+    /// Closed as became: other items carry on its work.
+    Became,
     /// Moved to another heap, and still open there.
     Moved,
     /// A way this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
@@ -610,6 +622,7 @@ impl From<BlockerGone> for BlockerGoneHowDto {
         match how {
             BlockerGone::Done => Self::Done,
             BlockerGone::WontDo => Self::WontDo,
+            BlockerGone::Became => Self::Became,
             BlockerGone::Moved => Self::Moved,
         }
     }
@@ -630,6 +643,7 @@ impl From<ItemSummary> for ItemRefDto {
             id: *item.id.as_uuid(),
             key: item.key.to_string(),
             title: item.title.as_str().to_owned(),
+            kind: item.kind.into(),
             state: item.state.kind().into(),
         }
     }
@@ -754,6 +768,18 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub blocker_gone: Option<BlockerGoneDto>,
+    /// The item this one was made from, in whichever heap it is now. Set when it is made and never changed. `null`
+    /// for an item that wasn't made from another. On every response.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub origin: Option<ItemRefDto>,
+    /// The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;
+    /// on one item and in the closed list it is a list, empty when nothing was made from it.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub became: Option<Vec<ItemRefDto>>,
     pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,

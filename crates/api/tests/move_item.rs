@@ -632,7 +632,9 @@ async fn items_left_behind_keep_the_moved_blocker_and_wait_for_the_person() -> R
     expect_that!(a_after.body["state"], eq(&json!("blocked")));
     expect_that!(
         a_after.body["blocked_by"],
-        eq(&json!({ "id": id(&w.item), "key": moved.body["key"], "title": "Rotate the certs", "state": "blocked" }))
+        eq(
+            &json!({ "id": id(&w.item), "key": moved.body["key"], "title": "Rotate the certs", "kind": "note", "state": "blocked" })
+        )
     );
     expect_that!(a_after.body["blocker_gone"]["how"], eq(&json!("moved")));
     expect_that!(a_after.body["blocker_gone"]["moved_to"]["id"], eq(&json!(w.to)));

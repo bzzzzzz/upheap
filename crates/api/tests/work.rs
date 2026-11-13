@@ -1127,11 +1127,13 @@ async fn a_run_writes_only_to_its_own_item_and_only_while_it_lasts() -> Result<(
     expect_that!(wrong_item.body["item_key"], eq(&json!(mine)));
     expect_that!(unknown_run.status, eq(StatusCode::NOT_FOUND));
     expect_that!(reached.status, eq(StatusCode::OK));
-    for response in [&after, &heartbeat, &reached_again] {
+    for response in [&after, &heartbeat] {
         expect_that!(response.status, eq(StatusCode::CONFLICT));
         expect_that!(code(response), some(eq("run_over")));
         expect_that!(response.body["title"], eq(&json!("This run is over.")));
     }
+    // Saying it again after reaching is nothing to do (Boundaries §6), not an error.
+    expect_that!(reached_again.status, eq(StatusCode::OK));
     Ok(())
 }
 

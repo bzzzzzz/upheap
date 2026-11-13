@@ -54,6 +54,8 @@ enum Target {
     TaskWithStep,
     /// An item with one open question, in `{item}` and `{question}`, with the question's version for `If-Match`.
     ItemWithQuestion,
+    /// An open note with a task made from it, in `{item}`.
+    NoteWithTaskMade,
     Tag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
@@ -720,6 +722,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/became",
+            edit,
+            Target::NoteWithTaskMade,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps/{heap}/items/{item}/move",
             edit,
             Target::ItemAndSecondHeap,
@@ -1069,6 +1079,36 @@ impl World {
             .await?;
         anyhow::ensure!(added.status == StatusCode::CREATED, "add step failed: {}", added.body);
         Ok((key, added.body["steps"][0]["version"].to_string()))
+    }
+
+    /// Creates an open note as the admin, and a task made from it. Returns the note's key.
+    async fn create_note_with_task_made(&self) -> Result<String> {
+        let (key, _) = self.create_item(false).await?;
+        let note = self
+            .app
+            .send(
+                Method::GET,
+                &format!("{}/items/{key}", self.heap_path()),
+                Some(&self.admin.session),
+                None,
+            )
+            .await?;
+        let made = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/items", self.heap_path()),
+                Some(&self.admin.session),
+                Some(json!({
+                    "title": "Made",
+                    "need": "nice_to_have",
+                    "kind": "task",
+                    "origin": { "item_id": note.body["id"], "age": "keep" },
+                })),
+            )
+            .await?;
+        anyhow::ensure!(made.status == StatusCode::CREATED, "split failed: {}", made.body);
+        Ok(key)
     }
 
     /// Creates an item with one open question as the admin and returns the item's key and the question's version.
@@ -1486,6 +1526,10 @@ impl World {
                 let (key, version) = self.create_task_with_step().await?;
                 path = path.replace("{item}", &key).replace("{step}", "1");
                 if_match = Some(version);
+            }
+            Target::NoteWithTaskMade => {
+                let key = self.create_note_with_task_made().await?;
+                path = path.replace("{item}", &key);
             }
             Target::ItemWithQuestion => {
                 let (key, version) = self.create_item_with_question().await?;

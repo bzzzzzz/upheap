@@ -31,10 +31,14 @@ pub(crate) const RUN_HEADER: &str = "upheap-run";
 /// writes an agent has (design: Agent runs, Queue and Runs). A request is allowed when its method and route template
 /// are listed here, and the service then checks the run and the item, and for the item's `PATCH`, which fields. Every
 /// other write is refused with `run_forbidden`: replying to a question, sending and taking back, retrying, claiming
-/// another run, heaps, teams, tags, parameters, views and new items belong to the person.
+/// another run, heaps, teams, tags, parameters and views belong to the person. So do new items, except the ones a
+/// run splits from its own item (`POST …/items`, which the service refuses without an `origin` that is the run's
+/// item) and closing that item as became.
 ///
 /// Templates are those the routes are registered with, under `/api/v1`.
 const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
+    (Method::POST, "/teams/{team}/heaps/{heap}/items"),
+    (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/became"),
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}"),
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/steps"),
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}/steps/{step}"),

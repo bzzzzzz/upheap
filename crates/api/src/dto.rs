@@ -50,6 +50,10 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
+        origin: view.origin.map(ItemRefDto::from),
+        became: view
+            .became
+            .map(|became| became.into_iter().map(ItemRefDto::from).collect()),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
