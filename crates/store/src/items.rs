@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
-use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
+use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Select,
@@ -523,6 +523,8 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
         closed_by: Set(item.state.closed_by().map(|id| id_to_db(id.as_uuid()))),
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
+        origin_id: Set(item.origin_id.map(|id| id_to_db(id.as_uuid()))),
+        created_run_id: Set(item.created_run_id.map(|id| id_to_db(id.as_uuid()))),
     })
 }
 
@@ -587,6 +589,16 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         parameters: BTreeMap::new(),
         created_at: read.timestamp(row.created_at)?,
         created_by: user(row.created_by.as_deref())?,
+        origin_id: row
+            .origin_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+            .transpose()?,
+        created_run_id: row
+            .created_run_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(RunId::from_uuid))
+            .transpose()?,
         version: read.version(row.version)?,
     })
 }

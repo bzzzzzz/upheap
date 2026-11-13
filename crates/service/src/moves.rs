@@ -126,7 +126,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, saved.id).await?;
-        let view = build_item_view(&txn, &target, access.membership.role, saved, children, now).await?;
+        let view = build_item_view(&txn, &target, &access.membership, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(

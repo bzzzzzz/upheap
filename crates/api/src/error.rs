@@ -261,6 +261,12 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Run(RunError::Forbidden(RunForbidden::Done)) => {
             simple(StatusCode::FORBIDDEN, "run_done_needs_review", Category::Permission)
         }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::AddReminder)) => {
+            simple(StatusCode::FORBIDDEN, "run_add_reminder", Category::Permission)
+        }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::AddNeedsContext)) => {
+            simple(StatusCode::FORBIDDEN, "run_add_needs_context", Category::Permission)
+        }
         ServiceError::NotReached(_) => simple(StatusCode::UNPROCESSABLE_ENTITY, "not_reached", Category::Caller),
         ServiceError::Question(QuestionError::StepNotFound { .. }) => Classified {
             field: Some("step"),

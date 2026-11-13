@@ -6,10 +6,11 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto, SizeDto,
-    StageDto, StepDto, StepProgressDto, UserRefDto,
+    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto,
+    SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::TurnDto;
+use api_types::waiting::ItemHeapDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
 use domain::item::Kind;
@@ -101,6 +102,20 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
         next_goal,
         with_agent: view.with_agent,
+        origin: view.origin.map(|origin| ItemOriginDto {
+            id: *origin.item.id.as_uuid(),
+            key: origin.item.key.to_string(),
+            title: origin.item.title.as_str().to_owned(),
+            kind: origin.item.kind.into(),
+            heap: ItemHeapDto {
+                id: *origin.heap.id.as_uuid(),
+                slug: origin.heap.slug.to_string(),
+                name: origin.heap.name.as_str().to_owned(),
+                team_slug: origin.team.slug.to_string(),
+                team_name: origin.team.name.as_str().to_owned(),
+            },
+        }),
+        added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }

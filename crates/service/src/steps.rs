@@ -35,7 +35,8 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
             .map_err(|error| in_run(principal, error))?;
-        self.check_run_write(&txn, principal, item_id, self.now()).await?;
+        // A run may add steps to an item it added, as well as to its own.
+        self.check_run_step_add(&txn, principal, &found, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
@@ -60,7 +61,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -111,7 +112,6 @@ impl Services {
         }
 
         let now = self.now();
-        let role = access.membership.role;
         let Some(edited) = current.apply_patch(&patch) else {
             let children = ItemChildren {
                 steps,
@@ -120,7 +120,7 @@ impl Services {
                 open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
                 locking: true,
             };
-            let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
+            let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
             // A write in a run that changes nothing still tells the run it was heard.
             commit_if_in_run(txn, principal).await?;
             return Ok(view);
@@ -141,7 +141,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(

@@ -853,10 +853,32 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub with_agent: bool,
+    /// The item this one was made from: the item of the run that added it. `null` when it has no origin, when the
+    /// caller can't view the origin's heap, and in the ranked list and the closed list, which don't look it up.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub origin: Option<ItemOriginDto>,
+    /// Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub added_in_run: bool,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,
+}
+
+/// The item another item was made from, named where the second refers to it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ItemOrigin)]
+pub struct ItemOriginDto {
+    pub id: Uuid,
+    /// Unique within the heap; the item's path is `…/items/{key}`.
+    pub key: String,
+    pub title: String,
+    pub kind: KindDto,
+    /// The heap it is in now, and its team.
+    pub heap: crate::waiting::ItemHeapDto,
 }
 
 /// One labelled reason for an item's position.

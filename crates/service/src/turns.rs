@@ -80,7 +80,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -110,7 +110,7 @@ impl Services {
             .take_back_open_turn(&txn, &access.heap, principal, item.id, TakeBackWhy::TakeBack, now)
             .await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         if !taken {
             // Nothing was written.
             return Ok(view);
@@ -167,7 +167,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -266,7 +266,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
