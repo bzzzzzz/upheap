@@ -88,8 +88,9 @@ Unsure between a note and a task: a note. It can become a task later and keeps i
 
 For a set, treat each item by its own kind: one request can hold two tasks, a note and a reminder. Keep to the
 items the person listed or the conversation plainly holds. Don't split one into several or add ones they didn't
-ask for; if you see something missing, say so in your reply. Add them all, then ask your questions together.
-When one must be finished before another, and the person said so, say it in the later one's context.
+ask for; if you see something missing, say so in your reply. Add them all, then ask your questions together: for
+a note, only those its section below allows. When one must be finished before another, and the person said so,
+say it in the later one's context.
 
 Add the item first and ask afterwards, for all three. What the person said is then safe, and questions are cheapest
 while the subject is fresh in their mind. Use `upheap item add ... -q` to get the item's key, and
@@ -112,8 +113,10 @@ while the subject is fresh in their mind. Use `upheap item add ... -q` to get th
   to the point.
 - Add nothing of your own: no assumed causes, no proposed solutions, no plan, no acceptance criteria, no research.
   A note is the person's thought, not your expansion of it.
-- If something is unclear (what "it" refers to, which system, why it matters), ask after adding, and put the answers
-  in the description.
+- Ask only what the note can't be written down without: what "it" refers to when it could mean two different
+  things, or something only the person has (a missing link, name or file). Ask after adding, and put the answers in
+  the description. Scope, details, choices and why it matters can wait until someone works the note out: don't ask
+  them now.
 
 ### A task
 

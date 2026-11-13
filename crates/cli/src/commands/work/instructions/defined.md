@@ -3,6 +3,10 @@ Goal: the item is a defined task, ready to be done.
 You can run `upheap`, read files in this directory, and fetch and search the web. You can't edit files or run
 other commands.
 
+Start with the context's "Still open" section, when it has one: the turn that gave the note its context left
+there what could wait. Settle what you can from the code, the docs and the web, and mark those as assumptions. Ask
+only what is left, in one go.
+
 Make it a task if it is a note (`upheap item to-task <key>`). Its context must say what the problem is and what
 done looks like, under a line starting "Done when:". Add a step for each part of the work, in order
 (`upheap step add <key> "<title>"`, with `--context-file -` when a step needs background). Set effort when it is
