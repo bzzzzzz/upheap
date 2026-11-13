@@ -25,7 +25,7 @@ use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
-use crate::client::{ClientError, Fetched, NO_QUERY};
+use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
@@ -858,8 +858,8 @@ impl Shared<'_> {
     /// the wall clock and looked at every `heartbeat_check`, since the clock tokio keeps stands still while the
     /// machine sleeps: a heartbeat then goes out soon after it wakes. A heartbeat that fails is tried again at the
     /// next check until one is heard, and said once it has failed [`FAILURES_TO_SAY`] times in a row, so the one that
-    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat is on its way, the tool
-    /// ending and the stop signal are still watched. Gives up the tool (which stops it) when the server says the run
+    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat's request is on its way,
+    /// the tool ending and the stop signal are still watched. Gives up the tool (which stops it) when the server says the run
     /// is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop now. The
     /// first Ctrl-C only keeps the loop from claiming again.
     async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
@@ -878,11 +878,15 @@ impl Shared<'_> {
                     if failures == 0 && !self.heartbeat_is_due(last) {
                         continue;
                     }
-                    // A heartbeat can take as long as the client's timeout, and longer with a sign-in to refresh.
-                    let outcome = tokio::select! {
-                        outcome = self.heartbeat(run) => outcome,
-                        result = &mut tool => return Driven::Ended(result),
-                        () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
+                    // The token is got first, whole (see `heartbeat_client`). The heartbeat can take as long as the
+                    // client's timeout, so the tool ending and the stop signal are watched meanwhile.
+                    let outcome = match self.heartbeat_client(run).await {
+                        Ok((client, token)) => tokio::select! {
+                            outcome = Self::send_heartbeat(&client, &token, run) => outcome,
+                            result = &mut tool => return Driven::Ended(result),
+                            () = self.stop_reaches(Stop::Now) => return Driven::Stopped,
+                        },
+                        Err(err) => Heartbeat::Failed(err),
                     };
                     last = self.app.now();
                     match outcome {
@@ -933,25 +937,23 @@ impl Shared<'_> {
         passed < 0 || passed >= every
     }
 
-    /// Sends a heartbeat and says how it went. Any failure but the run being over is returned for the caller to
-    /// report, since the agent's own writes keep the claim alive too.
-    async fn heartbeat(&self, run: &RunDto) -> Heartbeat {
+    /// A client in `run` and a token for its heartbeat. Kept apart from sending it: getting the token may refresh the
+    /// sign-in, which spends the old refresh token, so it must never be cut off halfway, while the heartbeat itself
+    /// can be dropped at any point and simply sent again.
+    async fn heartbeat_client(&self, run: &RunDto) -> Result<(ApiClient, String), CliError> {
+        let client = self.app.client(self.server.clone())?.in_run(Some(run.id.to_string()));
+        let token = self.app.access_token(&client).await?;
+        Ok((client, token))
+    }
+
+    /// Sends a heartbeat for `run` and says how it went. Any failure but the run being over is returned for the
+    /// caller to report, since the agent's own writes keep the claim alive too.
+    async fn send_heartbeat(client: &ApiClient, token: &str, run: &RunDto) -> Heartbeat {
         let id = run.id.to_string();
-        let sent = async {
-            let client = self.app.client(self.server.clone()).map_err(CliError::from)?;
-            let client = client.in_run(Some(id.clone()));
-            let token = self.app.access_token(&client).await?;
-            client
-                .post_empty(&["work", "runs", &id, "heartbeat"], &token)
-                .await
-                .map_err(CliError::from)
-        };
-        match sent.await {
+        match client.post_empty(&["work", "runs", &id, "heartbeat"], token).await {
             Ok(()) => Heartbeat::Heard,
-            Err(CliError::Client(ClientError::Problem { problem, .. })) if problem.code == "run_over" => {
-                Heartbeat::Over
-            }
-            Err(err) => Heartbeat::Failed(err),
+            Err(ClientError::Problem { problem, .. }) if problem.code == "run_over" => Heartbeat::Over,
+            Err(err) => Heartbeat::Failed(err.into()),
         }
     }
 

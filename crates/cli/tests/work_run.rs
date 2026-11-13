@@ -420,7 +420,7 @@ async fn heartbeats_keep_a_long_run_alive_past_the_lapse() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_heartbeat_the_server_refuses_is_said_once_and_again_when_heard() -> Result<()> {
+async fn heartbeats_the_server_refuses_are_said_once_and_again_when_heard() -> Result<()> {
     // Arrange: an agent that waits for the test.
     let (server, ada, mut cli, note) = with_prepared_note().await?;
     cli.heartbeat_every = StdDuration::from_millis(25);
@@ -464,6 +464,50 @@ async fn a_heartbeat_the_server_refuses_is_said_once_and_again_when_heard() -> R
     expect_that!(
         lines_with(&outcome.stderr, "The server hears the run again."),
         elements_are![contains_substring(note.as_str())]
+    );
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn one_refused_heartbeat_then_a_heard_one_says_nothing() -> Result<()> {
+    // Arrange: an agent that waits for the test; checks far enough apart for the test to sign in between two tries.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    cli.heartbeat_check = StdDuration::from_secs(1);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: the server's clock runs 20 minutes, so its old access token is refused, as the first heartbeat after a
+    // wake can be. Once one try has started with it, the CLI's new sign-in is saved, and the next try is heard.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let waiting = async {
+        entered.notified().await;
+        server.advance(Duration::from_minutes(20));
+        let fresh = server.sign_in_cli(&ada).await?;
+        let loads = cli.tokens.loads();
+        wait_until("a try with the old token", || cli.tokens.loads() > loads).await?;
+        cli.tokens.save(&server.url, &fresh)?;
+        let heard = server.heard_heartbeats();
+        wait_until("the next try to be heard", || server.heard_heartbeats() > heard).await?;
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(lines_with(&outcome.stderr, "couldn't tell the server"), is_empty());
+    expect_that!(
+        lines_with(&outcome.stderr, "The server hears the run again."),
+        is_empty()
     );
     expect_that!(
         lines_with(&outcome.stdout, &note),
