@@ -1,4 +1,4 @@
-//! A note becoming the items made from it (architecture.md, Splitting).
+//! A note becoming the items made from it (architecture.md, Data model and Cycle detection and locking).
 //!
 //! The items are made with `create_item` from an origin. This closes the note as became. A person's close takes back
 //! the note's turn like any close. In a run it is also the run's report that the turn is reached: the check that every
