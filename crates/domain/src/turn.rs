@@ -287,11 +287,14 @@ pub fn redo_stage(item: &Item, earliest_run: Option<&Run>) -> Stage {
 }
 
 impl Turn {
-    /// A turn opened on `item` by `opened_by` at `now`, going to the goal [`goal_for`] says.
+    /// A turn opened on `item` by `opened_by` at `now`, going to `goal`: [`goal_for`] says the default, and
+    /// [`pick_goal`] checks what a person asked for.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     pub fn open(
         id: TurnId,
         item: &Item,
         reach: Reach,
+        goal: Goal,
         line: Option<TurnLine>,
         source: TurnSource,
         opened_by: UserId,
@@ -301,7 +304,7 @@ impl Turn {
             id,
             item_id: item.id,
             reach,
-            goal: goal_for(item),
+            goal,
             line,
             opened_by: Some(opened_by),
             source,
@@ -449,6 +452,37 @@ pub const fn goal_for(item: &Item) -> Goal {
     }
 }
 
+/// The goals a person may send an open `item` to, [`goal_for`] first: also `defined` for a note as written, which
+/// the agent turns straight into a defined task (the person has seen enough to skip the stop at with context).
+/// Empty for a reminder, which no turn opens on. A closed item has none either, but this rule can't see that from
+/// the item's kind and stage alone; the callers (`send_to_agent`, the item response) check it first.
+pub fn goal_choices(item: &Item) -> Vec<Goal> {
+    if item.kind == Kind::Reminder {
+        return Vec::new();
+    }
+    let mut choices = vec![goal_for(item)];
+    if item.kind == Kind::Note && item.stage == Stage::AsWritten {
+        choices.push(Goal::Defined);
+    }
+    choices
+}
+
+/// The goal of a turn a person opens on `item` with `reach`, asking for `requested` (`None` is [`goal_for`]).
+///
+/// A goal outside [`goal_choices`] is refused. One other than [`goal_for`] goes one turn only: with
+/// [`Reach::AllTheWay`] it is refused too, because all the way would go on past the stop the person chose.
+/// Asking for the default goal is always fine, so a client may always send it.
+pub fn pick_goal(item: &Item, reach: Reach, requested: Option<Goal>) -> Result<Goal, ValidationError> {
+    let default = goal_for(item);
+    let Some(goal) = requested else {
+        return Ok(default);
+    };
+    if !goal_choices(item).contains(&goal) || (goal != default && reach != Reach::One) {
+        return Err(ValidationError::NotAllowed { field: Field::Goal });
+    }
+    Ok(goal)
+}
+
 /// Whether an agent has `item`: it is open, its heap is active, it has an open turn, and it doesn't wait for the
 /// person. `open_questions` is how many open questions it has, `stuck` whether its open turn is stuck, and
 /// `blocker_gone` whether its blocker is gone (see [`crate::question::waits_for_you`]).
@@ -528,6 +562,100 @@ mod tests {
     }
 
     #[gtest]
+    fn a_note_as_written_may_also_go_straight_to_defined() {
+        expect_that!(
+            goal_choices(&item(Kind::Note, Stage::AsWritten)),
+            elements_are![eq(&Goal::WithContext), eq(&Goal::Defined)]
+        );
+        expect_that!(
+            goal_choices(&item(Kind::Note, Stage::WithContext)),
+            elements_are![eq(&Goal::Defined)]
+        );
+        expect_that!(
+            goal_choices(&item(Kind::Task, Stage::AsWritten)),
+            elements_are![eq(&Goal::Defined)]
+        );
+        expect_that!(
+            goal_choices(&item(Kind::Task, Stage::WithContext)),
+            elements_are![eq(&Goal::Defined)]
+        );
+        expect_that!(
+            goal_choices(&item(Kind::Task, Stage::Defined)),
+            elements_are![eq(&Goal::Done)]
+        );
+        expect_that!(goal_choices(&item(Kind::Reminder, Stage::AsWritten)), is_empty());
+    }
+
+    #[gtest]
+    fn no_goal_asked_means_the_default() {
+        let note = item(Kind::Note, Stage::AsWritten);
+
+        expect_that!(pick_goal(&note, Reach::One, None), ok(eq(&Goal::WithContext)));
+        expect_that!(pick_goal(&note, Reach::AllTheWay, None), ok(eq(&Goal::WithContext)));
+    }
+
+    #[gtest]
+    fn the_default_goal_may_be_asked_with_either_reach() {
+        let note = item(Kind::Note, Stage::WithContext);
+
+        expect_that!(
+            pick_goal(&note, Reach::One, Some(Goal::Defined)),
+            ok(eq(&Goal::Defined))
+        );
+        expect_that!(
+            pick_goal(&note, Reach::AllTheWay, Some(Goal::Defined)),
+            ok(eq(&Goal::Defined))
+        );
+    }
+
+    #[gtest]
+    fn another_goal_from_the_choices_goes_one_turn_only() {
+        let note = item(Kind::Note, Stage::AsWritten);
+
+        expect_that!(
+            pick_goal(&note, Reach::One, Some(Goal::Defined)),
+            ok(eq(&Goal::Defined))
+        );
+        expect_that!(
+            pick_goal(&note, Reach::AllTheWay, Some(Goal::Defined)),
+            err(eq(&ValidationError::NotAllowed { field: Field::Goal }))
+        );
+    }
+
+    #[gtest]
+    fn a_goal_outside_the_choices_is_refused() {
+        let with_context = item(Kind::Note, Stage::WithContext);
+        let task = item(Kind::Task, Stage::AsWritten);
+
+        expect_that!(
+            pick_goal(&with_context, Reach::One, Some(Goal::WithContext)),
+            err(eq(&ValidationError::NotAllowed { field: Field::Goal }))
+        );
+        expect_that!(
+            pick_goal(&task, Reach::One, Some(Goal::Done)),
+            err(eq(&ValidationError::NotAllowed { field: Field::Goal }))
+        );
+    }
+
+    #[gtest]
+    fn an_opened_turn_stores_the_goal_it_is_given() {
+        let note = item(Kind::Note, Stage::AsWritten);
+
+        let turn = Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(40)),
+            &note,
+            Reach::One,
+            Goal::Defined,
+            None,
+            TurnSource::GoAhead,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+
+        expect_that!(turn.goal, eq(Goal::Defined));
+    }
+
+    #[gtest]
     fn a_line_is_trimmed_blank_means_none_and_is_bounded() {
         expect_that!(TurnLine::parse(" \n "), ok(none()));
         expect_that!(
@@ -568,6 +696,7 @@ mod tests {
             TurnId::from_uuid(Uuid::from_u128(40)),
             note,
             Reach::AllTheWay,
+            goal_for(note),
             TurnLine::parse("Use the new CA.").expect("valid"),
             TurnSource::GoAhead,
             UserId::from_uuid(Uuid::from_u128(10)),
@@ -643,6 +772,7 @@ mod tests {
             TurnId::from_uuid(Uuid::from_u128(40)),
             &note,
             Reach::One,
+            goal_for(&note),
             None,
             TurnSource::GoAhead,
             user,
@@ -663,6 +793,7 @@ mod tests {
             TurnId::from_uuid(Uuid::from_u128(40)),
             note,
             Reach::AllTheWay,
+            goal_for(note),
             None,
             TurnSource::Prepare,
             user,
@@ -809,6 +940,7 @@ mod run_tests {
             TurnId::from_uuid(Uuid::from_u128(40)),
             &note(),
             Reach::One,
+            goal_for(&note()),
             None,
             TurnSource::GoAhead,
             UserId::from_uuid(Uuid::from_u128(10)),

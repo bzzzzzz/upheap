@@ -643,6 +643,53 @@ async fn a_turn_sent_all_the_way_goes_on_to_defined_and_then_to_done() -> Result
 
 #[gtest]
 #[tokio::test]
+async fn a_note_sent_straight_to_defined_becomes_a_defined_task_and_goes_back_to_the_person() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add("Rotate the certs", json!({})).await?;
+    w.send_turn_with(&key, json!({ "reach": "one", "goal": "defined" }))
+        .await?;
+    let run = w.claimed().await?;
+    let path = w.item_path(&key).await?;
+    let written = w.write_context(&run, &key, "Why and how").await?;
+    let made_task = w
+        .in_run(
+            &run,
+            Method::PATCH,
+            &path,
+            Some(&w.get(&key).await?["version"]),
+            Some(json!({ "kind": "task" })),
+        )
+        .await?;
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{path}/steps"),
+            None,
+            Some(json!({ "title": "Order the certs" })),
+        )
+        .await?;
+
+    // Act
+    let reached = w.reached(&run).await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(written.status, eq(StatusCode::OK));
+    expect_that!(made_task.status, eq(StatusCode::OK));
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(item["kind"], eq(&json!("task")));
+    expect_that!(item["stage"], eq(&json!("defined")));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(item["with_agent"], eq(false));
+    expect_that!(item["state"], eq(&json!("open")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_turn_of_one_state_leaves_the_item_to_the_person_when_reached() -> Result<()> {
     // Arrange
     let w = world().await?;

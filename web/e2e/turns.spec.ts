@@ -159,6 +159,47 @@ test("all the way is offered and shown, and a defined task has one way to go", a
   await expect(who(page)).toContainText("going to: done");
 });
 
+test("a note as written can go straight to defined, and a task as written has two choices", async ({
+  page,
+  heapPath,
+}) => {
+  const { key } = await seed(page, heapPath, "Rotate the certs");
+  await open(page, heapPath, key, "Rotate the certs");
+  await openSendForm(page);
+  const form = sendForm(page);
+  await expect(form.locator("label").filter({ has: page.getByRole("radio") })).toHaveText([
+    "To with context",
+    "To defined",
+    "All the way",
+  ]);
+  await expect(form.getByRole("radio", { name: "To with context" })).toBeChecked();
+  await form.locator("label").filter({ hasText: "To defined" }).click();
+  await expect(form.getByRole("radio", { name: "To defined" })).toBeChecked();
+  await form.getByRole("button", { name: "Send", exact: true }).click();
+
+  await expect(chip(page)).toHaveText("Agent · to defined");
+  await expect(page.getByRole("status").filter({ hasText: "Sent to an agent, going to: defined." })).toBeVisible();
+  await chip(page).click();
+  await expect(who(page)).toContainText("going to: defined");
+  await expect(who(page)).not.toContainText("all the way");
+
+  const task = await seed(page, heapPath, "Ship it");
+  const current = await (await page.request.get(task.item)).json();
+  const made = await page.request.patch(task.item, {
+    headers: { ...headers, "If-Match": `"${current.version}"` },
+    data: { kind: "task" },
+  });
+  expect(made.ok()).toBe(true);
+  await open(page, heapPath, task.key, "Ship it");
+  await openSendForm(page);
+  await expect(
+    sendForm(page)
+      .locator("label")
+      .filter({ has: page.getByRole("radio") }),
+  ).toHaveText(["To defined", "All the way"]);
+  await expect(sendForm(page).getByRole("radio", { name: "To defined" })).toBeChecked();
+});
+
 test("taking back asks first: Cancel keeps it, Take back removes the chip and focus goes to ⋯", async ({
   page,
   heapPath,
@@ -334,6 +375,7 @@ test("on a phone the row carries the agent mark and the forms open as sheets tha
   expect((viewport?.height ?? 0) - ((sheet?.y ?? 0) + (sheet?.height ?? 0))).toBeLessThanOrEqual(24);
   await expectTouchSize(form.locator("label").filter({ hasText: "All the way" }));
   await expectTouchSize(form.locator("label").filter({ hasText: "To with context" }));
+  await expectTouchSize(form.locator("label").filter({ hasText: "To defined" }));
   await expectTouchSize(form.getByRole("button", { name: "Send", exact: true }));
   await expectTouchSize(form.getByRole("button", { name: "Cancel", exact: true }));
   await form.getByRole("button", { name: "Cancel", exact: true }).click();

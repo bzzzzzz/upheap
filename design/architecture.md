@@ -123,8 +123,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
   `MEDIUMTEXT` on MySQL.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
-  all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens and stored), the
-  person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
+  all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens, or picked by the
+  person: defined, for a note as written; then stored), the person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
   prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached) and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict

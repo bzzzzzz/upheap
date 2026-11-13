@@ -1,5 +1,5 @@
 import { Bot } from "lucide-react";
-import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import { ApiProblem, type Goal, type HeapRef, type Item, type Reach, type Turn } from "../api/client";
@@ -176,8 +176,8 @@ export function useSendWithUndo(heapRef: HeapRef, toastErrors = true) {
   const takeBack = useTakeBack(heapRef);
   const setToast = useToast();
   const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
-  const sendWithUndo = (item: Item, reach: Reach, line: string | null) =>
-    send.mutateAsync({ item, body: { reach, line } }).then(
+  const sendWithUndo = (item: Item, reach: Reach, line: string | null, goal?: Goal) =>
+    send.mutateAsync({ item, body: goal ? { reach, goal, line } : { reach, line } }).then(
       (saved) => {
         setToast({
           message: saved.turn ? `Sent to an agent, going to: ${GOAL_LABELS[saved.turn.goal]}.` : "Sent to an agent.",
@@ -196,9 +196,10 @@ export function useSendWithUndo(heapRef: HeapRef, toastErrors = true) {
 /**
  * The button in the item's status line before an agent has the item (ux.md, The item §15), which opens the form that
  * sends it: how far, and a line for the agent. A popover under the button on a wide screen and a tablet, a sheet on a
- * phone. The server decides when sending is allowed (`send_to_agent`) and when there is a goal to offer (`next_goal`);
- * the button shows only then. `onSent` runs once a send has closed the form, for the caller that moves focus on to the
- * agent chip, which replaces this button. Cancelling returns focus to the button.
+ * phone. The server decides when sending is allowed (`send_to_agent`) and when there is a goal to offer (`next_goal`,
+ * and `goal_choices` for a note as written, which may also go straight to defined); the button shows only then.
+ * `onSent` runs once a send has closed the form, for the caller that moves focus on to the agent chip, which replaces
+ * this button. Cancelling returns focus to the button.
  */
 export function SendToAgentButton({ heapRef, item, onSent }: { heapRef: HeapRef; item: Item; onSent: () => void }) {
   const button = useRef<HTMLButtonElement>(null);
@@ -223,6 +224,7 @@ export function SendToAgentButton({ heapRef, item, onSent }: { heapRef: HeapRef;
         heapRef={heapRef}
         item={item}
         goal={goal}
+        goalChoices={item.goal_choices}
         isOpen={open}
         onClose={(sent) => {
           setOpen(false);
@@ -243,6 +245,7 @@ function SendToAgent({
   heapRef,
   item,
   goal,
+  goalChoices,
   isOpen,
   onClose,
   triggerRef,
@@ -250,6 +253,7 @@ function SendToAgent({
   heapRef: HeapRef;
   item: Item;
   goal: Goal;
+  goalChoices: Goal[];
   isOpen: boolean;
   /** Closes the form; `sent` is whether a send closed it. */
   onClose: (sent: boolean) => void;
@@ -261,9 +265,9 @@ function SendToAgent({
   // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't cancel it.
   const sent = useRef(false);
 
-  const sendNow = (reach: Reach, line: string) => {
+  const sendNow = (reach: Reach, line: string, picked?: Goal) => {
     sent.current = false;
-    return sendWithUndo(item, reach, line.trim() === "" ? null : line).then((saved) => {
+    return sendWithUndo(item, reach, line.trim() === "" ? null : line, picked).then((saved) => {
       if (!saved) return;
       sent.current = true;
       onClose(true);
@@ -283,8 +287,9 @@ function SendToAgent({
     >
       <SendForm
         goal={goal}
+        goalChoices={goalChoices}
         pending={pending}
-        onSend={(reach, line) => void sendNow(reach, line)}
+        onSend={(reach, line, picked) => void sendNow(reach, line, picked)}
         onCancel={() => onClose(false)}
       />
       {error && (
@@ -314,26 +319,52 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
   );
 }
 
+/** One choice of how far, in the form's radio group. */
+function HowFar({ value, children }: { value: string; children: ReactNode }) {
+  return (
+    <Radio value={value} className={pickClass}>
+      {({ isSelected }) => (
+        <>
+          <span aria-hidden="true" className={pickBoxClass}>
+            {isSelected && <span className="size-2 rounded-full bg-surface" />}
+          </span>
+          {children}
+        </>
+      )}
+    </Radio>
+  );
+}
+
 /**
  * The form that sends the item: how far, and an optional line for the agent. Its draft lives here, so a refetch of
- * the item leaves it alone, and closing the form throws it away. A defined task has one way to go, to done.
+ * the item leaves it alone, and closing the form throws it away. A defined task has one way to go, to done. A note
+ * as written has a third choice, "To defined", between going one state and going all the way: it sends one turn with
+ * that goal. `onSend` gets the goal only for that choice.
  */
 function SendForm({
   goal,
+  goalChoices,
   pending,
   onSend,
   onCancel,
 }: {
   goal: Goal;
+  goalChoices: Goal[];
   pending: boolean;
-  onSend: (reach: Reach, line: string) => void;
+  onSend: (reach: Reach, line: string, goal?: Goal) => void;
   onCancel: () => void;
 }) {
-  const [reach, setReach] = useState<Reach>("one");
+  const [choice, setChoice] = useState<"one" | "further" | "all_the_way">("one");
   const [line, setLine] = useState("");
+  // The goal past the default one, when the server offers it. If it stops being offered while "To defined" is picked
+  // (the item changed meanwhile), the pick counts as "one".
+  const further = goalChoices.find((other) => other !== goal);
+  const picked = choice === "further" && !further ? "one" : choice;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSend(goal === "done" ? "one" : reach, line);
+    if (goal === "done") onSend("one", line);
+    else if (picked === "further" && further) onSend("one", line, further);
+    else onSend(picked === "all_the_way" ? "all_the_way" : "one", line);
   };
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
@@ -342,30 +373,13 @@ function SendForm({
       ) : (
         <RadioGroup
           aria-label="How far"
-          value={reach}
-          onChange={(value) => setReach(value as Reach)}
+          value={picked}
+          onChange={(value) => setChoice(value as typeof choice)}
           className="flex flex-col"
         >
-          <Radio value="one" className={pickClass}>
-            {({ isSelected }) => (
-              <>
-                <span aria-hidden="true" className={pickBoxClass}>
-                  {isSelected && <span className="size-2 rounded-full bg-surface" />}
-                </span>
-                To {GOAL_LABELS[goal]}
-              </>
-            )}
-          </Radio>
-          <Radio value="all_the_way" className={pickClass}>
-            {({ isSelected }) => (
-              <>
-                <span aria-hidden="true" className={pickBoxClass}>
-                  {isSelected && <span className="size-2 rounded-full bg-surface" />}
-                </span>
-                All the way
-              </>
-            )}
-          </Radio>
+          <HowFar value="one">To {GOAL_LABELS[goal]}</HowFar>
+          {further && <HowFar value="further">To {GOAL_LABELS[further]}</HowFar>}
+          <HowFar value="all_the_way">All the way</HowFar>
         </RadioGroup>
       )}
       <TextField value={line} onChange={setLine} className="flex flex-col gap-1">

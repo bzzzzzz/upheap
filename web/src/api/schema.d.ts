@@ -750,7 +750,8 @@ export interface paths {
         put?: never;
         /**
          * Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
-         *     item. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no
+         *     item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
+         *     a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`, with reach `one`. It needs no
          *     `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
          *     and the item waits as before. A blocked item can't be sent until it is unblocked.
          */
@@ -1778,7 +1779,8 @@ export interface components {
         };
         /**
          * @description The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
-         *     context and a task not yet defined go to `defined`, and a defined task goes to `done`.
+         *     context and a task not yet defined go to `defined`, and a defined task goes to `done`. A person may also send a
+         *     note as written straight to `defined`.
          * @enum {string}
          */
         Goal: "with_context" | "defined" | "done";
@@ -2071,6 +2073,11 @@ export interface components {
             description?: string | null;
             due?: null | components["schemas"]["Due"];
             effort?: null | components["schemas"]["Size"];
+            /**
+             * @description The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when
+             *     `next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`).
+             */
+            goal_choices: components["schemas"]["Goal"][];
             /** Format: uuid */
             heap_id: string;
             /** Format: uuid */
@@ -2908,6 +2915,7 @@ export interface components {
         };
         /** @description Sends an item to an agent. */
         SendToAgentRequest: {
+            goal?: null | components["schemas"]["Goal"];
             /**
              * @description Something to tell the agent: plain text, at most 2,000 characters, line breaks allowed; blank or `null` means
              *     none.
@@ -5702,7 +5710,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know */
+            /** @description Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to, or one past the next stable state with `all_the_way` */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -10,7 +10,7 @@ use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Item, Kind, Need, NewItem, Title};
 use domain::team::Team;
 use domain::text::Name;
-use domain::turn::{Reach, Turn, TurnLine, TurnSource};
+use domain::turn::{Reach, Turn, TurnLine, TurnSource, goal_for};
 use domain::user::{DisplayName, Email, User};
 use domain::validation::Field;
 use domain::{HeapId, ItemId, TeamId, Timestamp, TurnId, UserId, Version};
@@ -97,6 +97,7 @@ fn turn(item: &Item, user: UserId, line: Option<&str>) -> Result<Turn> {
         TurnId::from_uuid(Uuid::now_v7()),
         item,
         Reach::AllTheWay,
+        goal_for(item),
         line.map(TurnLine::parse).transpose()?.flatten(),
         TurnSource::GoAhead,
         user,
