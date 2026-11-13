@@ -200,11 +200,7 @@ fn render_questions(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
     let width = names.iter().map(|name| name.chars().count()).max().unwrap_or(0);
     let indent = " ".repeat(2 + width + 2);
     for (question, name) in questions.iter().zip(&names) {
-        let mut head = format!(
-            "{} · {}",
-            question_kind_text(question.kind),
-            question_state_text(question.state)
-        );
+        let mut head = format!("{} · {}", question_kind_text(question), question_state_text(question));
         if let Some(step) = question.step {
             head.push_str(&format!(" · step {}.{step}", item.key));
         }
@@ -218,12 +214,23 @@ fn render_questions(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
 
 /// What goes under a question's head line, each line relative to the column the text starts at.
 fn question_lines(question: &QuestionDto) -> Vec<String> {
-    let mut lines = vec![question.text.replace('\t', "    ")];
+    let mut lines = Vec::new();
+    if let Some(review) = &question.review {
+        lines.push(review.link.clone());
+        if review.piece != review.link {
+            lines.push(format!("Piece: {}", review.piece.replace('\t', "    ")));
+        }
+    }
+    lines.push(question.text.replace('\t', "    "));
     for line in question.details.iter().flat_map(|details| details.lines()) {
         lines.push(format!("  {}", line.replace('\t', "    ")));
     }
-    // A request always has Done and Can't be done, which the reader knows.
-    if question.kind != QuestionKindDto::Request && !question.choices.is_empty() {
+    // A request, a review and a done proposal always have the two choices of their kind, which the reader knows.
+    let fixed = matches!(
+        question.kind,
+        QuestionKindDto::Request | QuestionKindDto::Review | QuestionKindDto::DoneProposal
+    );
+    if !fixed && !question.choices.is_empty() {
         let how = if question.many { "pick any" } else { "pick one" };
         lines.push(format!("Choices ({how}): {}", question.choices.join(" · ")));
     }
@@ -256,20 +263,31 @@ fn question_lines(question: &QuestionDto) -> Vec<String> {
     lines
 }
 
-const fn question_kind_text(kind: QuestionKindDto) -> &'static str {
-    match kind {
-        QuestionKindDto::Question => "Question",
-        QuestionKindDto::Request => "Request",
-        QuestionKindDto::Unknown => "Other",
+/// The kind as the head line reads it; a review also says its round.
+fn question_kind_text(question: &QuestionDto) -> String {
+    match (question.kind, &question.review) {
+        (QuestionKindDto::Question, _) => "Question".to_owned(),
+        (QuestionKindDto::Request, _) => "Request".to_owned(),
+        (QuestionKindDto::Review, Some(review)) => format!("Review, round {}", review.round),
+        (QuestionKindDto::Review, None) => "Review".to_owned(),
+        (QuestionKindDto::DoneProposal, _) => "Done proposal".to_owned(),
+        (QuestionKindDto::Unknown, _) => "Other".to_owned(),
     }
 }
 
-const fn question_state_text(state: QuestionStateDto) -> &'static str {
-    match state {
-        QuestionStateDto::Open => "open",
-        QuestionStateDto::Answered => "answered",
-        QuestionStateDto::Withdrawn => "withdrawn",
-        QuestionStateDto::Unknown => "unknown",
+/// The state as the head line reads it. An answered review says whether it was approved, and an answered done
+/// proposal whether it was agreed to, by the pick: the first choice agrees.
+fn question_state_text(question: &QuestionDto) -> &'static str {
+    let agreed = question.reply.as_ref().map(|reply| reply.picked.first() == Some(&0));
+    match (question.state, question.kind, agreed) {
+        (QuestionStateDto::Answered, QuestionKindDto::Review, Some(true)) => "approved",
+        (QuestionStateDto::Answered, QuestionKindDto::Review, Some(false)) => "changes asked",
+        (QuestionStateDto::Answered, QuestionKindDto::DoneProposal, Some(true)) => "agreed",
+        (QuestionStateDto::Answered, QuestionKindDto::DoneProposal, Some(false)) => "not yet",
+        (QuestionStateDto::Open, ..) => "open",
+        (QuestionStateDto::Answered, ..) => "answered",
+        (QuestionStateDto::Withdrawn, ..) => "withdrawn",
+        (QuestionStateDto::Unknown, ..) => "unknown",
     }
 }
 

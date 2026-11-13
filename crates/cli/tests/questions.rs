@@ -1,4 +1,4 @@
-//! `upheap question ask | request` and the Questions section of `upheap item show`.
+//! `upheap question ask | request | review | propose-done` and the Questions section of `upheap item show`.
 
 mod common;
 
@@ -733,5 +733,178 @@ async fn question_reply_to_a_choice_question_without_a_pick_lists_the_choices() 
             "{task}.q1 takes a pick: give --pick with one of: Internal, Let's Encrypt"
         ))
     );
+    Ok(())
+}
+
+const PR: &str = "https://example.com/pull/7";
+
+/// A task with two steps, defined and sent to an agent, so its turn goes to done, and a run claimed on it. Returns the
+/// server, Ada, a CLI that runs inside the run, and the task's key.
+async fn task_in_a_done_run() -> Result<(TestServer, TestUser, TestCli, String)> {
+    let (server, ada, _, task) = with_task().await?;
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            &task,
+            json!({ "description": "Done when: the fence is painted.", "stage": "defined" }),
+        )
+        .await?;
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{task}/turn"),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claimed.stdout.trim().to_owned());
+    Ok((server, ada, cli, task))
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_review_says_the_round_and_a_second_ask_of_a_piece_waits() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, task) = task_in_a_done_run().await?;
+
+    // Act
+    let human = cli.run(&["question", "review", &task, PR, "The fence, painted"]).await;
+    let quiet = cli
+        .run(&[
+            "question", "review", &task, PR, "Gate too", "--piece", "the gate", "--quiet",
+        ])
+        .await;
+    let again = cli.run(&["question", "review", &task, PR, "Same piece"]).await;
+
+    // Assert
+    expect_that!(
+        human.stdout,
+        eq(&format!("Asked for review {task}.q1 (round 1 of {PR}).\n"))
+    );
+    expect_that!(human.exited(0), eq(true));
+    expect_that!(quiet.stdout, eq(&format!("{task}.q2\n")));
+    expect_that!(again.exited(3), eq(true));
+    expect_that!(again.stderr, contains_substring("(review_open)"));
+    expect_that!(
+        again.stderr,
+        contains_substring("hint: Wait for the person's reply to that review.")
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn propose_done_is_refused_naming_what_is_left_and_then_closes_the_task_when_agreed() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, task) = task_in_a_done_run().await?;
+
+    // Act
+    let refused = cli.run(&["question", "propose-done", &task, "Painted"]).await;
+    let ticked = [
+        cli.run(&["step", "tick", &format!("{task}.1")]).await,
+        cli.run(&["step", "tick", &format!("{task}.2")]).await,
+    ];
+    let proposed = cli.run(&["question", "propose-done", &task, "Painted"]).await;
+    let done = cli.run(&["item", "done", &task]).await;
+    let mut person = cli_in_heap(&server, &ada).await?;
+    person.env.run = None;
+    let shown = person.run(&["item", "show", &task]).await;
+    let agreed = person
+        .run(&["question", "reply", &format!("{task}.q1"), "--pick", "close as done"])
+        .await;
+    let item = server.read_item(&ada, HEAP, &task).await?;
+
+    // Assert
+    expect_that!(refused.exited(3), eq(true));
+    expect_that!(refused.stderr, contains_substring("2 open steps"));
+    expect_that!(
+        refused.stderr,
+        contains_substring("hint: Finish what it names, then propose again.")
+    );
+    expect_that!(ticked.iter().all(|t| t.exited(0)), eq(true));
+    expect_that!(proposed.stdout, eq(&format!("Proposed closing {task} ({task}.q1).\n")));
+    expect_that!(done.exited(3), eq(true));
+    expect_that!(done.stderr, contains_substring("propose-done"));
+    expect_that!(shown.stdout, contains_substring("Done proposal · open"));
+    expect_that!(agreed.exited(0), eq(true));
+    expect_that!(item["state"], eq("done"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_review_or_proposal_outside_a_run_is_refused_with_a_hint() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let review = cli.run(&["question", "review", &task, PR, "x"]).await;
+    let proposal = cli.run(&["question", "propose-done", &task, "x"]).await;
+
+    // Assert
+    for refused in [&review, &proposal] {
+        expect_that!(refused.exited(3), eq(true));
+        expect_that!(refused.stderr, contains_substring("(question_needs_do_turn)"));
+        expect_that!(
+            refused.stderr,
+            contains_substring("hint: Only an agent doing a task asks for review or proposes closing.")
+        );
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_show_reads_a_review_by_round_and_outcome_and_a_proposal_by_agreement() -> Result<()> {
+    // Arrange: one review changes asked then asked again, a second piece approved, and a proposal not yet.
+    let (server, ada, cli, task) = task_in_a_done_run().await?;
+    cli.run(&["question", "review", &task, PR, "First look"]).await;
+    cli.run(&[
+        "question",
+        "review",
+        &task,
+        "https://example.com/pull/8",
+        "Gate",
+        "--piece",
+        "the gate",
+    ])
+    .await;
+    reply(
+        &server,
+        &ada,
+        &task,
+        1,
+        json!({ "picked": [1], "comment": "Redo the corner." }),
+    )
+    .await?;
+    reply(&server, &ada, &task, 2, json!({ "picked": [0] })).await?;
+    cli.run(&["question", "review", &task, PR, "Second look"]).await;
+    cli.run(&["step", "tick", &format!("{task}.1")]).await;
+    cli.run(&["step", "tick", &format!("{task}.2")]).await;
+    let person = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let shown = person.run(&["item", "show", &task]).await;
+
+    // Assert
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!("{task}.q1  Review, round 1 · changes asked"))
+    );
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!("{task}.q2  Review, round 1 · approved"))
+    );
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!("{task}.q3  Review, round 2 · open"))
+    );
+    expect_that!(shown.stdout, contains_substring(PR));
+    expect_that!(shown.stdout, contains_substring("Piece: the gate"));
+    expect_that!(shown.stdout, contains_substring("→ Changes asked \"Redo the corner.\""));
     Ok(())
 }

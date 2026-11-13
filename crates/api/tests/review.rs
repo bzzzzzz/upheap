@@ -232,7 +232,7 @@ fn offered(item: &Value) -> Vec<&str> {
         .unwrap_or_default()
 }
 
-fn question<'a>(item: &'a Value, number: u64) -> &'a Value {
+fn question(item: &Value, number: u64) -> &Value {
     item["questions"]
         .as_array()
         .and_then(|all| all.iter().find(|q| q["number"] == json!(number)))

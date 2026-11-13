@@ -24,7 +24,7 @@ pub struct ReplyArgs {
     #[arg(value_name = "QUESTION")]
     pub question: String,
     /// A choice to pick, by its label ignoring case, or by its number, 1 for the first. Repeat for more where the
-    /// question allows any number. A request's choices are Done and Can't be done
+    /// question allows any number. A request's choices are Done and Can't be done, a review's Approved and Changes asked, a done proposal's Close as done and Not yet
     #[arg(long = "pick", value_name = "CHOICE")]
     pub picks: Vec<String>,
     /// A comment with the reply. `-` reads all of stdin. For longer text, use --comment-file

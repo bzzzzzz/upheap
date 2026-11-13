@@ -1061,7 +1061,7 @@ mod tests {
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
     fn question_from_a_later_server() -> serde_json::Value {
         json!([{
-            "number": 1, "kind": "review", "text": "Look", "details": null, "choices": [], "many": false,
+            "number": 1, "kind": "poll", "text": "Look", "details": null, "choices": [], "many": false,
             "step": null, "state": "parked", "asked_by": null, "asked_at": 0, "asked_label": "today",
             "reply": null, "version": 1, "allowed_actions": ["reply", "withdraw"],
         }])
