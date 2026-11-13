@@ -1,4 +1,4 @@
-//! `upheap work reached --result <text> [--link <url>]... [--stage with_context|defined]`: the run says it reached the
+//! `upheap work reached --result <text> [--link <url>]... [--stage defined]`: the run says it reached the
 //! turn's goal, or, in a turn to with context, that it went on to defined.
 //!
 //! It takes no item: the run knows it. The server checks the item as it is now; when it misses a condition the
@@ -30,11 +30,9 @@ pub struct ReachedArgs {
     pub shared: SharedArgs,
 }
 
-/// The stages a run may report: the ones a turn to with context can end at.
+/// The stage a run may report past its turn's goal: defined, from a turn to with context.
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
-#[value(rename_all = "snake_case")]
 pub enum ReportedStage {
-    WithContext,
     Defined,
 }
 
@@ -48,10 +46,7 @@ pub async fn run(args: ReachedArgs, app: &App, out: &mut Output) -> Result<(), C
     let body = ReachedRequestDto {
         result: args.result,
         links: args.links,
-        stage: args.stage.map(|stage| match stage {
-            ReportedStage::WithContext => StageDto::WithContext,
-            ReportedStage::Defined => StageDto::Defined,
-        }),
+        stage: args.stage.map(|ReportedStage::Defined| StageDto::Defined),
     };
     let reached = client
         .post::<RunDto>(&["work", "runs", &run, "reached"], &body, &token)

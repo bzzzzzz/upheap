@@ -1081,8 +1081,8 @@ $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
 14:02  k3x9a  Rotate the certs    note → with context    reached   2m10s   $0.31
 14:05  p2m4q  Paint the fence     note → with context    asked     0m40s   $0.08
-14:09  w7d2c  Fix the footer      task → defined (skipped with context)    reached   1m30s   $0.12
-14:06  Nothing to do. 1 item waits for you. Asking again in a minute.
+14:06  w7d2c  Fix the footer      task → defined (skipped with context)    reached   1m30s   $0.12
+14:07  Nothing to do. 1 item waits for you. Asking again in a minute.
 
 --heap    repeatable; with none, the default heap. Heaps agents make from these are included.
 --once    do one run, or nothing when there is nothing, and exit.

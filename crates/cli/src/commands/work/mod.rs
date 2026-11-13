@@ -166,3 +166,55 @@ pub(super) fn waiting_text(count: u32) -> Option<String> {
         n => Some(format!("{n} items wait for you.")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use api_types::turns::ReachDto;
+    use api_types::waiting::ItemHeapDto;
+    use googletest::prelude::*;
+    use uuid::Uuid;
+
+    use super::*;
+
+    fn item(kind: KindDto, stage: StageDto, goal: GoalDto) -> WorkItemDto {
+        WorkItemDto {
+            id: Uuid::nil(),
+            key: "k3x9a".to_owned(),
+            title: "Rotate the certs".to_owned(),
+            kind,
+            stage,
+            heap: ItemHeapDto {
+                id: Uuid::nil(),
+                slug: "work".to_owned(),
+                name: "Work".to_owned(),
+                team_slug: "ada".to_owned(),
+                team_name: "Ada".to_owned(),
+            },
+            goal,
+            reach: ReachDto::One,
+            line: None,
+            runs: 1,
+            failed_runs: 0,
+        }
+    }
+
+    #[gtest]
+    fn an_ended_run_that_went_past_with_context_says_it_skipped_it() {
+        let skipped = item(KindDto::Task, StageDto::Defined, GoalDto::WithContext);
+        expect_that!(
+            ended_journey(&skipped, Some(RunEndDto::Reached)),
+            eq("task → defined (skipped with context)")
+        );
+        expect_that!(
+            ended_journey(&skipped, Some(RunEndDto::Asked)),
+            eq("task → with context")
+        );
+        let plain = item(KindDto::Note, StageDto::WithContext, GoalDto::WithContext);
+        expect_that!(
+            ended_journey(&plain, Some(RunEndDto::Reached)),
+            eq("note → with context")
+        );
+        let defined = item(KindDto::Task, StageDto::Defined, GoalDto::Defined);
+        expect_that!(ended_journey(&defined, Some(RunEndDto::Reached)), eq("task → defined"));
+    }
+}
