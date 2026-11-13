@@ -363,12 +363,14 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     controls are not here but in Questions (point 13).
 13. **Questions** is a section under the Steps, shown when the item has any question, under the heading "Questions".
     The open questions come first, in the same tinted, outlined box, one row each in number order, separated by a thin
-    rule: a quiet line with the kind ("Question", "Request", "Question · pick any") and `· step "<title>"` when it
+    rule: a quiet line with the kind ("Question", "Request", "Question · pick any", "Review, round N", "Ready to close") and `· step "<title>"` when it
     names one, the short text in semibold, "Details ▸" when it has details (opening them in place), then the reply
     controls. A question without choices has an "Answer" field and Reply, off until the answer has text. With choices
     it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until something is picked. A request
     has "Comment, optional" and two buttons, Done and Can't be done, which reply as soon as they are pressed, sharing
-    one row on a phone. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast:
+    one row on a phone. A review and a done proposal are rows as in Waiting for me, 9 and 10: a review has its link
+    and piece under the text and Approved and Changes asked; a done proposal has its summary line and Close as done
+    and Not yet, and its toast has no Open, as the item is open already. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast:
     the row leaves the box and joins the fold (point 14), the focus goes to the next row's first control, else to the
     item, and a polite live region says Replied to “<text>”. While it is sending, that row's buttons are off. If it
     fails the row stays with its picks and comment and the reason shows under it. If someone else replied first, the
@@ -376,7 +378,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     heap a row shows its text and details with no controls. A closed item has no open rows: closing withdrew its open
     questions, which read in the fold as "Withdrawn".
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
-    withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone), and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
+    withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone); a review also shows its link and piece under the text, and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
     and all are withdrawn. It only reads; changing a reply is later.
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
@@ -400,6 +402,14 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     to an agent." and the chip shows it. Start, Done and Won't do in the item ask before they take an item back ("An
     agent has this. Starting it takes it back. Take it back and start it?"), inline under the title or in a sheet;
     Blocked and Open don't.
+    **Changes asked…** is a chip beside that place, shown instead of the Send button when the server offers it: an
+    agent brought the item to a stable state short of done and nobody has sent it on. It opens a form like Send's,
+    titled "Changes asked": "An agent brought this to: <stage>.", a required "What's wrong" field, **Send back**, off
+    until the field has text, and Cancel, sharing a row on a phone. Send back closes the form, shows the toast "Sent
+    back to the agent.", and gives focus to the agent chip, which the new turn brings; Cancel returns focus to the
+    button and drops the draft. A failed send keeps the form and its text and says why under the buttons; if someone
+    sent the item on first it says "The agent's work changed meanwhile: there's nothing to send back." and the chip
+    goes. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
     each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set
@@ -488,21 +498,21 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
    Rows are one column at the app's content width, separated by thin rules; no item pane opens beside the page.
 2. A row is the item's open-question row in Questions, the same component, with a head line of its own: the kind ("Request",
-   "Question", "Question · pick any"), the item's title as an accent, underlined link to the item in its heap, the heap's
+   "Question", "Question · pick any", "Review, round N", "Ready to close"), the item's title as an accent, underlined link to the item in its heap, the heap's
    name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
    one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action
    shows no controls.
 3. **Details ▸** holds the details as Markdown text and under them **Context ▸**, which unfolds the item's context and the
    heap's, rendered as Markdown text too, each under a small heading ("This item", the heap's name), or "No context". They are fetched when Context is
    opened, not with the page. A question without details shows Context alone.
-4. After a reply there is no toast: the row leaves, the count drops, the focus goes to the row that took its place if it
+4. After a reply there is no toast (but see 10): the row leaves, the count drops, the focus goes to the row that took its place if it
    was lost with the row, else to the heading, and a polite live region says Replied to “<text>”. If it fails the row
    stays with its picks and comment and the reason shows under it. If someone else replied first, or the item closed
    first, the row leaves and a note at the top of the list says so; the closed case keeps the comment so it can be
    copied. The notes stay until the next reply or until the person leaves the page. Drafts belong to their row and
    survive a refresh.
 5. On a phone every control is 44 px, Reply spans the width, and Done and Can't be done share a row at half the width
-   each.
+   each, as do the two buttons of a review and of a done proposal.
 6. Loading says "Loading…". With nothing waiting the page says "Nothing waits for you." and, quiet under it, "Questions
    from agents and teammates, and work whose blocker was closed, show up here." A failed refresh keeps the rows. Past 500 rows the first 500 show, with
    "Showing the 500 most important of n."
@@ -528,6 +538,19 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
    "Unblocked “<title>”."; if the item changed first, the note says "Someone else changed this meanwhile." In the item's
    Waits for you the same row has Unblock only, as the item is open already. A reader sees the row without Unblock. On
    a phone both buttons are 44 px, sharing a row.
+9. **A review row** is a question an agent asked for a link to its work. After the short text comes the link, an
+   accent, underlined "↗ example.test/pull/7" (without `https://`, wrapping when long) that opens the work in a new
+   tab, and, in quiet text, "Piece: <piece>" when the piece differs from the link. Then "Comment, optional" and two
+   buttons, **Approved**, the primary one, and **Changes asked**, which reply as soon as they are pressed. Approving
+   never closes the task: the agent goes on, and proposes closing when nothing is left. The agent asking again after
+   changes asked is the next round, "Review, round 2".
+10. **A done-proposal row** ("Ready to close") is the agent saying nothing is left. Under the short text a quiet
+    summary line: the steps, "Steps 3/3", and the reviews by their latest round per piece, "review approved",
+    "reviews: 2, both approved", "reviews: 3, 2 approved" or "no reviews", joined by " · ". The item is fetched for it,
+    one request per proposal; until it arrives, or if it fails, the line is left out. Then the comment, "Comment,
+    optional: what is left, if not yet", and **Close as done**, the primary button, and **Not yet**, which sends the
+    task back to the agent with the comment. Close as done is the only reply with a toast: "“<title>” is done." with
+    **Open**, which opens the closed item (Reopen is there). Not yet has none.
 
 ## Closed
 
