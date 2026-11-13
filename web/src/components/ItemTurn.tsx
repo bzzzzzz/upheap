@@ -2,7 +2,7 @@ import { Bot } from "lucide-react";
 import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
-import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
+import { ApiProblem, type Goal, type HeapRef, type Item, type Reach, type Turn } from "../api/client";
 import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { chipClass, compactButtonClass } from "./buttons";
@@ -414,7 +414,19 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
         setToast({ message: "Sent back to the agent." });
         onSent();
       },
-      () => undefined,
+      (error: Error) => {
+        // The item changed meanwhile and has a turn now, so this button and its form unmount: say it in a toast and
+        // move focus to what the new turn brings.
+        if (error instanceof ApiProblem && error.code === "nothing_to_redo") {
+          setOpen(false);
+          setToast({ message: itemProblem(error), error: true });
+          focusAfterRender(
+            () =>
+              document.querySelector<HTMLElement>("[data-item-pane] [data-agent-chip]") ??
+              document.querySelector<HTMLElement>("[data-item-pane]"),
+          );
+        }
+      },
     );
   };
 
@@ -427,6 +439,7 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
         aria-expanded={open}
         onClick={() => {
           redo.reset();
+          sent.current = false;
           setOpen(true);
         }}
         className={chipClass}

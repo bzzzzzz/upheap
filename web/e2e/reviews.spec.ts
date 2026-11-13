@@ -70,6 +70,8 @@ async function tickAll(page: Page, item: string) {
 }
 
 const entry = (page: Page) => page.getByRole("link", { name: /^Waiting( for me)?( \d+)?$/ });
+/** The toast has a Dismiss button; the polite live region that says "Replied to" has none. */
+const toastOf = (page: Page) => page.getByRole("button", { name: "Dismiss" });
 const rows = (page: Page) => page.getByRole("main").getByRole("listitem");
 
 async function openWaiting(page: Page, count: number) {
@@ -115,6 +117,7 @@ test("a review is a row with its link, and the reply does not close the task; th
   await changes.click();
   await expect(rows(page)).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Replied to" })).toHaveText("Replied to “The change”.");
+  await expect(toastOf(page)).toHaveCount(0);
 
   // The item's answered list.
   await openByKey(page, heapPath, task.key);
@@ -134,6 +137,7 @@ test("a review is a row with its link, and the reply does not close the task; th
   await expect(second).toContainText("Review, round 2");
   await second.getByRole("button", { name: "Approved", exact: true }).click();
   await expect(rows(page)).toHaveCount(0);
+  await expect(toastOf(page)).toHaveCount(0);
   const fetched = await (await page.request.get(task.item)).json();
   expect(fetched.state).not.toBe("done");
 });
@@ -186,6 +190,7 @@ test("Not yet on a proposal with no reviews keeps the task open", async ({ page,
   await open.getByRole("button", { name: "Not yet", exact: true }).click();
 
   await expect(open).toHaveCount(0);
+  await expect(toastOf(page)).toHaveCount(0);
   await itemPane(page)
     .getByText(/^1 answered/)
     .click();
@@ -197,7 +202,8 @@ test("Not yet on a proposal with no reviews keeps the task open", async ({ page,
   expect(fetched.state).not.toBe("done");
 });
 
-test("Changes asked… sends an item an agent brought to a stable state back", async ({ page, heapPath }) => {
+/** An item an agent brought to "with context" and left, with the page open on it. */
+async function reachedItem(page: Page, heapPath: string) {
   const created = await page.request.post(`/api/v1${heapPath}/items`, {
     headers,
     data: { title: "Rotate the certs", need: "expected", description: "Why" },
@@ -212,19 +218,56 @@ test("Changes asked… sends an item an agent brought to a stable state back", a
     data: { result: "Added the context" },
   });
   expect(reached.status()).toBe(200);
-
   await openByKey(page, heapPath, key);
+  return item;
+}
+
+test("Changes asked… sends an item an agent brought to a stable state back", async ({ page, heapPath }) => {
+  await reachedItem(page, heapPath);
   const button: Locator = itemPane(page).getByRole("button", { name: "Changes asked…" });
   await button.click();
   const form = page.getByRole("dialog", { name: "Changes asked" });
   await expect(form).toContainText("An agent brought this to: With context.");
   const send = form.getByRole("button", { name: "Send back", exact: true });
   await expect(send).toBeDisabled();
-  await form.getByRole("textbox", { name: "What's wrong" }).fill("Add the rollback steps.");
+  const field = form.getByRole("textbox", { name: "What's wrong" });
+
+  // Cancel returns focus to the button and drops the draft.
+  await field.fill("Draft");
+  await form.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(button).toBeFocused();
+  await button.click();
+  await expect(field).toHaveValue("");
+
+  await field.fill("Add the rollback steps.");
   await expect(send).toBeEnabled();
   await send.click();
 
   await expect(page.getByRole("status").filter({ hasText: "Sent back to the agent." })).toBeVisible();
   await expect(itemPane(page).getByRole("button", { name: /^Who has it: / })).toBeVisible();
   await expect(button).toHaveCount(0);
+  await expect(itemPane(page).locator("[data-agent-chip]")).toBeFocused();
+});
+
+test("Changes asked… when the item was sent on meanwhile closes the form and says so in a toast", async ({
+  page,
+  heapPath,
+}) => {
+  const item = await reachedItem(page, heapPath);
+  const button = itemPane(page).getByRole("button", { name: "Changes asked…" });
+  await button.click();
+  const form = page.getByRole("dialog", { name: "Changes asked" });
+  await form.getByRole("textbox", { name: "What's wrong" }).fill("Add the rollback steps.");
+
+  // The owner sends it back from elsewhere; the open page is stale.
+  const redone = await page.request.post(`${item}/turn/redo`, { headers, data: { line: "Already asked." } });
+  expect(redone.status()).toBeLessThan(300);
+
+  await form.getByRole("button", { name: "Send back", exact: true }).click();
+  const toast = page.getByRole("alert").filter({ hasText: "there's nothing to send back." });
+  await expect(toast).toHaveText("The agent's work changed meanwhile: there's nothing to send back.");
+  await expect(form).toHaveCount(0);
+  await expect(button).toHaveCount(0);
+  await expect(itemPane(page).locator("[data-agent-chip]")).toBeFocused();
 });

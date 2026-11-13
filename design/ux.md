@@ -370,7 +370,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     has "Comment, optional" and two buttons, Done and Can't be done, which reply as soon as they are pressed, sharing
     one row on a phone. A review and a done proposal are rows as in Waiting for me, 9 and 10: a review has its link
     and piece under the text and Approved and Changes asked; a done proposal has its summary line and Close as done
-    and Not yet, and its toast has no Open, as the item is open already. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast:
+    and Not yet, and its toast has no Open, as the item is open already. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast (but see Close as done):
     the row leaves the box and joins the fold (point 14), the focus goes to the next row's first control, else to the
     item, and a polite live region says Replied to “<text>”. While it is sending, that row's buttons are off. If it
     fails the row stays with its picks and comment and the reason shows under it. If someone else replied first, the
@@ -402,14 +402,14 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     to an agent." and the chip shows it. Start, Done and Won't do in the item ask before they take an item back ("An
     agent has this. Starting it takes it back. Take it back and start it?"), inline under the title or in a sheet;
     Blocked and Open don't.
-    **Changes asked…** is a chip beside that place, shown instead of the Send button when the server offers it: an
+    **Changes asked…** is a chip beside that place, shown beside the Send button when the server offers it: an
     agent brought the item to a stable state short of done and nobody has sent it on. It opens a form like Send's,
     titled "Changes asked": "An agent brought this to: <stage>.", a required "What's wrong" field, **Send back**, off
     until the field has text, and Cancel, sharing a row on a phone. Send back closes the form, shows the toast "Sent
     back to the agent.", and gives focus to the agent chip, which the new turn brings; Cancel returns focus to the
     button and drops the draft. A failed send keeps the form and its text and says why under the buttons; if someone
-    sent the item on first it says "The agent's work changed meanwhile: there's nothing to send back." and the chip
-    goes. A reader sees no chip.
+    sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
+    send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
     each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set

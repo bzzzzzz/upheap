@@ -557,9 +557,10 @@ export function useRedoTurn(heap: HeapRef) {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
       replaceListedItem(queryClient, heap, saved);
     },
+    // Returned, so the caller's error handler runs once the item has been fetched again and shows its new turn.
     onError: (error, { item }) => {
       if (error instanceof ApiProblem && error.code === "nothing_to_redo") {
-        void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+        return queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
       }
     },
     onSettled: () => {

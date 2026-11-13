@@ -882,8 +882,6 @@ ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Waiting for me · 5                 all heaps, most important first     │
 │                                                                        │
-│ Review and done-proposal rows: built, see ux.md (Waiting for me).      │
-│                                                                        │
 │ Question · Paint the fence · House                                     │
 │   "Which colour?"                                          Details ▾   │
 │     "The fence is cedar, last stained in 2022. The shed beside it      │
