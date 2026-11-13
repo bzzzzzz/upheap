@@ -15,7 +15,7 @@ use tokio::process::Command;
 use tokio::time::Instant;
 
 use super::{Access, Tool, ToolError, ToolReport, ToolStart};
-use crate::output::spoken_duration;
+use crate::output::{shorten, spoken_duration};
 
 /// The most a run may cost, in US dollars: what the server accepts.
 const MAX_COST_USD: f64 = 1_000_000.0;
@@ -29,7 +29,8 @@ pub(super) enum Exit {
 }
 
 /// The arguments `claude` starts with: stream what happens as one JSON event a line, ending with a `result` event,
-/// and read the prompt from stdin, keep the run out of the person's sessions, and refuse (not ask about) what isn't allowed, since no one is there to ask.
+/// and read the prompt from stdin, keep the run out of the person's sessions, and refuse (not ask about) what isn't
+/// allowed, since no one is there to ask.
 ///
 /// `Prepare` may run `upheap`, read files under the directory it runs in (a bare `Read` would allow any path on the
 /// machine) and use the web. `Do` may run `upheap` and has file edits accepted; every
@@ -112,6 +113,16 @@ pub(super) fn read_report(exit: Exit, result_line: Option<&str>, stderr: &str) -
     let failure = match exit {
         Exit::Code(0) if output.is_none() => Some("claude's output couldn't be read.".to_owned()),
         Exit::Code(0) if !is_error => None,
+        _ if is_error && (subtype == Some("success") || (subtype.is_none() && matches!(exit, Exit::Code(0)))) => {
+            // Failures of the API or the login come as a `success` result with `is_error` set and the reason as its text.
+            let text = last_message
+                .as_deref()
+                .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "));
+            Some(match text.filter(|text| !text.is_empty()) {
+                Some(text) => format!("claude reported an error: {}", shorten(&text, 200)),
+                None => "claude reported an error.".to_owned(),
+            })
+        }
         _ if is_error && subtype.is_some() => subtype.map(|subtype| format!("claude ended with {subtype}.")),
         Exit::Code(0) => Some("claude reported an error.".to_owned()),
         Exit::Code(code) => Some(match last_line(stderr) {
@@ -216,25 +227,32 @@ impl Running {
     }
 
     /// Stops the tool and returns once it is gone: asked to end with its group, killed with it after `STOP_GRACE` if
-    /// it has not. After that the drop has nothing left to do.
+    /// it has not. The tool stays in `self` while this waits, so that dropping the future mid-stop goes through the
+    /// drop below: it is asked again, and seen out and killed with its group. After the tool is gone the drop has
+    /// nothing left to do.
     async fn stop(&mut self) {
-        let Some(mut child) = self.child.take() else {
+        let Some(child) = self.child.as_mut() else {
             return;
         };
         #[cfg(unix)]
-        if let Some(group) = self.group.take() {
+        if let Some(group) = self.group {
             use rustix::process::{Signal, kill_process_group};
             // A group that is gone already is what was wanted.
             let _ = kill_process_group(group, Signal::TERM);
             if tokio::time::timeout(STOP_GRACE, child.wait()).await.is_err() {
                 let _ = kill_process_group(group, Signal::KILL);
                 if tokio::time::timeout(REAP_LIMIT, child.wait()).await.is_err() {
+                    // Left in `self`, so the drop sees it out.
                     tracing::warn!("a killed tool was not gone after {REAP_LIMIT:?}");
+                    return;
                 }
             }
+            // Reaped, so its group's number may be given to another: no more signals.
+            self.group = None;
         }
         #[cfg(not(unix))]
         let _ = child.kill().await;
+        self.child = None;
     }
 
     /// Waits for the tool to end on its own. After that nothing is left to stop.
@@ -412,7 +430,10 @@ pub(super) async fn run(
         };
         // What was read before the silence stays in `stream` and `stderr_bytes`, which the dropped reading only
         // borrowed.
+        // Biased to `reading`: output that arrived while this future was not polled is read, and counts as activity,
+        // before the silence is checked.
         tokio::select! {
+            biased;
             () = reading => false,
             () = activity.silent_for(silence_limit) => true,
         }
@@ -725,6 +746,8 @@ mod tests {
         let ok = r#"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.31,"result":"Done."}"#;
         let budget = r#"{"subtype":"error_max_budget_usd","is_error":true,"total_cost_usd":1.5}"#;
         let tokens_only = r#"{"subtype":"success","is_error":false,"usage":{"input_tokens":10}}"#;
+        let long = format!(r#"{{"is_error":true,"result":"{}"}}"#, "x".repeat(300));
+        let long_failure = format!("claude reported an error: {}…", "x".repeat(199));
         let cases: Vec<Case> = vec![
             ("a normal end with a cost", Exit::Code(0), ok, "", Some(0.31), None),
             (
@@ -795,6 +818,30 @@ mod tests {
                 "exit 0, is_error with no subtype",
                 Exit::Code(0),
                 r#"{"is_error":true}"#,
+                "",
+                None,
+                Some("claude reported an error."),
+            ),
+            (
+                "exit 0, is_error with a success subtype and the reason as its result, made one line",
+                Exit::Code(0),
+                r#"{"subtype":"success","is_error":true,"result":"Invalid API key\n  Please run /login"}"#,
+                "",
+                None,
+                Some("claude reported an error: Invalid API key Please run /login"),
+            ),
+            (
+                "exit 0, is_error with no subtype and a long result: shortened",
+                Exit::Code(0),
+                &long,
+                "",
+                None,
+                Some(&long_failure),
+            ),
+            (
+                "exit 0, is_error with a success subtype and no result",
+                Exit::Code(0),
+                r#"{"subtype":"success","is_error":true}"#,
                 "",
                 None,
                 Some("claude reported an error."),

@@ -513,6 +513,50 @@ mod processes {
 
     #[gtest]
     #[tokio::test]
+    async fn dropping_the_run_while_a_silent_tool_is_being_stopped_still_ends_it_with_what_it_started()
+    -> googletest::Result<()> {
+        // Arrange: a script that ignores being asked to end and starts a command of its own, run until the silence
+        // limit has stopped it.
+        let dir = tempfile::tempdir()?;
+        let pids = dir.path().join("pids");
+        let body = format!(
+            "trap '' TERM\necho $$ > '{pids}'\nsleep 30 &\necho $! >> '{pids}'\necho '{{\"type\":\"system\"}}'\nwhile true; do sleep 0.05; done",
+            pids = pids.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(3));
+
+        // Act: drop the run during the grace, which is what a second Ctrl-C does. The script has started everything
+        // once its event is out; the silence limit is up a little after, and the grace lasts longer than that.
+        let mut running = Box::pin(tools.run(start(Access::Do)));
+        let mut ended_early = false;
+        tokio::select! {
+            _ = &mut running => ended_early = true,
+            () = async {
+                while std::fs::read_to_string(&pids).map_or(0, |pids| pids.split_whitespace().count()) < 2 {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            } => {}
+        }
+        let still_stopping = !ended_early
+            && tokio::time::timeout(Duration::from_millis(3500), &mut running)
+                .await
+                .is_err();
+        drop(running);
+        let settled = tokio::time::timeout(Duration::from_secs(10), tools.settled()).await;
+
+        // Assert: the script and its command are gone.
+        verify_that!(still_stopping, eq(true))?;
+        verify_that!(settled.is_ok(), eq(true))?;
+        let pids = std::fs::read_to_string(&pids)?;
+        verify_that!(pids.split_whitespace().count(), eq(2))?;
+        for pid in pids.split_whitespace() {
+            verify_that!(is_alive(pid), eq(false))?;
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
     async fn a_script_that_ignores_the_request_to_end_is_gone_when_the_silent_run_returns() -> googletest::Result<()> {
         // Arrange
         let dir = tempfile::tempdir()?;

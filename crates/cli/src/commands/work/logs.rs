@@ -1,6 +1,7 @@
 //! The run logs: where each run's streamed agent output is saved, and removing the old ones. The log of a run is
-//! `<config dir>/runs/<run id>.jsonl`, next to the loop's own log and outside every run's directory, so the agent
-//! can't read it. They are kept as long as a kept directory is.
+//! `<config dir>/runs/<run id>.jsonl`, next to the loop's own log. The logs are kept out of the directory runs work
+//! in (`design/architecture.md`, item 7 of its CLI section, "`work run` is the agent loop", has the mechanism). They
+//! are kept as long as a kept directory is.
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

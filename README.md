@@ -189,7 +189,8 @@ directory is kept and used again for the item's next run, with what the last run
 once the item is closed or can't be found, or after 7 days with no run on the item, checking when it starts and
 about every hour. Old `<key>-<run id>` directories from earlier versions are left for you to clear. Claude's
 streamed output for each run is saved in `<config dir>/runs/<run id>.jsonl` (kept 7 days), and a `claude` that shows
-no output for 30 minutes is stopped and its run failed. With `--instructions <file>`, every run is also told what the file
+no output for 30 minutes is stopped and its run failed. `claude` prints nothing while a single tool call runs, so a
+tool call longer than 30 minutes (a raised Bash timeout, a slow MCP tool) counts as silence. With `--instructions <file>`, every run is also told what the file
 says: your own way of working on this machine (which skills to use, how to check and review a change), which
 comes before the heap's context on how the work is done. The file is read once, when the loop starts. With
 `--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as
