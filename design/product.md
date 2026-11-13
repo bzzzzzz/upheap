@@ -131,7 +131,8 @@ What it is not:
 7. A closed item can be reopened within one week of being closed. After that it can't be reopened.
 8. A blocked item can point to another item as the reason it's blocked. When that item is done, the blocked item goes
    back to open on its own. When it's closed as won't do, or moved to another heap, the blocked item stays blocked and
-   waits for the person, who decides what happens to it.
+   waits for the person, who decides what happens to it. A blocked item can also say in words why it's blocked, when
+   what it waits for isn't an item of the heap; the reason goes when the item leaves blocked.
 
 ## Notes, tasks and reminders
 

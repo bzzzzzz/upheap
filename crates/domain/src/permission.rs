@@ -814,7 +814,7 @@ mod tests {
         };
 
         expect_that!(sendable(&task, false), eq((true, false)));
-        task.state = ItemState::Blocked { by: None };
+        task.state = ItemState::Blocked { by: None, reason: None };
         expect_that!(sendable(&task, false), eq((false, false)));
         expect_that!(sendable(&task, true), eq((false, true)));
         task.state = ItemState::Open;

@@ -465,3 +465,131 @@ async fn reopening_a_blocker_leaves_what_it_freed_open_and_holds_what_it_left_wa
     expect_that!(waiting["count"], eq(&json!(0)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_reason_round_trips_and_is_replaced_or_cleared_while_blocked() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = titled(&app, &session, &heap, "Second").await?;
+    expect_that!(item["blocked_reason"], eq(&Value::Null));
+
+    // Act
+    let blocked = patch(
+        &app,
+        &session,
+        &item,
+        json!({ "state": "blocked", "blocked_reason": "  Waits for the vendor's quote " }),
+    )
+    .await?;
+    let read = get(&app, &session, id(&item)?).await?;
+    let replaced = patch(
+        &app,
+        &session,
+        &blocked.body,
+        json!({ "blocked_reason": "Waits for legal" }),
+    )
+    .await?;
+    let cleared = patch(&app, &session, &replaced.body, json!({ "blocked_reason": null })).await?;
+    let log = history(&app, &session, &heap, id(&item)?).await?;
+
+    // Assert
+    expect_that!(blocked.status, eq(StatusCode::OK));
+    expect_that!(
+        blocked.body["blocked_reason"],
+        eq(&json!("Waits for the vendor's quote"))
+    );
+    expect_that!(read["blocked_reason"], eq(&json!("Waits for the vendor's quote")));
+    expect_that!(replaced.body["blocked_reason"], eq(&json!("Waits for legal")));
+    expect_that!(cleared.body["state"], eq(&json!("blocked")));
+    expect_that!(cleared.body["blocked_reason"], eq(&Value::Null));
+    expect_that!(
+        log["entries"][0]["changes"],
+        eq(
+            &json!([{ "field": "blocked_reason", "label": "Blocked because", "before": "Waits for legal", "after": null }])
+        )
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_bad_reason_is_refused_and_so_is_one_on_an_item_that_isnt_blocked() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = titled(&app, &session, &heap, "Second").await?;
+
+    // Act
+    let blank = patch(
+        &app,
+        &session,
+        &item,
+        json!({ "state": "blocked", "blocked_reason": "  " }),
+    )
+    .await?;
+    let long = patch(
+        &app,
+        &session,
+        &item,
+        json!({ "state": "blocked", "blocked_reason": "x".repeat(301) }),
+    )
+    .await?;
+    let not_blocked = patch(&app, &session, &item, json!({ "blocked_reason": "x" })).await?;
+    let clearing = patch(&app, &session, &item, json!({ "blocked_reason": null })).await?;
+
+    // Assert
+    expect_that!(blank.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(blank.body["field"], eq(&json!("blocked_reason")));
+    expect_that!(long.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(long.body["field"], eq(&json!("blocked_reason")));
+    expect_that!(not_blocked.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(not_blocked.body["code"], eq(&json!("item_not_blocked")));
+    expect_that!(clearing.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn leaving_blocked_clears_the_reason_and_a_blocker_done_frees_it_too() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let blocker = titled(&app, &session, &heap, "First").await?;
+    let waits = titled(&app, &session, &heap, "Second").await?;
+    let started = titled(&app, &session, &heap, "Third").await?;
+    let waits = patch(
+        &app,
+        &session,
+        &waits,
+        json!({ "state": "blocked", "blocked_by_item_id": id(&blocker)?, "blocked_reason": "And the vendor" }),
+    )
+    .await?
+    .body;
+    let started = patch(
+        &app,
+        &session,
+        &started,
+        json!({ "state": "blocked", "blocked_reason": "Waits" }),
+    )
+    .await?
+    .body;
+
+    // Act
+    let start = patch(&app, &session, &started, json!({ "state": "in_progress" })).await?;
+    let closed = patch(&app, &session, &blocker, json!({ "state": "done" })).await?;
+    let freed = get(&app, &session, id(&waits)?).await?;
+    let log = history(&app, &session, &heap, id(&waits)?).await?;
+
+    // Assert
+    expect_that!(start.body["blocked_reason"], eq(&Value::Null));
+    expect_that!(closed.status, eq(StatusCode::OK));
+    expect_that!(freed["state"], eq(&json!("open")));
+    expect_that!(freed["blocked_reason"], eq(&Value::Null));
+    expect_that!(
+        log["entries"][0]["diff"]["blocked_reason"],
+        eq(&json!({ "before": "And the vendor", "after": null }))
+    );
+    Ok(())
+}

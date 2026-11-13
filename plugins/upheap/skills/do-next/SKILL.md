@@ -178,7 +178,8 @@ Telling the person how to do it is this session's result for that item.
 - **A good part is done and more is left:** leave it in progress with the steps ticked and a comment saying
   what's next. Stop when the session has gone on long enough or the next part needs a fresh start.
 - **It can't go on:** something outside it has to happen first. `upheap item block <key>`, with `--by` when it
-  waits for another item in the heap, and the reason in a comment.
+  waits for another item in the heap, and with `--reason "<what it waits for>"` when it waits for something outside
+  the heap (both when both apply). The context is not where the reason goes.
 - **It shouldn't be done at all:** tell the person why. Close it with `upheap item wontdo` only if they agree.
 
 ## 6. Ask first

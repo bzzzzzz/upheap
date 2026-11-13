@@ -32,6 +32,9 @@ pub struct BlockArgs {
     /// The item it waits for, named like ITEM. It must be in the same heap and not closed
     #[arg(long, value_name = "ITEM")]
     pub by: Option<String>,
+    /// Why it's blocked, in words: what it waits for outside the heap. 1 to 300 characters
+    #[arg(long, value_name = "TEXT")]
+    pub reason: Option<String>,
 }
 
 /// The state a command moves an item to.
@@ -60,9 +63,14 @@ impl StateVerb {
         let (key, title) = (&item.key, &item.title);
         match self {
             Self::Start => format!("Started {key}: {title}."),
-            Self::Block => match &item.blocked_by {
-                Some(blocker) => format!("Blocked {key}: {title}. Waiting for {}.", blocker.key),
-                None => format!("Blocked {key}: {title}."),
+            Self::Block => match (&item.blocked_by, &item.blocked_reason) {
+                (Some(blocker), Some(reason)) => {
+                    format!("Blocked {key}: {title}. Waiting for {}: {reason}", blocker.key)
+                }
+                // The reason is the person's text, so no period follows it.
+                (None, Some(reason)) => format!("Blocked {key}: {title}. Waiting for: {reason}"),
+                (Some(blocker), None) => format!("Blocked {key}: {title}. Waiting for {}.", blocker.key),
+                (None, None) => format!("Blocked {key}: {title}."),
             },
             Self::Done => format!("Done {key}: {title}."),
             Self::WontDo => format!("Won't do {key}: {title}."),
@@ -73,12 +81,20 @@ impl StateVerb {
 
 /// Moves the item to the verb's state, or says it's there already.
 pub async fn run_verb(verb: StateVerb, args: StateArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
-    change_state(verb, &args, None, app, out).await
+    change_state(verb, &args, None, None, app, out).await
 }
 
-/// Blocks the item, on `--by` when given.
+/// Blocks the item, on `--by` and for `--reason` when given.
 pub async fn run_block(args: BlockArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
-    change_state(StateVerb::Block, &args.state, args.by.as_deref(), app, out).await
+    change_state(
+        StateVerb::Block,
+        &args.state,
+        args.by.as_deref(),
+        args.reason.as_deref(),
+        app,
+        out,
+    )
+    .await
 }
 
 /// Where the item a block waits for is.
@@ -93,6 +109,7 @@ async fn change_state(
     verb: StateVerb,
     args: &StateArgs,
     by: Option<&str>,
+    reason: Option<&str>,
     app: &App,
     out: &mut Output,
 ) -> Result<(), CliError> {
@@ -135,7 +152,8 @@ async fn change_state(
     let target = verb.target();
     let blocker_id = blocker.as_ref().map(|blocker| blocker.id);
     let is_already = item.value.state == target
-        && blocker_id.is_none_or(|id| item.value.blocked_by.as_ref().is_some_and(|current| current.id == id));
+        && blocker_id.is_none_or(|id| item.value.blocked_by.as_ref().is_some_and(|current| current.id == id))
+        && reason.is_none_or(|text| item.value.blocked_reason.as_deref() == Some(text.trim()));
     if is_already {
         match out.mode() {
             Mode::Json => out.json(&item.body)?,
@@ -147,6 +165,7 @@ async fn change_state(
     let patch = ItemPatchDto {
         state: Some(target),
         blocked_by_item_id: blocker_id.map(Some),
+        blocked_reason: reason.map(|text| Some(text.to_owned())),
         ..ItemPatchDto::default()
     };
     let moved = api.patch_item(&at.key, item.value.version, &patch).await?;

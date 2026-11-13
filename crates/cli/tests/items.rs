@@ -143,6 +143,33 @@ async fn item_list_says_what_its_view_hides_and_shows_it_on_request() -> Result<
 
 #[gtest]
 #[tokio::test]
+async fn item_list_gives_a_blocked_items_reason_in_its_state_cell() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            key(&items[2])?,
+            json!({ "state": "blocked", "blocked_reason": "Waits for the vendor's quote" }),
+        )
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let shown = cli.run(&["item", "list", "--blocked", "shown"]).await;
+
+    // Assert
+    expect_that!(
+        shown.stdout,
+        contains_substring("blocked: Waits for the vendor's quote")
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_list_view_sends_the_saved_views_settings() -> Result<()> {
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;
