@@ -9,14 +9,15 @@ use std::collections::HashMap;
 
 use domain::item::Stage;
 use domain::run::{Run, RunEnd, RunEnded, RunLink, RunResult};
-use domain::{HeapId, ItemId, RunId, TurnId, UserId};
+use domain::turn::Goal;
+use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, UserId};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::StoreError;
 use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db};
-use crate::entities::{item_runs, items};
+use crate::entities::{item_runs, item_turns, items};
 
 const TABLE: &str = "item_runs";
 
@@ -164,6 +165,80 @@ pub async fn set_run_cost(db: &impl ConnectionTrait, id: RunId, cost_micro_usd: 
     Ok(result.rows_affected == 1)
 }
 
+/// Sets the tool start and exit times of the run `id`, each only where it is still unset: a run's times are never
+/// changed once set, so a second call changes nothing.
+pub async fn set_run_tool_times(
+    db: &impl ConnectionTrait,
+    id: RunId,
+    started: Option<Timestamp>,
+    ended: Option<Timestamp>,
+) -> Result<(), StoreError> {
+    if let Some(started) = started {
+        item_runs::Entity::update_many()
+            .set(item_runs::ActiveModel {
+                tool_started_at: Set(Some(started.as_millis())),
+                ..Default::default()
+            })
+            .filter(item_runs::Column::Id.eq(id_to_db(id.as_uuid())))
+            .filter(item_runs::Column::ToolStartedAt.is_null())
+            .exec(db)
+            .await?;
+    }
+    if let Some(ended) = ended {
+        item_runs::Entity::update_many()
+            .set(item_runs::ActiveModel {
+                tool_ended_at: Set(Some(ended.as_millis())),
+                ..Default::default()
+            })
+            .filter(item_runs::Column::Id.eq(id_to_db(id.as_uuid())))
+            .filter(item_runs::Column::ToolEndedAt.is_null())
+            .exec(db)
+            .await?;
+    }
+    Ok(())
+}
+
+/// The runs of the item `item_id`, newest first (by start, then id), each with the goal of its turn, as locking reads
+/// when `lock` is set.
+pub async fn list_runs_for_item(
+    db: &impl ConnectionTrait,
+    item_id: ItemId,
+    lock: bool,
+) -> Result<Vec<(Run, Goal)>, StoreError> {
+    let query = item_runs::Entity::find()
+        .filter(item_runs::Column::ItemId.eq(id_to_db(item_id.as_uuid())))
+        .order_by_desc(item_runs::Column::StartedAt)
+        .order_by_desc(item_runs::Column::Id);
+    let rows = crate::items::shared_if(query, lock).all(db).await?;
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The item's turns are few, and no relation joins them to runs: read their goals and match by id.
+    let turns = crate::items::shared_if(
+        item_turns::Entity::find().filter(item_turns::Column::ItemId.eq(id_to_db(item_id.as_uuid()))),
+        lock,
+    )
+    .all(db)
+    .await?;
+    let goals: HashMap<&str, &str> = turns
+        .iter()
+        .map(|turn| (turn.id.as_str(), turn.goal.as_str()))
+        .collect();
+    rows.into_iter()
+        .map(|row| {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.id,
+            };
+            let code = goals
+                .get(row.turn_id.as_str())
+                .ok_or_else(|| read.corrupt("run has no turn".to_owned()))?;
+            let goal = Goal::from_code(code).ok_or_else(|| read.corrupt(format!("unknown goal {code:?}")))?;
+            Ok((to_run(row)?, goal))
+        })
+        .collect()
+}
+
 /// Records that the run `id` was heard from at `heard_at`, if it has not ended and not been heard from later.
 pub async fn touch_run(db: &impl ConnectionTrait, id: RunId, heard_at: domain::Timestamp) -> Result<(), StoreError> {
     item_runs::Entity::update_many()
@@ -262,6 +337,8 @@ fn to_row(run: &Run) -> item_runs::ActiveModel {
         links: Set(ended.and_then(|ended| (!ended.links.is_empty()).then(|| links_to_db(&ended.links)))),
         failure: Set(ended.and_then(|ended| ended.failure.clone())),
         cost_micro_usd: Set(run.cost_micro_usd),
+        tool_started_at: Set(run.tool_started_at.map(Timestamp::as_millis)),
+        tool_ended_at: Set(run.tool_ended_at.map(Timestamp::as_millis)),
     }
 }
 
@@ -307,5 +384,7 @@ fn to_run(row: item_runs::Model) -> Result<Run, StoreError> {
         from_stage,
         ended,
         cost_micro_usd: row.cost_micro_usd,
+        tool_started_at: row.tool_started_at.map(|at| read.timestamp(at)).transpose()?,
+        tool_ended_at: row.tool_ended_at.map(|at| read.timestamp(at)).transpose()?,
     })
 }

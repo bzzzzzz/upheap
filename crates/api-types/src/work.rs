@@ -123,6 +123,39 @@ pub struct RunDto {
     pub cost_usd: Option<f64>,
 }
 
+/// A run as an item's page lists it: when it ran, how it ended and what it cost.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ItemRun)]
+pub struct ItemRunDto {
+    pub id: Uuid,
+    /// UTC milliseconds: when the run was claimed.
+    pub started_at: i64,
+    /// UTC milliseconds; `null` while the run has not ended.
+    pub ended_at: Option<i64>,
+    /// UTC milliseconds: when the run's agent tool started, as the loop reported it. `null` when not recorded: a run
+    /// made before this was kept, or whose tool never started.
+    pub tool_started_at: Option<i64>,
+    /// UTC milliseconds: when the run's agent tool exited. `null` when not recorded.
+    pub tool_ended_at: Option<i64>,
+    /// When the run started, ready to show: the time ("14:02") if it was today, else the date ("yesterday", "3 Nov"),
+    /// in the request's timezone.
+    pub started_label: String,
+    /// The item's stage when the run started.
+    pub from_stage: StageDto,
+    /// Where the run was going: the goal of its turn.
+    pub goal: GoalDto,
+    /// `null` while the run has not ended.
+    pub end: Option<RunEndDto>,
+    /// What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or
+    /// `handed_back`.
+    pub result: Option<String>,
+    pub links: Vec<String>,
+    /// Why the run failed; `null` unless it ended as `failed`.
+    pub failure: Option<String>,
+    /// What the run cost in US dollars; `null` when it wasn't reported.
+    pub cost_usd: Option<f64>,
+}
+
 /// A claim: the run started on the first item of the queue.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Claim)]
@@ -178,4 +211,12 @@ pub struct FinishRequestDto {
     /// characters. Ignored for a run that ended another way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<String>,
+    /// When the run's agent tool started, in UTC milliseconds. Set once: a later value for a run that has one is
+    /// ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_started_at: Option<i64>,
+    /// When the run's agent tool exited, in UTC milliseconds; not before `tool_started_at` when both are sent. Set
+    /// once: a later value for a run that has one is ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_ended_at: Option<i64>,
 }

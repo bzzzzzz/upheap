@@ -192,6 +192,23 @@ async fn the_cost_is_set_once_and_an_ended_run_is_not_touched() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_tool_times_round_trip() -> Result<()> {
+    // Arrange
+    let world = world().await?;
+    let (_, _, run) = run_on_new_item(&world, "k3x9a", 5_000).await?;
+
+    // Act
+    store::runs::set_run_tool_times(&world.db, run.id, Some(at(5_100)?), Some(at(5_900)?)).await?;
+    let found = store::runs::find_run(&world.db, run.id).await?.context("run")?;
+
+    // Assert
+    expect_that!(found.tool_started_at, some(eq(at(5_100)?)));
+    expect_that!(found.tool_ended_at, some(eq(at(5_900)?)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn touching_a_run_never_moves_it_back() -> Result<()> {
     // Arrange
     let world = world().await?;

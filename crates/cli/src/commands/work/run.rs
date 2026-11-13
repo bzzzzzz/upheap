@@ -542,6 +542,7 @@ impl Shared<'_> {
             let request = FinishRequestDto {
                 cost_usd: None,
                 failure: Some(failure.to_owned()),
+                ..Default::default()
             };
             self.finish_and_print(&run, &request, None).await?;
             return Ok(Next::Wait);
@@ -574,6 +575,7 @@ impl Shared<'_> {
                 let request = FinishRequestDto {
                     cost_usd: None,
                     failure: Some(format!("Couldn't read the item before starting: {err}")),
+                    ..Default::default()
                 };
                 self.finish_and_print(&run, &request, None).await?;
                 // An item that is gone, such as one moved to another heap since the claim, is that item's trouble:
@@ -633,8 +635,12 @@ impl Shared<'_> {
         // The marker stays open and locked until the tool is gone, so no sweep, in this loop or another, takes the
         // directory meanwhile.
         let mut marker = None;
-        let driven = match dir {
-            None => self.drive_tool(&run, start).await,
+        let (driven, tool_started) = match dir {
+            None => {
+                // Taken just before the tool is launched, to be sent with `finish` as when the tool started.
+                let started = self.app.now();
+                (self.drive_tool(&run, start).await, Some(started))
+            }
             Some(Ok(dir)) => match self.prepare_directory(&run, &dir).await {
                 Ok(locked) => {
                     marker = Some(locked);
@@ -642,17 +648,25 @@ impl Shared<'_> {
                         dir: Some(dir),
                         ..start
                     };
-                    self.drive_tool(&run, start).await
+                    let started = self.app.now();
+                    (self.drive_tool(&run, start).await, Some(started))
                 }
-                Err(err) => Driven::Ended(Err(err)),
+                Err(err) => (Driven::Ended(Err(err)), None),
             },
-            Some(Err(err)) => Driven::Ended(Err(err)),
+            Some(Err(err)) => (Driven::Ended(Err(err)), None),
         };
         // A tool that was stopped is still ending, and in a directory shared with the next run (no `--root`) two agents
         // would work at once. So the run is recorded, and the next one claimed, only once the tool is gone.
         if matches!(driven, Driven::Over | Driven::Stopped) {
             self.tools.settled().await;
         }
+        // The tool is gone: its own exit time, which a tool that never started doesn't have.
+        let tool_ended = self.app.now();
+        let tool_times = |request: FinishRequestDto| FinishRequestDto {
+            tool_started_at: tool_started.map(|at| at.as_millisecond()),
+            tool_ended_at: tool_started.map(|_| tool_ended.as_millisecond()),
+            ..request
+        };
         // Used until now, so a run longer than the unused period doesn't lose its directory the moment it ends.
         if let Some(marker) = marker
             && let Err(err) = marker.set_modified(SystemTime::from(self.app.now()))
@@ -662,25 +676,27 @@ impl Shared<'_> {
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
                 tracing::debug!(run_id = %run.id, last_message = ?report.last_message, "the tool ended");
-                let request = FinishRequestDto {
+                let request = tool_times(FinishRequestDto {
                     cost_usd: report.cost_usd,
                     failure: report.failure,
-                };
+                    ..Default::default()
+                });
                 (request, None)
             }
             Driven::Ended(Err(err)) => {
                 let request = FinishRequestDto {
                     cost_usd: None,
                     failure: Some(err.failure_text()),
+                    ..Default::default()
                 };
                 (request, Some(err))
             }
-            Driven::Over => (FinishRequestDto::default(), None),
+            Driven::Over => (tool_times(FinishRequestDto::default()), None),
             Driven::Stopped => {
-                let request = FinishRequestDto {
-                    cost_usd: None,
+                let request = tool_times(FinishRequestDto {
                     failure: Some("Stopped by the person.".to_owned()),
-                };
+                    ..Default::default()
+                });
                 (request, None)
             }
         };
@@ -1213,7 +1229,7 @@ fn local_time(ms: i64, zone: Option<&str>) -> String {
 }
 
 /// How long a run took, from its length in milliseconds: `0m40s`, `2m10s`, `1h05m`.
-fn format_duration(ms: i64) -> String {
+pub(crate) fn format_duration(ms: i64) -> String {
     let seconds = ms.max(0) / 1000;
     if seconds < 3600 {
         format!("{}m{:02}s", seconds / 60, seconds % 60)

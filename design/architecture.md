@@ -151,7 +151,9 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
   ended (`reached`, `asked`, `failed`, `taken_back` or `handed_back`), what it said it reached and made (`result`, `links`), why it
-  failed, and its cost in micro-dollars. Like turns, runs are never deleted and never bump the item's `version`.
+  failed, and its cost in micro-dollars. `work run` also sends the agent tool's own start and exit times with `finish`
+  (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started).
+  Like turns, runs are never deleted and never bump the item's `version`.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
   item's score in its own heap (`rank_open_items`, once per heap), then heap name, then position. A claim takes the

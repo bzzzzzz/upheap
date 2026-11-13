@@ -11,6 +11,7 @@ use api_types::common::{
 };
 use api_types::turns::{GoalDto, TurnDto};
 use api_types::waiting::ItemHeapDto;
+use api_types::work::ItemRunDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
 use domain::heap::Heap;
@@ -18,7 +19,9 @@ use domain::item::Kind;
 use domain::team::Team;
 use domain::turn::goal_choices;
 use jiff::tz::TimeZone;
-use service::items::{CommentView, GoneBlocker, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
+use service::items::{
+    CommentView, GoneBlocker, ItemRunView, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView,
+};
 use utoipa::IntoParams;
 
 fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
@@ -109,6 +112,10 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
                 .map(|comment| to_comment_dto(comment, as_of, tz))
                 .collect()
         }),
+        runs_cost_usd: view.runs.as_deref().and_then(runs_cost_usd),
+        runs: view
+            .runs
+            .map(|runs| runs.into_iter().map(|view| to_item_run_dto(view, as_of, tz)).collect()),
         waits_for_you: view.waits_for_you,
         turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
         next_goal,
@@ -198,6 +205,41 @@ pub(crate) fn to_comment_dto(view: CommentView, as_of: Timestamp, tz: &TimeZone)
         created_by: view.created_by.as_ref().map(UserRefDto::from),
         created_at: comment.created_at.as_millis(),
         created_label: describe_since(comment.created_at, as_of, tz),
+    }
+}
+
+/// A cost in millionths of a US dollar as dollars.
+pub(crate) fn micro_usd_to_usd(micro: i64) -> f64 {
+    micro as f64 / 1_000_000.0
+}
+
+/// The sum of the known costs of `runs` in US dollars, or `None` when none has one.
+fn runs_cost_usd(runs: &[ItemRunView]) -> Option<f64> {
+    runs.iter()
+        .filter_map(|view| view.run.cost_micro_usd)
+        .reduce(|total, micro| total + micro)
+        .map(micro_usd_to_usd)
+}
+
+fn to_item_run_dto(view: ItemRunView, as_of: Timestamp, tz: &TimeZone) -> ItemRunDto {
+    let run = view.run;
+    let ended = run.ended.as_ref();
+    ItemRunDto {
+        id: *run.id.as_uuid(),
+        started_at: run.started_at.as_millis(),
+        ended_at: ended.map(|ended| ended.at.as_millis()),
+        tool_started_at: run.tool_started_at.map(Timestamp::as_millis),
+        tool_ended_at: run.tool_ended_at.map(Timestamp::as_millis),
+        started_label: describe_since(run.started_at, as_of, tz),
+        from_stage: run.from_stage.into(),
+        goal: view.goal.into(),
+        end: ended.map(|ended| ended.end.into()),
+        result: ended.and_then(|ended| ended.result.as_ref().map(|result| result.as_str().to_owned())),
+        links: ended
+            .map(|ended| ended.links.iter().map(|link| link.as_str().to_owned()).collect())
+            .unwrap_or_default(),
+        failure: ended.and_then(|ended| ended.failure.clone()),
+        cost_usd: run.cost_micro_usd.map(micro_usd_to_usd),
     }
 }
 

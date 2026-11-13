@@ -18,6 +18,8 @@ pub struct Model {
     pub links: Option<String>,
     pub failure: Option<String>,
     pub cost_micro_usd: Option<i64>,
+    pub tool_started_at: Option<i64>,
+    pub tool_ended_at: Option<i64>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

@@ -157,6 +157,10 @@ pub struct Run {
     pub ended: Option<RunEnded>,
     /// What the run cost, in millionths of a US dollar. Set once, by `finish`.
     pub cost_micro_usd: Option<i64>,
+    /// When the agent tool started and exited, as the loop saw it. Each set once, by `finish`; `None` for a run whose
+    /// tool never started and for runs made before they were recorded.
+    pub tool_started_at: Option<Timestamp>,
+    pub tool_ended_at: Option<Timestamp>,
 }
 
 impl Run {
@@ -172,6 +176,8 @@ impl Run {
             from_stage: item.stage,
             ended: None,
             cost_micro_usd: None,
+            tool_started_at: None,
+            tool_ended_at: None,
         }
     }
 
@@ -357,6 +363,16 @@ pub fn parse_cost_usd(usd: f64) -> Result<i64, ValidationError> {
     }
     // At most 10^12, so it fits.
     Ok((usd * 1_000_000.0).round() as i64)
+}
+
+/// Checks that the tool did not exit before it started, when both times are given.
+pub fn check_tool_times(started: Option<Timestamp>, ended: Option<Timestamp>) -> Result<(), ValidationError> {
+    match (started, ended) {
+        (Some(started), Some(ended)) if ended < started => Err(ValidationError::FieldInvalid {
+            field: Field::ToolEndedAt,
+        }),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
