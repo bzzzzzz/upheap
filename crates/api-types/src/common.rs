@@ -847,8 +847,8 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub next_goal: Option<GoalDto>,
-    /// The goals the caller may send the item to, `next_goal` first: also `defined` on a note as written. Empty when
-    /// `next_goal` is null.
+    /// The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when
+    /// `next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`).
     #[serde(default)]
     #[schema(required = true)]
     pub goal_choices: Vec<GoalDto>,

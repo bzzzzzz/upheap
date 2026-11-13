@@ -8946,7 +8946,7 @@
             "items": {
               "$ref": "#/components/schemas/Goal"
             },
-            "description": "The goals the caller may send the item to, `next_goal` first: also `defined` on a note as written. Empty when\n`next_goal` is null."
+            "description": "The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when\n`next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`)."
           },
           "heap_id": {
             "type": "string",

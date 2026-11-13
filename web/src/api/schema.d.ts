@@ -2074,8 +2074,8 @@ export interface components {
             due?: null | components["schemas"]["Due"];
             effort?: null | components["schemas"]["Size"];
             /**
-             * @description The goals the caller may send the item to, `next_goal` first: also `defined` on a note as written. Empty when
-             *     `next_goal` is null.
+             * @description The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when
+             *     `next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`).
              */
             goal_choices: components["schemas"]["Goal"][];
             /** Format: uuid */
