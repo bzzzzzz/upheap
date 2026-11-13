@@ -386,6 +386,26 @@ async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn a_split_task_the_person_started_gets_no_turn() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, and the person starts A before it became.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    let started = w.edit(key_of(&a.body), json!({ "state": "in_progress" })).await?;
+    anyhow::ensure!(started.status == StatusCode::OK, "start failed: {}", started.body);
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_note_sent_one_state_gives_its_split_tasks_no_turn() -> Result<()> {
     // Arrange, act
     let (w, _, a, b, _) = split_and_became("one").await?;

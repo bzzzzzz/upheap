@@ -7,7 +7,7 @@
 //! between them can't strand a closed note with an open turn.
 
 use domain::audit::AuditAction;
-use domain::item::{Item, Kind, Stage};
+use domain::item::{Item, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{RunEnd, RunResult, split_reached_check};
 use domain::step::StepState;
@@ -33,8 +33,8 @@ impl Services {
     /// from) unless it has no open question and every open task made from it has a context and a step that isn't
     /// dropped (those still in the note's heap; one moved away is the person's). Otherwise each of those tasks becomes
     /// defined, the note closes as became, and the run and the turn end as reached; no next turn opens on the note.
-    /// When its turn was sent all the way, each of those tasks that has no open turn gets one of its own
-    /// ([`domain::turn::Turn::passed_on`]).
+    /// When its turn was sent all the way, each of those tasks that isn't started and has no open turn gets one of
+    /// its own ([`domain::turn::Turn::passed_on`]).
     pub async fn became_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let found = store::items::find_item(&txn, item_id)
@@ -148,18 +148,22 @@ impl Services {
             store::audit::insert_audit_entry(&txn, &entry).await?;
 
             // All the way §2: sent all the way, the note's turn goes on to the tasks it became, each defined by now.
-            // One the person has sent on already keeps its turn.
-            for task in made.iter().filter(|item| to_define(item, heap.id)) {
+            // One the person has started or sent on already stays as the person left it.
+            for task in made
+                .iter()
+                .filter(|item| to_define(item, heap.id) && item.state.kind() != StateKind::InProgress)
+            {
+                if store::turns::find_open_turn_locking(&txn, task.id).await?.is_some() {
+                    continue;
+                }
                 let task = Item {
                     stage: Stage::Defined,
                     ..task.clone()
                 };
                 let Some(turn) = scope.turn.passed_on(TurnId::from_uuid(self.new_id(now)), &task, now) else {
+                    // A turn of one state passes nothing on, to any task.
                     break;
                 };
-                if store::turns::find_open_turn_locking(&txn, task.id).await?.is_some() {
-                    continue;
-                }
                 store::turns::insert_turn(&txn, &turn).await?;
                 let entry = self.item_audit_entry(
                     heap,

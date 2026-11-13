@@ -190,7 +190,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   a step
   (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
   run and turn end as reached with no follow-on on the note. If that turn was sent all the way, each of those tasks
-  without an open turn gets one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener,
+  not started and without an open turn gets one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener,
   to done); a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
