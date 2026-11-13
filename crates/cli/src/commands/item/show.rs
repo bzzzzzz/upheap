@@ -2,7 +2,7 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    ItemDto, KindDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
+    ItemDto, ItemRefDto, KindDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use clap::Args;
@@ -120,6 +120,15 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
             out.line(&format!("  {}", reason.replace('\n', " ")))?;
         }
     }
+    if let Some(origin) = &item.origin {
+        out.line(&format!("From: {}", item_ref_text(origin)))?;
+    }
+    if let Some(became) = item.became.as_deref().filter(|became| !became.is_empty()) {
+        out.line("Became:")?;
+        for made in became {
+            out.line(&format!("  {}", item_ref_text(made)))?;
+        }
+    }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
         out.line_toned("Context", Tone::Strong)?;
@@ -130,6 +139,17 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     render_comments(item, out)?;
     render_steps(item, out)?;
     render_questions(item, out)
+}
+
+/// Another item as one phrase: `n8c2d "Certs are a mess" (note, became)`.
+fn item_ref_text(item: &ItemRefDto) -> String {
+    format!(
+        "{} \"{}\" ({}, {})",
+        item.key,
+        item.title,
+        kind_text(item.kind),
+        state_text(item.state)
+    )
 }
 
 /// The item's comments, when it has any: a heading and then the thread as `comment list` prints it.

@@ -8,9 +8,21 @@ done looks like, under a line starting "Done when:". Add a step for each part of
 (`upheap step add <key> "<title>"`, with `--context-file -` when a step needs background). Set effort when it is
 clear (`upheap item edit <key> --effort s|m|l|xl`).
 
-If the item is really several pieces of work, don't split it: this version can't. Say so in a comment and ask
-the person how they want it cut.
+If the item is really several pieces of work, split it instead. First look at "Became" under the item: an earlier
+run may have made some of the tasks already, so carry on from them and make only what is missing.
+1. Make each task, one at a time and in order, with its context (a line starting "Done when:") and its steps:
+   `upheap item add "<title>" --task --from <key> --need <need> --age keep|new --context-file - --step "<title>"`,
+   with the context on stdin. `--age keep` ranks it from the note's age, `--age new` from now.
+2. Give the need and the age when the item's context or the person's line settles them. Never give a need above the
+   note's. When they don't, ask one question on the note that lists the pieces (`upheap question ask <key>`), and
+   stop.
+3. A task that has to wait for an earlier one gets `--blocked-by <key of that task>` when it is made. Block only on
+   tasks you made in this run.
+4. Then `upheap item became <key>`. It closes the note as became and reaches the turn. There is nothing more to do
+   after it.
+A single piece of work stays one task, in place (`upheap item to-task <key>`).
 
 Don't do the work and don't tick steps.
 
-Reached needs: a task with a context, at least one step, and no open question.
+Reached needs: a task with a context, at least one step, and no open question. For a split: no open question on the
+note, and every open task made from it with a context and at least one step.

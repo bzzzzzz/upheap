@@ -194,6 +194,8 @@ enum ItemCommand {
     Reopen(commands::item::state::StateArgs),
     /// Make a note a task, in place: it keeps its key, age and history
     ToTask(commands::item::state::StateArgs),
+    /// Close a note as became, once items are made from it with `item add --from`
+    Became(commands::item::state::StateArgs),
     /// Move an item to another heap of its team, with its context, steps, questions and history
     Move(commands::item::move_item::MoveArgs),
 }
@@ -322,7 +324,8 @@ impl Command {
                 | ItemCommand::Done(args)
                 | ItemCommand::Wontdo(args)
                 | ItemCommand::Reopen(args)
-                | ItemCommand::ToTask(args),
+                | ItemCommand::ToTask(args)
+                | ItemCommand::Became(args),
             ) => &args.shared,
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
             Self::Item(ItemCommand::Move(args)) => &args.shared,
@@ -469,6 +472,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Item(ItemCommand::Wontdo(args)) => run_verb(StateVerb::WontDo, args, app, out).await,
         Command::Item(ItemCommand::Reopen(args)) => run_verb(StateVerb::Reopen, args, app, out).await,
         Command::Item(ItemCommand::ToTask(args)) => commands::item::to_task::run(args, app, out).await,
+        Command::Item(ItemCommand::Became(args)) => commands::item::became::run(args, app, out).await,
         Command::Item(ItemCommand::Move(args)) => commands::item::move_item::run(args, app, out).await,
         Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,

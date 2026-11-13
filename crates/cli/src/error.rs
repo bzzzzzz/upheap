@@ -304,6 +304,19 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
             .map(|key| format!("This run holds {key}; write to it only.")),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
         "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
+        "run_need_above_origin" => Some(match &problem.highest {
+            Some(highest) => format!("Give --need {highest} or lower."),
+            None => "Give --need at or below the note's.".to_owned(),
+        }),
+        "run_blocker_not_made" => Some("Block only on a task you made from this item in this turn.".to_owned()),
+        "nothing_made" => Some(
+            "Make the tasks first: upheap item add \"<title>\" --task --from <key> --need <need> --age keep|new"
+                .to_owned(),
+        ),
+        "became_needs_note" => Some("Only a note becomes other items; a task or reminder stays one.".to_owned()),
+        "origin_not_a_note" => Some("Only a note can be split; make items from a note.".to_owned()),
+        "origin_closed" => Some("Reopen the note first, or make the items from another one.".to_owned()),
+        "became_needs_split" => Some("Make items from the note, then close it with `upheap item became`.".to_owned()),
         _ => None,
     }
 }
@@ -342,7 +355,13 @@ fn client_exit_code(err: &ClientError) -> u8 {
         ClientError::Problem { problem, .. }
             if matches!(
                 problem.code.as_str(),
-                "run_forbidden" | "run_done_needs_review" | "run_wrong_item" | "run_over" | "run_cost_recorded"
+                "run_forbidden"
+                    | "run_done_needs_review"
+                    | "run_wrong_item"
+                    | "run_over"
+                    | "run_cost_recorded"
+                    | "run_need_above_origin"
+                    | "run_blocker_not_made"
             ) =>
         {
             3
@@ -380,6 +399,7 @@ mod tests {
                 field: None,
                 hint: None,
                 item_key: None,
+                highest: None,
                 request_id: None,
             }),
             body: String::new(),
@@ -446,8 +466,18 @@ mod tests {
         );
         let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
+        let too_high = {
+            let mut err = problem(403, "run_need_above_origin");
+            if let ClientError::Problem { problem, .. } = &mut err {
+                problem.highest = Some("expected".to_owned());
+            }
+            CliError::Client(err)
+        };
+        let not_made = run_refusal(403, "run_blocker_not_made", "Blocks only among the items it made.");
 
-        for err in [&over, &wrong, &forbidden, &done, &recorded, &missed] {
+        for err in [
+            &over, &wrong, &forbidden, &done, &recorded, &missed, &too_high, &not_made,
+        ] {
             expect_that!(err.exit_code(), eq(3));
         }
         // Their messages say it all: a hint would only contradict them.
@@ -459,6 +489,14 @@ mod tests {
             contains(eq("hint: This run holds k3x9a; write to it only."))
         );
         expect_that!(forbidden.to_message(), contains(eq("hint: Only the person does that.")));
+        expect_that!(
+            too_high.to_message(),
+            contains(eq("hint: Give --need expected or lower."))
+        );
+        expect_that!(
+            not_made.to_message(),
+            contains(eq("hint: Block only on a task you made from this item in this turn."))
+        );
         expect_that!(
             missed.to_message(),
             contains(eq("hint: Fix what's missing and say reached again."))
