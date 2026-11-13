@@ -367,6 +367,33 @@ pub enum ItemError {
     BecameNeedsNote { item_id: ItemId, kind: Kind },
 }
 
+/// Whose age a new item made from another counts from: nothing is inherited silently, so a split says which.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Age {
+    /// The origin's: ranking counts the new item's age from when the origin joined the list.
+    Keep,
+    /// None: ranking counts it from now.
+    New,
+}
+
+impl Age {
+    /// The `arrives_at` of an item made from `origin` with this age: the origin's `arrives_at`, or its creation when
+    /// it has none, for [`Age::Keep`]; `None` for [`Age::New`], so its age counts from its own creation.
+    pub fn arrives_at(self, origin: &Item) -> Option<Timestamp> {
+        match self {
+            Self::Keep => Some(origin.arrives_at.unwrap_or(origin.created_at)),
+            Self::New => None,
+        }
+    }
+}
+
+/// The item a new item is made from, and which age it takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewOrigin {
+    pub item_id: ItemId,
+    pub age: Age,
+}
+
 /// The fields of a new item. Everything except the title and the need is optional.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewItem {
@@ -385,8 +412,9 @@ pub struct NewItem {
     pub tags: BTreeSet<TagId>,
     /// An option for each custom parameter that is set. The service checks they are in use in the heap.
     pub parameters: BTreeMap<ParameterId, OptionId>,
-    /// The item it is made from. The service checks it is an open note of the same heap.
-    pub origin: Option<ItemId>,
+    /// The item it is made from. The service checks it is an open note of the same heap, and sets `arrives_at` from
+    /// the age.
+    pub origin: Option<NewOrigin>,
     /// The item the new one starts blocked by. The service checks it with the other blockers.
     pub blocked_by: Option<ItemId>,
 }
@@ -532,7 +560,7 @@ impl Item {
             arrives_at: fields.arrives_at,
             tags: fields.tags,
             parameters: fields.parameters,
-            origin: fields.origin,
+            origin: fields.origin.map(|origin| origin.item_id),
             created_at: now,
             created_by: Some(created_by),
             version: Version::INITIAL,

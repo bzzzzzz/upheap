@@ -24,6 +24,7 @@ mod personal;
 pub mod questions;
 mod random;
 pub mod saved_views;
+mod splitting;
 pub mod steps;
 pub mod tags;
 pub mod teams;

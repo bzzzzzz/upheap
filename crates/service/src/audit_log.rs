@@ -296,7 +296,13 @@ fn collect_referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
     let blockers = entries
         .iter()
         .filter(|entry| entry.entity_type == EntityType::Item)
-        .flat_map(|entry| [entry.diff.get("blocked_by"), entry.diff.get("blocker_done")])
+        .flat_map(|entry| {
+            [
+                entry.diff.get("blocked_by"),
+                entry.diff.get("origin"),
+                entry.diff.get("blocker_done"),
+            ]
+        })
         .flatten()
         .flat_map(|value| [value.get("before"), value.get("after"), Some(value)])
         .flatten()
@@ -442,7 +448,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 52] = [
+const FIELD_ORDER: [&str; 53] = [
     "step",
     "step_title",
     "step_context",
@@ -477,6 +483,7 @@ const FIELD_ORDER: [&str; 52] = [
     "context",
     "state",
     "blocked_by",
+    "origin",
     "need",
     "effort",
     "impact",
@@ -626,6 +633,7 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "context" => "Context",
         "state" => "State",
         "blocked_by" => "Blocked by",
+        "origin" => "Made from",
         "need" => "Need",
         "effort" => "Effort",
         "impact" => "Impact",
@@ -673,7 +681,7 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
         "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
         "due" => describe_recorded_due(value, tz)?,
-        "blocked_by" | "blocker_done" => names.of_value(value, "Unknown item"),
+        "blocked_by" | "origin" | "blocker_done" => names.of_value(value, "Unknown item"),
         "heap" => names.of_value(value, "Unknown heap"),
         "tags" => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
         "options" | "archived_options" => join(
@@ -718,6 +726,7 @@ const fn describe_state(state: StateKind) -> &'static str {
         StateKind::Blocked => "Blocked",
         StateKind::Done => "Done",
         StateKind::WontDo => "Won't do",
+        StateKind::Became => "Became",
     }
 }
 

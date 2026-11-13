@@ -6,7 +6,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::comment::Comment;
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, Stage, StateKind};
+use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, NewOrigin, Stage, StateKind};
 use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
@@ -21,6 +21,7 @@ use domain::tag::Tag;
 use domain::team::Role;
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, with_agent};
 use domain::user::User;
+use domain::validation::Field;
 use domain::{
     Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, TurnId, UserId, ValidationError, Version,
 };
@@ -59,6 +60,12 @@ pub struct ItemView {
     /// How its blocker stopped holding it, when it did: closed, or moved to another heap. The item then waits for the
     /// person.
     pub blocker_gone: Option<GoneBlocker>,
+    /// The item it was made from, in whichever heap it is now.
+    pub origin: Option<ItemSummary>,
+    /// The items made from it, oldest first, in any state and heap: `Some` in a single-item response and in the
+    /// closed list, `None` in the ranked list and other lists. A split makes a handful of items, and the closed list
+    /// is at most [`MAX_CLOSED_PAGE`] rows, so one query reads them for the whole page.
+    pub became: Option<Vec<ItemSummary>>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
@@ -318,6 +325,7 @@ impl Services {
         let mut blockers = blocker_summaries(&self.db, &items).await?;
         blockers.extend(blocker_summaries(&self.db, &to_come).await?);
         let gone = gone_blockers(&self.db, items.iter().chain(&to_come), &blockers).await?;
+        let origins = origin_summaries(&self.db, items.iter().chain(&to_come)).await?;
         let mut users = load_item_users(&self.db, &items).await?;
         users.extend(load_item_users(&self.db, &to_come).await?);
 
@@ -330,12 +338,16 @@ impl Services {
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
             let blocker_gone = gone.get(&item.id).cloned();
             let created_by = pick_user(&users, item.created_by);
+            let origin = item.origin.and_then(|id| origins.get(&id).cloned());
             ItemView {
                 item,
                 tags,
                 parameters: values,
                 blocked_by,
                 blocker_gone,
+                origin,
+                // Lists carry the origin only; what an item became is read for one item or the closed list.
+                became: None,
                 created_by,
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
@@ -528,7 +540,9 @@ impl Services {
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
+        let origins = origin_summaries(&self.db, items.iter()).await?;
         let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
+        let mut made = made_from_by_origin(&store::items::list_items_made_from(&self.db, &item_ids, false).await?);
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
@@ -544,6 +558,8 @@ impl Services {
                 let values = describe_values(&item, &parameters);
                 let created_by = pick_user(&users, item.created_by);
                 let closed_by = pick_user(&users, item.state.closed_by());
+                let origin = item.origin.and_then(|id| origins.get(&id).cloned());
+                let became = made.remove(&item.id).unwrap_or_default();
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
@@ -551,6 +567,8 @@ impl Services {
                     parameters: values,
                     blocked_by: None,
                     blocker_gone: None,
+                    origin,
+                    became: Some(became),
                     created_by,
                     closed_by,
                     allowed_actions,
@@ -574,22 +592,60 @@ impl Services {
         })
     }
 
-    /// Adds an open item to the heap. Every tag must belong to the heap, or it fails with
-    /// [`ServiceError::TagNotInHeap`]. Every value must be an option in use of a parameter in use of the heap
-    /// ([`ParameterError::NotInHeap`], [`ParameterError::OptionNotInParameter`]).
+    /// Adds an item to the heap: open, or blocked when `fields.blocked_by` names the item it waits for. Every tag must
+    /// belong to the heap, or it fails with [`ServiceError::TagNotInHeap`]. Every value must be an option in use of a
+    /// parameter in use of the heap ([`ParameterError::NotInHeap`], [`ParameterError::OptionNotInParameter`]). The
+    /// blocker is checked as an edit's is ([`ServiceError::BlockerNotInHeap`], [`ServiceError::BlockerClosed`]).
+    ///
+    /// With `fields.origin` the item is made from another, in a split: the origin must be an open note of this heap
+    /// ([`ServiceError::OriginNotInHeap`], [`ServiceError::OriginNotANote`], [`ServiceError::OriginClosed`]) and not
+    /// made by a reminder (a validation error on the origin). With age [`Age::Keep`] the new item's age counts from the
+    /// origin's.
+    ///
+    /// In a run the item must be made from the run's own item, with a need up to its own and no tags, values or
+    /// reminder kind, and may wait only for an item the run made from it in the same turn (Runs). It gets no prepare
+    /// turn.
     pub async fn create_item(
         &self,
         principal: Principal,
         heap_id: HeapId,
-        fields: NewItem,
+        mut fields: NewItem,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
+        let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        let now = self.now();
+        let scope = match (principal.run, fields.origin) {
+            (None, _) => None,
+            (Some(_), None) => return Err(forbidden()),
+            (Some(_), Some(origin)) => self.check_run_write(&txn, principal, origin.item_id, now).await?,
+        };
+        if scope.is_some()
+            && (!fields.tags.is_empty() || !fields.parameters.is_empty() || fields.kind == Kind::Reminder)
+        {
+            return Err(forbidden());
+        }
+        let origin_item = match fields.origin {
+            Some(origin) => Some(self.find_origin(&txn, &fields, heap_id, origin).await?),
+            None => None,
+        };
+        if let (Some(origin), Some(_)) = (&origin_item, &scope)
+            && fields.need > origin.need
+        {
+            return Err(run_forbidden(RunForbidden::NeedAboveOrigin { highest: origin.need }));
+        }
+        if let (Some(blocker), Some(scope), Some(origin)) = (fields.blocked_by, &scope, &origin_item) {
+            ensure_made_in_turn(&txn, blocker, origin.id, scope.turn.opened_at).await?;
+        }
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
         let parameters = store::parameters::list_parameters_locking(&txn, heap_id).await?;
         check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
 
-        let now = self.now();
+        if let (Some(origin), Some(item)) = (fields.origin, &origin_item) {
+            fields.arrives_at = origin.age.arrives_at(item);
+        }
+        let blocker = fields.blocked_by;
         let key = new_item_key(&txn, &*self.random, heap_id).await?;
         let item = Item::new(
             ItemId::from_uuid(self.new_id(now)),
@@ -599,6 +655,9 @@ impl Services {
             principal.user_id,
             now,
         );
+        if let Some(blocker) = blocker {
+            check_blocker(&txn, &item, blocker).await?;
+        }
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
             &access.heap,
@@ -612,8 +671,8 @@ impl Services {
         // A heap set so agents prepare gives every new item a turn of one state, whoever added it (Work with agents,
         // Opening a turn). A new task's turn goes to defined, never to done. It acts only here, on create, so it never
         // opens a second turn on an item.
-        // A reminder gets none: no turn opens on one.
-        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder {
+        // A reminder gets none: no turn opens on one. Nor does an item an agent makes in a run (Opening a turn).
+        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder && principal.run.is_none() {
             let turn = Turn::open(
                 TurnId::from_uuid(self.new_id(now)),
                 &item,
@@ -638,9 +697,10 @@ impl Services {
             None
         };
         let created_by = store::users::find_user(&txn, principal.user_id).await?;
+        let blocked_by = find_blocker(&txn, &item).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, prepared = opened.is_some(), "item created");
+        tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, origin = ?item.origin, blocked = blocked_by.is_some(), prepared = opened.is_some(), "item created");
         // The creator opened the turn, if there is one.
         let turn = opened.map(|turn| TurnView {
             turn,
@@ -653,12 +713,14 @@ impl Services {
         let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
         let step_actions = allowed_step_actions(&item, &access.heap, access.membership.role);
         let values = describe_values(&item, &parameters);
-        // New items are open notes, so they have no blocker, no closer and no steps.
+        // New items have no closer, no steps and nothing made from them, and their blocker is not gone.
         Ok(ItemView {
+            origin: origin_item.as_ref().map(ItemSummary::from),
+            became: Some(Vec::new()),
             item,
             tags,
             parameters: values,
-            blocked_by: None,
+            blocked_by,
             blocker_gone: None,
             created_by,
             closed_by: None,
@@ -674,6 +736,31 @@ impl Services {
             with_agent: turn.is_some(),
             turn,
         })
+    }
+
+    /// The open note `origin` names, read under the heap lock, for an item about to be made in `heap_id` from it.
+    async fn find_origin(
+        &self,
+        txn: &impl ConnectionTrait,
+        fields: &NewItem,
+        heap_id: HeapId,
+        origin: NewOrigin,
+    ) -> Result<Item, ServiceError> {
+        if fields.kind == Kind::Reminder {
+            return Err(ValidationError::FieldInvalid { field: Field::Origin }.into());
+        }
+        let item_id = origin.item_id;
+        let found = store::items::find_item_locking(txn, item_id)
+            .await?
+            .filter(|found| found.heap_id == heap_id)
+            .ok_or(ServiceError::OriginNotInHeap { item_id })?;
+        if found.kind != Kind::Note {
+            return Err(ServiceError::OriginNotANote { item_id });
+        }
+        if found.is_closed() {
+            return Err(ServiceError::OriginClosed { item_id });
+        }
+        Ok(found)
     }
 
     pub async fn find_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
@@ -728,7 +815,7 @@ impl Services {
             .map_err(|error| in_run(principal, error))?;
         if principal.run.is_some() {
             check_run_patch(&patch)?;
-            self.check_run_write(&txn, principal, item_id, self.now()).await?;
+            self.check_run_write_made(&txn, principal, item_id, self.now()).await?;
         }
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
@@ -906,7 +993,7 @@ impl Services {
     /// Withdraws every open question of `item`, which is being closed: each gets its next version and a
     /// `question_withdrawn` entry. Answered questions stay as they are. Says how many it withdrew. The caller holds
     /// the heap lock.
-    async fn withdraw_open_questions(
+    pub(crate) async fn withdraw_open_questions(
         &self,
         txn: &store::DatabaseTransaction,
         heap: &Heap,
@@ -1001,6 +1088,13 @@ pub(crate) async fn build_item_view(
         }
         None => None,
     };
+    let origin = match item.origin {
+        Some(id) => store::items::list_blockers(db, [id]).await?.pop(),
+        None => None,
+    };
+    let became = made_from_by_origin(&store::items::list_items_made_from(db, &[item.id], locking).await?)
+        .remove(&item.id)
+        .unwrap_or_default();
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
     let waits_for_you = waits_for_you(&item, heap, open_questions, stuck, blocker_gone.is_some());
@@ -1020,6 +1114,8 @@ pub(crate) async fn build_item_view(
         tags,
         blocked_by,
         blocker_gone,
+        origin,
+        became: Some(became),
         created_by,
         closed_by,
         allowed_actions,
@@ -1423,6 +1519,31 @@ pub(crate) async fn blocker_summaries(
     Ok(found)
 }
 
+/// The items `items` were made from, by ID, whichever heap each is in now. The origin of a listed item is usually
+/// in the same list, but may be closed or moved, so they are read in one query.
+pub(crate) async fn origin_summaries<'a>(
+    db: &impl ConnectionTrait,
+    items: impl IntoIterator<Item = &'a Item>,
+) -> Result<HashMap<ItemId, ItemSummary>, ServiceError> {
+    let ids: BTreeSet<ItemId> = items.into_iter().filter_map(|item| item.origin).collect();
+    Ok(store::items::list_blockers(db, ids)
+        .await?
+        .into_iter()
+        .map(|summary| (summary.id, summary))
+        .collect())
+}
+
+/// `made`, the items made from other items, grouped under the item each was made from, in the order given.
+pub(crate) fn made_from_by_origin(made: &[Item]) -> HashMap<ItemId, Vec<ItemSummary>> {
+    let mut grouped: HashMap<ItemId, Vec<ItemSummary>> = HashMap::new();
+    for item in made {
+        if let Some(origin) = item.origin {
+            grouped.entry(origin).or_default().push(ItemSummary::from(item));
+        }
+    }
+    grouped
+}
+
 /// Fails unless every tag and option `view` filters by, and the parameter it sorts by, belong to the heap whose
 /// tags are `heap_tags` and whose parameters, archived ones included, are `parameters`.
 ///
@@ -1522,9 +1643,32 @@ pub(crate) async fn new_item_key(
     }
 }
 
+/// Fails with [`RunForbidden::BlockerNotMade`] unless `blocker` is an item made from `origin` at or after `opened_at`:
+/// the turn's start. A run sets blocks only among the items it made in its turn.
+async fn ensure_made_in_turn(
+    db: &impl ConnectionTrait,
+    blocker: ItemId,
+    origin: ItemId,
+    opened_at: Timestamp,
+) -> Result<(), ServiceError> {
+    let made = store::items::find_item_locking(db, blocker)
+        .await?
+        .is_some_and(|found| found.origin == Some(origin) && found.created_at >= opened_at);
+    if made {
+        Ok(())
+    } else {
+        Err(run_forbidden(RunForbidden::BlockerNotMade))
+    }
+}
+
 /// A write only the person makes, tried in a run.
 const fn forbidden() -> ServiceError {
-    ServiceError::Run(RunError::Forbidden(RunForbidden::Person))
+    run_forbidden(RunForbidden::Person)
+}
+
+/// A write a run is refused, for `reason`.
+const fn run_forbidden(reason: RunForbidden) -> ServiceError {
+    ServiceError::Run(RunError::Forbidden(reason))
 }
 
 /// Refuses a patch made in a run unless it only sets the context, makes a note or a reminder a task, or starts the

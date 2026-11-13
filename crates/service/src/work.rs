@@ -62,6 +62,13 @@ pub struct ClaimView {
     pub waiting_count: u32,
 }
 
+/// The run a write is made in and the turn it works to.
+#[derive(Debug)]
+pub(crate) struct RunScope {
+    pub run: Run,
+    pub turn: Turn,
+}
+
 /// A heap the queue is asked about, with its team.
 struct QueueHeap {
     heap: Heap,
@@ -239,6 +246,11 @@ impl Services {
     ) -> Result<RunView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (run, heap) = self.lock_run(&txn, principal, run_id).await?;
+        // A run that already ended as reached, as `item became` ends it, has nothing more to do.
+        if run.ended.as_ref().is_some_and(|ended| ended.end == RunEnd::Reached) {
+            let view = self.run_view(&txn, run).await?;
+            return Ok(view);
+        }
         let now = self.now();
         let turn = self.ensure_live(&txn, &run, now).await?;
         let item = store::items::find_item_locking(&txn, run.item_id)
@@ -448,7 +460,31 @@ impl Services {
         principal: Principal,
         item_id: ItemId,
         now: Timestamp,
-    ) -> Result<Option<Run>, ServiceError> {
+    ) -> Result<Option<RunScope>, ServiceError> {
+        self.check_run_item(txn, principal, item_id, now, false).await
+    }
+
+    /// [`Self::check_run_write`] that also accepts an item made from the run's item in the run's turn, so a run can
+    /// give the tasks it makes their steps and context (Runs). Questions stay on the run's own item and use
+    /// `check_run_write`.
+    pub(crate) async fn check_run_write_made(
+        &self,
+        txn: &impl ConnectionTrait,
+        principal: Principal,
+        item_id: ItemId,
+        now: Timestamp,
+    ) -> Result<Option<RunScope>, ServiceError> {
+        self.check_run_item(txn, principal, item_id, now, true).await
+    }
+
+    async fn check_run_item(
+        &self,
+        txn: &impl ConnectionTrait,
+        principal: Principal,
+        item_id: ItemId,
+        now: Timestamp,
+        allow_made: bool,
+    ) -> Result<Option<RunScope>, ServiceError> {
         let Some(run_id) = principal.run else {
             return Ok(None);
         };
@@ -456,15 +492,21 @@ impl Services {
             .await?
             .filter(|run| run.user_id == principal.user_id)
             .ok_or(ServiceError::NotFound)?;
-        self.ensure_live(txn, &run, now).await?;
+        let turn = self.ensure_live(txn, &run, now).await?;
         if run.item_id != item_id {
-            let held = store::items::find_item(txn, run.item_id)
-                .await?
-                .ok_or(ServiceError::NotFound)?;
-            return Err(RunError::WrongItem { key: held.key }.into());
+            let made_here = allow_made
+                && store::items::find_item(txn, item_id)
+                    .await?
+                    .is_some_and(|found| found.origin == Some(run.item_id) && found.created_at >= turn.opened_at);
+            if !made_here {
+                let held = store::items::find_item(txn, run.item_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?;
+                return Err(RunError::WrongItem { key: held.key }.into());
+            }
         }
         store::runs::touch_run(txn, run.id, now).await?;
-        Ok(Some(run))
+        Ok(Some(RunScope { run, turn }))
     }
 
     /// The run `run_id` as the caller's, read under the lock of its item's heap, with that heap. Fails with

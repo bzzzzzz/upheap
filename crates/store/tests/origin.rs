@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
-use domain::item::{Item, ItemState, Kind, Need, NewItem, Title};
+use domain::item::{Age, Item, ItemState, Kind, Need, NewItem, NewOrigin, Title};
 use domain::team::Team;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User};
@@ -91,7 +91,10 @@ fn made_from(note: &Item, key: &str, by: UserId, ms: i64, blocked_by: Option<Ite
         arrives_at: Some(Timestamp::from_millis(0).context("in range")?),
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
-        origin: Some(note.id),
+        origin: Some(NewOrigin {
+            item_id: note.id,
+            age: Age::Keep,
+        }),
         blocked_by,
     };
     Ok(Item::new(

@@ -35,7 +35,7 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
             .map_err(|error| in_run(principal, error))?;
-        self.check_run_write(&txn, principal, item_id, self.now()).await?;
+        self.check_run_write_made(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
@@ -93,7 +93,7 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
             .map_err(|error| in_run(principal, error))?;
-        self.check_run_write(&txn, principal, item_id, self.now()).await?;
+        self.check_run_write_made(&txn, principal, item_id, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;

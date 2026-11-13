@@ -135,6 +135,8 @@ pub enum Field {
     Links,
     /// What a run cost, in US dollars.
     CostUsd,
+    /// The item a new item is made from.
+    Origin,
 }
 
 impl Field {
@@ -174,6 +176,7 @@ impl Field {
             Self::Reason => "reason",
             Self::Links => "links",
             Self::CostUsd => "cost_usd",
+            Self::Origin => "origin",
         }
     }
 }
