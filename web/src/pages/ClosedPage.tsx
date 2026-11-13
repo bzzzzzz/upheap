@@ -3,7 +3,7 @@ import { useId } from "react";
 
 import type { ClosedGroup, HeapRef, Item } from "../api/client";
 import { useClosedItems, useReopenItem } from "../api/queries";
-import { CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
+import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
 
 /** A run of items next to each other with the same `closed_group`, as the server groups them. */
@@ -133,9 +133,10 @@ function ClosedRow({
 }) {
   const by = useUserName(item.closed_by);
   const wontDo = item.state === "wont_do";
+  const became = item.state === "became";
   return (
     <li className="flex items-center gap-3 px-2 py-[9px]">
-      <ClosedMark wontDo={wontDo} />
+      <ClosedMark wontDo={wontDo || became} />
       <div className="min-w-0 flex-1">
         <Link
           to="/teams/$team/heaps/$heap/items/$item"
@@ -146,7 +147,7 @@ function ClosedRow({
           {item.title}
         </Link>
         <p className="text-xs text-muted max-sm:text-[13px]">
-          {STATE_LABELS[item.state]} · {item.closed_label}
+          {became ? `Became ${becameWords(item.became ?? [])}` : STATE_LABELS[item.state]} · {item.closed_label}
           {by && ` by ${by}`}
         </p>
       </div>

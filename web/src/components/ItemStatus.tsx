@@ -5,7 +5,7 @@ import type { HeapRef, Item, RankedItem } from "../api/client";
 import { chipClass } from "./buttons";
 import { AgentChip, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
-import { KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
+import { isClosed, KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate, isToCome } from "./reminders";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -38,7 +38,7 @@ export function StatusLine({
   onTakenBack: () => void;
 }) {
   const date = item.kind === "reminder" && item.due ? formatDate(item.due.date) : undefined;
-  const closed = item.state === "done" || item.state === "wont_do";
+  const closed = isClosed(item.state);
   const blocker = item.state === "blocked" ? item.blocked_by : null;
   const focusAfterRender = useFocusAfterRender();
   // Set by a send, until the item shows the agent's chip, which then takes the focus: the send button goes away with the

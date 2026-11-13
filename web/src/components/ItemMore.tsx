@@ -50,7 +50,7 @@ function actionsOf(item: Item) {
   const arrivedReminder = item.kind === "reminder" && !isToCome(item) && allowed.includes("make_task");
   let main: Main | null = null;
   let others: ItemState[] = [];
-  if (state === "done" || state === "wont_do") {
+  if (isClosed(state)) {
     if (allowed.includes("reopen")) main = { label: changeLabel(state, "open"), state: "open" };
   } else if (canChange) {
     const [first, ...rest] = NEXT_STATES[state];
