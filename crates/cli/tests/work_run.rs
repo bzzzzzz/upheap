@@ -146,7 +146,7 @@ async fn a_note_gets_a_question_then_its_context_after_the_answer() -> Result<()
     expect_that!(
         lines_with(&asked.stdout, &note),
         elements_are![matches_regex(format!(
-            r"^\d\d:\d\d  {note}  Rotate the certs  note → with context  asked  \d+m\d\ds  \$0\.08$"
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  asked  \d+m\d\ds  \$0\.08$"
         ))]
     );
     expect_that!(waiting["waits_for_you"], eq(true));
@@ -155,7 +155,7 @@ async fn a_note_gets_a_question_then_its_context_after_the_answer() -> Result<()
     expect_that!(
         lines_with(&reached.stdout, &note),
         elements_are![matches_regex(format!(
-            r"^\d\d:\d\d  {note}  Rotate the certs  note → with context  reached  \d+m\d\ds  \$0\.31$"
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  reached  \d+m\d\ds  \$0\.31$"
         ))]
     );
     expect_that!(item["stage"], eq("with_context"));
@@ -330,7 +330,7 @@ async fn an_agent_that_does_nothing_fails_with_the_servers_text_and_a_failed_too
     expect_that!(
         lines[0],
         matches_regex(format!(
-            r"^\d\d:\d\d  {note}  Rotate the certs  note → with context  failed  \d+m\d\ds$"
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  failed  \d+m\d\ds$"
         ))
     );
     expect_that!(lines[1], starts_with("       "));
@@ -1150,7 +1150,7 @@ async fn doing_a_task_ends_with_a_review_and_the_next_run_reads_the_reply() -> R
     expect_that!(
         lines_with(&first.stdout, &task),
         elements_are![matches_regex(format!(
-            r"^\d\d:\d\d  {task}  Paint the fence  task → done  asked  \d+m\d\ds  \$1\.25$"
+            r"^\d\d:\d\d  {task}  Paint the fence  Personal  task → done  asked  \d+m\d\ds  \$1\.25$"
         ))]
     );
     expect_that!(waiting["state"], eq("in_progress"));
@@ -2050,6 +2050,195 @@ async fn quiet_prints_the_key_of_each_run_and_json_the_run_as_the_server_has_it(
     expect_that!(run["end"], eq("reached"));
     expect_that!(run["cost_usd"], eq(0.05));
     expect_that!(run["item"]["key"], not(eq(&json!(first))));
+    Ok(())
+}
+
+/// Makes the heap `ada/house`, named House.
+async fn add_house(server: &TestServer, ada: &TestUser) -> Result<()> {
+    server
+        .send(ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "House" })))
+        .await?;
+    Ok(())
+}
+
+/// Asks a question on `item` in `ada/house`, so it waits for Ada.
+async fn ask_in_house(server: &TestServer, ada: &TestUser, item: &str) -> Result<()> {
+    server
+        .send(
+            ada,
+            "POST",
+            &format!("/teams/ada/heaps/house/items/{item}/questions"),
+            Some(json!({ "kind": "question", "text": "Which one?" })),
+        )
+        .await?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_run_line_and_the_started_note_name_the_heap() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let tool = context_writing_agent(&cli.agent(), 0.31);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_regex(format!(
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  reached  "
+        ))]
+    );
+    expect_that!(
+        lines_with(&outcome.stderr, &note),
+        elements_are![contains_regex(format!(
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  started$"
+        ))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn quiet_with_several_heaps_prints_team_heap_and_key() -> Result<()> {
+    // Arrange: the only item is in the second heap.
+    let (server, ada) = with_preparing_heap().await?;
+    add_house(&server, &ada).await?;
+    change_heap_house(&server, &ada).await?;
+    let note = server
+        .add_item(&ada, "ada/house", json!({ "title": "Fix the gutter" }))
+        .await?;
+    let note = key(&note)?.to_owned();
+    let cli = cli_in_heap(&server, &ada).await?;
+    let tool = context_writing_agent(&cli.agent(), 0.05);
+
+    // Act
+    let quiet = cli
+        .run_work(
+            &[
+                "work",
+                "run",
+                "--tool",
+                "claude",
+                "--once",
+                "--quiet",
+                "--heap",
+                HEAP,
+                "--heap",
+                "ada/house",
+            ],
+            &tool,
+        )
+        .await;
+
+    // Assert
+    expect_that!(quiet.exited(0), eq(true));
+    expect_that!(quiet.stdout, eq(&format!("ada/house/{note}\n")));
+    Ok(())
+}
+
+/// Makes `ada/house` prepare every new note.
+async fn change_heap_house(server: &TestServer, ada: &TestUser) -> Result<()> {
+    let heap = server.send(ada, "GET", "/teams/ada/heaps/house", None).await?;
+    server
+        .send_with(
+            ada,
+            "PATCH",
+            "/teams/ada/heaps/house",
+            Some(json!({ "agents_prepare": true })),
+            &[("if-match", &heap["version"].to_string())],
+        )
+        .await?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn with_several_heaps_the_idle_line_says_where_the_items_wait() -> Result<()> {
+    // Arrange: one item in each heap waits for Ada, and nothing else is in the queue.
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    add_house(&server, &ada).await?;
+    let other = server
+        .add_item(&ada, "ada/house", json!({ "title": "Fix the gutter" }))
+        .await?;
+    cli.run(&["question", "ask", &note, "Which CA?"]).await;
+    ask_in_house(&server, &ada, key(&other)?).await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let both = cli
+        .run_work(&[ONCE, &["--heap", HEAP, "--heap", "ada/house"]].concat(), &tool)
+        .await;
+    let one = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(
+        both.stdout,
+        contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\. 2 items wait for you: 1 in House, 1 in Personal\.$")
+    );
+    expect_that!(
+        one.stdout,
+        contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\. 1 item waits for you\.$")
+    );
+    expect_that!(tool.starts().len(), eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_idle_line_is_said_again_when_the_split_changes_and_the_total_does_not() -> Result<()> {
+    // Arrange: one note waits in Personal; nothing is claimable, as no heap prepares its notes.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    add_house(&server, &ada).await?;
+    let in_personal = add_note(&server, &ada, "Rotate the certs").await?;
+    let in_house = server
+        .add_item(&ada, "ada/house", json!({ "title": "Fix the gutter" }))
+        .await?;
+    let in_house = key(&in_house)?.to_owned();
+    let cli = cli_in_heap(&server, &ada).await?;
+    cli.run(&["question", "ask", &in_personal, "Which CA?"]).await;
+    let tool = idle_agent(None);
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let args = [LOOP, &["--heap", HEAP, "--heap", "ada/house"]].concat();
+
+    // Act: once the first idle line is shown, the note in Personal is answered and one in House is asked about.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let changing = async {
+        wait_until("the first idle line", || {
+            stdout.contents().contains("1 item waits for you: 1 in Personal.")
+        })
+        .await?;
+        reply(&server, &ada, &in_personal, 1, json!({ "comment": "Let's Encrypt" })).await?;
+        ask_in_house(&server, &ada, &in_house).await?;
+        wait_until("the second idle line", || {
+            stdout.contents().contains("1 item waits for you: 1 in House.")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, changed) = tokio::join!(looping, changing);
+
+    // Assert
+    changed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, "Nothing to do."),
+        elements_are![
+            matches_regex(
+                r"^\d\d:\d\d  Nothing to do\. 1 item waits for you: 1 in Personal\. Asking again in a minute\.$"
+            ),
+            matches_regex(
+                r"^\d\d:\d\d  Nothing to do\. 1 item waits for you: 1 in House\. Asking again in a minute\.$"
+            )
+        ]
+    );
+    expect_that!(tool.starts().len(), eq(0));
     Ok(())
 }
 

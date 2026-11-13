@@ -47,6 +47,17 @@ pub struct WorkItem {
 pub struct NextView {
     pub item: Option<WorkItem>,
     pub waiting_count: u32,
+    /// Where those items are: each heap of the queue that has any, in the queue's heap order.
+    pub waiting: Vec<WaitingInHeap>,
+}
+
+/// Items waiting for the person in one heap of the queue.
+#[derive(Debug)]
+pub struct WaitingInHeap {
+    pub heap: Heap,
+    pub team: Team,
+    /// At least 1.
+    pub count: u32,
 }
 
 /// A run with the item it holds.
@@ -61,6 +72,8 @@ pub struct RunView {
 pub struct ClaimView {
     pub run: Option<RunView>,
     pub waiting_count: u32,
+    /// As in [`NextView`].
+    pub waiting: Vec<WaitingInHeap>,
 }
 
 /// A heap the queue is asked about, with its team.
@@ -75,6 +88,7 @@ struct Queue {
     /// Candidates whose item is already at the turn's goal, by heap index. They are never `first`: a claim ends them.
     met: Vec<(usize, Item, Turn)>,
     waiting_count: u32,
+    waiting: Vec<WaitingInHeap>,
 }
 
 /// `refs` as `team/heap` pairs of handles, each once, in the order given. Fails with a validation error unless there
@@ -123,6 +137,7 @@ impl Services {
         Ok(NextView {
             item: queue.first,
             waiting_count: queue.waiting_count,
+            waiting: queue.waiting,
         })
     }
 
@@ -187,6 +202,7 @@ impl Services {
             return Ok(ClaimView {
                 run: None,
                 waiting_count: queue.waiting_count,
+                waiting: queue.waiting,
             });
         };
         let run = Run::start(
@@ -210,6 +226,7 @@ impl Services {
         Ok(ClaimView {
             run: Some(RunView { run, work }),
             waiting_count: queue.waiting_count,
+            waiting: queue.waiting,
         })
     }
 
@@ -656,24 +673,32 @@ impl Services {
             .into_iter()
             .map(|(heap_id, turn)| (heap_id, turn.counting_lapse(lapsed.contains(&turn.id))))
             .collect();
-        let with_question: HashSet<ItemId> = store::questions::list_open_questions_on_open_items(db, &heap_ids)
-            .await?
-            .into_iter()
-            .map(|(_, question)| question.item_id)
-            .collect();
+        let questions = store::questions::list_open_questions_on_open_items(db, &heap_ids).await?;
+        let with_question: HashSet<ItemId> = questions.iter().map(|(_, question)| question.item_id).collect();
         let gone = list_gone_blockers(db, &heap_ids).await?;
-        let waiting: HashSet<ItemId> = with_question
+        let waiting_heap: HashMap<ItemId, HeapId> = questions
             .iter()
-            .copied()
+            .map(|(heap_id, question)| (question.item_id, *heap_id))
             .chain(
                 turns
                     .iter()
                     .filter(|(_, turn)| turn.is_stuck())
-                    .map(|(_, turn)| turn.item_id),
+                    .map(|(heap_id, turn)| (turn.item_id, *heap_id)),
             )
-            .chain(gone.iter().map(|(item, ..)| item.id))
+            .chain(gone.iter().map(|(item, ..)| (item.id, item.heap_id)))
             .collect();
-        let waiting_count = u32::try_from(waiting.len()).unwrap_or(u32::MAX);
+        let waiting_count = u32::try_from(waiting_heap.len()).unwrap_or(u32::MAX);
+        let waiting = heaps
+            .iter()
+            .filter_map(|queue| {
+                let count = waiting_heap.values().filter(|id| **id == queue.heap.id).count();
+                (count > 0).then(|| WaitingInHeap {
+                    heap: queue.heap.clone(),
+                    team: queue.team.clone(),
+                    count: u32::try_from(count).unwrap_or(u32::MAX),
+                })
+            })
+            .collect();
 
         // Items an agent could take: an open turn that isn't stuck, no open question and no live run.
         let mut by_heap: HashMap<HeapId, HashMap<ItemId, Turn>> = HashMap::new();
@@ -740,6 +765,7 @@ impl Services {
             first,
             met,
             waiting_count,
+            waiting,
         })
     }
 

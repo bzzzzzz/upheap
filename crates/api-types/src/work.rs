@@ -46,6 +46,19 @@ pub struct WorkNextDto {
     /// How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
     /// counts once.
     pub waiting_count: u32,
+    /// How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+    /// `waiting_count`.
+    #[serde(default)]
+    pub waiting: Vec<WaitingInHeapDto>,
+}
+
+/// The items waiting for the person in one heap.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = WaitingInHeap)]
+pub struct WaitingInHeapDto {
+    pub heap: ItemHeapDto,
+    /// At least 1.
+    pub count: u32,
 }
 
 /// How a run ended.
@@ -118,6 +131,9 @@ pub struct ClaimDto {
     pub run: Option<RunDto>,
     /// As in `WorkNext`.
     pub waiting_count: u32,
+    /// As in `WorkNext`.
+    #[serde(default)]
+    pub waiting: Vec<WaitingInHeapDto>,
 }
 
 /// Claims the next item of the queue over some heaps.
