@@ -379,6 +379,42 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");
 });
 
+test("a blocked item shows why in words, in the pane and on the row's padlock", async ({ page, heapPath }) => {
+  await addItem(page, "Renew the domain");
+  await addItem(page, "Pay the registrar");
+  const status = () => itemPane(page).getByRole("group", { name: "Status" });
+
+  // The reason is set from the CLI or the API; the web shows it. The text is only there once the server has it.
+  await openItem(page, "Renew the domain");
+  await changeElsewhere(page, heapPath, { state: "blocked", blocked_reason: "Waiting for the registrar's invoice" });
+  await page.reload();
+  await expect(status()).toContainText("Blocked: Waiting for the registrar's invoice");
+  await closeItem(page);
+  await page.getByRole("button", { name: "Show it" }).click();
+  await expect(row(page, "Renew the domain").getByRole("button", { name: "Unblock Renew the domain" })).toHaveAttribute(
+    "title",
+    "Unblock. Blocked: Waiting for the registrar's invoice",
+  );
+  await expect(row(page, "Renew the domain").getByRole("link")).toContainText(
+    ", blocked: Waiting for the registrar's invoice",
+  );
+
+  // With a blocker named too, both show: who blocks it, then why.
+  await openItem(page, "Renew the domain");
+  await moreEntry(page, await openMore(page), "Change blocker…").click();
+  await page
+    .getByRole("dialog", { name: "Change blocker", exact: true })
+    .getByLabel("Waiting for")
+    .selectOption({ label: "Pay the registrar" });
+  await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Pay the registrar$/ })).toBeVisible();
+  await expect(status()).toContainText(": Waiting for the registrar's invoice");
+
+  // Leaving blocked clears it.
+  await changeState(page, "Unblock", "main");
+  await expect(status()).not.toContainText("Blocked");
+  await expect(status()).not.toContainText("invoice");
+});
+
 test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {
   // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
   await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
