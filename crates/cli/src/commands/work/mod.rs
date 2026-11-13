@@ -138,27 +138,32 @@ pub(super) const fn end_word(end: Option<RunEndDto>) -> Option<&'static str> {
     }
 }
 
-/// `1 item waits for you.` or `N items wait for you.`, or nothing at 0.
-pub(super) fn waiting_text(count: u32) -> Option<String> {
+/// `1 item waits for you` or `N items wait for you`, without an ending, or nothing at 0.
+fn waiting_phrase(count: u32) -> Option<String> {
     match count {
         0 => None,
-        1 => Some("1 item waits for you.".to_owned()),
-        n => Some(format!("{n} items wait for you.")),
+        1 => Some("1 item waits for you".to_owned()),
+        n => Some(format!("{n} items wait for you")),
     }
+}
+
+/// `1 item waits for you.` or `N items wait for you.`, or nothing at 0.
+pub(super) fn waiting_text(count: u32) -> Option<String> {
+    waiting_phrase(count).map(|phrase| format!("{phrase}."))
 }
 
 /// `waiting_text(total)` with where they wait: `3 items wait for you: 2 in Work, 1 in House.`, each heap with its
 /// count in the order given. Without heaps (a server that doesn't say), the plain total.
 pub(super) fn waiting_by_heap_text(total: u32, by_heap: &[(&str, u32)]) -> Option<String> {
-    let text = waiting_text(total)?;
+    let phrase = waiting_phrase(total)?;
     if by_heap.is_empty() {
-        return Some(text);
+        return Some(format!("{phrase}."));
     }
     let split: Vec<String> = by_heap
         .iter()
         .map(|(name, count)| format!("{count} in {name}"))
         .collect();
-    Some(format!("{}: {}.", text.trim_end_matches('.'), split.join(", ")))
+    Some(format!("{phrase}: {}.", split.join(", ")))
 }
 
 #[cfg(test)]
