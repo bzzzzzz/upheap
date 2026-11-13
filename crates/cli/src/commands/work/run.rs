@@ -125,7 +125,7 @@ impl AllowRules {
 ///
 /// With `--root`, each item gets a directory of its own under it, `<team>/<heap>/<key>`, which the tool sets up and
 /// starts in. It is the same one for every run on the item, as the last run left it. The loop removes it once the
-/// item is closed or can't be found, or when no run has started in it for 7 days. Directories from before, named by
+/// item is closed or can't be found, or when no run has been in it for 7 days. Directories from before, named by
 /// an item's key and a run's ID, are never touched.
 pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     if app.env.run.is_some() {
@@ -590,11 +590,14 @@ impl Shared<'_> {
             .as_ref()
             .and_then(|dir| dir.as_ref().ok())
             .map(|dir| self.live_dirs.register(dir.clone()));
+        // The marker stays open and locked until the tool is gone, so no sweep, in this loop or another, takes the
+        // directory meanwhile.
+        let mut marker = None;
         let driven = match dir {
             None => self.drive_tool(&run, start).await,
             Some(Ok(dir)) => match self.prepare_directory(&run, &dir).await {
-                // The marker stays open and locked until the tool is gone, so no sweep takes the directory meanwhile.
-                Ok(_marker) => {
+                Ok(locked) => {
+                    marker = Some(locked);
                     let start = ToolStart {
                         dir: Some(dir),
                         ..start
@@ -609,6 +612,12 @@ impl Shared<'_> {
         // would work at once. So the run is recorded, and the next one claimed, only once the tool is gone.
         if matches!(driven, Driven::Over | Driven::Stopped) {
             self.tools.settled().await;
+        }
+        // Used until now, so a run longer than the unused period doesn't lose its directory the moment it ends.
+        if let Some(marker) = marker
+            && let Err(err) = marker.set_modified(SystemTime::from(self.app.now()))
+        {
+            tracing::warn!(run_id = %run.id, error = %err, "couldn't mark the run's directory as used");
         }
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {

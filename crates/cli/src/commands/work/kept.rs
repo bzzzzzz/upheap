@@ -1,6 +1,6 @@
 //! The directories `work run --root` keeps, one for each item: where one is, the marker that says when a run last
-//! started in it, which ones the sweep looks at, and whether it keeps or removes each. No server and no clock here:
-//! the loop reads the item and passes in the time, so every rule below is tested with plain values.
+//! started or ended in it, which ones the sweep looks at, and whether it keeps or removes each. No server and no
+//! clock here: the loop reads the item and passes in the time, so every rule below is tested with plain values.
 //!
 //! The path is the whole record. There is no index file to fall out of step with the directories.
 
@@ -18,7 +18,8 @@ use domain::validation::Field;
 use super::run::is_unreachable;
 use crate::CliError;
 
-/// The file a run writes into its directory as it starts. Its modification time is when a run last started there.
+/// The file a run writes into its directory as it starts, and touches as it ends. Its modification time is when a run
+/// last started or ended there.
 ///
 /// An agent that deletes it makes the sweep ignore the directory until the next run on the item writes it again:
 /// without it, nothing says the directory is ours to remove.
@@ -119,7 +120,7 @@ pub struct Kept {
     pub team: String,
     pub heap: String,
     pub key: String,
-    /// How long ago a run last started here. Zero for a marker dated in the future, as after a clock change.
+    /// How long ago a run last started or ended here. Zero for a marker dated in the future, as after a clock change.
     pub age: Duration,
     /// When the marker was last written, as listed. A sweep removes the directory only if it still is.
     pub modified: Option<SystemTime>,
@@ -512,6 +513,34 @@ mod tests {
         verify_that!(dir.join(MARKER).is_file(), eq(true))?;
         verify_that!(away.join(MARKER).is_file(), eq(true))?;
         verify_that!(is_same_file(&marker, &dir.join(MARKER))?, eq(true))
+    }
+
+    #[gtest]
+    fn preparing_while_a_sweep_renames_the_directory_away_makes_a_fresh_one() -> googletest::Result<()> {
+        // Arrange: a sweep holds the marker's lock; a run starts preparing and waits on it.
+        let root = tempfile::tempdir()?;
+        let dir = root.path().join("ada/work/k3x9a");
+        drop(prepare(&dir, "run-1", "t", "s")?);
+        let sweeping = File::open(dir.join(MARKER))?;
+        sweeping.try_lock()?;
+        let preparing = {
+            let dir = dir.clone();
+            std::thread::spawn(move || prepare(&dir, "run-2", "t", "s"))
+        };
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Act: the sweep renames the directory away and lets go.
+        let away = root.path().join(format!("{REMOVING}x"));
+        std::fs::rename(&dir, &away)?;
+        drop(sweeping);
+        let marker = preparing.join().expect("prepare panicked")?;
+
+        // Assert: the run holds the marker of a new directory at the item's path, not the one taken away.
+        verify_that!(is_same_file(&marker, &dir.join(MARKER))?, eq(true))?;
+        verify_that!(
+            std::fs::read_to_string(away.join(MARKER))?,
+            eq("run run-1\nstarted t\nserver s\n")
+        )
     }
 
     #[gtest]

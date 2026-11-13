@@ -1054,7 +1054,7 @@ Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after 
 --once    do one run, or nothing when there is nothing, and exit.
 --workers keep up to N runs going at once (1 to 8, default 1), each on its own item. Above 1, needs --root.
 --root    each item runs in <dir>/<team>/<heap>/<key>, kept and reused for its next run; removed once the item
-          is closed or can't be found, or 7 days after a run last started in it (swept at start, then hourly).
+          is closed or can't be found, or 7 days after a run last started or ended in it (swept at start, then hourly).
 The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
 prints, the state to reach, and the person's line.
 How a run ended is read off it: it said `work reached` and the check passed; or `work hand-back`; or it left an open

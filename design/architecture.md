@@ -677,7 +677,7 @@ section is how it maps onto this API.
    missing and the tool writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
    record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
    left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
-   `.upheap-run` in it, naming the server, and that file's modification time is when a run last started there. The
+   `.upheap-run` in it, naming the server, and that file's modification time is when a run last started or ended there. The
    run holds a shared lock on that file until it ends. The loop sweeps the
    root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
    marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's) while
