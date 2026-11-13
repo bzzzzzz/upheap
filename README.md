@@ -176,24 +176,25 @@ cargo run -p cli -- auth logout
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
 `UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. With `UPHEAP_RUN` set to a run's ID, every
 request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
-reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
-starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
-item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
-`auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
-and run what your own and the project's Claude settings allow. With `--root`, each run starts in a directory
-under the root instead, `<root>/<team>/<heap>/<key>`, with a `CLAUDE.md` that says how to work there, and `claude`
-may run any command, edit and read, for preparing as well: a run there has to clone and build what it works on. The
-directory is kept and used again for the item's next run, with what the last run left in it. The loop removes it
-once the item is closed or can't be found, or after 7 days with no run on the item, checking when it starts and
-about every hour. Old `<key>-<run id>` directories from earlier versions are left for you to clear. With `--instructions <file>`, every run is also told what the file
-says: your own way of working on this machine (which skills to use, how to check and review a change), which
-comes before the heap's context on how the work is done. The file is read once, when the loop starts. With
-`--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as
-`mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions; `--allow-prepare` and `--allow-do` add a
-rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
-comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth`, though a rule as
-wide as `Bash` lets a run get around that through a shell. Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
-signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything else.
+reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run` starts
+`claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an item (give
+it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not `auth`), read files
+under that directory and use the web, and nothing else. To do a task, it may also edit files, and run what your own
+and the project's Claude settings allow. With `--root`, each run starts in a directory under the root instead,
+`<root>/<team>/<heap>/<key>`, with a `CLAUDE.md` that says how to work there, and `claude` may run any command, edit
+and read, for preparing as well: a run there has to clone and build what it works on. The directory is kept and used
+again for the item's next run, with what the last run left in it. The loop removes it once the item is closed or can't
+be found, or after 7 days with no run on the item, checking when it starts and about every hour. Only directories this
+server and your account made are checked against the server. Old `<key>-<run id>` directories from earlier versions
+are left for you to clear. With `--instructions <file>`, every run is also told what the file says: your own way of
+working on this machine (which skills to use, how to check and review a change), which comes before the heap's context
+on how the work is done. The file is read once, when the loop starts. With `--allow <rule>`, every run's `claude` may
+also use what the rule allows (Claude's rule syntax, such as `mcp__claude_ai_Claude_Docs`), without allowing it in
+your own sessions; `--allow-prepare` and `--allow-do` add a rule to runs that prepare an item or do a task only. Each
+flag takes one rule and can be repeated; a rule with a comma or a space, or one starting with `-`, is refused. Every
+run is still denied `upheap auth`, though a rule as wide as `Bash` lets a run get around that through a shell. Exit
+codes: 0 done, 2 bad command line, 3 refused, 4 not signed in or not found, 5 server unreachable, 6 local setup broken
+(no keychain, or no agent tool), 1 anything else.
 
 ### From Claude Code
 

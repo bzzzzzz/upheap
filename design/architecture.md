@@ -677,14 +677,18 @@ section is how it maps onto this API.
    missing, writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
    record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
    left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
-   `.upheap-run` in it, and that file's modification time is when a run last started there. The loop sweeps the
-   root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
-   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's). Any
-   other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
-   and a server out of reach ends the sweep. Only directories at that depth with a marker are looked at, so the
-   old `<key>-<run id>` ones and anything else are never touched, and a directory a run of this loop is in or
-   about to start in is skipped. A removal renames the directory away under the lock that guards that set and
-   deletes it after releasing it, since deleting a clone is slow. There the tool is allowed any command, edit and read, passed on its
+   `.upheap-run` in it: the server and user's id the loop works as, the run, and when it started, with the file's
+   modification time as when a run last started there. The loop sweeps the root when it starts and about hourly
+   before a claim, one worker at a time. It removes a directory whose marker is 7 days old, with no request. It asks
+   the server only about directories whose marker names this server and this user, so a root shared by two servers
+   or accounts never loses one's directories to the other's 404s; the others are kept until they are 7 days old.
+   For those, the server answering 404 removes (the item is gone, moved to another heap, or in a heap the person
+   can no longer see, which it also answers 404), and so does a closed item. Any other failure to read an item,
+   403 included, keeps the directory, and a server out of reach ends the sweep. Only directories at that depth with
+   a marker are looked at, so the old `<key>-<run id>` ones and anything else are never touched, and a directory a
+   run of this loop is in or about to start in is skipped. A removal renames the directory away under the lock that
+   guards that set and deletes it after releasing it, since deleting a clone is slow.
+   There the tool is allowed any command, edit and read, passed on its
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
    wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
    `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's

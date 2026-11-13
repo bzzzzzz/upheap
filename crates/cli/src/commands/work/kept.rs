@@ -2,10 +2,13 @@
 //! started in it, which ones the sweep looks at, and whether it keeps or removes each. No server and no clock here:
 //! the loop reads the item and passes in the time, so every rule below is tested with plain values.
 //!
+//! The marker also says who made the directory (a server and a user), so a root shared by two servers or accounts
+//! never has one's directories judged by the other's answers.
+//!
 //! The path is the whole record. There is no index file to fall out of step with the directories.
 
 use std::collections::HashSet;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -23,7 +26,8 @@ use crate::CliError;
 /// without it, nothing says the directory is ours to remove.
 pub const MARKER: &str = ".upheap-run";
 
-/// How long a directory can go without a run before the sweep removes it.
+/// How long a directory can go without a run before the sweep removes it. [`Reason::Unused`]'s note names it in words
+/// ("7 days"), so change that text with this.
 pub const UNUSED_FOR: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// The start of the name a directory is renamed to before it is deleted.
@@ -52,12 +56,59 @@ pub fn item_directory(root: &Path, team: &str, heap: &str, key: &str) -> std::io
     }
 }
 
+/// Who made a directory: the server the loop talks to and the user it is signed in as. Only a directory made by the
+/// loop's own owner is ever asked about, since another server or account answers 404 for items that are fine.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Owner {
+    server: String,
+    user: String,
+}
+
+impl Owner {
+    /// `server` is the server's URL as the loop uses it, without a trailing `/`; `user` is the user's id.
+    pub fn new(server: &str, user: &str) -> Self {
+        Self {
+            server: server.trim_end_matches('/').to_owned(),
+            user: user.to_owned(),
+        }
+    }
+
+    /// The marker's text. One `name value` per line.
+    fn marker(&self, run_id: &str, started: &str) -> String {
+        format!(
+            "version {MARKER_VERSION}\nserver {}\nuser {}\nrun {run_id}\nstarted {started}\n",
+            self.server, self.user
+        )
+    }
+
+    /// Whether `marker`, a marker's text, names this owner. Tolerant: lines it doesn't know are ignored, and a missing
+    /// or different `version`, server or user means no.
+    fn made(&self, marker: &str) -> bool {
+        let (mut version, mut server, mut user) = (None, None, None);
+        for line in marker.lines() {
+            match line.split_once(' ') {
+                Some(("version", value)) => version = Some(value.trim()),
+                Some(("server", value)) => server = Some(value.trim()),
+                Some(("user", value)) => user = Some(value.trim()),
+                _ => {}
+            }
+        }
+        version == Some(MARKER_VERSION) && server == Some(self.server.as_str()) && user == Some(self.user.as_str())
+    }
+}
+
+/// The marker's format version. Any other is read as not matching.
+const MARKER_VERSION: &str = "1";
+
+/// The most of a marker that is read: it is a few lines, and what is past this is not ours.
+const MARKER_READ_LIMIT: u64 = 4096;
+
 /// Makes `dir` and its parents if they aren't there, and writes the marker. A directory that is there is used as it
 /// is. `started` is an RFC 3339 UTC time, for a person reading the file.
-pub fn prepare(dir: &Path, run_id: &str, started: &str) -> std::io::Result<()> {
+pub fn prepare(dir: &Path, owner: &Owner, run_id: &str, started: &str) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     // Written whole every time, so its modification time moves even though the text may not.
-    std::fs::write(dir.join(MARKER), format!("run {run_id}\nstarted {started}\n"))
+    std::fs::write(dir.join(MARKER), owner.marker(run_id, started))
 }
 
 /// A directory the sweep looks at.
@@ -69,6 +120,8 @@ pub struct Kept {
     pub key: String,
     /// How long ago a run last started here. Zero for a marker dated in the future, as after a clock change.
     pub age: Duration,
+    /// Whether the marker names the owner `list` was given. Only then may the server's answer remove it.
+    pub mine: bool,
 }
 
 impl Kept {
@@ -98,7 +151,7 @@ fn child_directories(dir: &Path, fits: fn(&str) -> bool) -> Vec<(String, PathBuf
 /// The directories under `root` that are kept: `<team>/<heap>/<key>` with a marker file in it, every part a real
 /// directory. Anything else is not ours and is left out, such as the old `<key>-<run id>` directories, stray files,
 /// symlinks, and directories without a marker.
-pub fn list(root: &Path, now: SystemTime) -> Vec<Kept> {
+pub fn list(root: &Path, now: SystemTime, owner: &Owner) -> Vec<Kept> {
     let mut kept = Vec::new();
     for (team, team_dir) in child_directories(root, is_slug) {
         for (heap, heap_dir) in child_directories(&team_dir, is_slug) {
@@ -115,12 +168,17 @@ pub fn list(root: &Path, now: SystemTime) -> Vec<Kept> {
                     .ok()
                     .and_then(|modified| now.duration_since(modified).ok())
                     .unwrap_or_default();
+                let mine = std::fs::File::open(&marker).is_ok_and(|file| {
+                    let mut text = String::new();
+                    file.take(MARKER_READ_LIMIT).read_to_string(&mut text).is_ok() && owner.made(&text)
+                });
                 kept.push(Kept {
                     dir,
                     team: team.clone(),
                     heap: heap.clone(),
                     key,
                     age,
+                    mine,
                 });
             }
         }
@@ -250,8 +308,9 @@ pub fn is_unused(age: Duration) -> bool {
 }
 
 /// What to do with a directory that is not too old, from what reading its item answered: the time it was closed, or
-/// nothing for an open item. A failure to read is never a reason to remove, except the server saying the item isn't
-/// there: a permission change or a bad answer must not delete someone's work.
+/// nothing for an open item. Only the server answering 404 removes: the item is gone, moved to another heap, or in a
+/// heap the person can no longer see (the server answers 404 for that too). Any other failure keeps the directory,
+/// 403 and a bad answer included. The caller asks only about directories this loop's server and user made.
 pub fn verdict(read: Result<Option<i64>, &CliError>) -> Verdict {
     match read {
         Ok(Some(_closed_at)) => Verdict::Remove(Reason::Closed),
@@ -375,6 +434,54 @@ mod tests {
         }
     }
 
+    fn owner() -> Owner {
+        Owner::new("http://upheap.test/", "u-1")
+    }
+
+    #[gtest]
+    fn a_marker_made_for_an_owner_matches_only_that_owner() {
+        let marker = owner().marker("run-1", "2026-11-12T10:00:00Z");
+
+        expect_that!(owner().made(&marker), eq(true));
+        expect_that!(Owner::new("http://other.test", "u-1").made(&marker), eq(false));
+        expect_that!(Owner::new("http://upheap.test", "u-2").made(&marker), eq(false));
+    }
+
+    #[gtest]
+    fn a_marker_is_read_tolerantly_but_only_in_version_1_with_both_owner_lines() {
+        let owner = owner();
+        let with_extra = "version 1\nfuture thing\nserver http://upheap.test\nuser u-1\nrun x\n";
+        let no_owner = "run x\nstarted y\n";
+        let no_user = "version 1\nserver http://upheap.test\nrun x\n";
+        let wrong_version = "version 2\nserver http://upheap.test\nuser u-1\n";
+        let no_version = "server http://upheap.test\nuser u-1\n";
+
+        expect_that!(owner.made(with_extra), eq(true));
+        expect_that!(owner.made(no_owner), eq(false));
+        expect_that!(owner.made(no_user), eq(false));
+        expect_that!(owner.made(wrong_version), eq(false));
+        expect_that!(owner.made(no_version), eq(false));
+        expect_that!(owner.made(""), eq(false));
+    }
+
+    #[gtest]
+    fn a_kept_directory_is_mine_only_when_its_marker_names_the_owner() -> googletest::Result<()> {
+        let root = tempfile::tempdir()?;
+        let mine = root.path().join("ada/work/aaaaa");
+        prepare(&mine, &owner(), "r", "t")?;
+        let theirs = root.path().join("ada/work/bbbbb");
+        prepare(&theirs, &Owner::new("http://other.test", "u-1"), "r", "t")?;
+        keep(root.path(), &["ada", "work", "ccccc"])?;
+
+        let mut kept = list(root.path(), SystemTime::now(), &owner());
+        kept.sort_by(|a, b| a.key.cmp(&b.key));
+
+        verify_that!(
+            kept.iter().map(|kept| kept.mine).collect::<Vec<_>>(),
+            eq(&[true, false, false])
+        )
+    }
+
     /// A kept directory under `root`, with a marker.
     fn keep(root: &Path, parts: &[&str]) -> std::io::Result<PathBuf> {
         let dir = parts.iter().fold(root.to_owned(), |path, part| path.join(part));
@@ -400,7 +507,7 @@ mod tests {
         // A marker that is a directory is not a marker.
         std::fs::create_dir_all(root.path().join("ada/work/k4x9a").join(MARKER))?;
 
-        let kept = list(root.path(), SystemTime::now());
+        let kept = list(root.path(), SystemTime::now(), &owner());
 
         verify_that!(
             kept.iter().map(|kept| kept.dir.clone()).collect::<Vec<_>>(),
@@ -423,7 +530,7 @@ mod tests {
         keep(outside.path(), &["t", "work", "k3x9a"])?;
         std::os::unix::fs::symlink(outside.path().join("t"), root.path().join("linked"))?;
 
-        verify_that!(list(root.path(), SystemTime::now()), is_empty())
+        verify_that!(list(root.path(), SystemTime::now(), &owner()), is_empty())
     }
 
     #[gtest]
@@ -441,7 +548,7 @@ mod tests {
         set(&old, now - Duration::from_secs(8 * 24 * 60 * 60))?;
         set(&future, now + Duration::from_secs(3600))?;
 
-        let mut kept = list(root.path(), now);
+        let mut kept = list(root.path(), now, &owner());
         kept.sort_by(|a, b| a.key.cmp(&b.key));
 
         verify_that!(
@@ -456,13 +563,13 @@ mod tests {
         let root = tempfile::tempdir()?;
         let dir = root.path().join("ada/work/k3x9a");
 
-        prepare(&dir, "run-1", "2026-11-12T10:00:00Z")?;
+        prepare(&dir, &owner(), "run-1", "2026-11-12T10:00:00Z")?;
         std::fs::write(dir.join("left.txt"), "kept")?;
-        prepare(&dir, "run-2", "2026-11-12T11:00:00Z")?;
+        prepare(&dir, &owner(), "run-2", "2026-11-12T11:00:00Z")?;
 
         verify_that!(
             std::fs::read_to_string(dir.join(MARKER))?,
-            eq("run run-2\nstarted 2026-11-12T11:00:00Z\n")
+            eq("version 1\nserver http://upheap.test\nuser u-1\nrun run-2\nstarted 2026-11-12T11:00:00Z\n")
         )?;
         verify_that!(std::fs::read_to_string(dir.join("left.txt"))?, eq("kept"))
     }
@@ -473,7 +580,10 @@ mod tests {
         std::fs::create_dir_all(root.path().join("ada/work"))?;
         std::fs::write(root.path().join("ada/work/k3x9a"), "")?;
 
-        verify_that!(prepare(&root.path().join("ada/work/k3x9a"), "r", "t"), err(anything()))
+        verify_that!(
+            prepare(&root.path().join("ada/work/k3x9a"), &owner(), "r", "t"),
+            err(anything())
+        )
     }
 
     #[gtest]

@@ -13,6 +13,7 @@ use std::time::{Duration, SystemTime};
 
 use api_types::common::ItemDto;
 use api_types::heaps::HeapDto;
+use api_types::me::MeDto;
 use api_types::work::{ClaimDto, ClaimRequestDto, FinishRequestDto, RunDto, RunEndDto};
 use clap::Args;
 use futures_util::future::join_all;
@@ -22,7 +23,7 @@ use tokio::sync::watch;
 use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
-use super::kept::{self, Kept, LiveDirs, Verdict};
+use super::kept::{self, Kept, LiveDirs, Owner, Verdict};
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ClientError, Fetched, NO_QUERY};
@@ -137,6 +138,14 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let client = app.client(server.clone())?;
     let token = app.access_token(&client).await?;
     let heaps = resolve_named_heaps(&args.heaps, app, &client, &token).await?;
+    // Who made the directories this loop keeps; the sweep asks the server only about its own.
+    let owner = match args.root {
+        Some(_) => {
+            let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
+            Some(Owner::new(server.as_str(), &me.value.user.id.to_string()))
+        }
+        None => None,
+    };
     work.tools.check(args.tool)?;
     let root = args.root.as_deref().map(make_root).transpose()?;
     let instructions = match args.instructions {
@@ -164,6 +173,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         once: args.once,
         workers: args.workers,
         root,
+        owner,
         instructions,
         allow: AllowRules {
             every: args.allow,
@@ -322,6 +332,8 @@ struct Shared<'a> {
     workers: u8,
     /// Where each item's directory is kept; `None` when runs start in this directory.
     root: Option<PathBuf>,
+    /// Who the directories made in `root` are made for; `Some` exactly when `root` is.
+    owner: Option<Owner>,
     /// The runner's own instructions, for every run's brief.
     instructions: Option<String>,
     /// The runner's extra allow rules, which each run's tool is started with.
@@ -643,14 +655,19 @@ impl Shared<'_> {
 
     /// Makes `dir` if it isn't there and writes the marker that says a run started in it now.
     async fn prepare_directory(&self, run: &RunDto, dir: &Path) -> Result<(), ToolError> {
+        // There is an owner whenever there is a root, and a directory is only prepared under a root.
+        let Some(owner) = &self.owner else {
+            return Ok(());
+        };
         let (id, started) = (
             run.id.to_string(),
             jiff::Timestamp::from_second(self.app.now().as_second()),
         );
         let made = {
             let dir = dir.to_owned();
+            let owner = owner.clone();
             let started = started.map_or_else(|_| String::new(), |at| at.to_string());
-            tokio::task::spawn_blocking(move || kept::prepare(&dir, &id, &started)).await
+            tokio::task::spawn_blocking(move || kept::prepare(&dir, &owner, &id, &started)).await
         };
         made.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked)))
             .map_err(|source| ToolError::NoDirectory {
@@ -662,7 +679,7 @@ impl Shared<'_> {
     /// Sweeps the root if it has been `sweep_every` since the last sweep, or never has been. A worker that finds one
     /// due marks it started and sweeps; the others find it done and carry on.
     async fn sweep_if_due(&self) {
-        let Some(root) = &self.root else {
+        let (Some(root), Some(owner)) = (&self.root, &self.owner) else {
             return;
         };
         {
@@ -672,15 +689,15 @@ impl Shared<'_> {
             }
             *last = Some(Instant::now());
         }
-        self.sweep(root).await;
+        self.sweep(root, owner).await;
     }
 
     /// Removes the kept directories of closed and missing items, and those unused for 7 days; see [`kept`]. Never
     /// fails: whatever goes wrong leaves a directory in place, or is a warning.
-    async fn sweep(&self, root: &Path) {
+    async fn sweep(&self, root: &Path, owner: &Owner) {
         let now = SystemTime::from(self.app.now());
         let found = {
-            let root = root.to_owned();
+            let (root, owner) = (root.to_owned(), owner.clone());
             tokio::task::spawn_blocking(move || {
                 // What an interrupted sweep renamed and did not finish deleting.
                 for left in kept::leftovers(&root) {
@@ -688,7 +705,7 @@ impl Shared<'_> {
                         tracing::warn!(dir = %left.display(), error = %err, "couldn't clear a half-removed directory");
                     }
                 }
-                kept::list(&root, now)
+                kept::list(&root, now, &owner)
             })
             .await
         };
@@ -701,6 +718,9 @@ impl Shared<'_> {
             }
             let reason = if kept::is_unused(directory.age) {
                 kept::Reason::Unused
+            } else if !directory.mine {
+                // Made through another server or account: its item may be fine, and this server can't say.
+                continue;
             } else {
                 let read = self.read_closed_at(&directory).await;
                 match kept::verdict(read.as_ref().copied()) {

@@ -3,8 +3,8 @@
 
 mod common;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
@@ -1073,7 +1073,9 @@ async fn with_a_root_each_item_runs_in_root_team_heap_key() -> Result<()> {
     expect_that!(b.join(".upheap-run").is_file(), eq(true));
     expect_that!(
         std::fs::read_to_string(a.join(".upheap-run"))?,
-        matches_regex(r"run [0-9a-f-]{36}\nstarted \d{4}-\d\d-\d\dT[0-9:.]+Z\n")
+        matches_regex(
+            r"^version 1\nserver http://127\.0\.0\.1:\d+\nuser [0-9a-f-]{36}\nrun [0-9a-f-]{36}\nstarted \d{4}-\d\d-\d\dT[0-9:.]+Z\n$"
+        )
     );
     expect_that!(dirs[2], none());
     Ok(())
@@ -1119,17 +1121,41 @@ async fn a_later_run_on_the_same_item_starts_in_the_same_directory_with_what_was
     Ok(())
 }
 
-/// A kept directory for `key` in `heap` of `team` under `root`, with a marker last written `days` days ago and a
-/// file in it.
-fn kept_directory(root: &std::path::Path, team: &str, heap: &str, key: &str, days: u64) -> Result<std::path::PathBuf> {
+/// The marker text that says a directory was made through `server` by `user`, as a run of the loop writes it.
+async fn owner_marker(server: &TestServer, user: &TestUser) -> Result<String> {
+    let me = server.send(user, "GET", "/me", None).await?;
+    let id = me["user"]["id"].as_str().context("no user id")?;
+    Ok(marker_for(&server.url, id))
+}
+
+fn marker_for(server: &str, user_id: &str) -> String {
+    format!("version 1\nserver {server}\nuser {user_id}\nrun x\nstarted y\n")
+}
+
+/// A kept directory for `key` in `heap` of `team` under `root`, with `marker` written `days` days ago and a file in
+/// it.
+fn kept_directory(
+    root: &std::path::Path,
+    marker: &str,
+    team: &str,
+    heap: &str,
+    key: &str,
+    days: u64,
+) -> Result<std::path::PathBuf> {
     let dir = root.join(team).join(heap).join(key);
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join("work.txt"), "what the agent left")?;
-    let marker = dir.join(".upheap-run");
-    std::fs::write(&marker, "run x\nstarted y\n")?;
-    let at = std::time::SystemTime::now() - StdDuration::from_secs(days * 24 * 60 * 60);
-    std::fs::File::options().write(true).open(marker)?.set_modified(at)?;
+    let path = dir.join(".upheap-run");
+    std::fs::write(&path, marker)?;
+    set_age(&path, days)?;
     Ok(dir)
+}
+
+/// Sets the modification time of `path` to `days` days ago.
+fn set_age(path: &std::path::Path, days: u64) -> Result<()> {
+    let at = std::time::SystemTime::now() - StdDuration::from_secs(days * 24 * 60 * 60);
+    std::fs::File::options().write(true).open(path)?.set_modified(at)?;
+    Ok(())
 }
 
 #[gtest]
@@ -1137,18 +1163,19 @@ fn kept_directory(root: &std::path::Path, team: &str, heap: &str, key: &str, day
 async fn a_looping_run_sweeps_again_between_claims_when_a_sweep_is_due() -> Result<()> {
     // Arrange: sweeps due before every claim. The one run makes a kept directory for an item that doesn't exist, after
     // the sweep at the start has passed, so only a later sweep can remove it.
-    let (_server, _ada, mut cli, _note) = with_prepared_note().await?;
+    let (server, ada, mut cli, _note) = with_prepared_note().await?;
     cli.sweep_every = StdDuration::ZERO;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path().join("runs");
     let stray = root.join("ada").join("personal").join("zzzzz");
     let tool = {
-        let (agent, stray) = (cli.agent(), stray.clone());
+        let (agent, stray, marker) = (cli.agent(), stray.clone(), marker.clone());
         StandIn::new(move |start| {
-            let (agent, stray) = (agent.clone(), stray.clone());
+            let (agent, stray, marker) = (agent.clone(), stray.clone(), marker.clone());
             async move {
                 std::fs::create_dir_all(&stray).expect("the stray directory");
-                std::fs::write(stray.join(".upheap-run"), "run x\nstarted y\n").expect("its marker");
+                std::fs::write(stray.join(".upheap-run"), &marker).expect("its marker");
                 let item = item_key_of(&start);
                 agent
                     .upheap_with_stdin(
@@ -1205,6 +1232,7 @@ async fn with_a_note_nobody_claims() -> Result<(TestServer, TestUser, TestCli, S
 async fn the_sweep_removes_the_directory_of_a_closed_item() -> Result<()> {
     // Arrange: one item done and one not wanted, each with a kept directory, in a heap of their own.
     let (server, ada, cli, done) = with_a_note_nobody_claims().await?;
+    let marker = owner_marker(&server, &ada).await?;
     let wont = add_note(&server, &ada, "Order the certificate").await?;
     server.edit_item(&ada, HEAP, &done, json!({ "state": "done" })).await?;
     server
@@ -1212,8 +1240,8 @@ async fn the_sweep_removes_the_directory_of_a_closed_item() -> Result<()> {
         .await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path();
-    let first = kept_directory(root, "ada", "personal", &done, 1)?;
-    let second = kept_directory(root, "ada", "personal", &wont, 1)?;
+    let first = kept_directory(root, &marker, "ada", "personal", &done, 1)?;
+    let second = kept_directory(root, &marker, "ada", "personal", &wont, 1)?;
     let root_arg = root.to_string_lossy().into_owned();
 
     // Act
@@ -1241,12 +1269,13 @@ async fn the_sweep_removes_the_directory_of_a_closed_item() -> Result<()> {
 #[tokio::test]
 async fn the_sweep_removes_the_directory_of_an_item_that_cannot_be_found() -> Result<()> {
     // Arrange: a key that isn't in Ada's heap, and a heap Ada has no such item or heap in.
-    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let (server, ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path();
-    let no_item = kept_directory(root, "ada", "personal", "zzzzz", 1)?;
-    let no_heap = kept_directory(root, "ada", "elsewhere", "zzzzz", 1)?;
-    let no_team = kept_directory(root, "other", "personal", "zzzzz", 1)?;
+    let no_item = kept_directory(root, &marker, "ada", "personal", "zzzzz", 1)?;
+    let no_heap = kept_directory(root, &marker, "ada", "elsewhere", "zzzzz", 1)?;
+    let no_team = kept_directory(root, &marker, "other", "personal", "zzzzz", 1)?;
     let root_arg = root.to_string_lossy().into_owned();
 
     // Act
@@ -1272,9 +1301,10 @@ async fn the_sweep_removes_a_directory_unused_for_7_days_and_keeps_a_recent_one(
     // Arrange: two open items, one last used 8 days ago and one 6 days ago.
     let (server, ada, cli, old_item) = with_a_note_nobody_claims().await?;
     let recent_item = add_note(&server, &ada, "Order the certificate").await?;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
-    let old = kept_directory(parent.path(), "ada", "personal", &old_item, 8)?;
-    let recent = kept_directory(parent.path(), "ada", "personal", &recent_item, 6)?;
+    let old = kept_directory(parent.path(), &marker, "ada", "personal", &old_item, 8)?;
+    let recent = kept_directory(parent.path(), &marker, "ada", "personal", &recent_item, 6)?;
     let root_arg = parent.path().to_string_lossy().into_owned();
 
     // Act
@@ -1298,11 +1328,129 @@ async fn the_sweep_removes_a_directory_unused_for_7_days_and_keeps_a_recent_one(
 
 #[gtest]
 #[tokio::test]
+async fn the_sweep_keeps_what_another_server_or_account_made_unless_it_is_unused_for_7_days() -> Result<()> {
+    // Arrange: items that don't exist here, as another server's would not. Their markers name another server, another
+    // user, and no owner at all; one of the other server's is old.
+    let (server, ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let mine = owner_marker(&server, &ada).await?;
+    let other_server = marker_for(
+        "http://other.example",
+        mine.split("user ")
+            .nth(1)
+            .unwrap_or_default()
+            .split('\n')
+            .next()
+            .unwrap_or_default(),
+    );
+    let other_user = mine.replace("user ", "user x-");
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let recent = kept_directory(root, &other_server, "ada", "personal", "aaaaa", 1)?;
+    let by_other_user = kept_directory(root, &other_user, "ada", "personal", "bbbbb", 1)?;
+    let ownerless = kept_directory(root, "run x\nstarted y\n", "ada", "personal", "ccccc", 1)?;
+    let old = kept_directory(root, &other_server, "ada", "personal", "ddddd", 8)?;
+    let own = kept_directory(root, &mine, "ada", "personal", "eeeee", 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: only the old one, and the one this server and account made for a missing item, are removed.
+    expect_that!(outcome.exited(0), eq(true));
+    for dir in [recent, by_other_user, ownerless] {
+        expect_that!(dir.join("work.txt").is_file(), eq(true), "{}", dir.display());
+    }
+    expect_that!(old.exists(), eq(false));
+    expect_that!(own.exists(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_never_removes_the_directory_of_a_run_that_is_going_on() -> Result<()> {
+    // Arrange: two workers and a sweep before every claim. The first run ages its own marker past 7 days, makes a
+    // stray directory that is as old, and waits for a sweep to remove the stray: that sweep ran after its own marker
+    // aged, and saw both.
+    let (server, ada, mut cli, _note) = with_prepared_note().await?;
+    cli.sweep_every = StdDuration::ZERO;
+    let marker = owner_marker(&server, &ada).await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let stray = root.join("ada/personal/zzzzz");
+    let existed = Arc::new(Mutex::new(Vec::<bool>::new()));
+    let tool = {
+        let (agent, stray, existed, root) = (cli.agent(), stray.clone(), existed.clone(), root.clone());
+        StandIn::new(move |start| {
+            let (agent, stray, existed, root, marker) = (
+                agent.clone(),
+                stray.clone(),
+                existed.clone(),
+                root.clone(),
+                marker.clone(),
+            );
+            async move {
+                let dir = start.dir.clone().expect("a directory under the root");
+                let note = |exists: bool| existed.lock().expect("the record").push(exists);
+                set_age(&dir.join(".upheap-run"), 8).expect("age its own marker");
+                kept_directory(&root, &marker, "ada", "personal", "zzzzz", 8).expect("the stray directory");
+                note(dir.is_dir());
+                let gone = tokio::time::timeout(StdDuration::from_secs(10), async {
+                    while stray.exists() {
+                        tokio::time::sleep(StdDuration::from_millis(5)).await;
+                    }
+                })
+                .await;
+                assert!(gone.is_ok(), "no sweep removed the stray directory");
+                note(dir.is_dir());
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                note(dir.is_dir());
+                Ok(ToolReport::default())
+            }
+        })
+    };
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let root_arg = root.to_string_lossy().into_owned();
+    let args = [LOOP, &["--workers", "2", "--root", &root_arg]].concat();
+
+    // Act
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let pressing = async {
+        wait_until("the run to check its directory after the sweep", || {
+            existed.lock().expect("the record").len() == 3
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+
+    // Assert: the run's directory was there before, after the sweep took the stray, and after it reached its goal.
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(stray.exists(), eq(false));
+    expect_that!(existed.lock().expect("the record").clone(), eq(&vec![true, true, true]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_sweep_keeps_an_open_items_directory() -> Result<()> {
     // Arrange
-    let (_server, _ada, cli, note) = with_a_note_nobody_claims().await?;
+    let (server, ada, cli, note) = with_a_note_nobody_claims().await?;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
-    let dir = kept_directory(parent.path(), "ada", "personal", &note, 1)?;
+    let dir = kept_directory(parent.path(), &marker, "ada", "personal", &note, 1)?;
     let root_arg = parent.path().to_string_lossy().into_owned();
 
     // Act
@@ -1324,9 +1472,10 @@ async fn the_sweep_keeps_an_open_items_directory() -> Result<()> {
 #[tokio::test]
 async fn the_sweep_says_nothing_in_quiet_mode_when_it_removes() -> Result<()> {
     // Arrange
-    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let (server, ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
-    let dir = kept_directory(parent.path(), "ada", "personal", "zzzzz", 1)?;
+    let dir = kept_directory(parent.path(), &marker, "ada", "personal", "zzzzz", 1)?;
     let root_arg = parent.path().to_string_lossy().into_owned();
 
     // Act
@@ -1350,7 +1499,8 @@ async fn the_sweep_says_nothing_in_quiet_mode_when_it_removes() -> Result<()> {
 #[tokio::test]
 async fn the_sweep_leaves_old_run_directories_and_anything_else_alone() -> Result<()> {
     // Arrange: all of these would be removed if they were kept directories of a missing item.
-    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let (server, ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let marker = owner_marker(&server, &ada).await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path();
     let old_run = root.join("zzzzz-0191d3c2-7b1e-7a60-8a43-5b2f4a1c9d10");
@@ -1361,7 +1511,7 @@ async fn the_sweep_leaves_old_run_directories_and_anything_else_alone() -> Resul
     std::fs::create_dir_all(&no_marker)?;
     std::fs::write(no_marker.join("work.txt"), "mine")?;
     std::fs::write(root.join("stray.txt"), "stray")?;
-    let too_deep = kept_directory(&root.join("ada"), "personal", "zzzzz", "yyyyy", 30)?;
+    let too_deep = kept_directory(&root.join("ada"), &marker, "personal", "zzzzz", "yyyyy", 30)?;
     let too_shallow = root.join("ada/zzzzz");
     std::fs::create_dir_all(&too_shallow)?;
     std::fs::write(too_shallow.join(".upheap-run"), "x")?;

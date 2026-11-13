@@ -25,7 +25,7 @@ were never committed. It may have stopped half-way, or failed. Before anything e
 1. If the work has started (here, or on a branch the comments name), check that branch out and carry on from it.
 2. Otherwise make a branch from the latest default branch, and follow the repository's rules for branches, checks
    and pull requests.
-3. This directory is removed once the item is closed, or after 7 days with no run on the item, and a run on another
+3. This directory is removed once the item is closed or moves to another heap, or after 7 days with no run on the item, and a run on another
    machine starts without it. Commit and push what must be kept before the run ends, and say in a comment on the
    item where it is: the branch, and the pull request once there is one.
 
