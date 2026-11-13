@@ -333,4 +333,38 @@ mod tests {
         expect_that!(uses_proxy(&Url::parse("https://upheap.example.test")?), eq(true));
         Ok(())
     }
+
+    /// The request as it goes out, read off the wire: the test servers in `tests/` read it through hyper, which
+    /// would hide a missing header the front end of a deployed server refuses.
+    #[gtest]
+    #[tokio::test]
+    async fn an_empty_post_says_its_length_is_zero() -> googletest::Result<()> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let server = Url::parse(&format!("http://{}", listener.local_addr()?))?;
+        let answering = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await?;
+            let mut head = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !head.windows(4).any(|end| end == b"\r\n\r\n") {
+                let read = socket.read(&mut chunk).await?;
+                if read == 0 {
+                    break;
+                }
+                head.extend_from_slice(&chunk[..read]);
+            }
+            socket.write_all(b"HTTP/1.1 204 No Content\r\n\r\n").await?;
+            std::io::Result::Ok(String::from_utf8_lossy(&head).to_lowercase())
+        });
+
+        ApiClient::new(server, None)?
+            .post_empty(&["work", "runs", "r", "heartbeat"], "token")
+            .await?;
+
+        let head = answering.await??;
+        expect_that!(head.matches("content-length").count(), eq(1));
+        expect_that!(head, contains_substring("content-length: 0\r\n"));
+        Ok(())
+    }
 }
