@@ -42,7 +42,6 @@ impl Services {
             .map_err(|error| in_run(principal, error))?;
         let now = self.now();
         let scope = self.check_run_write(&txn, principal, item_id, now).await?;
-        let role = access.membership.role;
         let heap = &access.heap;
         let note = store::items::find_item_locking(&txn, item_id)
             .await?
@@ -51,7 +50,7 @@ impl Services {
 
         let Some(became) = note.became(principal.user_id, now)? else {
             let children = ItemChildren::read_locking(&txn, note.id).await?;
-            let view = build_item_view(&txn, heap, role, note, children, now).await?;
+            let view = build_item_view(&txn, heap, &access.membership, note, children, now).await?;
             commit_if_in_run(txn, principal).await?;
             return Ok(view);
         };
@@ -146,7 +145,7 @@ impl Services {
         }
 
         let children = ItemChildren::read_locking(&txn, saved.id).await?;
-        let view = build_item_view(&txn, heap, role, saved, children, now).await?;
+        let view = build_item_view(&txn, heap, &access.membership, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(

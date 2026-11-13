@@ -51,12 +51,15 @@ pub struct ToolStart {
     pub brief: String,
     /// Variables to add to the tool's environment: the run, the server and the heap.
     pub env: Vec<(String, String)>,
-    /// A directory for the tool to make, set up for itself and run in: one that doesn't exist yet. `None` to run
-    /// in the directory `work run` was started in, as it is.
+    /// A directory for the tool to set up for itself and run in, made if it is missing. It may hold an earlier run's
+    /// work, which is kept. `None` to run in the directory `work run` was started in, as it is.
     pub dir: Option<PathBuf>,
     /// Allow rules the person added for this run's access (`--allow` and the turn's own flag), in the tool's syntax,
     /// on top of the tool's own. Already checked to be one rule each.
     pub allow: Vec<String>,
+    /// A file for the tool's streamed output, one event a line, made with the directory it is in. `None` for no log.
+    /// A log that can't be written is a warning, not a failure of the run.
+    pub log: Option<PathBuf>,
 }
 
 /// What the tool reported when it ended.
@@ -146,10 +149,16 @@ pub struct WorkDeps {
     pub interrupts: ListenForInterrupts,
     /// How long to wait before asking again when nothing is left to do. 60 seconds in the binary.
     pub idle_wait: Duration,
-    /// How often a live run says so. 5 minutes in the binary: a run lapses after 30.
+    /// How often a live run says so, by the wall clock. 5 minutes in the binary: a run lapses after 30.
     pub heartbeat_every: Duration,
+    /// How often the loop looks at the clock to see whether a heartbeat is due, and so how often it tries again
+    /// while heartbeats fail (a try that ran into the client's timeout is followed by the next at once). 30 seconds
+    /// in the binary.
+    pub heartbeat_check: Duration,
     /// How long to wait between tries to record a run's end. 5 seconds in the binary.
     pub finish_retry: Duration,
+    /// How long between sweeps of the `--root` for directories to remove. 1 hour in the binary.
+    pub sweep_every: Duration,
 }
 
 impl WorkDeps {
@@ -160,7 +169,9 @@ impl WorkDeps {
             interrupts: Box::new(listen_for_signals),
             idle_wait: Duration::from_secs(60),
             heartbeat_every: Duration::from_secs(5 * 60),
+            heartbeat_check: Duration::from_secs(30),
             finish_retry: Duration::from_secs(5),
+            sweep_every: Duration::from_secs(60 * 60),
         }
     }
 }
@@ -201,12 +212,17 @@ fn listen_for_signals() -> UnboundedReceiver<Interrupt> {
     receiver
 }
 
+/// How long a tool may print nothing before it is stopped and its run failed, in the binary.
+const SILENCE_LIMIT: Duration = Duration::from_secs(30 * 60);
+
 /// The tools of this machine: processes started from the programs on `PATH`.
 pub struct SystemTools {
     /// The program to start for [`Tool::Claude`] in place of the one on `PATH`. For tests.
     claude: Option<PathBuf>,
     /// The tools stopped and not yet ended.
     stops: claude::StopTracker,
+    /// How long a tool may print nothing before it is stopped and its run failed. 30 minutes in the binary.
+    silence_limit: Duration,
 }
 
 impl SystemTools {
@@ -214,6 +230,7 @@ impl SystemTools {
         Self {
             claude: None,
             stops: claude::StopTracker::new(),
+            silence_limit: SILENCE_LIMIT,
         }
     }
 
@@ -222,6 +239,15 @@ impl SystemTools {
         Self {
             claude: Some(path),
             stops: claude::StopTracker::new(),
+            silence_limit: SILENCE_LIMIT,
+        }
+    }
+
+    /// These tools, stopping a tool after `limit` without output. For tests.
+    pub fn with_silence_limit(self, limit: Duration) -> Self {
+        Self {
+            silence_limit: limit,
+            ..self
         }
     }
 
@@ -249,9 +275,10 @@ impl AgentTools for SystemTools {
     fn run(&self, start: ToolStart) -> Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>> {
         let program = self.program(start.tool);
         let stops = self.stops.clone();
+        let silence_limit = self.silence_limit;
         Box::pin(async move {
             match start.tool {
-                Tool::Claude => claude::run(program?, start, stops).await,
+                Tool::Claude => claude::run(program?, start, stops, silence_limit).await,
             }
         })
     }

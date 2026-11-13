@@ -126,7 +126,7 @@ async fn items_made_from_a_note_read_back_oldest_first_with_their_origin() -> Re
         made.iter().map(|item| item.id).collect::<Vec<_>>(),
         eq(&vec![first.id, second.id])
     );
-    expect_that!(made[0].origin, some(eq(note.id)));
+    expect_that!(made[0].origin_id, some(eq(note.id)));
     expect_that!(made[1].state, eq(ItemState::Blocked { by: Some(first.id) }));
     expect_that!(none_made, is_empty());
     Ok(())

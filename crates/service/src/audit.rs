@@ -23,7 +23,7 @@ pub(crate) fn describe_new_item(item: &Item) -> Value {
     if item.stage == Stage::AsWritten {
         fields.remove("stage");
     }
-    if let Some(origin) = item.origin {
+    if let Some(origin) = item.origin_id {
         fields.insert("origin".into(), json!(origin.to_string()));
     }
     Value::Object(fields)
@@ -109,6 +109,11 @@ pub(crate) fn describe_new_question(question: &Question) -> Value {
     }
     if let Some(step) = question.step {
         fields.insert("question_step".into(), json!(step.get()));
+    }
+    if let Some(review) = &question.review {
+        fields.insert("question_link".into(), json!(review.link.as_str()));
+        fields.insert("question_piece".into(), json!(review.piece.as_str()));
+        fields.insert("question_round".into(), json!(review.round));
     }
     Value::Object(fields)
 }
@@ -211,6 +216,16 @@ pub(crate) fn describe_goal_met(goal: Goal, before: Stage, after: Stage, how: Go
 /// A turn a run handed back, for its `turn_handed_back` entry.
 pub(crate) fn describe_hand_back(turn: &Turn, reason: &str) -> Value {
     json!({ "goal": turn.goal.code(), "reason": reason })
+}
+
+/// A turn the person sent back for changes, for its `turn_redone` entry: the redone turn's goal, the stage the item
+/// moved from and to, and the person's line.
+pub(crate) fn describe_redone(turn: &Turn, before: Stage, after: Stage, line: &str) -> Value {
+    json!({
+        "goal": turn.goal.code(),
+        "stage": { "before": before.code(), "after": after.code() },
+        "line": line,
+    })
 }
 
 /// A stuck turn let go again, for its `turn_retried` entry.

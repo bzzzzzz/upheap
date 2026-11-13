@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { HeapRef, Item, RankedItem } from "../api/client";
 import { chipClass } from "./buttons";
-import { AgentChip, SendToAgentButton } from "./ItemTurn";
+import { AgentChip, ChangesAskedButton, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import { isClosed, KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { PopoverSheet } from "./PopoverSheet";
@@ -112,6 +112,7 @@ export function StatusLine({
         {entry && <RankChip entry={entry} />}
         <AgentChip heapRef={heapRef} item={item} onTakenBack={onTakenBack} />
         <SendToAgentButton heapRef={heapRef} item={item} onSent={() => setSent((n) => n + 1)} />
+        <ChangesAskedButton heapRef={heapRef} item={item} onSent={() => setSent((n) => n + 1)} />
       </div>
       {date && isToCome(item) && <p className="text-sm text-ink-soft">Joins the list on {date}</p>}
     </div>

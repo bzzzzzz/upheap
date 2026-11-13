@@ -101,6 +101,8 @@ enum Target {
     Claimable,
     /// An item whose turn is stuck, in `{item}`.
     StuckItem,
+    /// An item whose turn a run reached, in `{item}`: its changes can be asked.
+    ReachedItem,
     /// A run the caller claimed on an item that has a context, in `{run}`. A caller who can't claim gets a run ID
     /// nobody has.
     OwnRun,
@@ -128,6 +130,8 @@ enum RequestBody {
     NewComment,
     /// Sending an item to an agent, one state.
     SendToAgent,
+    /// Asking for changes to a reached turn.
+    RedoTurn,
     /// A claim over the shared heap.
     Claim,
     /// A run reaching its goal.
@@ -663,6 +667,14 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::Empty,
             StatusCode::OK,
         ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/turn/redo",
+            edit,
+            Target::ReachedItem,
+            RequestBody::RedoTurn,
+            StatusCode::CREATED,
+        ),
         // The queue refuses an archived heap even to read, as it is for claiming.
         row(
             Method::GET,
@@ -1172,6 +1184,23 @@ impl World {
     }
 
     /// Creates an item whose turn is stuck: three claims of it as the admin, each finished as failed. Returns its key.
+    /// Creates an item with context, sends it to an agent and has a run reach the goal. Returns its key.
+    async fn create_reached_item(&self) -> Result<String> {
+        let key = self.create_item_with_turn("critical").await?;
+        let run = self.claim_item(&self.admin.session, &key).await?;
+        let reached = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/work/runs/{run}/reached"),
+                Some(&self.admin.session),
+                Some(json!({ "result": "Added the context" })),
+            )
+            .await?;
+        anyhow::ensure!(reached.status == StatusCode::OK, "reached failed: {}", reached.body);
+        Ok(key)
+    }
+
     async fn create_stuck_item(&self) -> Result<String> {
         let key = self.create_item_with_turn("critical").await?;
         for _ in 0..3 {
@@ -1373,6 +1402,7 @@ impl World {
             RequestBody::ReplyToQuestion => Some(json!({ "reply": { "comment": "Internal" } })),
             RequestBody::NewComment => Some(json!({ "body": "Use the internal CA." })),
             RequestBody::SendToAgent => Some(json!({ "reach": "one" })),
+            RequestBody::RedoTurn => Some(json!({ "line": "Use the new CA." })),
             RequestBody::Claim => Some(json!({ "heaps": [format!("{}/{}", self.team_slug, self.heap_slug)] })),
             RequestBody::Reached => {
                 Some(json!({ "result": "Added the context", "links": ["https://example.test/pr/1"] }))
@@ -1498,6 +1528,7 @@ impl World {
                 self.create_item_with_turn("critical").await?;
             }
             Target::StuckItem => path = path.replace("{item}", &self.create_stuck_item().await?),
+            Target::ReachedItem => path = path.replace("{item}", &self.create_reached_item().await?),
             Target::OwnRun => {
                 let run = match session.as_deref() {
                     // Only a member of the team can claim in its heap.

@@ -8,6 +8,7 @@ use crate::parameter::Parameter;
 use crate::question::QuestionState;
 use crate::saved_view::SavedView;
 use crate::team::{Membership, Role, Team, admin_remains};
+use crate::turn::{Turn, check_redo};
 use crate::{Timestamp, UserId};
 
 /// Something a team member may be allowed to do.
@@ -80,6 +81,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::TurnReached
         | AuditAction::TurnHandedBack
         | AuditAction::TurnRetried
+        | AuditAction::TurnRedone
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewCreated
@@ -128,6 +130,14 @@ pub enum ItemAction {
     TakeBack,
     /// Let the agents try again at an item whose turn is stuck.
     Retry,
+    /// Ask for changes to an item whose latest turn reached a stable state short of done.
+    RedoTurn,
+}
+
+/// Whether `role` may ask for changes to `item` in `heap`, whose latest turn is `latest`: the heap is active, the role
+/// may edit items, and [`check_redo`] passes.
+pub fn can_redo_turn(item: &Item, heap: &Heap, role: Role, latest: Option<&Turn>) -> bool {
+    !heap.is_archived() && Permission::EditItems.is_granted_to(role) && check_redo(item, latest).is_ok()
 }
 
 /// What `role` can do with `item` in `heap` at `now`, given whether it has an open turn and whether that turn is

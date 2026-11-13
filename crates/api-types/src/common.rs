@@ -272,6 +272,10 @@ pub enum ItemActionDto {
     /// Let the agents try again, on `POST …/turn/retry`. Offered for an open item the caller may edit whose turn is
     /// stuck.
     Retry,
+    /// Ask for changes, on `POST …/turn/redo`. Offered for an open item the caller may edit that has no open turn and
+    /// whose latest turn reached a stable state short of done and was not redone yet. Only an item's own response
+    /// carries it, not a list row.
+    RedoTurn,
 }
 
 impl From<ItemAction> for ItemActionDto {
@@ -289,6 +293,7 @@ impl From<ItemAction> for ItemActionDto {
             ItemAction::SendToAgent => Self::SendToAgent,
             ItemAction::TakeBack => Self::TakeBack,
             ItemAction::Retry => Self::Retry,
+            ItemAction::RedoTurn => Self::RedoTurn,
         }
     }
 }
@@ -396,6 +401,12 @@ impl StepDto {
 pub enum QuestionKindDto {
     Question,
     Request,
+    /// A link to work for the person to look at, replied to with `Approved` or `Changes asked`. Asked only by an agent
+    /// doing a task.
+    Review,
+    /// The agent says nothing is left, replied to with `Close as done` or `Not yet`. Asked only by an agent doing a
+    /// task. Agreeing closes the task.
+    DoneProposal,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -407,6 +418,8 @@ impl From<QuestionKind> for QuestionKindDto {
         match kind {
             QuestionKind::Question => Self::Question,
             QuestionKind::Request => Self::Request,
+            QuestionKind::Review => Self::Review,
+            QuestionKind::DoneProposal => Self::DoneProposal,
         }
     }
 }
@@ -419,6 +432,8 @@ impl TryFrom<QuestionKindDto> for QuestionKind {
         match kind {
             QuestionKindDto::Question => Ok(Self::Question),
             QuestionKindDto::Request => Ok(Self::Request),
+            QuestionKindDto::Review => Ok(Self::Review),
+            QuestionKindDto::DoneProposal => Ok(Self::DoneProposal),
             QuestionKindDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Kind }),
         }
     }
@@ -483,7 +498,19 @@ pub struct QuestionReplyDto {
     pub replied_label: String,
 }
 
-/// One question or request on an item.
+/// What a review asks about.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Review)]
+pub struct ReviewDto {
+    /// The address of the work to look at: an absolute `http` or `https` link.
+    pub link: String,
+    /// The piece of work the review is about, which numbers its rounds. The link itself when the asker named none.
+    pub piece: String,
+    /// 1 plus the answered reviews of the same piece when this was asked; fixed then.
+    pub round: u32,
+}
+
+/// One question, request, review or done proposal on an item.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Question)]
 pub struct QuestionDto {
@@ -496,12 +523,18 @@ pub struct QuestionDto {
     /// The long version, Markdown; `null` when there is none.
     pub details: Option<String>,
     /// The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
-    /// `Can't be done`.
+    /// `Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`.
     pub choices: Vec<String>,
     /// Whether any number of choices may be picked, not just one.
     pub many: bool,
     /// The number of the item's step this is about, which may have been dropped since.
     pub step: Option<u32>,
+    /// What a `review` asks about; `null` for every other kind.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub review: Option<ReviewDto>,
     pub state: QuestionStateDto,
     /// Who asked. `null` when it can't be traced.
     pub asked_by: Option<UserRefDto>,
@@ -768,13 +801,6 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub blocker_gone: Option<BlockerGoneDto>,
-    /// The item this one was made from, in whichever heap it is now. Set when it is made and never changed. `null`
-    /// for an item that wasn't made from another. On every response.
-    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
-    // says required.
-    #[serde(default)]
-    #[schema(required = true)]
-    pub origin: Option<ItemRefDto>,
     /// The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;
     /// on one item and in the closed list it is a list, empty when nothing was made from it.
     #[serde(default)]
@@ -846,10 +872,33 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub with_agent: bool,
+    /// The item this one was made from: the note it was split from, or the item of the run that added it. `null` when
+    /// it has no origin, when the
+    /// caller can't view the origin's heap, and in the ranked list and the closed list, which don't look it up.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub origin: Option<ItemOriginDto>,
+    /// Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub added_in_run: bool,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,
+}
+
+/// The item another item was made from, named where the second refers to it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ItemOrigin)]
+pub struct ItemOriginDto {
+    pub id: Uuid,
+    /// Unique within the heap; the item's path is `…/items/{key}`.
+    pub key: String,
+    pub title: String,
+    pub kind: KindDto,
+    /// The heap it is in now, and its team.
+    pub heap: crate::waiting::ItemHeapDto,
 }
 
 /// One labelled reason for an item's position.
@@ -1054,7 +1103,7 @@ mod tests {
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
     fn question_from_a_later_server() -> serde_json::Value {
         json!([{
-            "number": 1, "kind": "review", "text": "Look", "details": null, "choices": [], "many": false,
+            "number": 1, "kind": "poll", "text": "Look", "details": null, "choices": [], "many": false,
             "step": null, "state": "parked", "asked_by": null, "asked_at": 0, "asked_label": "today",
             "reply": null, "version": 1, "allowed_actions": ["reply", "withdraw"],
         }])

@@ -152,6 +152,8 @@ cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
+cargo run -p cli -- question review k3x9a https://github.com/o/r/pull/12 "Paint the fence"  # an agent in a run asks for review; replied to with Approved or Changes asked; --piece, --details-file
+cargo run -p cli -- question propose-done k3x9a "Painted and checked"  # an agent in a run proposes closing; the person replies Close as done or Not yet
 cargo run -p cli -- comment add k3x9a "Used the internal CA."   # a comment on the item; or --file notes.md, or - for stdin
 cargo run -p cli -- comment list k3x9a                          # an item's comments, oldest first
 cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file
@@ -159,7 +161,7 @@ cargo run -p cli -- work next                                    # what an agent
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
 cargo run -p cli -- work run --tool claude                       # the agent loop: claim, start claude on the item, record the run, repeat; Ctrl-C stops it
 cargo run -p cli -- work run --tool claude --heap work --once    # one run in a heap, or nothing when there is nothing to do
-cargo run -p cli -- work run --tool claude --root ~/agent-runs   # each run in a new directory under the root, set up for claude
+cargo run -p cli -- work run --tool claude --root ~/agent-runs   # each item in its own kept directory under the root, set up for claude
 cargo run -p cli -- work run --tool claude --root ~/agent-runs --workers 3  # up to 3 runs at once, each on its own item
 cargo run -p cli -- work run --tool claude --instructions ~/how-i-work.md  # tell every run how you want work done on this machine
 cargo run -p cli -- work run --tool claude --allow mcp__claude_ai_Claude_Docs --allow-do 'Bash(npm:*)'  # let runs use a tool your settings don't allow; --allow-prepare / --allow-do for one kind of run only
@@ -182,10 +184,15 @@ reminder a task and start it, on the run's own item only, and is refused anythin
 starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
 item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
 `auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
-and run what your own and the project's Claude settings allow. With `--root`, each run starts in a new directory
-under the root instead, named by the item's key and the run's ID, with a `CLAUDE.md` that says how to work there,
-and `claude` may run any command, edit and read, for preparing as well: a run there has to clone and build what it
-works on. Nothing removes these directories. With `--instructions <file>`, every run is also told what the file
+and run what your own and the project's Claude settings allow. With `--root`, each run starts in a directory
+under the root instead, `<root>/<team>/<heap>/<key>`, with a `CLAUDE.md` that says how to work there, and `claude`
+may run any command, edit and read, for preparing as well: a run there has to clone and build what it works on. The
+directory is kept and used again for the item's next run, with what the last run left in it. The loop removes it
+once the item is closed or can't be found, or after 7 days with no run on the item, checking when it starts and
+about every hour. Old `<key>-<run id>` directories from earlier versions are left for you to clear. Claude's
+streamed output for each run is saved in `<config dir>/runs/<run id>.jsonl` (kept 7 days), and a `claude` that shows
+no output for 30 minutes is stopped and its run failed. `claude` prints nothing while a single tool call runs, so a
+tool call longer than 30 minutes (a raised Bash timeout, a slow MCP tool) counts as silence. With `--instructions <file>`, every run is also told what the file
 says: your own way of working on this machine (which skills to use, how to check and review a change), which
 comes before the heap's context on how the work is done. The file is read once, when the loop starts. With
 `--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as

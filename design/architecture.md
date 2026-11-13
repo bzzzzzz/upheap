@@ -62,11 +62,11 @@ The tables and columns are in the migrations. These are the conventions they fol
   `arrives_at.unwrap_or(created_at)` as the item's age, so `arrives_at` has a second use: an item made from another
   with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
   It is still `NULL` for every other item, and the API shows it only for reminders.
-- **An item's origin** is `items.origin_item_id`, the item it was made from in a split (`item add --from`). It is set
-  when the item is made and never changed, points to an item of the same heap at that time, and stays when either item
-  later moves to another heap, as a blocker's link does. An index serves the lookup of what was made from an item,
-  which the item and the closed list show as `became`: a handful of items per note, and at most one page of closed
-  items, read in one query.
+- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run
+  that added it, with `created_run_id` set beside it then. It is set when the item is made and never changed, and
+  stays when either item later moves to another heap, as a blocker's link does. An index serves the lookup of what was
+  made from an item, which the item and the closed list show as `became`: a handful of items per note, and at most one
+  page of closed items, read in one query.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -111,6 +111,15 @@ The tables and columns are in the migrations. These are the conventions they fol
   500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+  **A review and a done proposal are question kinds** with fixed choices too (Approved or Changes asked; Close as done
+  or Not yet), asked only by an agent in a run whose turn goes to done, on a task. A review's link, piece (the link
+  itself when none is named) and round live on its row; the round is fixed when it is asked, as one more than the
+  item's answered reviews of that piece, so later events never change it, and a withdrawn or open review doesn't count.
+  A done proposal is refused, with every blocker listed, while any question or step is open or a reviewed piece's
+  latest round isn't approved (`check_close_ready`); a task with no reviews can be proposed closed.
+  An agent never closes a task: its `PATCH` to done is always refused. The person's reply Close as done closes the task
+  in the reply's transaction, by the same path as their own Done: the open turn ends as reached by the person, other
+  open questions are withdrawn, and the items it blocks are freed.
 - **An item's comments are rows of their own** in `item_comments`: an append-only thread under the item's context,
   so an agent or a person adds to an item without rewriting its context, which could change the author's words and
   clash with their edits. A comment has no `version` and is never changed or deleted, and adding one never bumps the
@@ -165,19 +174,28 @@ The tables and columns are in the migrations. These are the conventions they fol
   `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, closing a note as became, and the run's own heartbeat, reached, hand-back and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
-  and touches `heard_at`. Starting an item in a run keeps its turn. **A run splits its note:** creating an item is
-  allowed in a run only with an `origin` that is the run's own item (a note), with a need no higher than the note's,
-  no tags, values or reminder kind, and a block only on an item made from the note in the same turn
-  (`created_at >= turn.opened_at`); it opens no prepare turn. Steps, comments and the item `PATCH` are also accepted on
-  those items made in the turn (`check_run_write_made`), questions only on the run's own item. `POST …/became` in a
-  run checks that no question is open and every open task made from the note has a context and a step
-  (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the run
-  and turn end as reached with no follow-on. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
+  and touches `heard_at`. Starting an item in a run keeps its turn.
+  **Adding an item in a run** (`check_run_add`) may target any heap the person can edit, in any of their teams. It
+  locks the heap of the run's item and the target heap in heap ID order (once when they are the same, as
+  `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
+  item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
+  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run (`check_run_step_add`),
+  and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
+  the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn made
+  from the note (`origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
+  checks that no question is open and every open task made from the note has a context and a step
+  (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
+  run and turn end as reached with no follow-on. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`); neither is shown yet. `work reached` checks
   the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
   stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
   has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
   never has to read a message.
+  **Redo** is the person's way to say a turn that reached a stable state short of done isn't right: it marks that turn
+  `redone` (`redone_at`, `redone_by`), puts the item's stage back to where the turn's first run found it, and opens a
+  turn to the same reach and goal with the person's line, in one transaction. Only the item's latest turn can be
+  redone, and only once; the kind isn't changed back and what the agent wrote stays.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done,
   won't do or became (a note closed because items were made from it; only `POST …/became` sets it). In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -602,7 +620,7 @@ the remaining admins.
    by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
    (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
    back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and
-   after, and `TurnRetried`). Closing an item writes its take back, then a withdrawal for each open question, then its
+   after, `TurnRetried`, and `TurnRedone`, with the goal, the stage before and after and the line). Closing an item writes its take back, then a withdrawal for each open question, then its
    own update.
 7. Invite links are never deleted. Making and revoking one are team entries (`InviteLinkCreated`,
    `InviteLinkRevoked`) shown to admins, and a join through one is a membership entry (`MemberJoined`) naming the
@@ -638,7 +656,7 @@ principles; the exit codes are in `crates/cli/src/error.rs`, and the commands an
 section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), an item's questions (ask, request) and comments (add, list), tags
+   task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add, list), tags
    (list, add, edit), parameters (list, add, edit, archive, and their options), heaps (list, pick a default) and
    signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
    write per kind of change (name and weight, tags, option order), each at the version the last returned, because
@@ -680,17 +698,39 @@ section is how it maps onto this API.
 7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
-   sends a heartbeat every 5 minutes, six chances inside the 30 minutes after which a run lapses, and stops the tool
-   when the server answers `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
-   only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
+   sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
+   machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again at each
+   check until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes out
+   before the network is back after a wake isn't a false alarm. The heartbeat says the loop is up. Claude's streamed
+   output says claude is working: it is read by the loop only, saved to the run's log
+   (`<config dir>/runs/<run id>.jsonl`, pruned after 7 days) and never sent to the server. When the tool shows no
+   output for 30 minutes the loop stops it and fails the run with its own message, "The agent showed no activity
+   for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
+   claude does, so a sleep isn't silence. The loop stops the tool when the server answers
+   `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
+   failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
    item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
-   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names a new
-   directory for each run and the tool makes it, with its own instructions (for Claude, `CLAUDE.md`), and starts
-   there: a run then begins from nothing and can't see another run's files, and what it needs to carry on is in
-   the item's comments and on the remote. There the tool is allowed any command, edit and read, passed on its
+   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names one
+   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run; the loop makes it if it is
+   missing and the tool writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
+   record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
+   left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
+   `.upheap-run` in it, naming the server, and that file's modification time is when a run last started or ended there. The
+   run holds a shared lock on that file until it ends. The loop sweeps the
+   root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
+   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's) while
+   its heap still reads fine: the server answers 404 for a heap the caller can't see too, so another account's
+   directories on a shared root are left alone. Only the server the marker names is asked; another server's
+   directories go only for age. Any other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
+   and a server out of reach ends the sweep. Only directories at that depth with a marker are looked at, so the
+   old `<key>-<run id>` ones and anything else are never touched, and a directory a run of this loop is in or
+   about to start in is skipped. A removal takes the marker's lock exclusively, so a run in another loop on the same
+   root keeps its directory too, checks the marker wasn't rewritten since the sweep listed it, renames the directory
+   away under the lock that guards that set, and deletes it after releasing both, since deleting a clone is slow. A
+   run that opened the marker just before finds it moved once it gets the lock, and makes the directory again. There the tool is allowed any command, edit and read, passed on its
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
    wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
    `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's

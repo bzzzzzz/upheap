@@ -181,8 +181,9 @@ What it is not:
    where the work is.
 3. Changes asked sends the task back to the agent, which changes the work and asks again. There is no limit on
    rounds.
-4. A task can need several reviews, as when one change lands as several pull requests. It is done when the agent
-   has nothing left to do on it and every review it asked for is approved.
+4. A task can need several reviews, as when one change lands as several pull requests. When the agent has nothing
+   left to do on it and every review it asked for is approved, it proposes closing, and the task is done when the
+   person agrees. Work with nothing to review is closed the same way, from the proposal alone.
 
 ## The agent loop
 

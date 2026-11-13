@@ -297,7 +297,13 @@ async fn invalid_questions_are_refused_naming_the_field() -> Result<()> {
             "many",
             "field_not_allowed",
         ),
-        (json!({ "kind": "review", "text": "Look" }), "kind", "value_unknown"),
+        (json!({ "kind": "poll", "text": "Look" }), "kind", "value_unknown"),
+        (json!({ "kind": "review", "text": "Look" }), "link", "field_empty"),
+        (
+            json!({ "kind": "request", "text": "Do it", "link": "https://example.test/pull/1" }),
+            "link",
+            "field_not_allowed",
+        ),
     ];
 
     // Act and assert

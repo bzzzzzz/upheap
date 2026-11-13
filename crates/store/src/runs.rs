@@ -45,6 +45,19 @@ pub async fn find_run(db: &impl ConnectionTrait, id: RunId) -> Result<Option<Run
     row.map(to_run).transpose()
 }
 
+/// The first run of the turn `turn_id`, the one that started earliest, as a locking read (see [`find_run_locking`]).
+pub async fn find_earliest_run_for_turn_locking(
+    db: &impl ConnectionTrait,
+    turn_id: TurnId,
+) -> Result<Option<Run>, StoreError> {
+    let query = item_runs::Entity::find()
+        .filter(item_runs::Column::TurnId.eq(id_to_db(turn_id.as_uuid())))
+        .order_by_asc(item_runs::Column::StartedAt)
+        .order_by_asc(item_runs::Column::Id);
+    let row = crate::items::shared_if(query, true).one(db).await?;
+    row.map(to_run).transpose()
+}
+
 /// The runs of the turn `turn_id` that have not ended, as locking reads (see [`find_run_locking`]). A turn has at most
 /// one in practice: a claim skips an item with a live run, and writes a lapsed one before choosing.
 pub async fn list_unended_runs_for_turn_locking(

@@ -66,6 +66,12 @@ The usual order of work
    for them, and their answer reads back in `upheap item show`. When they answer in the conversation, record it
    with `upheap question reply k3x9a.q1 --pick Internal` or `--comment "..."`. Their sign-in is what replies, so
    reply only with what they said.
+5. An agent never closes a task: in a run `upheap item done` is refused. When you do a task in a run, put the work
+   where it is reviewed and ask for review with `upheap question review k3x9a <link> "<what it is>"`; the person
+   replies Approved or Changes asked, and asking again about the same piece is the next round. When nothing is
+   left, propose closing with `upheap question propose-done k3x9a "<what was done>"`; the person replies Close as
+   done, which closes the task, or Not yet. Both are refused outside a run on a task, and the refusal says what to
+   do next.
 
 Example
   upheap item add "Rotate the staging certs" --effort s --task --context-file context.md --step "Order the new certificate" --step "Install it in staging" -q    # prints the key, say k3x9a

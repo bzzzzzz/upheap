@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::handle::ItemKey;
 use crate::text::{parse_optional, parse_required};
 use crate::validation::{Field, ValidationError};
-use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
+use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 
 /// A closed item can be reopened for exactly 7 × 24 hours after it was closed, independent of timezones.
 pub const REOPEN_WINDOW: Duration = Duration::from_days(7);
@@ -529,12 +529,17 @@ pub struct Item {
     /// lowest-priority option. A closed item may keep an option or a parameter that was archived since; reopening it
     /// brings them up to date (`parameter::current_values`).
     pub parameters: BTreeMap<ParameterId, OptionId>,
-    /// The item this one was made from. Set when it is made and never changed; it stays when either item moves.
-    pub origin: Option<ItemId>,
     pub created_at: Timestamp,
     /// Who added it. `None` only for an item added before creators were stored whose `item_created` audit entry
     /// couldn't be found to fill it in.
     pub created_by: Option<UserId>,
+    /// The item this one was made from: the note it was split from (`NewItem::origin`), or the item of the run that
+    /// added it. Set when it is made and never changed; it stays when either item moves. `None` for an item a person
+    /// added without one.
+    pub origin_id: Option<ItemId>,
+    /// The run that added it. `None` for an item a person added. Set together with `origin_id` by
+    /// [`Item::added_in_run`].
+    pub created_run_id: Option<RunId>,
     pub version: Version,
 }
 
@@ -560,10 +565,25 @@ impl Item {
             arrives_at: fields.arrives_at,
             tags: fields.tags,
             parameters: fields.parameters,
-            origin: fields.origin.map(|origin| origin.item_id),
             created_at: now,
             created_by: Some(created_by),
+            origin_id: fields.origin.map(|origin| origin.item_id),
+            created_run_id: None,
             version: Version::INITIAL,
+        }
+    }
+
+    /// This new item as added by `run`, held on the item `origin`: it links back to that item and records the run, and
+    /// starts with its context written, since a run adds an item only with one. Origin and run are set together,
+    /// here only, except that a person's split sets the origin alone. In a run the item is made from the run's item, so
+    /// a split's origin is that item too.
+    #[must_use]
+    pub fn added_in_run(self, origin: ItemId, run: RunId) -> Self {
+        Self {
+            stage: Stage::WithContext,
+            origin_id: Some(origin),
+            created_run_id: Some(run),
+            ..self
         }
     }
 

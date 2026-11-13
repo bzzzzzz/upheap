@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Item, Kind, Need, NewItem, Title};
-use domain::question::{NewQuestion, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText};
+use domain::question::{NewQuestion, Question, QuestionKind, QuestionNumber, QuestionState, QuestionText, ReviewInput};
 use domain::step::StepNumber;
 use domain::team::Team;
 use domain::text::{Context, Name};
@@ -90,7 +90,15 @@ fn question(
     many: bool,
 ) -> Result<Question> {
     let choices: Vec<String> = choices.iter().map(|label| (*label).to_owned()).collect();
-    let fields = NewQuestion::new(kind, QuestionText::parse("Which CA?")?, None, &choices, many, None)?;
+    let fields = NewQuestion::new(
+        kind,
+        QuestionText::parse("Which CA?")?,
+        None,
+        &choices,
+        many,
+        None,
+        ReviewInput::default(),
+    )?;
     Ok(Question::new(
         QuestionId::from_uuid(Uuid::now_v7()),
         item_id,
@@ -341,5 +349,51 @@ async fn a_withdrawn_question_round_trips_and_is_no_longer_open() -> Result<()> 
         waiting.iter().map(|(_, q)| q.number.get()).collect::<Vec<_>>(),
         elements_are![eq(&2)]
     );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_review_round_trips_with_its_link_piece_and_round() -> Result<()> {
+    // Arrange
+    let (db, item_id, asker) = item_in_new_database().await?;
+    let fields = NewQuestion::new(
+        QuestionKind::Review,
+        QuestionText::parse("The API change")?,
+        None,
+        &[],
+        false,
+        None,
+        ReviewInput {
+            link: Some("https://example.com/pull/12"),
+            piece: Some("the API"),
+        },
+    )?;
+    let review = Question::new(
+        QuestionId::from_uuid(Uuid::now_v7()),
+        item_id,
+        QuestionNumber::FIRST,
+        fields,
+        asker,
+        now()?,
+    )
+    .in_round(2);
+
+    // Act
+    store::questions::insert_question(&db, &review).await?;
+    store::questions::insert_question(
+        &db,
+        &question(item_id, asker, 2, QuestionKind::DoneProposal, &[], false)?,
+    )
+    .await?;
+    let listed = store::questions::list_questions(&db, item_id).await?;
+
+    // Assert
+    expect_that!(listed[0], eq(&review));
+    let stored = listed[0].review.as_ref().context("review")?;
+    expect_that!(stored.link.as_str(), eq("https://example.com/pull/12"));
+    expect_that!(stored.piece.as_str(), eq("the API"));
+    expect_that!(stored.round, eq(2));
+    expect_that!(listed[1].review, none());
     Ok(())
 }

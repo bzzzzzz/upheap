@@ -163,6 +163,22 @@ impl TurnDto {
     }
 }
 
+/// Asks for changes to the work an agent brought to a stable state short of done.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = RedoTurnRequest)]
+pub struct RedoTurnDto {
+    /// What is wrong: plain text, 1 to 2,000 characters, line breaks allowed. Required.
+    pub line: String,
+}
+
+impl RedoTurnDto {
+    /// The line. Fails when it is blank or too long.
+    pub fn to_line(&self) -> Result<TurnLine, ValidationError> {
+        TurnLine::parse(&self.line)?.ok_or(ValidationError::Empty { field: Field::Line })
+    }
+}
+
 /// Sends an item to an agent.
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

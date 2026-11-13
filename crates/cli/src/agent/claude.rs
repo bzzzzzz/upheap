@@ -1,14 +1,21 @@
-//! Claude's command-line tool as an agent: the command line for each kind of access, starting it, and reading what it
-//! printed. The permission flags are the ones in the README's agent paragraph, kept in `arguments`.
+//! Claude's command-line tool as an agent: the command line for each kind of access, starting it, reading what it
+//! streams while it works, and stopping it when it goes silent. The permission flags are the ones in the README's agent
+//! paragraph, kept in `arguments`.
 
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use std::time::Duration;
 
 use serde_json::Value;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, ReadBuf};
 use tokio::process::Command;
+use tokio::time::Instant;
 
 use super::{Access, Tool, ToolError, ToolReport, ToolStart};
+use crate::output::{shorten, spoken_duration};
 
 /// The most a run may cost, in US dollars: what the server accepts.
 const MAX_COST_USD: f64 = 1_000_000.0;
@@ -21,8 +28,9 @@ pub(super) enum Exit {
     Signal,
 }
 
-/// The arguments `claude` starts with: print the answer as one JSON object and read the prompt from stdin, keep the
-/// run out of the person's sessions, and refuse (not ask about) what isn't allowed, since no one is there to ask.
+/// The arguments `claude` starts with: stream what happens as one JSON event a line, ending with a `result` event,
+/// and read the prompt from stdin, keep the run out of the person's sessions, and refuse (not ask about) what isn't
+/// allowed, since no one is there to ask.
 ///
 /// `Prepare` may run `upheap`, read files under the directory it runs in (a bare `Read` would allow any path on the
 /// machine) and use the web. `Do` may run `upheap` and has file edits accepted; every
@@ -39,7 +47,8 @@ pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -
     let mut arguments = vec![
         "-p",
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--no-session-persistence",
         "--permission-mode",
     ];
@@ -84,13 +93,16 @@ const UPHEAP_COMMANDS: [&str; 11] = [
     "Bash(upheap parameter list:*)",
 ];
 
-/// What the tool's exit and output say: its cost, whether it failed, and its last message.
+/// What the tool's exit and output say: its cost, whether it failed, and its last message. `result_line` is the line
+/// of its stream that held the `result` event, if it printed one.
 ///
 /// It ended normally when it exited 0 and its JSON says `is_error` is not true; otherwise it failed, and the failure
 /// is named by what is known, best first: the subtype of the error it reported, its exit code with the last line of
 /// its stderr, a signal, or output that could not be read. The cost is believed only from 0 to a million dollars.
-pub(super) fn read_report(exit: Exit, stdout: &str, stderr: &str) -> ToolReport {
-    let output: Option<Value> = serde_json::from_str(stdout.trim()).ok().filter(Value::is_object);
+pub(super) fn read_report(exit: Exit, result_line: Option<&str>, stderr: &str) -> ToolReport {
+    let output: Option<Value> = result_line
+        .and_then(|line| serde_json::from_str(line.trim()).ok())
+        .filter(Value::is_object);
     let field = |name: &str| output.as_ref().and_then(|output| output.get(name));
     let is_error = field("is_error").and_then(Value::as_bool).unwrap_or(false);
     let subtype = field("subtype").and_then(Value::as_str);
@@ -101,6 +113,16 @@ pub(super) fn read_report(exit: Exit, stdout: &str, stderr: &str) -> ToolReport 
     let failure = match exit {
         Exit::Code(0) if output.is_none() => Some("claude's output couldn't be read.".to_owned()),
         Exit::Code(0) if !is_error => None,
+        _ if is_error && (subtype == Some("success") || (subtype.is_none() && matches!(exit, Exit::Code(0)))) => {
+            // Failures of the API or the login come as a `success` result with `is_error` set and the reason as its text.
+            let text = last_message
+                .as_deref()
+                .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "));
+            Some(match text.filter(|text| !text.is_empty()) {
+                Some(text) => format!("claude reported an error: {}", shorten(&text, 200)),
+                None => "claude reported an error.".to_owned(),
+            })
+        }
         _ if is_error && subtype.is_some() => subtype.map(|subtype| format!("claude ended with {subtype}.")),
         Exit::Code(0) => Some("claude reported an error.".to_owned()),
         Exit::Code(code) => Some(match last_line(stderr) {
@@ -121,17 +143,15 @@ fn last_line(text: &str) -> Option<&str> {
     text.lines().rev().map(str::trim).find(|line| !line.is_empty())
 }
 
-/// What Claude reads as its instructions in a run's own directory.
-const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
+/// What Claude reads as its instructions in an item's directory.
+pub(super) const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
 
-/// Makes `dir`, which must not exist yet, with what Claude reads from the directory it starts in: `CLAUDE.md`. Makes
-/// the directories above it too.
+/// Makes `dir` if it isn't there, and the directories above it, and writes what Claude reads from the directory it
+/// starts in: `CLAUDE.md`, over any an earlier run left. Whatever else is in `dir` is left as it is.
 fn set_up_directory(dir: &Path) -> std::io::Result<()> {
-    if let Some(root) = dir.parent() {
-        std::fs::create_dir_all(root)?;
-    }
-    // Not `create_dir_all`: a directory that is there already is someone else's, and its files are not written over.
-    std::fs::create_dir(dir)?;
+    // `create_dir_all` succeeds on a directory that is there, which is the point: it is an item's, kept between runs.
+    // It fails on a file in the way, which is a `NoDirectory` error to the caller.
+    std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("CLAUDE.md"), WORKSPACE_INSTRUCTIONS)
 }
 
@@ -204,6 +224,35 @@ impl Running {
             Some(child) => (child.stdin.take(), child.stdout.as_mut(), child.stderr.as_mut()),
             None => (None, None, None),
         }
+    }
+
+    /// Stops the tool and returns once it is gone: asked to end with its group, killed with it after `STOP_GRACE` if
+    /// it has not. The tool stays in `self` while this waits, so that dropping the future mid-stop goes through the
+    /// drop below: it is asked again, and seen out and killed with its group. After the tool is gone the drop has
+    /// nothing left to do.
+    async fn stop(&mut self) {
+        let Some(child) = self.child.as_mut() else {
+            return;
+        };
+        #[cfg(unix)]
+        if let Some(group) = self.group {
+            use rustix::process::{Signal, kill_process_group};
+            // A group that is gone already is what was wanted.
+            let _ = kill_process_group(group, Signal::TERM);
+            if tokio::time::timeout(STOP_GRACE, child.wait()).await.is_err() {
+                let _ = kill_process_group(group, Signal::KILL);
+                if tokio::time::timeout(REAP_LIMIT, child.wait()).await.is_err() {
+                    // Left in `self`, so the drop sees it out.
+                    tracing::warn!("a killed tool was not gone after {REAP_LIMIT:?}");
+                    return;
+                }
+            }
+            // Reaped, so its group's number may be given to another: no more signals.
+            self.group = None;
+        }
+        #[cfg(not(unix))]
+        let _ = child.kill().await;
+        self.child = None;
     }
 
     /// Waits for the tool to end on its own. After that nothing is left to stop.
@@ -314,10 +363,20 @@ impl Drop for Running {
 }
 
 /// Starts `program` as Claude with `start`'s access, in `start`'s directory when it names one, which is made and set
-/// up first, writes the brief to its stdin and closes it, and reads it to its
-/// end. The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not
-/// it. Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
-pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) -> Result<ToolReport, ToolError> {
+/// up first, writes the brief to its stdin and closes it, and reads its output to the end, line by line as it comes.
+/// Every line of stdout goes to `start.log` when there is one; the report is read from the stream's `result` event.
+/// The process leads a group of its own on Unix, so a Ctrl-C typed in the terminal reaches `upheap` and not it.
+/// Dropping the future stops the process: it is asked to end, and killed if it has not within a few seconds.
+///
+/// A tool that prints nothing, on stdout or stderr, for `silence_limit` is stopped the same way, and the run ends
+/// with a failure that says so, once the process is gone. The limit counts on the monotonic clock, which stands
+/// still while the machine sleeps, as the tool does: a sleep is not silence.
+pub(super) async fn run(
+    program: PathBuf,
+    start: ToolStart,
+    stops: StopTracker,
+    silence_limit: Duration,
+) -> Result<ToolReport, ToolError> {
     let mut command = Command::new(&program);
     command.args(arguments(start.access, start.dir.is_some(), &start.allow));
     if let Some(dir) = start.dir {
@@ -328,6 +387,10 @@ pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) 
         }
         command.current_dir(dir);
     }
+    let log = match start.log {
+        Some(path) => open_log(path).await,
+        None => None,
+    };
     command
         .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env("PATH", path_with_this_binary_first())
@@ -342,19 +405,55 @@ pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) 
         source,
     })?;
     let mut running = Running::new(child, stops);
-    let (stdin, stdout, stderr) = running.pipes();
-    // The output pipes stay the child's, read through borrows: were they this function's own, a stop would close
-    // them before the tool is asked to end, and what the tool prints on its way out would kill it mid-cleanup.
-    let brief = start.brief;
-    // Written while the output is read, so a tool that prints before it has read everything cannot stall. A tool that
-    // exits without reading its input is not an error here: its exit says what happened.
-    let write = async move {
-        if let Some(mut stdin) = stdin {
-            let _ = stdin.write_all(brief.as_bytes()).await;
-            let _ = stdin.shutdown().await;
+    let activity = Activity::new();
+    let mut stream = Stream { result_line: None, log };
+    let mut stderr_bytes = Vec::new();
+    let silent = {
+        let (stdin, stdout, stderr) = running.pipes();
+        // The output pipes stay the child's, read through borrows: were they this function's own, a stop would close
+        // them before the tool is asked to end, and what the tool prints on its way out would kill it mid-cleanup.
+        let brief = start.brief;
+        // Written while the output is read, so a tool that prints before it has read everything cannot stall. A tool
+        // that exits without reading its input is not an error here: its exit says what happened.
+        let write = async move {
+            if let Some(mut stdin) = stdin {
+                let _ = stdin.write_all(brief.as_bytes()).await;
+                let _ = stdin.shutdown().await;
+            }
+        };
+        let reading = async {
+            tokio::join!(
+                write,
+                stream.read(stdout.map(|pipe| Watched::new(pipe, &activity))),
+                read_to_end(stderr.map(|pipe| Watched::new(pipe, &activity)), &mut stderr_bytes),
+            );
+        };
+        // What was read before the silence stays in `stream` and `stderr_bytes`, which the dropped reading only
+        // borrowed.
+        // Biased to `reading`: output that arrived while this future was not polled is read, and counts as activity,
+        // before the silence is checked.
+        tokio::select! {
+            biased;
+            () = reading => false,
+            () = activity.silent_for(silence_limit) => true,
         }
     };
-    let (_, stdout, stderr) = tokio::join!(write, read_to_end(stdout), read_to_end(stderr));
+    let stderr_text = String::from_utf8_lossy(&stderr_bytes);
+    let result_line = stream.result_line.as_deref().map(String::from_utf8_lossy);
+    if silent {
+        running.stop().await;
+        // A tool that printed its result and then hung has done its work: report that.
+        return Ok(match result_line {
+            Some(line) => read_report(Exit::Code(0), Some(&line), &stderr_text),
+            None => ToolReport {
+                failure: Some(format!(
+                    "The agent showed no activity for {}.",
+                    spoken_duration(silence_limit)
+                )),
+                ..ToolReport::default()
+            },
+        });
+    }
     let exit = match running.wait().await {
         Ok(status) => status.code().map_or(Exit::Signal, Exit::Code),
         Err(source) => {
@@ -364,20 +463,148 @@ pub(super) async fn run(program: PathBuf, start: ToolStart, stops: StopTracker) 
             });
         }
     };
-    Ok(read_report(
-        exit,
-        &String::from_utf8_lossy(&stdout),
-        &String::from_utf8_lossy(&stderr),
-    ))
+    Ok(read_report(exit, result_line.as_deref(), &stderr_text))
 }
 
-async fn read_to_end(pipe: Option<impl tokio::io::AsyncRead + Unpin>) -> Vec<u8> {
-    let mut bytes = Vec::new();
+/// Opens the run's log for appending, with the directory it is in made. A log that can't be had is a warning and no
+/// log: a run is never failed for it.
+async fn open_log(path: PathBuf) -> Option<tokio::fs::File> {
+    let opened = {
+        let path = path.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            std::fs::OpenOptions::new().create(true).append(true).open(path)
+        })
+        .await
+    };
+    match opened.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked))) {
+        Ok(file) => Some(tokio::fs::File::from_std(file)),
+        Err(err) => {
+            tracing::warn!(log = %path.display(), error = %err, "couldn't open the run's log; going on without it");
+            None
+        }
+    }
+}
+
+/// What the tool's stdout has said so far, and where it is kept.
+struct Stream {
+    /// The last line that was a `result` event.
+    result_line: Option<Vec<u8>>,
+    /// The run's log; `None` without one, or once writing to it failed.
+    log: Option<tokio::fs::File>,
+}
+
+impl Stream {
+    /// Reads `pipe` to its end a line at a time, whatever the line's length, keeping each in the log and the last
+    /// `result` event. A blank line is not parsed.
+    async fn read(&mut self, pipe: Option<Watched<'_, &mut tokio::process::ChildStdout>>) {
+        let Some(pipe) = pipe else {
+            return;
+        };
+        let mut pipe = BufReader::new(pipe);
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            // What was read before an error is still what the tool printed.
+            match pipe.read_until(b'\n', &mut line).await {
+                Ok(0) | Err(_) => return,
+                Ok(_) => self.take(&line).await,
+            }
+        }
+    }
+
+    /// Logs `line`, with its newline if it ended without one, and remembers it when it is the `result` event.
+    async fn take(&mut self, line: &[u8]) {
+        self.log_line(line).await;
+        if is_result_line(line) {
+            self.result_line = Some(line.to_vec());
+        }
+    }
+
+    async fn log_line(&mut self, line: &[u8]) {
+        let Some(file) = self.log.as_mut() else {
+            return;
+        };
+        let newline: &[u8] = if line.ends_with(b"\n") { b"" } else { b"\n" };
+        // Flushed, so that what is in the log is what was read, even if the run is dropped at the next await.
+        let written = async {
+            file.write_all(line).await?;
+            file.write_all(newline).await?;
+            file.flush().await
+        };
+        if let Err(err) = written.await {
+            tracing::warn!(error = %err, "couldn't write to the run's log; going on without it");
+            self.log = None;
+        }
+    }
+}
+
+/// Whether `line` is a JSON object whose `type` is `result`: the event that ends a stream. Anything else, a line that
+/// is not JSON or not UTF-8 included, is not.
+fn is_result_line(line: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(line)
+        .is_ok_and(|event| event.is_object() && event.get("type").and_then(Value::as_str) == Some("result"))
+}
+
+/// When the tool last printed, which the pipes it is read through keep up to date.
+#[derive(Clone)]
+struct Activity(Arc<Mutex<Instant>>);
+
+impl Activity {
+    fn new() -> Self {
+        Self(Arc::new(Mutex::new(Instant::now())))
+    }
+
+    fn mark(&self) {
+        *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Instant::now();
+    }
+
+    fn last(&self) -> Instant {
+        *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Ready once `limit` has passed with no activity.
+    async fn silent_for(&self, limit: Duration) {
+        loop {
+            let deadline = self.last() + limit;
+            if Instant::now() >= deadline {
+                return;
+            }
+            tokio::time::sleep_until(deadline).await;
+        }
+    }
+}
+
+/// A pipe that marks the activity whenever bytes come out of it, so a line still being written counts.
+struct Watched<'a, R> {
+    pipe: R,
+    activity: &'a Activity,
+}
+
+impl<'a, R> Watched<'a, R> {
+    fn new(pipe: R, activity: &'a Activity) -> Self {
+        Self { pipe, activity }
+    }
+}
+
+impl<R: AsyncRead + Unpin> AsyncRead for Watched<'_, R> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        let polled = Pin::new(&mut self.pipe).poll_read(cx, buf);
+        if matches!(polled, Poll::Ready(Ok(()))) && buf.filled().len() > before {
+            self.activity.mark();
+        }
+        polled
+    }
+}
+
+async fn read_to_end(pipe: Option<impl AsyncRead + Unpin>, bytes: &mut Vec<u8>) {
     if let Some(mut pipe) = pipe {
         // What was read before an error is still what the tool printed.
-        let _ = pipe.read_to_end(&mut bytes).await;
+        let _ = pipe.read_to_end(bytes).await;
     }
-    bytes
 }
 
 /// `PATH` with the directory of the running `upheap` first, so the `upheap` the agent runs is this one and the two
@@ -407,7 +634,8 @@ mod tests {
             eq(&vec![
                 "-p",
                 "--output-format",
-                "json",
+                "stream-json",
+                "--verbose",
                 "--no-session-persistence",
                 "--permission-mode",
                 "dontAsk",
@@ -441,7 +669,8 @@ mod tests {
             eq(&vec![
                 "-p",
                 "--output-format",
-                "json",
+                "stream-json",
+                "--verbose",
                 "--no-session-persistence",
                 "--permission-mode",
                 "acceptEdits",
@@ -507,7 +736,8 @@ mod tests {
         }
     }
 
-    /// A row of the table: a name, the exit, stdout and stderr, and the cost and failure they make.
+    /// A row of the table: a name, the exit, the result line (empty for none) and stderr, and the cost and failure
+    /// they make.
     type Case<'a> = (&'a str, Exit, &'a str, &'a str, Option<f64>, Option<&'a str>);
 
     /// What `read_report` makes of an exit and its output: the cost and the failure.
@@ -516,6 +746,8 @@ mod tests {
         let ok = r#"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.31,"result":"Done."}"#;
         let budget = r#"{"subtype":"error_max_budget_usd","is_error":true,"total_cost_usd":1.5}"#;
         let tokens_only = r#"{"subtype":"success","is_error":false,"usage":{"input_tokens":10}}"#;
+        let long = format!(r#"{{"is_error":true,"result":"{}"}}"#, "x".repeat(300));
+        let long_failure = format!("claude reported an error: {}…", "x".repeat(199));
         let cases: Vec<Case> = vec![
             ("a normal end with a cost", Exit::Code(0), ok, "", Some(0.31), None),
             (
@@ -591,6 +823,30 @@ mod tests {
                 Some("claude reported an error."),
             ),
             (
+                "exit 0, is_error with a success subtype and the reason as its result, made one line",
+                Exit::Code(0),
+                r#"{"subtype":"success","is_error":true,"result":"Invalid API key\n  Please run /login"}"#,
+                "",
+                None,
+                Some("claude reported an error: Invalid API key Please run /login"),
+            ),
+            (
+                "exit 0, is_error with no subtype and a long result: shortened",
+                Exit::Code(0),
+                &long,
+                "",
+                None,
+                Some(&long_failure),
+            ),
+            (
+                "exit 0, is_error with a success subtype and no result",
+                Exit::Code(0),
+                r#"{"subtype":"success","is_error":true}"#,
+                "",
+                None,
+                Some("claude reported an error."),
+            ),
+            (
                 "a cost over the limit is no cost",
                 Exit::Code(0),
                 r#"{"is_error":false,"total_cost_usd":1000000.5}"#,
@@ -634,7 +890,7 @@ mod tests {
         ];
 
         for (name, exit, stdout, stderr, cost, failure) in cases {
-            let report = read_report(exit, stdout, stderr);
+            let report = read_report(exit, Some(stdout).filter(|line| !line.is_empty()), stderr);
 
             expect_that!(report.cost_usd, eq(cost), "{name}: cost");
             expect_that!(report.failure.as_deref(), eq(failure), "{name}: failure");
@@ -643,9 +899,62 @@ mod tests {
 
     #[gtest]
     fn the_last_message_is_the_result_when_there_is_one() {
-        let report = read_report(Exit::Code(0), r#"{"is_error":false,"result":"All done"}"#, "");
+        let report = read_report(Exit::Code(0), Some(r#"{"is_error":false,"result":"All done"}"#), "");
 
         expect_that!(report.last_message, some(eq("All done")));
-        expect_that!(read_report(Exit::Code(0), "{}", "").last_message, none());
+        expect_that!(read_report(Exit::Code(0), Some("{}"), "").last_message, none());
+    }
+
+    #[gtest]
+    fn only_a_json_object_of_type_result_is_the_result_line() {
+        expect_that!(is_result_line(br#"{"type":"result","is_error":false}"#), eq(true));
+        expect_that!(is_result_line(b"{\"type\":\"result\"}\n"), eq(true));
+        expect_that!(is_result_line(br#"{"type":"assistant","message":{}}"#), eq(false));
+        expect_that!(is_result_line(br#"{"is_error":false}"#), eq(false));
+        expect_that!(is_result_line(br#"["result"]"#), eq(false));
+        expect_that!(is_result_line(b"not json"), eq(false));
+        expect_that!(is_result_line(b"\n"), eq(false));
+        expect_that!(is_result_line(b"{\"type\":\"result\",\"result\":\"\xff\"}"), eq(false));
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_stream_keeps_the_last_result_event_and_ignores_the_rest() {
+        // Arrange
+        let mut stream = Stream {
+            result_line: None,
+            log: None,
+        };
+        let lines: [&[u8]; 5] = [
+            br#"{"type":"system","subtype":"init"}"#,
+            br#"{"type":"result","result":"first"}"#,
+            b"warming up",
+            br#"{"type":"assistant"}"#,
+            br#"{"type":"result","result":"last"}"#,
+        ];
+
+        // Act
+        for line in lines {
+            stream.take(line).await;
+        }
+
+        // Assert
+        expect_that!(
+            stream.result_line.as_deref(),
+            some(eq(&br#"{"type":"result","result":"last"}"#[..]))
+        );
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_stream_with_no_result_event_has_no_result_line() {
+        let mut stream = Stream {
+            result_line: None,
+            log: None,
+        };
+
+        stream.take(br#"{"type":"assistant"}"#).await;
+
+        expect_that!(stream.result_line, none());
     }
 }

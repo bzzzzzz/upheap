@@ -54,6 +54,7 @@ mod processes {
             env: vec![("UPHEAP_RUN".to_owned(), "the-run".to_owned())],
             dir: None,
             allow: vec![],
+            log: None,
         }
     }
 
@@ -65,7 +66,7 @@ mod processes {
         let seen = dir.path().join("seen");
         let body = format!(
             "cat > '{seen}.stdin'\nprintf '%s\\n' \"$UPHEAP_RUN\" \"$@\" > '{seen}.args'\nprintf '%s' \"$PATH\" > '{seen}.path'\n\
-             printf '%s' '{{\"is_error\":false,\"total_cost_usd\":0.25,\"result\":\"fine\"}}'",
+             printf '%s' '{{\"type\":\"result\",\"is_error\":false,\"total_cost_usd\":0.25,\"result\":\"fine\"}}'",
             seen = seen.display()
         );
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
@@ -129,12 +130,12 @@ mod processes {
         let seen = dir.path().join("seen");
         let args = dir.path().join("args");
         let body = format!(
-            "pwd -P > '{}'\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"is_error\":false}}'",
+            "pwd -P > '{}'\nprintf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"type\":\"result\",\"is_error\":false}}'",
             seen.display(),
             args.display()
         );
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
-        let run_dir = dir.path().join("root").join("k3x9a-the-run");
+        let run_dir = dir.path().join("root").join("ada").join("work").join("k3x9a");
 
         // Act
         let report = tools
@@ -152,7 +153,7 @@ mod processes {
         )?;
         verify_that!(
             std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
-            contains_substring("for one run on one Upheap item")
+            contains_substring("keeps this directory for one Upheap item")
         )?;
         // No settings file: Claude would ignore its allow rules in a directory nobody has trusted.
         verify_that!(run_dir.join(".claude").exists(), eq(false))?;
@@ -169,7 +170,7 @@ mod processes {
         let dir = tempfile::tempdir()?;
         let args = dir.path().join("args");
         let body = format!(
-            "printf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"is_error\":false}}'",
+            "printf '%s\\n' \"$@\" > '{}'\nprintf '%s' '{{\"type\":\"result\",\"is_error\":false}}'",
             args.display()
         );
         let tools = SystemTools::with_claude(script(dir.path(), &body)?);
@@ -193,13 +194,22 @@ mod processes {
 
     #[gtest]
     #[tokio::test]
-    async fn a_directory_that_is_there_already_is_left_alone_and_the_script_never_starts() -> googletest::Result<()> {
-        // Arrange
+    async fn a_directory_that_is_there_already_is_reused_with_its_files_and_a_fresh_claude_md() -> googletest::Result<()>
+    {
+        // Arrange: an earlier run left a file and its own instructions.
         let dir = tempfile::tempdir()?;
-        let started = dir.path().join("started");
-        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo > '{}'", started.display()))?);
+        let seen = dir.path().join("seen");
+        let tools = SystemTools::with_claude(script(
+            dir.path(),
+            &format!(
+                "pwd -P > '{}'\nprintf '%s' '{{\"type\":\"result\",\"is_error\":false}}'",
+                seen.display()
+            ),
+        )?);
         let run_dir = dir.path().join("taken");
         std::fs::create_dir(&run_dir)?;
+        std::fs::write(run_dir.join("left.txt"), "what the last run left")?;
+        std::fs::write(run_dir.join("CLAUDE.md"), "old instructions")?;
 
         // Act
         let result = tools
@@ -210,8 +220,43 @@ mod processes {
             .await;
 
         // Assert
+        verify_that!(result?.failure, none())?;
+        verify_that!(
+            PathBuf::from(std::fs::read_to_string(&seen)?.trim_end()),
+            eq(&run_dir.canonicalize()?)
+        )?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("left.txt"))?,
+            eq("what the last run left")
+        )?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
+            eq(claude::WORKSPACE_INSTRUCTIONS)
+        )
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_file_where_the_directory_should_be_is_no_directory_and_the_script_never_starts() -> googletest::Result<()>
+    {
+        // Arrange
+        let dir = tempfile::tempdir()?;
+        let started = dir.path().join("started");
+        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo > '{}'", started.display()))?);
+        let in_the_way = dir.path().join("taken");
+        std::fs::write(&in_the_way, "a file")?;
+
+        // Act
+        let result = tools
+            .run(ToolStart {
+                dir: Some(in_the_way.clone()),
+                ..start(Access::Do)
+            })
+            .await;
+
+        // Assert
         verify_that!(result, err(matches_pattern!(ToolError::NoDirectory { .. })))?;
-        verify_that!(std::fs::read_dir(&run_dir)?.count(), eq(0))?;
+        verify_that!(std::fs::read_to_string(&in_the_way)?, eq("a file"))?;
         verify_that!(started.exists(), eq(false))
     }
 
@@ -391,6 +436,216 @@ mod processes {
         verify_that!(settled.is_ok(), eq(true))?;
         verify_that!(took, ge(claude::STOP_GRACE / 2))?;
         verify_that!(alive, eq(false))
+    }
+
+    /// Whether the process `pid` is still there.
+    fn is_alive(pid: &str) -> bool {
+        std::process::Command::new("kill")
+            .args(["-0", pid])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    const RESULT: &str = r#"{"type":"result","is_error":false,"total_cost_usd":0.25,"result":"fine"}"#;
+
+    #[gtest]
+    #[tokio::test]
+    async fn the_stream_is_saved_line_for_line_and_the_result_event_makes_the_report() -> googletest::Result<()> {
+        // Arrange: three events, the last one without a newline, and a log in a directory that isn't there yet.
+        let dir = tempfile::tempdir()?;
+        let events = [
+            r#"{"type":"system","subtype":"init"}"#,
+            r#"{"type":"assistant","n":1}"#,
+            RESULT,
+        ];
+        let body = format!(
+            "echo '{}'\necho '{}'\nprintf '%s' '{}'",
+            events[0], events[1], events[2]
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?);
+        let log = dir.path().join("config").join("runs").join("the-run.jsonl");
+
+        // Act
+        let report = tools
+            .run(ToolStart {
+                log: Some(log.clone()),
+                ..start(Access::Do)
+            })
+            .await?;
+
+        // Assert
+        verify_that!(report.cost_usd, eq(Some(0.25)))?;
+        verify_that!(report.failure, none())?;
+        verify_that!(report.last_message.as_deref(), eq(Some("fine")))?;
+        verify_that!(std::fs::read_to_string(&log)?, eq(&format!("{}\n", events.join("\n"))))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_script_that_goes_silent_is_stopped_with_what_it_started_and_the_run_fails() -> googletest::Result<()> {
+        // Arrange: one event, then a command of the script's own that would run for a long time.
+        let dir = tempfile::tempdir()?;
+        let pids = dir.path().join("pids");
+        let body = format!(
+            "echo '{{\"type\":\"system\"}}'\necho $$ > '{pids}'\nsleep 30 &\necho $! >> '{pids}'\nwait",
+            pids = pids.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(3));
+
+        // Act
+        let before = std::time::Instant::now();
+        let report = tools.run(start(Access::Do)).await?;
+        let took = before.elapsed();
+
+        // Assert: it returned soon after the limit, with the failure, and nothing of the script is left.
+        verify_that!(
+            report.failure.as_deref(),
+            eq(Some("The agent showed no activity for 3 seconds."))
+        )?;
+        verify_that!(report.cost_usd, none())?;
+        verify_that!(report.last_message, none())?;
+        verify_that!(took, lt(Duration::from_secs(8)))?;
+        for pid in std::fs::read_to_string(&pids)?.split_whitespace() {
+            verify_that!(is_alive(pid), eq(false))?;
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn dropping_the_run_while_a_silent_tool_is_being_stopped_still_ends_it_with_what_it_started()
+    -> googletest::Result<()> {
+        // Arrange: a script that ignores being asked to end and starts a command of its own, run until the silence
+        // limit has stopped it.
+        let dir = tempfile::tempdir()?;
+        let pids = dir.path().join("pids");
+        let body = format!(
+            "trap '' TERM\necho $$ > '{pids}'\nsleep 30 &\necho $! >> '{pids}'\necho '{{\"type\":\"system\"}}'\nwhile true; do sleep 0.05; done",
+            pids = pids.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(3));
+
+        // Act: drop the run during the grace, which is what a second Ctrl-C does. The script has started everything
+        // once its event is out; the silence limit is up a little after, and the grace lasts longer than that.
+        let mut running = Box::pin(tools.run(start(Access::Do)));
+        let mut ended_early = false;
+        tokio::select! {
+            _ = &mut running => ended_early = true,
+            () = async {
+                while std::fs::read_to_string(&pids).map_or(0, |pids| pids.split_whitespace().count()) < 2 {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            } => {}
+        }
+        let still_stopping = !ended_early
+            && tokio::time::timeout(Duration::from_millis(3500), &mut running)
+                .await
+                .is_err();
+        drop(running);
+        let settled = tokio::time::timeout(Duration::from_secs(10), tools.settled()).await;
+
+        // Assert: the script and its command are gone.
+        verify_that!(still_stopping, eq(true))?;
+        verify_that!(settled.is_ok(), eq(true))?;
+        let pids = std::fs::read_to_string(&pids)?;
+        verify_that!(pids.split_whitespace().count(), eq(2))?;
+        for pid in pids.split_whitespace() {
+            verify_that!(is_alive(pid), eq(false))?;
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_script_that_ignores_the_request_to_end_is_gone_when_the_silent_run_returns() -> googletest::Result<()> {
+        // Arrange
+        let dir = tempfile::tempdir()?;
+        let pid_file = dir.path().join("pid");
+        let body = format!(
+            "trap '' TERM\necho $$ > '{}'\nwhile true; do sleep 0.05; done",
+            pid_file.display()
+        );
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(2));
+
+        // Act
+        let before = std::time::Instant::now();
+        let report = tools.run(start(Access::Do)).await?;
+        let took = before.elapsed();
+
+        // Assert: killed after the grace, and gone by the time the run returned.
+        verify_that!(
+            report.failure.as_deref(),
+            eq(Some("The agent showed no activity for 2 seconds."))
+        )?;
+        verify_that!(took, ge(claude::STOP_GRACE))?;
+        verify_that!(is_alive(std::fs::read_to_string(&pid_file)?.trim()), eq(false))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_script_that_printed_its_result_and_then_hangs_is_stopped_and_reported_as_having_ended()
+    -> googletest::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo '{RESULT}'\nsleep 30"))?)
+            .with_silence_limit(Duration::from_secs(3));
+
+        let report = tools.run(start(Access::Do)).await?;
+
+        verify_that!(report.failure, none())?;
+        verify_that!(report.cost_usd, eq(Some(0.25)))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_script_that_prints_often_enough_is_not_silent() -> googletest::Result<()> {
+        // Arrange: 4 seconds of output, with never a second between two lines, and a limit of 3 seconds. The limit is
+        // generous because a script can take a while to start when many run at once.
+        let dir = tempfile::tempdir()?;
+        let body =
+            format!("for i in 1 2 3 4 5 6 7 8; do echo '{{\"type\":\"assistant\"}}'; sleep 0.5; done\necho '{RESULT}'");
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(3));
+
+        // Act
+        let report = tools.run(start(Access::Do)).await?;
+
+        // Assert
+        verify_that!(report.failure, none())?;
+        verify_that!(report.cost_usd, eq(Some(0.25)))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_script_that_only_writes_to_stderr_is_not_silent() -> googletest::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let body = format!("for i in 1 2 3 4 5 6 7 8; do echo working >&2; sleep 0.5; done\necho '{RESULT}'");
+        let tools = SystemTools::with_claude(script(dir.path(), &body)?).with_silence_limit(Duration::from_secs(3));
+
+        let report = tools.run(start(Access::Do)).await?;
+
+        verify_that!(report.failure, none())?;
+        verify_that!(report.cost_usd, eq(Some(0.25)))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_log_that_cannot_be_made_does_not_fail_the_run() -> googletest::Result<()> {
+        // Arrange: the log's directory would be under a file.
+        let dir = tempfile::tempdir()?;
+        let in_the_way = dir.path().join("file");
+        std::fs::write(&in_the_way, "a file")?;
+        let tools = SystemTools::with_claude(script(dir.path(), &format!("echo '{RESULT}'"))?);
+
+        // Act
+        let report = tools
+            .run(ToolStart {
+                log: Some(in_the_way.join("runs").join("the-run.jsonl")),
+                ..start(Access::Do)
+            })
+            .await?;
+
+        // Assert
+        verify_that!(report.failure, none())?;
+        verify_that!(report.cost_usd, eq(Some(0.25)))
     }
 
     #[gtest]

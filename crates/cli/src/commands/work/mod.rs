@@ -8,6 +8,8 @@ mod brief;
 pub mod claim;
 pub mod finish;
 pub mod hand_back;
+mod kept;
+mod logs;
 pub mod next;
 pub mod reached;
 pub mod run;

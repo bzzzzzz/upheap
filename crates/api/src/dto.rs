@@ -6,10 +6,11 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto,
-    StepProgressDto, UserRefDto,
+    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto,
+    SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::TurnDto;
+use api_types::waiting::ItemHeapDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
 use domain::item::Kind;
@@ -50,7 +51,6 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
-        origin: view.origin.map(ItemRefDto::from),
         became: view
             .became
             .map(|became| became.into_iter().map(ItemRefDto::from).collect()),
@@ -105,6 +105,20 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
         next_goal,
         with_agent: view.with_agent,
+        origin: view.origin.map(|origin| ItemOriginDto {
+            id: *origin.item.id.as_uuid(),
+            key: origin.item.key.to_string(),
+            title: origin.item.title.as_str().to_owned(),
+            kind: origin.item.kind.into(),
+            heap: ItemHeapDto {
+                id: *origin.heap.id.as_uuid(),
+                slug: origin.heap.slug.to_string(),
+                name: origin.heap.name.as_str().to_owned(),
+                team_slug: origin.team.slug.to_string(),
+                team_name: origin.team.name.as_str().to_owned(),
+            },
+        }),
+        added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
     }
@@ -138,6 +152,11 @@ pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZon
         choices: question.choices.labels().to_vec(),
         many: question.many,
         step: question.step.map(|step| step.get()),
+        review: question.review.as_ref().map(|review| ReviewDto {
+            link: review.link.as_str().to_owned(),
+            piece: review.piece.as_str().to_owned(),
+            round: review.round,
+        }),
         state: question.state().into(),
         asked_by: view.asked_by.as_ref().map(UserRefDto::from),
         asked_at: question.asked_at.as_millis(),

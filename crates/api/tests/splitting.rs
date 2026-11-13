@@ -483,30 +483,11 @@ async fn a_run_is_held_to_the_note_it_splits() -> Result<()> {
         expect_that!(code(refused), some(eq("run_blocker_not_made")));
     }
     expect_that!(no_origin.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(code(&no_origin), some(eq("run_forbidden")));
+    expect_that!(code(&no_origin), some(eq("run_add_needs_context")));
     expect_that!(wrong_origin.status, eq(StatusCode::FORBIDDEN));
     expect_that!(code(&wrong_origin), some(eq("run_wrong_item")));
     expect_that!(reminder.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(code(&reminder), some(eq("run_forbidden")));
-    Ok(())
-}
-
-#[gtest]
-#[tokio::test]
-async fn a_run_cannot_give_a_made_task_tags_or_values() -> Result<()> {
-    // Arrange
-    let w = world().await?;
-    let (note, run) = w.note_in_a_run("expected").await?;
-    let tag = w.app.new_tag_id(&w.session, &w.heap, "ops").await?;
-
-    // Act
-    let tagged = w
-        .split_in_run(&run, &note, "Tagged", json!({ "tag_ids": [tag] }))
-        .await?;
-
-    // Assert
-    expect_that!(tagged.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(code(&tagged), some(eq("run_forbidden")));
+    expect_that!(code(&reminder), some(eq("run_add_reminder")));
     Ok(())
 }
 
@@ -714,7 +695,7 @@ async fn in_a_prepare_heap_a_run_s_items_get_no_turn_and_a_persons_do() -> Resul
 
 #[gtest]
 #[tokio::test]
-async fn a_run_writes_to_the_tasks_it_made_this_turn_but_not_earlier_ones_and_asks_only_on_its_note() -> Result<()> {
+async fn a_run_adds_steps_to_the_tasks_it_made_but_not_earlier_ones_and_writes_nothing_else_on_them() -> Result<()> {
     // Arrange: a task made by the person before the turn, and one made by the run.
     let w = world().await?;
     let note = w.add_note("Certs are a mess", "expected").await?;
@@ -756,9 +737,40 @@ async fn a_run_writes_to_the_tasks_it_made_this_turn_but_not_earlier_ones_and_as
     expect_that!(step_on_made.status, eq(StatusCode::CREATED));
     expect_that!(step_on_earlier.status, eq(StatusCode::FORBIDDEN));
     expect_that!(code(&step_on_earlier), some(eq("run_wrong_item")));
-    expect_that!(comment_on_made.status, eq(StatusCode::CREATED));
+    expect_that!(comment_on_made.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&comment_on_made), some(eq("run_wrong_item")));
     expect_that!(question_on_made.status, eq(StatusCode::FORBIDDEN));
     expect_that!(code(&question_on_made), some(eq("run_wrong_item")));
     expect_that!(question_on_note.status, eq(StatusCode::CREATED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_tried_again_blocks_on_a_task_the_failed_run_of_its_turn_made() -> Result<()> {
+    // Arrange: the first run makes a task and fails; the turn is claimed again.
+    let w = world().await?;
+    let (note, first) = w.note_in_a_run("expected").await?;
+    let made = w.split_in_run(&first, &note, "Rotate staging", json!({})).await?.body;
+    let failed = w
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/work/runs/{first}/finish"),
+            Some(&w.session),
+            Some(json!({ "failure": "The tool crashed" })),
+        )
+        .await?;
+    anyhow::ensure!(failed.status == StatusCode::OK, "finish failed: {}", failed.body);
+    let second = w.claimed().await?;
+
+    // Act
+    let chained = w
+        .split_in_run(&second, &note, "Rotate production", json!({ "blocked_by": id(&made) }))
+        .await?;
+
+    // Assert
+    expect_that!(chained.status, eq(StatusCode::CREATED));
+    expect_that!(chained.body["state"], eq(&json!("blocked")));
     Ok(())
 }

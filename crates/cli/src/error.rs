@@ -298,11 +298,22 @@ impl CliError {
 fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
     match problem.code.as_str() {
         "run_over" => Some("This run is over. Stop.".to_owned()),
-        "run_wrong_item" => problem
-            .item_key
-            .as_ref()
-            .map(|key| format!("This run holds {key}; write to it only.")),
+        "run_wrong_item" => problem.item_key.as_ref().map(|key| {
+            format!("This run holds {key}. Besides adding items, and steps to the items it added, write to {key} only.")
+        }),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
+        "run_add_reminder" => Some("Add it as a task or a note; leave the date in its context.".to_owned()),
+        "run_add_needs_context" => {
+            Some("Add it again with --context-file - and say what it is and why it came up.".to_owned())
+        }
+        "run_done_needs_review" => {
+            Some("Propose closing: upheap question propose-done <key> \"<what was done>\"".to_owned())
+        }
+        "not_ready_to_close" => Some("Finish what it names, then propose again.".to_owned()),
+        "review_open" => Some("Wait for the person's reply to that review.".to_owned()),
+        "question_needs_task" | "question_needs_do_turn" => {
+            Some("Only an agent doing a task asks for review or proposes closing.".to_owned())
+        }
         "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
         "run_need_above_origin" => Some(match &problem.highest {
             Some(highest) => format!("Give --need {highest} or lower."),
@@ -360,6 +371,8 @@ fn client_exit_code(err: &ClientError) -> u8 {
                     | "run_wrong_item"
                     | "run_over"
                     | "run_cost_recorded"
+                    | "run_add_reminder"
+                    | "run_add_needs_context"
                     | "run_need_above_origin"
                     | "run_blocker_not_made"
             ) =>
@@ -466,6 +479,8 @@ mod tests {
         );
         let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
+        let reminder = run_refusal(403, "run_add_reminder", "A run adds tasks and notes, not reminders.");
+        let no_context = run_refusal(403, "run_add_needs_context", "An item a run adds needs a context.");
         let too_high = {
             let mut err = problem(403, "run_need_above_origin");
             if let ClientError::Problem { problem, .. } = &mut err {
@@ -476,19 +491,45 @@ mod tests {
         let not_made = run_refusal(403, "run_blocker_not_made", "Blocks only among the items it made.");
 
         for err in [
-            &over, &wrong, &forbidden, &done, &recorded, &missed, &too_high, &not_made,
+            &over,
+            &wrong,
+            &forbidden,
+            &done,
+            &recorded,
+            &missed,
+            &reminder,
+            &no_context,
+            &too_high,
+            &not_made,
         ] {
             expect_that!(err.exit_code(), eq(3));
         }
+        expect_that!(
+            done.to_message(),
+            contains(eq(
+                "hint: Propose closing: upheap question propose-done <key> \"<what was done>\""
+            ))
+        );
         // Their messages say it all: a hint would only contradict them.
-        expect_that!(done.to_message(), not(contains(starts_with("hint:"))));
         expect_that!(recorded.to_message(), not(contains(starts_with("hint:"))));
         expect_that!(over.to_message(), contains(eq("hint: This run is over. Stop.")));
         expect_that!(
             wrong.to_message(),
-            contains(eq("hint: This run holds k3x9a; write to it only."))
+            contains(eq(
+                "hint: This run holds k3x9a. Besides adding items, and steps to the items it added, write to k3x9a only."
+            ))
         );
         expect_that!(forbidden.to_message(), contains(eq("hint: Only the person does that.")));
+        expect_that!(
+            reminder.to_message(),
+            contains(eq("hint: Add it as a task or a note; leave the date in its context."))
+        );
+        expect_that!(
+            no_context.to_message(),
+            contains(eq(
+                "hint: Add it again with --context-file - and say what it is and why it came up."
+            ))
+        );
         expect_that!(
             too_high.to_message(),
             contains(eq("hint: Give --need expected or lower."))

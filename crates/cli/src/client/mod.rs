@@ -134,9 +134,16 @@ impl ApiClient {
         self.read_json(response).await
     }
 
-    /// `POST /api/v1/<path>` with no body, for an endpoint that answers `204`, as the holder of `token`.
+    /// `POST /api/v1/<path>` with no body, for an endpoint that answers `204`, as the holder of `token`. The request
+    /// says `Content-Length: 0` on purpose: a proxy such as Cloud Run's front end answers a POST with no length
+    /// `411 Length Required` before it reaches the server.
     pub async fn post_empty(&self, path: &[&str], token: &str) -> Result<(), ClientError> {
-        let request = self.http.post(self.api_url(path)).bearer_auth(token);
+        let request = self
+            .http
+            .post(self.api_url(path))
+            .header(reqwest::header::CONTENT_LENGTH, 0)
+            .body(Vec::new())
+            .bearer_auth(token);
         let response = self.send(request).await?;
         if !response.status().is_success() {
             return Err(self.read_failure(response).await);
@@ -324,6 +331,40 @@ mod tests {
             expect_that!(uses_proxy(&Url::parse(local)?), eq(false), "{local}");
         }
         expect_that!(uses_proxy(&Url::parse("https://upheap.example.test")?), eq(true));
+        Ok(())
+    }
+
+    /// The request as it goes out, read off the wire: the test servers in `tests/` read it through hyper, which
+    /// would hide a missing header the front end of a deployed server refuses.
+    #[gtest]
+    #[tokio::test]
+    async fn an_empty_post_says_its_length_is_zero() -> googletest::Result<()> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let server = Url::parse(&format!("http://{}", listener.local_addr()?))?;
+        let answering = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await?;
+            let mut head = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !head.windows(4).any(|end| end == b"\r\n\r\n") {
+                let read = socket.read(&mut chunk).await?;
+                if read == 0 {
+                    break;
+                }
+                head.extend_from_slice(&chunk[..read]);
+            }
+            socket.write_all(b"HTTP/1.1 204 No Content\r\n\r\n").await?;
+            std::io::Result::Ok(String::from_utf8_lossy(&head).to_lowercase())
+        });
+
+        ApiClient::new(server, None)?
+            .post_empty(&["work", "runs", "r", "heartbeat"], "token")
+            .await?;
+
+        let head = answering.await??;
+        expect_that!(head.matches("content-length").count(), eq(1));
+        expect_that!(head, contains_substring("content-length: 0\r\n"));
         Ok(())
     }
 }

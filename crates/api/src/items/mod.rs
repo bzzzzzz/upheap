@@ -169,7 +169,13 @@ async fn list_closed(
 /// Adds an item. Only the title is required.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items", tag = "items", security(("session" = [])),
     params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
-    responses((status = 201, body = ItemDto), (status = 404, body = Problem), (status = 403, description = "From inside a run: `run_forbidden` (no origin, tags, values or a reminder), `run_wrong_item` (an origin that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`", body = Problem), (status = 409, description = "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), or from inside a run `run_over`", body = Problem), (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`)", body = Problem)))]
+    responses(
+        (status = 201, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
+        (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`)", body = Problem),
+    ))]
 async fn create_item(
     State(state): State<AppState>,
     path: HeapPath,

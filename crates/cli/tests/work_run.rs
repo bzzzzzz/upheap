@@ -389,19 +389,156 @@ async fn heartbeats_keep_a_long_run_alive_past_the_lapse() -> Result<()> {
     let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
     let tool = waiting_agent(&cli.agent(), &entered, &release);
 
-    // Act: the server's clock runs 58 minutes in two steps. After each the CLI signs in again, since the server has
+    // Act: the server's clock runs 87 minutes in three steps. After each the CLI signs in again, since the server has
     // let the old access token expire, and the test waits for heartbeats the server has heard. Without them the run
     // would have lapsed at 30 minutes.
     let running = cli.run_work(ONCE, &tool);
     let waiting = async {
         entered.notified().await;
-        for _ in 0..2 {
+        for _ in 0..3 {
             server.advance(Duration::from_minutes(29));
             cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
-            // Only the loop reads the tokens meanwhile, once for each heartbeat it starts, one after another: when it
-            // starts the second one after the sign-in, the first has been heard.
-            let loads = cli.tokens.loads();
-            wait_until("two heartbeats after the sign-in", || cli.tokens.loads() >= loads + 2).await?;
+            let heard = server.heard_heartbeats();
+            wait_until("a heartbeat heard after the sign-in", || {
+                server.heard_heartbeats() > heard
+            })
+            .await?;
+        }
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heartbeats_the_server_refuses_are_said_once_and_again_when_heard() -> Result<()> {
+    // Arrange: an agent that waits for the test.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: the server's clock runs 20 minutes without a new sign-in. The access token has expired there, so the
+    // heartbeats are refused, and the run has not lapsed. The test waits for several tries, signs in again, and waits
+    // for one to be heard.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let waiting = async {
+        entered.notified().await;
+        server.advance(Duration::from_minutes(20));
+        let loads = cli.tokens.loads();
+        wait_until("the first refused heartbeat to be said", || {
+            stderr.contents().contains("couldn't tell the server")
+        })
+        .await?;
+        wait_until("more tries", || cli.tokens.loads() >= loads + 4).await?;
+        cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
+        wait_until("the heartbeat to be heard", || {
+            stderr.contents().contains("The server hears the run again.")
+        })
+        .await?;
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        lines_with(&outcome.stderr, "couldn't tell the server the run is still going"),
+        elements_are![all![
+            contains_substring(note.as_str()),
+            contains_substring("Trying again every 1 second.")
+        ]]
+    );
+    expect_that!(
+        lines_with(&outcome.stderr, "The server hears the run again."),
+        elements_are![contains_substring(note.as_str())]
+    );
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn one_refused_heartbeat_then_a_heard_one_says_nothing() -> Result<()> {
+    // Arrange: an agent that waits for the test; checks far enough apart for the test to sign in between two tries.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_millis(25);
+    cli.heartbeat_check = StdDuration::from_secs(1);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: the server's clock runs 20 minutes, so its old access token is refused, as the first heartbeat after a
+    // wake can be. Once one try has started with it, the CLI's new sign-in is saved, and the next try is heard.
+    let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
+    let waiting = async {
+        entered.notified().await;
+        server.advance(Duration::from_minutes(20));
+        let fresh = server.sign_in_cli(&ada).await?;
+        let loads = cli.tokens.loads();
+        wait_until("a try with the old token", || cli.tokens.loads() > loads).await?;
+        cli.tokens.save(&server.url, &fresh)?;
+        let heard = server.heard_heartbeats();
+        wait_until("the next try to be heard", || server.heard_heartbeats() > heard).await?;
+        release.notify_one();
+        anyhow::Ok(())
+    };
+    let (outcome, waited) = tokio::join!(running, waiting);
+
+    // Assert
+    waited?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(lines_with(&outcome.stderr, "couldn't tell the server"), is_empty());
+    expect_that!(
+        lines_with(&outcome.stderr, "The server hears the run again."),
+        is_empty()
+    );
+    expect_that!(
+        lines_with(&outcome.stdout, &note),
+        elements_are![contains_substring("reached")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heartbeat_goes_out_when_the_machine_wakes_from_sleep() -> Result<()> {
+    // Arrange: heartbeats far apart by any clock the test waits on, checked often. An agent that waits.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    cli.heartbeat_every = StdDuration::from_secs(10 * 60);
+    let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
+    let tool = waiting_agent(&cli.agent(), &entered, &release);
+
+    // Act: twice, the machine sleeps 20 minutes: both clocks move on, the CLI signs in again (the server let the old
+    // access token expire), and the test waits for the server to hear the heartbeat that goes out on waking. Without
+    // those the run would have lapsed at 30 minutes: the test's real time never reaches the 10 minutes between beats.
+    let running = cli.run_work(ONCE, &tool);
+    let waiting = async {
+        entered.notified().await;
+        for _ in 0..2 {
+            server.advance(Duration::from_minutes(20));
+            cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
+            let heard = server.heard_heartbeats();
+            cli.clock_offset.fetch_add(20 * 60 * 1000, Ordering::SeqCst);
+            wait_until("the heartbeat on waking", || server.heard_heartbeats() > heard).await?;
         }
         release.notify_one();
         anyhow::Ok(())
@@ -947,7 +1084,7 @@ async fn defined_task_with_go_ahead(server: &TestServer, ada: &TestUser) -> Resu
 
 #[gtest]
 #[tokio::test]
-async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_reply() -> Result<()> {
+async fn doing_a_task_ends_with_a_review_and_the_next_run_reads_the_reply() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada").await?;
@@ -967,9 +1104,10 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
                         &start,
                         &[
                             "question",
-                            "request",
+                            "review",
                             &task,
-                            "Review https://example.com/pr/7 and mark the task done",
+                            "https://example.com/pr/7",
+                            "The fence, painted",
                             "--details-file",
                             "-",
                         ],
@@ -1020,11 +1158,8 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
     expect_that!(waiting["waits_for_you"], eq(true));
     expect_that!(second.exited(0), eq(true));
     let second_brief = &again.starts()[0].brief;
-    expect_that!(
-        second_brief,
-        contains_substring("Review https://example.com/pr/7 and mark the task done")
-    );
-    expect_that!(second_brief, contains_substring("Can't be done"));
+    expect_that!(second_brief, contains_substring("Review, round 1 · changes asked"));
+    expect_that!(second_brief, contains_substring("https://example.com/pr/7"));
     expect_that!(second_brief, contains_substring("The corner is missed."));
     expect_that!(third.exited(0), eq(true));
     expect_that!(third.stdout, contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\.$"));
@@ -1034,11 +1169,13 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
 
 #[gtest]
 #[tokio::test]
-async fn with_a_root_each_run_gets_a_directory_of_its_own_under_it_named_by_its_item() -> Result<()> {
+async fn with_a_root_each_item_runs_in_root_team_heap_key() -> Result<()> {
     // Arrange: two notes to prepare, and a root that isn't there yet.
     let (server, ada, cli, first) = with_prepared_note().await?;
     let second = add_note(&server, &ada, "Order the certificate").await?;
-    let tool = idle_agent(None);
+    // Each run prepares its note, so the next claims the other.
+    let tool = context_writing_agent(&cli.agent(), 0.1);
+    add_note(&server, &ada, "Renew the domain").await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path().join("runs");
     let root_arg = root.to_string_lossy().into_owned();
@@ -1049,29 +1186,498 @@ async fn with_a_root_each_run_gets_a_directory_of_its_own_under_it_named_by_its_
     let two = cli.run_work(&once_in_root, &tool).await;
     let without = cli.run_work(ONCE, &tool).await;
 
-    // Assert: the loop makes the root, and hands the tool a directory to make in it.
+    // Assert: the loop makes the root and the directory, and hands the tool the directory.
     expect_that!(one.exited(0), eq(true));
     expect_that!(two.exited(0), eq(true));
     expect_that!(without.exited(0), eq(true));
-    expect_that!(root.is_dir(), eq(true));
     let starts = tool.starts();
     let dirs: Vec<_> = starts.iter().map(|start| start.dir.clone()).collect();
     assert_that!(dirs.len(), eq(3));
     let (Some(a), Some(b)) = (&dirs[0], &dirs[1]) else {
         anyhow::bail!("the runs with a root have no directory: {dirs:?}");
     };
-    expect_that!(a.parent(), some(eq(root.as_path())));
-    expect_that!(b.parent(), some(eq(root.as_path())));
-    expect_that!(a, not(eq(b)));
-    let names = [a, b].map(|dir| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
-    expect_that!(names, each(matches_regex(r"[0-9a-z]+-[0-9a-f-]{36}")));
+    expect_that!(a.parent(), some(eq(root.join("ada").join("personal").as_path())));
+    expect_that!(b.parent(), some(eq(root.join("ada").join("personal").as_path())));
     // Each is named by the key of the item it worked, whichever of the two the queue gave it.
-    let keys = [format!("{first}-"), format!("{second}-")];
+    let mut keys = [a, b].map(|dir| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
+    keys.sort();
+    let mut worked = [first, second];
+    worked.sort();
+    expect_that!(keys, eq(&worked));
+    expect_that!(a.join(".upheap-run").is_file(), eq(true));
+    expect_that!(b.join(".upheap-run").is_file(), eq(true));
     expect_that!(
-        names.iter().all(|name| keys.iter().any(|key| name.starts_with(key))),
-        eq(true)
+        std::fs::read_to_string(a.join(".upheap-run"))?,
+        matches_regex(r"run [0-9a-f-]{36}\nstarted \d{4}-\d\d-\d\dT[0-9:.]+Z\nserver http://127.0.0.1:\d+\n")
     );
     expect_that!(dirs[2], none());
+    Ok(())
+}
+
+/// The run id a tool was started with.
+fn run_id_of(start: &ToolStart) -> String {
+    start
+        .env
+        .iter()
+        .find(|(name, _)| name == "UPHEAP_RUN")
+        .map(|(_, id)| id.clone())
+        .unwrap_or_default()
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_tool_is_given_a_log_named_by_the_run_in_the_runs_directory_of_the_config() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let start = &tool.starts()[0];
+    let expected = cli
+        .config_dir
+        .path()
+        .join("runs")
+        .join(format!("{}.jsonl", run_id_of(start)));
+    expect_that!(start.log, some(eq(&expected)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_that_showed_no_activity_fails_with_that_text_and_points_to_its_log_when_there_is_one() -> Result<()> {
+    // Arrange: the tool leaves its log, as a real one does, and reports the silence stop.
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let silent = StandIn::new(|start: ToolStart| async move {
+        if let Some(log) = &start.log {
+            std::fs::create_dir_all(log.parent().expect("a directory")).expect("the runs directory");
+            std::fs::write(log, "{\"type\":\"system\"}\n").expect("the log");
+        }
+        Ok(ToolReport {
+            failure: Some("The agent showed no activity for 30 minutes.".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+    let no_log = StandIn::new(|_| async {
+        Ok(ToolReport {
+            failure: Some("The agent showed no activity for 30 minutes.".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+
+    // Act
+    let with_log = cli.run_work(ONCE, &silent).await;
+    let without_log = cli.run_work(ONCE, &no_log).await;
+    let json = cli.run_work(&[ONCE, &["--json"]].concat(), &silent).await;
+
+    // Assert
+    let path = cli
+        .config_dir
+        .path()
+        .join("runs")
+        .join(format!("{}.jsonl", run_id_of(&silent.starts()[0])));
+    let lines: Vec<&str> = with_log.stdout.lines().skip(1).collect();
+    expect_that!(lines[0], contains_substring("failed"));
+    expect_that!(lines[1], eq("       The agent showed no activity for 30 minutes."));
+    expect_that!(lines[2], eq(&format!("       Log: {}", path.display())));
+    expect_that!(lines.len(), eq(3));
+    let lines: Vec<&str> = without_log.stdout.lines().skip(1).collect();
+    expect_that!(lines.len(), eq(2));
+    expect_that!(json.stdout, not(contains_substring("Log:")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_header_is_followed_by_a_note_of_where_the_logs_go_in_human_mode_only() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let human = cli.run_work(ONCE, &tool).await;
+    let json = cli.run_work(&[ONCE, &["--json"]].concat(), &tool).await;
+
+    // Assert
+    let note = format!(
+        "Each run's claude output is saved in {}, as <run id>.jsonl.",
+        cli.config_dir.path().join("runs").display()
+    );
+    expect_that!(lines_with(&human.stderr, "Each run's"), elements_are![eq(&note)]);
+    expect_that!(json.stderr, not(contains_substring("Each run's")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn logs_older_than_seven_days_are_removed_when_the_loop_starts_and_nothing_else() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let runs = cli.config_dir.path().join("runs");
+    std::fs::create_dir_all(&runs)?;
+    let (old, new, other) = (runs.join("old.jsonl"), runs.join("new.jsonl"), runs.join("old.txt"));
+    let eight_days = StdDuration::from_secs(8 * 24 * 60 * 60);
+    for path in [&old, &new, &other] {
+        std::fs::write(path, "{}\n")?;
+    }
+    for path in [&old, &other] {
+        std::fs::File::options()
+            .write(true)
+            .open(path)?
+            .set_modified(std::time::SystemTime::now() - eight_days)?;
+    }
+
+    // Act
+    let outcome = cli.run_work(ONCE, &idle_agent(None)).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(old.exists(), eq(false));
+    expect_that!(new.exists(), eq(true));
+    expect_that!(other.exists(), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_later_run_on_the_same_item_starts_in_the_same_directory_with_what_was_left() -> Result<()> {
+    // Arrange: the first run leaves a file and fails; the marker is dated back so a rewrite shows.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let root_arg = root.to_string_lossy().into_owned();
+    let once_in_root = [ONCE, &["--root", &root_arg]].concat();
+    let failing = StandIn::new(|start: ToolStart| async move {
+        if let Some(dir) = &start.dir {
+            std::fs::write(dir.join("left.txt"), "half done").expect("the directory is there");
+        }
+        Ok(ToolReport {
+            failure: Some("it broke".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+    let marker = root.join("ada/personal").join(&note).join(".upheap-run");
+
+    // Act
+    let first = cli.run_work(&once_in_root, &failing).await;
+    let old = std::time::SystemTime::now() - StdDuration::from_secs(3600);
+    std::fs::File::options().write(true).open(&marker)?.set_modified(old)?;
+    let again = idle_agent(None);
+    let second = cli.run_work(&once_in_root, &again).await;
+
+    // Assert
+    expect_that!(first.exited(0), eq(true));
+    expect_that!(second.exited(0), eq(true));
+    let (first_start, second_start) = (&failing.starts()[0], &again.starts()[0]);
+    expect_that!(second_start.dir, eq(&first_start.dir));
+    expect_that!(
+        std::fs::read_to_string(root.join("ada/personal").join(&note).join("left.txt"))?,
+        eq("half done")
+    );
+    expect_that!(std::fs::metadata(&marker)?.modified()?, gt(old));
+    Ok(())
+}
+
+/// A kept directory for `key` in `heap` of `team` under `root`, with a marker naming `server` last written `days` days
+/// ago and a file in it.
+fn kept_directory(
+    server: &str,
+    root: &std::path::Path,
+    team: &str,
+    heap: &str,
+    key: &str,
+    days: u64,
+) -> Result<std::path::PathBuf> {
+    let dir = root.join(team).join(heap).join(key);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("work.txt"), "what the agent left")?;
+    let marker = dir.join(".upheap-run");
+    std::fs::write(&marker, format!("run x\nstarted y\nserver {server}\n"))?;
+    let at = std::time::SystemTime::now() - StdDuration::from_secs(days * 24 * 60 * 60);
+    std::fs::File::options().write(true).open(marker)?.set_modified(at)?;
+    Ok(dir)
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_looping_run_sweeps_again_between_claims_when_a_sweep_is_due() -> Result<()> {
+    // Arrange: sweeps due before every claim. The one run makes a kept directory for an item that doesn't exist, after
+    // the sweep at the start has passed, so only a later sweep can remove it.
+    let (server, _ada, mut cli, _note) = with_prepared_note().await?;
+    cli.sweep_every = StdDuration::ZERO;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let stray = root.join("ada").join("personal").join("zzzzz");
+    let tool = {
+        let (agent, stray, marker) = (
+            cli.agent(),
+            stray.clone(),
+            format!("run x\nstarted y\nserver {}\n", server.url),
+        );
+        StandIn::new(move |start| {
+            let (agent, stray, marker) = (agent.clone(), stray.clone(), marker.clone());
+            async move {
+                std::fs::create_dir_all(&stray).expect("the stray directory");
+                std::fs::write(stray.join(".upheap-run"), marker).expect("its marker");
+                let item = item_key_of(&start);
+                agent
+                    .upheap_with_stdin(
+                        &start,
+                        &["item", "edit", &item, "--context-file", "-", "-q"],
+                        "Context.\n",
+                    )
+                    .await;
+                agent.upheap(&start, &["work", "reached", "--result", "Done"]).await;
+                Ok(ToolReport::default())
+            }
+        })
+    };
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+    let root_arg = root.to_string_lossy().into_owned();
+    let args = [LOOP, &["--root", &root_arg]].concat();
+
+    // Act: once the run has made the directory, wait for a sweep to remove it, then stop the loop.
+    let looping = cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr);
+    let pressing = async {
+        wait_until("the run to make the stray directory", || tool.starts().len() == 1).await?;
+        wait_until("a later sweep to remove it", || {
+            stderr
+                .contents()
+                .contains("Removed ada/personal/zzzzz: the item can't be found.")
+        })
+        .await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(stray.exists(), eq(false));
+    expect_that!(tool.starts().len(), eq(1));
+    Ok(())
+}
+
+/// A server with Ada, a heap that leaves its notes alone, the CLI signed in as Ada, and an open note in it. Nothing
+/// is claimed there, so a run only sweeps.
+async fn with_a_note_nobody_claims() -> Result<(TestServer, TestUser, TestCli, String)> {
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let note = add_note(&server, &ada, "Rotate the certs").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    Ok((server, ada, cli, note))
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_the_directory_of_a_closed_item() -> Result<()> {
+    // Arrange: one item done and one not wanted, each with a kept directory, in a heap of their own.
+    let (server, ada, cli, done) = with_a_note_nobody_claims().await?;
+    let wont = add_note(&server, &ada, "Order the certificate").await?;
+    server.edit_item(&ada, HEAP, &done, json!({ "state": "done" })).await?;
+    server
+        .edit_item(&ada, HEAP, &wont, json!({ "state": "wont_do" }))
+        .await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let first = kept_directory(&server.url, root, "ada", "personal", &done, 1)?;
+    let second = kept_directory(&server.url, root, "ada", "personal", &wont, 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: both are gone, and so are the heap and team directories they leave empty.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(first.exists(), eq(false));
+    expect_that!(second.exists(), eq(false));
+    expect_that!(root.join("ada").exists(), eq(false));
+    expect_that!(
+        outcome.stderr,
+        contains_regex(format!(r"(?m)^\d\d:\d\d  Removed ada/personal/{done}: the item is closed\.$").as_str())
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_regex(format!(r"(?m)^\d\d:\d\d  Removed ada/personal/{wont}: the item is closed\.$").as_str())
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_the_directory_of_an_item_that_cannot_be_found() -> Result<()> {
+    // Arrange: a key that isn't in Ada's heap, and keys in a heap and a team Ada can't see, as another account's
+    // directories on a shared root would be.
+    let (server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let no_item = kept_directory(&server.url, root, "ada", "personal", "zzzzz", 1)?;
+    let no_heap = kept_directory(&server.url, root, "ada", "elsewhere", "zzzzz", 1)?;
+    let no_team = kept_directory(&server.url, root, "other", "personal", "zzzzz", 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: only the item in a heap that reads fine is gone; a 404 for the heap may be someone else's.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(no_item.exists(), eq(false));
+    for dir in [no_heap, no_team] {
+        expect_that!(dir.join("work.txt").is_file(), eq(true), "{}", dir.display());
+    }
+    expect_that!(
+        outcome.stderr,
+        contains_substring("Removed ada/personal/zzzzz: the item can't be found.")
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_a_directory_unused_for_7_days_and_keeps_a_recent_one() -> Result<()> {
+    // Arrange: two open items, one last used 8 days ago and one 6 days ago.
+    let (server, ada, cli, old_item) = with_a_note_nobody_claims().await?;
+    let recent_item = add_note(&server, &ada, "Order the certificate").await?;
+    let parent = tempfile::tempdir()?;
+    let old = kept_directory(&server.url, parent.path(), "ada", "personal", &old_item, 8)?;
+    let recent = kept_directory(&server.url, parent.path(), "ada", "personal", &recent_item, 6)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(old.exists(), eq(false));
+    expect_that!(
+        std::fs::read_to_string(recent.join("work.txt"))?,
+        eq("what the agent left")
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_substring(format!("Removed ada/personal/{old_item}: unused for 7 days.").as_str())
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_keeps_an_open_items_directory() -> Result<()> {
+    // Arrange
+    let (server, _ada, cli, note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let dir = kept_directory(&server.url, parent.path(), "ada", "personal", &note, 1)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--quiet", "--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: nothing is removed and nothing is said about the sweep.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        std::fs::read_to_string(dir.join("work.txt"))?,
+        eq("what the agent left")
+    );
+    expect_that!(outcome.stderr, not(contains_substring("Removed")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_asks_nothing_about_another_servers_directory_and_removes_it_only_for_age() -> Result<()> {
+    // Arrange: two directories for items this server doesn't have, both last used by a loop on another server.
+    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let other = "https://other.example";
+    let recent = kept_directory(other, parent.path(), "ada", "personal", "zzzzz", 1)?;
+    let old = kept_directory(other, parent.path(), "ada", "personal", "yyyyy", 8)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(recent.join("work.txt").is_file(), eq(true));
+    expect_that!(old.exists(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_says_nothing_in_quiet_mode_when_it_removes() -> Result<()> {
+    // Arrange
+    let (server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let dir = kept_directory(&server.url, parent.path(), "ada", "personal", "zzzzz", 1)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(
+            &[
+                "work", "run", "--tool", "claude", "--once", "--quiet", "--root", &root_arg,
+            ],
+            &idle_agent(None),
+        )
+        .await;
+
+    // Assert
+    expect_that!(dir.exists(), eq(false));
+    expect_that!(outcome.stdout, eq(""));
+    expect_that!(outcome.stderr, eq(""));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_leaves_old_run_directories_and_anything_else_alone() -> Result<()> {
+    // Arrange: all of these would be removed if they were kept directories of a missing item.
+    let (server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let old_run = root.join("zzzzz-0191d3c2-7b1e-7a60-8a43-5b2f4a1c9d10");
+    std::fs::create_dir_all(&old_run)?;
+    std::fs::write(old_run.join("CLAUDE.md"), "old")?;
+    std::fs::write(old_run.join(".upheap-run"), "old")?;
+    let no_marker = root.join("ada/personal/zzzzz");
+    std::fs::create_dir_all(&no_marker)?;
+    std::fs::write(no_marker.join("work.txt"), "mine")?;
+    std::fs::write(root.join("stray.txt"), "stray")?;
+    let too_deep = kept_directory(&server.url, &root.join("ada"), "personal", "zzzzz", "yyyyy", 30)?;
+    let too_shallow = root.join("ada/zzzzz");
+    std::fs::create_dir_all(&too_shallow)?;
+    std::fs::write(too_shallow.join(".upheap-run"), "x")?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(std::fs::read_to_string(old_run.join("CLAUDE.md"))?, eq("old"));
+    expect_that!(std::fs::read_to_string(no_marker.join("work.txt"))?, eq("mine"));
+    expect_that!(std::fs::read_to_string(root.join("stray.txt"))?, eq("stray"));
+    expect_that!(too_deep.join("work.txt").is_file(), eq(true));
+    expect_that!(too_shallow.join(".upheap-run").is_file(), eq(true));
+    expect_that!(outcome.stderr, not(contains_substring("Removed")));
     Ok(())
 }
 
@@ -1651,5 +2257,70 @@ async fn a_worker_claims_again_while_another_run_goes_on() -> Result<()> {
     expect_that!(outcome.exited(0), eq(true));
     expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(3));
     expect_that!(tool.starts().len(), eq(3));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_adds_a_task_with_steps_and_is_told_what_an_item_without_context_needs() -> Result<()> {
+    // Arrange: an agent that adds a task with a context and a step, then an item with no context.
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let agent = cli.agent();
+    let outcomes: Arc<std::sync::Mutex<Vec<Outcome>>> = Arc::default();
+    let adding = {
+        let (agent, outcomes) = (agent.clone(), outcomes.clone());
+        StandIn::new(move |start: ToolStart| {
+            let (agent, outcomes) = (agent.clone(), outcomes.clone());
+            async move {
+                let with_context = agent
+                    .upheap_with_stdin(
+                        &start,
+                        &[
+                            "item",
+                            "add",
+                            "Rotate the old certs",
+                            "--task",
+                            "--step",
+                            "List them",
+                            "--context-file",
+                            "-",
+                            "-q",
+                        ],
+                        "Found while writing the context.\n",
+                    )
+                    .await;
+                let without = agent.upheap(&start, &["item", "add", "No context"]).await;
+                if let Ok(mut all) = outcomes.lock() {
+                    all.extend([with_context, without]);
+                }
+                Ok(ToolReport::default())
+            }
+        })
+    };
+
+    // Act
+    let ran = cli.run_work(ONCE, &adding).await;
+
+    // Assert
+    expect_that!(ran.exited(0), eq(true));
+    let outcomes = std::mem::take(&mut *outcomes.lock().map_err(|_| anyhow::anyhow!("poisoned"))?);
+    expect_that!(outcomes[0].exited(0), eq(true));
+    let added = server.read_item(&ada, HEAP, outcomes[0].stdout.trim()).await?;
+    expect_that!(added["kind"], eq("task"));
+    expect_that!(added["stage"], eq("with_context"));
+    expect_that!(added["origin"]["key"], eq(note.as_str()));
+    expect_that!(added["steps"][0]["title"], eq("List them"));
+    expect_that!(outcomes[1].exited(3), eq(true));
+    expect_that!(
+        outcomes[1].stderr,
+        contains_substring("hint: Add it again with --context-file - and say what it is and why it came up.")
+    );
+    let shown = cli.run(&["item", "show", outcomes[0].stdout.trim()]).await;
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!(
+            "From: {note} \"Rotate the certs\" (note, ada/personal), added by an agent run"
+        ))
+    );
     Ok(())
 }

@@ -63,9 +63,10 @@ The shape of the offering is in Product, Distribution.
 7. I tell it to do the first task. It works through the checklist, ticking steps and adding ones it finds. One
    step needs me (a credential, a purchase), so it attaches a request; I do it and say so.
 8. The agent opens a pull request and asks me to review it. I comment there and reply "changes asked". It fixes
-   them and asks again; I approve. The task is done, and the second task is no longer blocked.
+   them and asks again; I approve. The agent merges it and, with nothing left, proposes closing the task. I
+   agree: the task is done, and the second task is no longer blocked.
 9. For the second I say "all the way" up front. The agent runs it through without stopping at stable states,
-   and still waits for my review before done.
+   and still waits for my review, and my agreement, before done.
 10. The repository got the code and nothing about progress. I can see what happened, when, and what each run cost.
 
 Two side paths: a note too big for a task becomes a new heap with its own context, notes and tasks. And a
@@ -113,13 +114,17 @@ is resolved or turned into a task.
 **Review**
 
 1. **Core.** An agent never marks its own work done. It asks for a review: a request on the task with a link to
-   where the work is, such as a pull request or a document.
+   where the work is, such as a pull request or a document. Approval doesn't close the task: the agent finishes
+   the piece (merges, publishes).
 2. **Core.** The person reviews where the work lives, and replies in Upheap with one of two outcomes: approved,
    or changes asked, with an optional line. Their comments stay where the work is.
 3. **Core.** Changes asked sends the task back to the agent, which reads the comments at the link, changes the
    work and asks again. There is no limit on rounds.
-4. **Core.** A task can need several reviews, as when one change lands as several pull requests. It is done when
-   the agent has nothing left to do on it and every review it asked for is approved.
+4. **Core.** A task can need several reviews, as when one change lands as several pull requests. When the agent
+   has nothing left to do on it and every review it asked for is approved, it proposes closing. The person's
+   agreement closes the task as done; declining, with a line, sends it back to the agent.
+8. **Core.** A task whose work needs no review, with no pull request or document to look at, is closed the same
+   way: the agent proposes closing once it thinks the work is done, and the person agrees.
 5. A task in review is in the middle of the agent's turn, like any item with an open request. "All the way"
    still stops for each review.
 6. Work the person does themselves needs no review.
@@ -321,6 +326,8 @@ week), setup (once or rarely) or recovery.
 2. Follow the link and review there: comment on the pull request, in the document.
 3. Back in Upheap, reply approved, or changes asked with an optional line.
 4. Changes asked: the request comes back later with the work changed, and I review again from step 2.
+5. Approved: the agent finishes the piece (merges, publishes). With nothing left, a done proposal is in what
+   waits for me. I agree, and the task is done; or I say not yet, with a line, and it goes back to the agent.
 
 ### The agent, through `upheap work`
 
@@ -331,7 +338,8 @@ week), setup (once or rarely) or recovery.
    what the item was made from, and which stable state to reach.
 3. The agent does the move: fills in context, writes a checklist, makes tasks, does the work and ticks steps.
 4. It reaches the stable state and says so. The run and its cost are recorded, and the item is the person's.
-   For done, that takes a review first (A6).
+   For done, the agent proposes closing, after a review where there is work to look at (A6), and the person's
+   agreement closes the task.
 5. Sent "all the way", the item is the next one again, until it's done.
 
 **A2. Ask.** Loop.
@@ -360,12 +368,14 @@ week), setup (once or rarely) or recovery.
 2. It attaches a review request with the link and ends the run. A task whose work lands in several pieces gets
    a request for each, at once or one after another.
 3. Approved: on its next run the agent finishes that piece as the context says (merges, publishes). With no work
-   left and every review approved, it marks the task done.
+   left and every review approved, it proposes closing the task. Work with nothing to review goes straight to the
+   proposal.
 4. Changes asked: on its next run it reads the comments at the link, changes the work, and asks again.
 
 **A5. A run dies.** Recovery, for A1.
 
-1. The agent tool crashes, is killed, or `upheap work` is stopped in the middle of a turn.
+1. The agent tool crashes, is killed, hangs (showing no output for 30 minutes, when the loop stops it), or
+   `upheap work` is stopped in the middle of a turn.
 2. What the agent had already written stays: ticked steps, context, questions.
 3. The item is still with the agent and still not at a stable state, so it's the next item again, and the next
    run carries on from what's written.
@@ -473,6 +483,7 @@ Whoever asks writes the text and the choices. Two kinds come with their choices 
 | Question | Text, and any choices the asker likes | The asker's, or none |
 | Request | What to do | Done, or can't be done |
 | Review | A link to the work | Approved, or changes asked |
+| Done proposal | That nothing is left | Close as done, or not yet |
 
 A question is open, closed by a reply, or withdrawn (the asker no longer needs it). Its reply can be changed
 while its item is open.
@@ -492,7 +503,9 @@ ended (reached, asked, failed, handed back), the state it started from and reach
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
-hasn't been heard from for a set time.
+hasn't been heard from for a set time. The run is heard by the loop's heartbeat (the loop is up) or any write in
+the run. Whether the agent itself is still working is the loop's to watch, from the tool's output, not the
+server's.
 
 **Agent.** Not an account. An agent acts as the person who runs `upheap work`, with their sign-in, and every
 change it makes carries the run it was made in.
@@ -549,10 +562,12 @@ change it makes carries the run it was made in.
    question; **handed back**, with a reason, when there is nothing to do and the goal needn't be reached,
    such as work done elsewhere (the turn goes back to the person, and it isn't a failure); or **failed**. An item
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
+   So does a run whose tool showed no activity for 30 minutes: the loop stops it and fails it with its own reason.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
    in the table and has no open question. Otherwise the run counts as failed.
 7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
-   wrong. The person retries it or takes it back.
+   wrong. Both kinds of failure, a lapsed claim and a silent tool, count toward stuck. The person retries it or takes
+   it back.
 8. A turn whose item is already at its goal stage or past it never starts a run: `next` skips it, and a claim
    ends it as reached, credited to the person running `upheap work`, and takes the next item. A goal of done is
    never met this way.
@@ -578,8 +593,10 @@ change it makes carries the run it was made in.
 **Review**
 
 1. A review is asked only on a task, in a turn that is doing it.
-2. An agent can close a task as done only when every step is ticked or dropped, at least one review on it is
-   approved, and for each piece of work the latest round is approved.
+2. An agent never closes a task; it proposes closing, with a done proposal. A proposal is asked only when every
+   step is ticked or dropped, no question on the task is open, and for each piece of work that had reviews the
+   latest round is approved. A task with no reviews may propose closing. The person's "close as done" closes the
+   task as done and ends the turn as reached; "not yet" sends it back to the agent with what they said.
 3. Changes asked closes that review. The agent's next request for the same work is a new review, shown as the
    next round of that piece.
 4. An agent can't withdraw a review. Reviews withdrawn by a take-back count for nothing: after a new go-ahead
@@ -600,10 +617,13 @@ change it makes carries the run it was made in.
 
 1. Read everything in the heaps `upheap work` was given.
 2. Write only inside a run that holds a claim: the item's context, steps and state, questions on it, and the
-   moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item.
+   moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item, besides
+   adding an item: a run may add a task or a note, with a context, to any heap the person can edit. The new item
+   links back to the run's item and records the run, starts with its context written and gets no Prepare turn. It may
+   take steps from the run that added it, and no other write. A run adds no reminder.
 3. Set effort, impact and due time on what it makes, and its need at a split (Kinds and moves §3). It never
    changes the need of an item that exists.
-4. Never: close anything as won't do, close anything as done except a task under Review §2, answer a question,
+4. Never: close anything, as done or won't do (it proposes closing a task, Review §2), answer a question,
    change a heap's context or settings once the turn that made the heap has ended, or touch tags' and
    parameters' definitions.
 
@@ -650,7 +670,7 @@ Each walked by hand through the rules above.
 3. **Splitting.** A two-month-old "expected" note is sent all the way. The agent makes tasks A, B, C, with B
    blocked by A and C by B. Moves §2: the note is closed as became. Moves §3: the note's context says all three
    serve the same promise, so the agent gives each "expected" and the note's age, without asking. All the way
-   §2: each gets a turn. Queue §1: only A is in the queue. A's review is approved, A is done, Blocks §2 frees B,
+   §2: each gets a turn. Queue §1: only A is in the queue. A's review is approved, the agent merges and proposes closing, the person agrees, A is done, Blocks §2 frees B,
    and B is next.
 4. **Taken back mid-run.** The agent has ticked two of five steps and asked a question. The person takes the
    task back. Person §1: the turn ends, the question is withdrawn, the two ticks stay. The run's next write is
@@ -662,7 +682,8 @@ Each walked by hand through the rules above.
    first gets the top item and its claim; Queue §1 keeps it out of the second's queue, which gets the next one.
 7. **Two reviews, one approved.** A task lands as two pull requests. The person approves the first and asks for
    changes on the second. Review §2: not done. Review §3: the agent reworks the second and asks again, round 2.
-   Approved: every review is approved, steps are ticked, done.
+   Approved: the agent merges, ticks the last steps and proposes closing; every piece's latest round is
+   approved, so the proposal is allowed. The person agrees: done.
 8. **A second thought after done.** A day later the person wants to change the first approval. Questions §3: the
    task is closed, so no. They reopen it (within a week), which puts it with them, and give a go-ahead with a
    line saying what's wrong. The earlier approvals stand, and the agent asks for a review of what it changes.
@@ -718,6 +739,9 @@ joining the queue; and need being settled for everything made from a note.
     feeds itself work.
 11. **A reminder's age starts at its date,** not at creation. Otherwise a reminder set a year ahead arrives as a
     year-old item.
+12. **An agent never closes a task; the person agrees to its proposal** (owner), not an agent closing once its
+    reviews are approved. Approving a review and closing a task are different calls: a pull request approved
+    still has to be merged, and a task with nothing to review still needs someone to say it's done.
 
 ### Unproven mechanisms
 
@@ -762,7 +786,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | --- | --- | --- | --- | --- | --- |
 | W1 | List row: step count, reminder mark, who has it | P2 | Constant | Core | Without the marks an item an agent holds looks free to take |
 | W2 | Waiting for me, across heaps | P3, P14, A5 | Constant | Core | Every agent turn that asks stops until the person finds the question |
-| W3 | Replying: a question, a request, a review | P3, P14 | Constant | Core | The only way an item goes back to the agent |
+| W3 | Replying: a question, a request, a review, a done proposal | P3, P14 | Constant | Core | The only way an item goes back to the agent, and the only way an agent's task is done |
 | W4 | Item: context as Markdown | P4, P5 | Daily | Core | It is what the agent reads and what it writes |
 | W5 | Item: steps | P4, P5 | Constant | Core | A task is its steps |
 | W6 | Item: who has it, send on, take back, changes asked, retry | P4, P11, P12 | Constant | Core | Nothing reaches an agent without the go-ahead |
@@ -792,7 +816,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C3 | `item show` and `heap show` with everything an agent reads | A1 | Constant | Core | The agent starts every run by reading |
 | C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | Constant | Core | Filling in context is the first turn of every note |
 | C5 | `step add`, `tick`, `drop`, `edit` | A1 | Constant | Core | Doing a task is ticking its steps |
-| C6 | `question ask`, `request`, `review` | A2, A6 | Constant | Core | The agent's only way to reach the person |
+| C6 | `question ask`, `request`, `review`, `propose-done` | A2, A6 | Constant | Core | The agent's only way to reach the person |
 | C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | An agent ends a turn no other way, bar a hand-back (C7a) |
 | C7a | `work hand-back`: the run found nothing to do and gives the turn back | A1 | Weekly | Enabler | Without it a run that finds the work done must say reached, or fail |
 | C8 | `item to-task` | A1 | Daily | Core | Golden path step 6 |
@@ -865,10 +889,6 @@ Next likely action: open the item.
 ALL WIDTHS · Waiting for me (W2, W3)                  constant · core
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Waiting for me · 5                 all heaps, most important first     │
-│                                                                        │
-│ Review, round 2 · Rotate the certs · Work                              │
-│   "The script and the runbook"   ↗ link to the work                    │
-│   [Approved] [Changes asked]     comment, optional                     │
 │                                                                        │
 │ Question · Paint the fence · House                                     │
 │   "Which colour?"                                          Details ▾   │
@@ -1042,7 +1062,7 @@ starts the agent tool. A command with it set writes as an agent, inside that run
 is the person's own.
 
 ```
-C1 · upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>]     constant · core
+C1 · upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>] [--root <dir>]     constant · core
 
 $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
@@ -1053,6 +1073,8 @@ Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after 
 --heap    repeatable; with none, the default heap. Heaps agents make from these are included.
 --once    do one run, or nothing when there is nothing, and exit.
 --workers keep up to N runs going at once (1 to 8, default 1), each on its own item. Above 1, needs --root.
+--root    each item runs in <dir>/<team>/<heap>/<key>, kept and reused for its next run; removed once the item
+          is closed or can't be found, or 7 days after a run last started or ended in it (swept at start, then hourly).
 The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
 prints, the state to reach, and the person's line.
 How a run ended is read off it: it said `work reached` and the check passed; or `work hand-back`; or it left an open
@@ -1102,6 +1124,8 @@ Questions
               <its details, when it has them>
   k3x9a.q2  Review, round 1 · changes asked
             https://example.com/pull/12  →  "See the comments there."
+  k3x9a.q3  Done proposal · open
+            "Merged; nothing left"
 
 Runs 3 · $1.20
 
@@ -1135,7 +1159,8 @@ upheap heap add "Blog move" --from n8c2d --context-file context.md
 upheap item add "Pick a host" --heap blog-move --from n8c2d --need expected --age new
 upheap item became n8c2d                                   after making things from it
 
-upheap item done k3x9a                                     a task, once its reviews are approved
+upheap question propose-done k3x9a "Merged; nothing left" [--details-file f]
+                                                           when steps and reviews are done
 upheap work reached --result "Rotation script merged." [--link https://example.com/pull/12]...
 upheap work hand-back --reason "Already fixed in #123; nothing left to prepare."
 
@@ -1162,9 +1187,13 @@ Each is exit 3 with the server's message and code, and a hint saying what to do 
   The item changed since it was read          "Read it again: upheap item show k3x9a"
   The turn was taken back, or the claim lapsed  "This run is over. Stop."
   A write outside the run's own item          names the item the run holds
+  A reminder added in a run                   "Add it as a task or a note; leave the date in its context."
+  An item added in a run with no context      "Add it again with --context-file - and say what it is and why
+                                              it came up."
   A need above the note's                     names the highest it may give
-  Done without what Review §2 asks            names what's missing: open steps, no approved review,
-                                              a piece whose latest round isn't approved
+  Closing a task, in a run                    "Propose closing: upheap question propose-done k3x9a ..."
+  A proposal without what Review §2 asks      names everything missing: open steps, an open question or
+                                              review, a piece whose latest round isn't approved
   Reached, but the item doesn't fit the stage names the condition it misses, and the run can fix it
                                               and say reached again
   Won't do, answering a question, changing    "Only the person does that."

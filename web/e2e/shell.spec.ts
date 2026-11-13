@@ -459,3 +459,75 @@ test("the personal team reads as the user's team, and its heap's title is the he
   await page.goto("/teams");
   await expect(page.getByRole("link", { name: "Open Tester's team" })).toBeVisible();
 });
+
+test("on a phone, the rows' chips and buttons scroll under the top bar and the tabs, never over them", async ({
+  page,
+  heapPath,
+}) => {
+  test.skip(!isPhone(page), "Only a phone has the sticky top bar and the tabs.");
+  const headers = { "x-csrf-protection": "1" };
+  const tag = await page.request.post(`/api/v1${heapPath}/tags`, { headers, data: { name: "infra" } });
+  expect(tag.status()).toBe(201);
+  const param = await page.request.post(`/api/v1${heapPath}/parameters`, {
+    headers,
+    data: { name: "Energy", options: ["High"] },
+  });
+  expect(param.status()).toBe(201);
+  const energy = (await param.json()) as { id: string; options: { id: string }[] };
+  const tagId = (await tag.json()).id as string;
+  const high = energy.options[0]?.id ?? "";
+  // Enough rows for the list to scroll past both bars.
+  for (let n = 1; n <= 20; n++) {
+    const made = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers,
+      data: {
+        title: `Item ${n}`,
+        need: "expected",
+        tag_ids: [tagId],
+        parameter_values: { [energy.id]: high },
+      },
+    });
+    expect(made.status()).toBe(201);
+  }
+  await page.goto(heapPath);
+  await expect(row(page, "Item 20")).toBeVisible();
+  const top = page.locator("header").filter({ has: page.getByRole("button", { name: /^Switch heap/ }) });
+  await expect(top).toBeVisible();
+  const tabs = page.getByRole("navigation", { name: "Heap views" });
+
+  // Steps through the page a few pixels at a time, and wherever a row's button sits under a bar, the bar is what a tap
+  // there hits. Counts what was checked, so the test can't pass by checking nothing.
+  const result = await page.evaluate(
+    ([topBar, tabBar]) => {
+      const bars = [topBar, tabBar].filter((bar) => bar !== null);
+      const checked = { tag: 0, parameter: 0, start: 0 };
+      const over: string[] = [];
+      const end = document.documentElement.scrollHeight - window.innerHeight;
+      for (let y = 0; y <= end; y += 4) {
+        window.scrollTo(0, y);
+        for (const button of document.querySelectorAll("li:has([data-row-link]) button")) {
+          const box = button.getBoundingClientRect();
+          if (box.height === 0) continue;
+          const cx = box.left + box.width / 2;
+          const cy = box.top + box.height / 2;
+          for (const bar of bars) {
+            const barBox = bar.getBoundingClientRect();
+            if (cy <= barBox.top || cy >= barBox.bottom) continue;
+            const label = button.getAttribute("aria-label") ?? "";
+            if (label.startsWith("Filter by tag")) checked.tag++;
+            else if (label.startsWith("Filter by")) checked.parameter++;
+            else if (label.startsWith("Start")) checked.start++;
+            const hit = document.elementFromPoint(cx, cy);
+            if (!hit || !bar.contains(hit)) over.push(`${label} at ${y}`);
+          }
+        }
+      }
+      return { checked, over };
+    },
+    [await top.elementHandle(), await tabs.elementHandle()] as const,
+  );
+  expect(result.over).toEqual([]);
+  expect(result.checked.tag).toBeGreaterThan(0);
+  expect(result.checked.parameter).toBeGreaterThan(0);
+  expect(result.checked.start).toBeGreaterThan(0);
+});

@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
 use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
-use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, UserId, Version};
+use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Select,
@@ -208,7 +208,7 @@ pub async fn list_items_blocked_by_locking(
     Ok(items)
 }
 
-/// The items made from any of `origins` (their `origin` is one of them), in any state and any heap, oldest first,
+/// The items made from any of `origins` (their `origin_id` is one of them), in any state and any heap, oldest first,
 /// with their tags and values. With `lock` the rows are read with locking reads (`FOR SHARE` on MySQL and Postgres)
 /// like [`find_item_locking`], so a write that depends on what was made calls it after [`crate::heaps::lock_heap`].
 ///
@@ -223,7 +223,7 @@ pub async fn list_items_made_from(
     let mut items = Vec::new();
     for chunk in ids.chunks(IN_LIST_CHUNK) {
         let query = items::Entity::find()
-            .filter(items::Column::OriginItemId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::OriginId.is_in(chunk.iter().map(String::as_str)))
             .order_by_asc(items::Column::CreatedAt)
             .order_by_asc(items::Column::Id);
         for row in shared_if(query, lock).all(db).await? {
@@ -551,7 +551,8 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
         closed_by: Set(item.state.closed_by().map(|id| id_to_db(id.as_uuid()))),
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
-        origin_item_id: Set(item.origin.map(|id| id_to_db(id.as_uuid()))),
+        origin_id: Set(item.origin_id.map(|id| id_to_db(id.as_uuid()))),
+        created_run_id: Set(item.created_run_id.map(|id| id_to_db(id.as_uuid()))),
     })
 }
 
@@ -564,11 +565,6 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         StateKind::from_code(&row.state).ok_or_else(|| read.corrupt(format!("unknown state {:?}", row.state)))?;
     let blocked_by = row
         .blocked_by_item_id
-        .as_deref()
-        .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
-        .transpose()?;
-    let origin = row
-        .origin_item_id
         .as_deref()
         .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
         .transpose()?;
@@ -619,9 +615,18 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         // Filled in by `attach_tags` and `attach_values`; the row alone doesn't hold them.
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
-        origin,
         created_at: read.timestamp(row.created_at)?,
         created_by: user(row.created_by.as_deref())?,
+        origin_id: row
+            .origin_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+            .transpose()?,
+        created_run_id: row
+            .created_run_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(RunId::from_uuid))
+            .transpose()?,
         version: read.version(row.version)?,
     })
 }

@@ -133,13 +133,15 @@ export function ItemRow({
   };
 
   return (
+    // `isolate` makes the row its own stacking context: the buttons' and chips' z-10 lifts them over the row's link,
+    // not over the page's sticky bars.
     <motion.li
       layout="position"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="relative overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
+      className="relative isolate overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
     >
       {swipe.showActions && (
         <SwipeActions
@@ -287,7 +289,8 @@ export function ComingRow({
     }
   };
   return (
-    <li className="relative rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent">
+    // Its own stacking context, as ItemRow's.
+    <li className="relative isolate rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent">
       <div
         className={`flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"

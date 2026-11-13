@@ -136,7 +136,7 @@ async fn a_task_is_made_from_a_note_and_the_note_became_it() -> Result<()> {
     );
     expect_that!(
         shown_task.stdout,
-        contains_substring(format!("From: {note} \"Certs are a mess\" (note, open)"))
+        contains_substring(format!("From: {note} \"Certs are a mess\" (note, ada/personal)"))
     );
     expect_that!(
         shown_second.stdout,
@@ -184,6 +184,8 @@ async fn in_a_run_the_note_became_ends_the_turn_and_a_need_above_the_notes_is_re
             "critical",
             "--age",
             "keep",
+            "--description",
+            "Done when: staging has new certs.",
         ])
         .await;
     let made = cli

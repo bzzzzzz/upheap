@@ -17,7 +17,7 @@ run may have made some of the tasks already, so carry on from them and make only
    note's. When they don't, ask one question on the note that lists the pieces (`upheap question ask <key>`), and
    stop.
 3. A task that has to wait for an earlier one gets `--blocked-by <key of that task>` when it is made. Block only on
-   tasks you made in this run.
+   tasks made from this note in this turn.
 4. Then `upheap item became <key>`. It closes the note as became and reaches the turn. There is nothing more to do
    after it.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).

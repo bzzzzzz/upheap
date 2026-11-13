@@ -26,6 +26,15 @@ async fn guide_show_prints_the_commands_and_the_instructions_with_nobody_signed_
     );
     expect_that!(shown.stdout, contains_substring("\nFor agents\n"));
     expect_that!(shown.stdout, contains_substring("--all-heaps"));
+    expect_that!(
+        shown.stdout,
+        contains_substring("  upheap question review <ITEM> <LINK> <TEXT>")
+    );
+    expect_that!(
+        shown.stdout,
+        contains_substring("  upheap question propose-done <ITEM> <TEXT>")
+    );
+    expect_that!(shown.stdout, contains_substring("An agent never closes a task"));
     expect_that!(shown.stdout, ends_with("  upheap item done k3x9a\n"));
     Ok(())
 }

@@ -96,16 +96,21 @@ impl RunLink {
     pub const MAX_COUNT: usize = 10;
 
     pub fn parse(raw: &str) -> Result<Self, ValidationError> {
-        let text = parse_required(raw, Field::Links, Self::MAX_CHARS)?;
+        Self::parse_as(raw, Field::Links)
+    }
+
+    /// [`Self::parse`] for a link that is another field, such as a review's: the same rule, reported against `field`.
+    pub fn parse_as(raw: &str, field: Field) -> Result<Self, ValidationError> {
+        let text = parse_required(raw, field, Self::MAX_CHARS)?;
         let lowered = text.to_ascii_lowercase();
         let rest = lowered
             .strip_prefix("https://")
             .or_else(|| lowered.strip_prefix("http://"))
-            .ok_or(ValidationError::FieldInvalid { field: Field::Links })?;
+            .ok_or(ValidationError::FieldInvalid { field })?;
         let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
         let clean = !host.is_empty() && !text.chars().any(|c| c.is_whitespace() || c.is_control());
         if !clean {
-            return Err(ValidationError::FieldInvalid { field: Field::Links });
+            return Err(ValidationError::FieldInvalid { field });
         }
         Ok(Self(text))
     }
@@ -225,11 +230,15 @@ pub enum RunError {
 pub enum RunForbidden {
     /// Anything outside what a run may write.
     Person,
-    /// Closing a task as done, which an agent does only after an approved review.
+    /// Closing a task as done, which an agent never does: it proposes closing, and the person agrees.
     Done,
+    /// Adding a reminder, which a run does not: it adds tasks and notes.
+    AddReminder,
+    /// Adding an item with no context, which a run never does.
+    AddNeedsContext,
     /// A task made in a split with a need above the note's.
     NeedAboveOrigin { highest: Need },
-    /// A block on an item that wasn't made from the run's item in this turn.
+    /// A block on an item that no run of this turn made from the run's item.
     BlockerNotMade,
 }
 
@@ -237,9 +246,11 @@ impl fmt::Display for RunForbidden {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Person => f.write_str("Only the person does that."),
-            Self::Done => {
-                f.write_str("An agent closes a task as done only after an approved review, which isn't available yet.")
-            }
+            Self::Done => f.write_str(
+                "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`.",
+            ),
+            Self::AddReminder => f.write_str("A run adds tasks and notes, not reminders."),
+            Self::AddNeedsContext => f.write_str("An item a run adds needs a context."),
             Self::NeedAboveOrigin { highest } => write!(
                 f,
                 "An agent never gives a need above the note's, which is {}.",
@@ -266,8 +277,8 @@ pub enum NotReached {
     NoSteps,
     #[error("The item has an open question.")]
     OpenQuestion,
-    #[error("Reaching done takes an approved review, which isn't available yet.")]
-    DoneNeedsReview,
+    #[error("A task reaches done when the person agrees to close it. Propose it with `upheap question propose-done`.")]
+    DoneByProposal,
 }
 
 /// Checks that `item` is at `goal`, as it is now: `open_questions` is how many open questions it has and `live_steps`
@@ -275,10 +286,10 @@ pub enum NotReached {
 ///
 /// - `with_context`: open, a description, no open question.
 /// - `defined`: open, a task, a description, a step, no open question.
-/// - `done`: never passes until reviews exist.
+/// - `done`: never passes: the person agrees to a done proposal, which ends the turn as reached.
 pub fn reached_check(item: &Item, goal: Goal, open_questions: usize, live_steps: usize) -> Result<(), NotReached> {
     if goal == Goal::Done {
-        return Err(NotReached::DoneNeedsReview);
+        return Err(NotReached::DoneByProposal);
     }
     if item.is_closed() {
         return Err(NotReached::Closed);
@@ -446,7 +457,7 @@ mod tests {
         let ready = with_context(task(item()));
         expect_that!(
             reached_check(&ready, Goal::Done, 0, 3),
-            err(eq(NotReached::DoneNeedsReview))
+            err(eq(NotReached::DoneByProposal))
         );
         let mut closed = with_context(item());
         closed.state = ItemState::Done {
