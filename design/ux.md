@@ -393,9 +393,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     when the server allows it: not on a reminder, a closed item, in an archived heap, or on a **blocked item**, which
     can't be sent until it is unblocked (the server refuses it: "This item is blocked. Unblock it before sending it to
     an agent."). It opens a form: a popover under the button on a wide screen and a tablet, a sheet on
-    a phone. The form has two choices, "To <where it goes>" (the next stable state: with context, defined or done)
-    and "All the way", or on a defined task the one line "To done"; "A line for the agent (optional)"; Send and
-    Cancel. Cancel returns focus to the button. Send acts at once, closes the form, gives focus to the chip that
+    a phone. The form has the choices "To <where it goes>" (the next stable state: with context, defined or done), on a
+    note as written also "To defined", and "All the way", or on a defined task the one line "To done"; "A line for
+    the agent (optional)"; Send and Cancel. Cancel returns focus to the button. Send acts at once, closes the form, gives focus to the chip that
     replaces the button and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back
     without asking or a second toast. The list row's robot sends the same way but for one step with no line, and shows the same toast. A failed send or take back
     says why in the popover, and the form keeps its line. Someone else's send first says "Someone already sent this

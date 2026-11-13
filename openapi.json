@@ -3875,7 +3875,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole\nitem. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no\n`If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,\nand the item waits as before. A blocked item can't be sent until it is unblocked.",
+        "summary": "Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole\nitem. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks\na `goal` from the item's `goal_choices`: a note as written may go straight to `defined`, with reach `one`. It needs no\n`If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,\nand the item waits as before. A blocked item can't be sent until it is unblocked.",
         "operationId": "send_to_agent",
         "parameters": [
           {
@@ -3973,7 +3973,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know",
+            "description": "Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to, or one past the next stable state with `all_the_way`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8375,7 +8375,7 @@
       },
       "Goal": {
         "type": "string",
-        "description": "The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with\ncontext and a task not yet defined go to `defined`, and a defined task goes to `done`.",
+        "description": "The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with\ncontext and a task not yet defined go to `defined`, and a defined task goes to `done`. A person may also send a\nnote as written straight to `defined`.",
         "enum": [
           "with_context",
           "defined",
@@ -8942,6 +8942,7 @@
           "waits_for_you",
           "turn",
           "next_goal",
+          "goal_choices",
           "with_agent",
           "origin",
           "added_in_run",
@@ -9092,6 +9093,13 @@
                 "description": "`null` when unset."
               }
             ]
+          },
+          "goal_choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Goal"
+            },
+            "description": "The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when\n`next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`)."
           },
           "heap_id": {
             "type": "string",
@@ -11251,6 +11259,17 @@
           "reach"
         ],
         "properties": {
+          "goal": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Goal",
+                "description": "Where the turn goes to. Absent or `null` means the item's `next_goal`. Otherwise one of the item's\n`goal_choices`: the default goal with either reach, or another with reach `one` only (today, `defined` on a\nnote as written). A goal the item can't be sent to, or another goal with `all_the_way`, is `field_not_allowed`."
+              }
+            ]
+          },
           "line": {
             "type": [
               "string",

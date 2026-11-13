@@ -19,7 +19,7 @@ use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
-use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, with_agent};
+use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_agent};
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
@@ -696,6 +696,7 @@ impl Services {
                 TurnId::from_uuid(self.new_id(now)),
                 &item,
                 Reach::One,
+                goal_for(&item),
                 None,
                 TurnSource::Prepare,
                 principal.user_id,

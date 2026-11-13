@@ -11,7 +11,9 @@ use domain::heap::Heap;
 use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{Run, RunEnd};
-use domain::turn::{Reach, RedoError, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource, check_redo, redo_stage};
+use domain::turn::{
+    Goal, Reach, RedoError, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource, check_redo, pick_goal, redo_stage,
+};
 use domain::{ItemId, Timestamp, TurnId};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
@@ -25,17 +27,20 @@ use crate::{Principal, ServiceError, Services};
 
 impl Services {
     /// Sends an item to an agent: opens a turn of `reach` with an optional `line` from the person, going to the
-    /// next stable state. Any member may.
+    /// next stable state, or to the `goal` the person picked (see [`pick_goal`]: a note as written may go straight to
+    /// defined, with reach one). Any member may.
     ///
     /// Fails with [`ItemError::Closed`] on a closed item, [`TurnError::NeedsNoteOrTask`] on a reminder, to come or
     /// not (it must become a task first), [`TurnError::Blocked`] on a blocked item (it must be unblocked first),
     /// [`ServiceError::HeapArchived`] in an archived heap, and [`TurnError::AlreadyOpen`] when an agent already has
-    /// the item. An item with an open question may be sent: the turn opens, and the item waits as before.
+    /// the item. An item with an open question may be sent: the turn opens, and the item waits as before. A `goal` the
+    /// item can't be sent to fails with a validation error on the goal, after those refusals.
     pub async fn send_to_agent(
         &self,
         principal: Principal,
         item_id: ItemId,
         reach: Reach,
+        goal: Option<Goal>,
         line: Option<TurnLine>,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -58,12 +63,14 @@ impl Services {
         if store::turns::find_open_turn_locking(&txn, item.id).await?.is_some() {
             return Err(TurnError::AlreadyOpen { item_id: item.id }.into());
         }
+        let goal = pick_goal(&item, reach, goal)?;
 
         let now = self.now();
         let turn = Turn::open(
             TurnId::from_uuid(self.new_id(now)),
             &item,
             reach,
+            goal,
             line,
             TurnSource::GoAhead,
             principal.user_id,

@@ -24,7 +24,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 }
 
 /// Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
-/// item. Any member may. The turn goes to the next stable state, `goal`, worked out from the item. It needs no
+/// item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
+/// a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`, with reach `one`. It needs no
 /// `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
 /// and the item waits as before. A blocked item can't be sent until it is unblocked.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/turn", tag = "items", security(("session" = [])),
@@ -34,7 +35,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`heap_archived`, `item_closed`, `turn_item_blocked` (unblock the item first) or `turn_open` (an agent already has the item)", body = Problem),
-        (status = 422, description = "Invalid fields: a `line` over 2,000 characters, or a `reach` this server doesn't know", body = Problem),
+        (status = 422, description = "Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to, or one past the next stable state with `all_the_way`", body = Problem),
     ))]
 async fn send_to_agent(
     State(state): State<AppState>,
@@ -42,10 +43,10 @@ async fn send_to_agent(
     ClientTimeZone(tz): ClientTimeZone,
     ApiJson(body): ApiJson<SendToAgentDto>,
 ) -> Result<(StatusCode, Json<ItemDto>), ApiError> {
-    let (reach, line) = body.to_turn_fields().map_err(ServiceError::from)?;
+    let (reach, goal, line) = body.to_turn_fields().map_err(ServiceError::from)?;
     let view = state
         .services
-        .send_to_agent(path.principal, path.item_id, reach, line)
+        .send_to_agent(path.principal, path.item_id, reach, goal, line)
         .await?;
     Ok((StatusCode::CREATED, Json(to_item_dto(view, state.services.now(), &tz))))
 }

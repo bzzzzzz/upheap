@@ -49,7 +49,8 @@ impl TryFrom<ReachDto> for Reach {
 }
 
 /// The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
-/// context and a task not yet defined go to `defined`, and a defined task goes to `done`.
+/// context and a task not yet defined go to `defined`, and a defined task goes to `done`. A person may also send a
+/// note as written straight to `defined`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = Goal)]
@@ -69,6 +70,19 @@ impl From<Goal> for GoalDto {
             Goal::WithContext => Self::WithContext,
             Goal::Defined => Self::Defined,
             Goal::Done => Self::Done,
+        }
+    }
+}
+
+impl TryFrom<GoalDto> for Goal {
+    type Error = ValidationError;
+
+    fn try_from(goal: GoalDto) -> Result<Self, Self::Error> {
+        match goal {
+            GoalDto::WithContext => Ok(Self::WithContext),
+            GoalDto::Defined => Ok(Self::Defined),
+            GoalDto::Done => Ok(Self::Done),
+            GoalDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Goal }),
         }
     }
 }
@@ -185,6 +199,11 @@ impl RedoTurnDto {
 #[schema(as = SendToAgentRequest)]
 pub struct SendToAgentDto {
     pub reach: ReachDto,
+    /// Where the turn goes to. Absent or `null` means the item's `next_goal`. Otherwise one of the item's
+    /// `goal_choices`: the default goal with either reach, or another with reach `one` only (today, `defined` on a
+    /// note as written). A goal the item can't be sent to, or another goal with `all_the_way`, is `field_not_allowed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<GoalDto>,
     /// Something to tell the agent: plain text, at most 2,000 characters, line breaks allowed; blank or `null` means
     /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -192,9 +211,42 @@ pub struct SendToAgentDto {
 }
 
 impl SendToAgentDto {
-    /// The reach and the line. Fails on a reach this server doesn't know, and on a line that is too long.
-    pub fn to_turn_fields(&self) -> Result<(Reach, Option<TurnLine>), ValidationError> {
+    /// The reach, the requested goal and the line. Fails on a reach or goal this server doesn't know, and on a line
+    /// that is too long.
+    pub fn to_turn_fields(&self) -> Result<(Reach, Option<Goal>, Option<TurnLine>), ValidationError> {
         let line = self.line.as_deref().map(TurnLine::parse).transpose()?.flatten();
-        Ok((Reach::try_from(self.reach)?, line))
+        let goal = self.goal.map(Goal::try_from).transpose()?;
+        Ok((Reach::try_from(self.reach)?, goal, line))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn a_goal_this_server_does_not_know_is_a_value_unknown_error() -> googletest::Result<()> {
+        let dto: SendToAgentDto = serde_json::from_value(serde_json::json!({ "reach": "one", "goal": "far" }))?;
+
+        expect_that!(
+            dto.to_turn_fields(),
+            err(eq(&ValidationError::ValueUnknown { field: Field::Goal }))
+        );
+        Ok(())
+    }
+
+    #[gtest]
+    fn a_known_goal_and_a_missing_one_are_passed_on() -> googletest::Result<()> {
+        let with: SendToAgentDto = serde_json::from_value(serde_json::json!({ "reach": "one", "goal": "defined" }))?;
+        let without: SendToAgentDto = serde_json::from_value(serde_json::json!({ "reach": "one" }))?;
+
+        expect_that!(
+            with.to_turn_fields().map(|fields| fields.1),
+            ok(some(eq(&Goal::Defined)))
+        );
+        expect_that!(without.to_turn_fields().map(|fields| fields.1), ok(none()));
+        Ok(())
     }
 }

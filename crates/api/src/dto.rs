@@ -9,12 +9,12 @@ use api_types::common::{
     ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, MadeItemDto, QuestionDto, QuestionReplyDto, RankedItemDto,
     ReviewDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
-use api_types::turns::TurnDto;
+use api_types::turns::{GoalDto, TurnDto};
 use api_types::waiting::ItemHeapDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
 use domain::item::Kind;
-use domain::turn::goal_for;
+use domain::turn::goal_choices;
 use jiff::tz::TimeZone;
 use service::items::{CommentView, GoneBlocker, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
 use utoipa::IntoParams;
@@ -36,8 +36,13 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
     let closed_at = item.state.closed_at();
-    // What a turn opened now would go to: for an open note or task.
-    let next_goal = (closed_at.is_none() && item.kind != Kind::Reminder).then(|| goal_for(&item).into());
+    // What a turn opened now may go to, the default first: for an open note or task (a reminder has none).
+    let goal_choices: Vec<GoalDto> = if closed_at.is_none() {
+        goal_choices(&item).into_iter().map(Into::into).collect()
+    } else {
+        Vec::new()
+    };
+    let next_goal = goal_choices.first().copied();
     ItemDto {
         id: *item.id.as_uuid(),
         key: item.key.to_string(),
@@ -104,6 +109,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         waits_for_you: view.waits_for_you,
         turn: view.turn.map(|turn| to_turn_dto(turn, as_of, tz)),
         next_goal,
+        goal_choices,
         with_agent: view.with_agent,
         origin: view.origin.map(|origin| ItemOriginDto {
             id: *origin.item.id.as_uuid(),
