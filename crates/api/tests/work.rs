@@ -1057,13 +1057,13 @@ async fn every_other_write_in_a_run_is_refused() -> Result<()> {
             .await?,
     );
     refused(
-        "new item",
+        "new tag",
         w.in_run(
             &run,
             Method::POST,
-            &format!("{heap_path}/items"),
+            &format!("{heap_path}/tags"),
             None,
-            Some(json!({ "title": "New", "need": "expected" })),
+            Some(json!({ "name": "new" })),
         )
         .await?,
     );
