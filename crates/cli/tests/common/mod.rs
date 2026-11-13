@@ -103,6 +103,28 @@ pub struct TestUser {
     pub session: String,
 }
 
+/// Stands in for Cloud Run's front end, which answers `411 Length Required` to a POST, PUT or PATCH that has neither
+/// a `Content-Length` nor a `Transfer-Encoding` header, before the request reaches the server. The router alone
+/// accepts one, so without this a client that forgot the length would pass every test and fail in production.
+async fn require_length(request: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    use axum::http::{Method, StatusCode, header};
+    use axum::response::IntoResponse;
+
+    let writes = matches!(*request.method(), Method::POST | Method::PUT | Method::PATCH);
+    let headers = request.headers();
+    let has_length = headers.contains_key(header::CONTENT_LENGTH) || headers.contains_key(header::TRANSFER_ENCODING);
+    if writes && !has_length {
+        let page = "<!DOCTYPE html><html><body><h1>Error: Length Required</h1>\n<h2>POST requests require a Content-length header.</h2></body></html>";
+        return (
+            StatusCode::LENGTH_REQUIRED,
+            [(header::CONTENT_TYPE, "text/html; charset=UTF-8")],
+            page,
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
+
 impl TestServer {
     pub async fn start() -> Result<Self> {
         Self::start_with_random(Arc::new(SystemRandom)).await
@@ -132,6 +154,7 @@ impl TestServer {
                 max_age: std::time::Duration::from_secs(3600),
             },
         });
+        let router = router.layer(axum::middleware::from_fn(require_length));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);
         tokio::spawn(async move { axum::serve(listener, router).await });

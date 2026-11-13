@@ -389,13 +389,13 @@ async fn heartbeats_keep_a_long_run_alive_past_the_lapse() -> Result<()> {
     let (entered, release) = (Arc::new(Notify::new()), Arc::new(Notify::new()));
     let tool = waiting_agent(&cli.agent(), &entered, &release);
 
-    // Act: the server's clock runs 58 minutes in two steps. After each the CLI signs in again, since the server has
+    // Act: the server's clock runs 87 minutes in three steps. After each the CLI signs in again, since the server has
     // let the old access token expire, and the test waits for heartbeats the server has heard. Without them the run
     // would have lapsed at 30 minutes.
     let running = cli.run_work(ONCE, &tool);
     let waiting = async {
         entered.notified().await;
-        for _ in 0..2 {
+        for _ in 0..3 {
             server.advance(Duration::from_minutes(29));
             cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
             // Only the loop reads the tokens meanwhile, once for each heartbeat it starts, one after another: when it
