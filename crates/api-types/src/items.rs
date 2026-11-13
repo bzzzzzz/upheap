@@ -299,7 +299,7 @@ pub struct CreateItemDto {
     pub description: Option<String>,
     /// Required: every item says how much it's needed.
     pub need: NeedDto,
-    /// `"note"` when left out or `null`. A new item is always as written, so a task starts at that stage. A
+    /// `"note"` when left out or `null`. A new item is as written, so a task starts at that stage, unless an agent run adds it: that one starts with its context. A
     /// `"reminder"` needs `due` with a `date`: that date is when it joins the list, and its due is made firm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<KindDto>,

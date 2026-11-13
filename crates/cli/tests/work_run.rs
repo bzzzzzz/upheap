@@ -1995,3 +1995,68 @@ async fn a_worker_claims_again_while_another_run_goes_on() -> Result<()> {
     expect_that!(tool.starts().len(), eq(3));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_run_adds_a_task_with_steps_and_is_told_what_an_item_without_context_needs() -> Result<()> {
+    // Arrange: an agent that adds a task with a context and a step, then an item with no context.
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let agent = cli.agent();
+    let outcomes: Arc<std::sync::Mutex<Vec<Outcome>>> = Arc::default();
+    let adding = {
+        let (agent, outcomes) = (agent.clone(), outcomes.clone());
+        StandIn::new(move |start: ToolStart| {
+            let (agent, outcomes) = (agent.clone(), outcomes.clone());
+            async move {
+                let with_context = agent
+                    .upheap_with_stdin(
+                        &start,
+                        &[
+                            "item",
+                            "add",
+                            "Rotate the old certs",
+                            "--task",
+                            "--step",
+                            "List them",
+                            "--context-file",
+                            "-",
+                            "-q",
+                        ],
+                        "Found while writing the context.\n",
+                    )
+                    .await;
+                let without = agent.upheap(&start, &["item", "add", "No context"]).await;
+                if let Ok(mut all) = outcomes.lock() {
+                    all.extend([with_context, without]);
+                }
+                Ok(ToolReport::default())
+            }
+        })
+    };
+
+    // Act
+    let ran = cli.run_work(ONCE, &adding).await;
+
+    // Assert
+    expect_that!(ran.exited(0), eq(true));
+    let outcomes = outcomes.lock().map_err(|_| anyhow::anyhow!("poisoned"))?;
+    expect_that!(outcomes[0].exited(0), eq(true));
+    let added = server.read_item(&ada, HEAP, outcomes[0].stdout.trim()).await?;
+    expect_that!(added["kind"], eq("task"));
+    expect_that!(added["stage"], eq("with_context"));
+    expect_that!(added["origin"]["key"], eq(note.as_str()));
+    expect_that!(added["steps"][0]["title"], eq("List them"));
+    expect_that!(outcomes[1].exited(3), eq(true));
+    expect_that!(
+        outcomes[1].stderr,
+        contains_substring("hint: Add it again with --context-file - and say what it is and why it came up.")
+    );
+    let shown = cli.run(&["item", "show", outcomes[0].stdout.trim()]).await;
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!(
+            "From: {note} \"Rotate the certs\" (note, ada/personal), added by an agent run"
+        ))
+    );
+    Ok(())
+}

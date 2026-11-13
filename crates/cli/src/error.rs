@@ -303,6 +303,10 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
             .as_ref()
             .map(|key| format!("This run holds {key}; write to it only.")),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
+        "run_add_reminder" => Some("Add it as a task or a note; leave the date in its context.".to_owned()),
+        "run_add_needs_context" => {
+            Some("Add it again with --context-file - and say what it is and why it came up.".to_owned())
+        }
         "run_done_needs_review" => {
             Some("Propose closing: upheap question propose-done <key> \"<what was done>\"".to_owned())
         }
@@ -350,7 +354,13 @@ fn client_exit_code(err: &ClientError) -> u8 {
         ClientError::Problem { problem, .. }
             if matches!(
                 problem.code.as_str(),
-                "run_forbidden" | "run_done_needs_review" | "run_wrong_item" | "run_over" | "run_cost_recorded"
+                "run_forbidden"
+                    | "run_done_needs_review"
+                    | "run_wrong_item"
+                    | "run_over"
+                    | "run_cost_recorded"
+                    | "run_add_reminder"
+                    | "run_add_needs_context"
             ) =>
         {
             3
@@ -454,8 +464,19 @@ mod tests {
         );
         let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
+        let reminder = run_refusal(403, "run_add_reminder", "A run adds tasks and notes, not reminders.");
+        let no_context = run_refusal(403, "run_add_needs_context", "An item a run adds needs a context.");
 
-        for err in [&over, &wrong, &forbidden, &done, &recorded, &missed] {
+        for err in [
+            &over,
+            &wrong,
+            &forbidden,
+            &done,
+            &recorded,
+            &missed,
+            &reminder,
+            &no_context,
+        ] {
             expect_that!(err.exit_code(), eq(3));
         }
         expect_that!(
@@ -472,6 +493,16 @@ mod tests {
             contains(eq("hint: This run holds k3x9a; write to it only."))
         );
         expect_that!(forbidden.to_message(), contains(eq("hint: Only the person does that.")));
+        expect_that!(
+            reminder.to_message(),
+            contains(eq("hint: Add it as a task or a note; leave the date in its context."))
+        );
+        expect_that!(
+            no_context.to_message(),
+            contains(eq(
+                "hint: Add it again with --context-file - and say what it is and why it came up."
+            ))
+        );
         expect_that!(
             missed.to_message(),
             contains(eq("hint: Fix what's missing and say reached again."))

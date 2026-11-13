@@ -120,6 +120,9 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
             out.line(&format!("  {}", reason.replace('\n', " ")))?;
         }
     }
+    if let Some(text) = from_text(item) {
+        out.line(&text)?;
+    }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
         out.line("")?;
         out.line_toned("Context", Tone::Strong)?;
@@ -368,6 +371,30 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
         ]);
     }
     rows
+}
+
+/// Where the item came from, when it has an origin or an agent run added it. `From: k3x9a "Rotate the certs" (task,
+/// acme/ops), added by an agent run`; `From: an agent run` when the origin isn't one the caller can see.
+fn from_text(item: &ItemDto) -> Option<String> {
+    match (&item.origin, item.added_in_run) {
+        (Some(origin), added_in_run) => {
+            let heap = &origin.heap;
+            let mut text = format!(
+                "From: {} \"{}\" ({}, {}/{})",
+                origin.key,
+                origin.title.replace('\n', " "),
+                kind_text(origin.kind),
+                heap.team_slug,
+                heap.slug
+            );
+            if added_in_run {
+                text.push_str(", added by an agent run");
+            }
+            Some(text)
+        }
+        (None, true) => Some("From: an agent run".to_owned()),
+        (None, false) => None,
+    }
 }
 
 /// The open turn as one line: where it goes, the reach when it is all the way, the person's line in quotes, and
