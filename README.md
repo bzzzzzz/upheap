@@ -145,6 +145,8 @@ cargo run -p cli -- item show k3x9a --history                    # name an item 
 cargo run -p cli -- item edit k3x9a --context-file context.md    # the item's context; or - for stdin, or --no-context
 cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note or a reminder becomes a task, keeping its key and history
+cargo run -p cli -- item add "Rotate staging" --task --from k3x9a --need expected --age keep   # split a note: a task made from it
+cargo run -p cli -- item became k3x9a                            # the note is closed as became, once items are made from it
 cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
