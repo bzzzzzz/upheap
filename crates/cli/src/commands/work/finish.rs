@@ -32,6 +32,7 @@ pub async fn run(args: FinishArgs, app: &App, out: &mut Output) -> Result<(), Cl
     let body = FinishRequestDto {
         cost_usd: args.cost_usd,
         failure: args.failure,
+        ..Default::default()
     };
     let finished = client
         .post::<RunDto>(&["work", "runs", &run, "finish"], &body, &token)

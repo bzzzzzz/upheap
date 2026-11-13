@@ -6913,7 +6913,7 @@
         "tags": [
           "work"
         ],
-        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.",
+        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.\nThe tool's start and exit times are each set once too, but sending them again changes nothing and is no error.",
         "operationId": "finish_run",
         "parameters": [
           {
@@ -6978,7 +6978,7 @@
             }
           },
           "422": {
-            "description": "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000",
+            "description": "`invalid_fields` (`field` `cost_usd`): not a number from 0 to 1,000,000; or (`field` `tool_ended_at`) before `tool_started_at`; `timestamp_out_of_range`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8376,6 +8376,22 @@
               "null"
             ],
             "description": "Why the run failed, for a run that ends without reaching the goal or asking: plain text, cut to 2,000\ncharacters. Ignored for a run that ended another way."
+          },
+          "tool_ended_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "When the run's agent tool exited, in UTC milliseconds; not before `tool_started_at` when both are sent. Set\nonce: a later value for a run that has one is ignored."
+          },
+          "tool_started_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "When the run's agent tool started, in UTC milliseconds. Set once: a later value for a run that has one is\nignored."
           }
         },
         "additionalProperties": false
@@ -8946,6 +8962,8 @@
           "parameters",
           "created_at",
           "created_label",
+          "runs",
+          "runs_cost_usd",
           "waits_for_you",
           "turn",
           "next_goal",
@@ -9183,6 +9201,24 @@
               "$ref": "#/components/schemas/Question"
             },
             "description": "The item's questions and requests in number order, answered ones included. `null` in the ranked list and the\nclosed list: read the item for its questions."
+          },
+          "runs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ItemRun"
+            },
+            "description": "The item's runs, newest first by when they started; `[]` when it has none. `null` in the ranked list and the\nclosed list: read the item for its runs."
+          },
+          "runs_cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "What the runs cost in US dollars: the sum of those that reported a cost. `null` in the ranked list and the\nclosed list, and when no run has a cost."
           },
           "stage": {
             "oneOf": [
@@ -9549,6 +9585,104 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "ItemRun": {
+        "type": "object",
+        "description": "A run as an item's page lists it: when it ran, how it ended and what it cost.",
+        "required": [
+          "id",
+          "started_at",
+          "started_label",
+          "from_stage",
+          "goal",
+          "links"
+        ],
+        "properties": {
+          "cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "What the run cost in US dollars; `null` when it wasn't reported."
+          },
+          "end": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunEnd",
+                "description": "`null` while the run has not ended."
+              }
+            ]
+          },
+          "ended_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds; `null` while the run has not ended."
+          },
+          "failure": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the run failed; `null` unless it ended as `failed`."
+          },
+          "from_stage": {
+            "$ref": "#/components/schemas/Stage",
+            "description": "The item's stage when the run started."
+          },
+          "goal": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "Where the run was going: the goal of its turn."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or\n`handed_back`."
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: when the run was claimed."
+          },
+          "started_label": {
+            "type": "string",
+            "description": "When the run started, ready to show (\"today\", \"yesterday\", \"3 Nov\"), in the request's timezone."
+          },
+          "tool_ended_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds: when the run's agent tool exited. `null` when not recorded."
+          },
+          "tool_started_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds: when the run's agent tool started, as the loop reported it. `null` when not recorded: a run\nmade before this was kept, or whose tool never started."
           }
         }
       },

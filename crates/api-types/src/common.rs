@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::comments::CommentDto;
 use crate::turns::{GoalDto, TurnDto};
+use crate::work::ItemRunDto;
 
 /// Effort or impact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -866,6 +867,16 @@ pub struct ItemDto {
     /// The item's comments in number order, oldest first. `null` in the ranked list and the closed list: read the
     /// item for its comments.
     pub comments: Option<Vec<CommentDto>>,
+    /// The item's runs, newest first by when they started; `[]` when it has none. `null` in the ranked list and the
+    /// closed list: read the item for its runs.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub runs: Option<Vec<ItemRunDto>>,
+    /// What the runs cost in US dollars: the sum of those that reported a cost. `null` in the ranked list and the
+    /// closed list, and when no run has a cost.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub runs_cost_usd: Option<f64>,
     /// Whether the item is open, in an active heap, and has an open question, a stuck agent turn or a gone blocker:
     /// it waits for the caller, and `GET /me/waiting` lists it. On every response, lists included; always `false` on a closed item
     /// and in an archived heap.

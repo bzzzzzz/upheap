@@ -16,6 +16,7 @@ import { ItemActions } from "./ItemMore";
 import { ItemComments } from "./ItemComments";
 import { ItemBecame } from "./ItemBecame";
 import { ItemQuestions, useItemWaits, WaitsForYou } from "./ItemQuestions";
+import { ItemRuns } from "./ItemRuns";
 import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
 import { isClosed } from "./labels";
@@ -355,6 +356,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       <ItemBecame item={item} />
 
       <ItemQuestions heapRef={heapRef} item={item} waits={waits} />
+
+      <ItemRuns item={item} />
 
       {/* History starts collapsed and loads once opened; each item opens with it collapsed again. Who added the
           item stays in view, on the same line as History's toggle. */}
