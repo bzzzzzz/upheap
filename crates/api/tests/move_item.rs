@@ -605,7 +605,7 @@ async fn items_left_behind_keep_the_moved_blocker_and_wait_for_the_person() -> R
         &w.app,
         &w.session,
         &w.item,
-        json!({ "state": "blocked", "blocked_by_item_id": id(&b) }),
+        json!({ "state": "blocked", "blocked_by_item_id": id(&b), "blocked_reason": "Waits for the vendor" }),
     )
     .await?;
     anyhow::ensure!(blocked.status == StatusCode::OK, "block M failed: {}", blocked.body);
@@ -629,6 +629,8 @@ async fn items_left_behind_keep_the_moved_blocker_and_wait_for_the_person() -> R
     expect_that!(moved.status, eq(StatusCode::OK));
     expect_that!(moved.body["state"], eq(&json!("blocked")));
     expect_that!(moved.body["blocked_by"], eq(&Value::Null));
+    // Its reason is about the outside world, so it moves along.
+    expect_that!(moved.body["blocked_reason"], eq(&json!("Waits for the vendor")));
     expect_that!(a_after.body["state"], eq(&json!("blocked")));
     expect_that!(
         a_after.body["blocked_by"],

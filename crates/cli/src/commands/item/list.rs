@@ -23,6 +23,7 @@ use super::common::{due_cell, sizes_text, state_text, tags_text};
 
 /// Titles longer than this are cut short in the table, so the columns after them stay on screen.
 const TITLE_WIDTH: usize = 60;
+const REASON_WIDTH: usize = 40;
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
@@ -398,6 +399,11 @@ fn ranked_row(row: &ShownRow<'_>) -> Vec<Cell> {
         .first()
         .map(|top| format!("{} ({}%)", top.label, top.share_percent))
         .unwrap_or_default();
+    // A blocked item says why, when it has a reason.
+    let state = match &item.blocked_reason {
+        Some(why) => format!("{}: {}", state_text(item.state), shorten(why, REASON_WIDTH)),
+        None => state_text(item.state).to_owned(),
+    };
     let mut cells = vec![
         Cell::toned(row.position.to_string(), Tone::Dim),
         Cell::toned(item.key.clone(), Tone::Strong),
@@ -405,7 +411,7 @@ fn ranked_row(row: &ShownRow<'_>) -> Vec<Cell> {
     cells.extend(row.heap.clone().map(Cell::new));
     cells.extend([
         Cell::new(shorten(&item.title, TITLE_WIDTH)),
-        Cell::new(state_text(item.state)),
+        Cell::new(state),
         Cell::new(sizes_text(item.effort, item.impact)),
         due_cell(item),
         Cell::new(tags_text(item)),

@@ -945,6 +945,7 @@ mod tests {
         let mut blocked = item(Kind::Note, Stage::AsWritten);
         blocked.state = ItemState::Blocked {
             by: Some(ItemId::from_uuid(Uuid::from_u128(99))),
+            reason: None,
         };
         expect_that!(
             check_redo(&blocked, Some(&reached)),

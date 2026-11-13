@@ -1811,7 +1811,8 @@ fn check_run_patch(patch: &ItemPatch) -> Result<(), ServiceError> {
         || patch.due.is_some()
         || patch.tags.is_some()
         || !patch.parameters.is_empty()
-        || patch.blocked_by.is_some();
+        || patch.blocked_by.is_some()
+        || patch.blocked_reason.is_some();
     if other_fields {
         return Err(forbidden());
     }

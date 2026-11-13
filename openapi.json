@@ -8989,6 +8989,13 @@
               }
             ]
           },
+          "blocked_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when\ngiven; cleared when the item leaves blocked."
+          },
           "blocker_gone": {
             "oneOf": [
               {
@@ -9410,6 +9417,13 @@
             ],
             "format": "uuid",
             "description": "The item this one waits for: a non-closed item of the same heap. Only a blocked item can have one, so send\nit with `\"state\": \"blocked\"` unless the item is blocked already. `null` clears it. Leaving the blocked state\nclears it too."
+          },
+          "blocked_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the item is blocked, in words: what it waits for outside the heap. 1 to 300 characters. Only a blocked\nitem can have one, so send it with `\"state\": \"blocked\"` unless the item is blocked already. `null` clears\nit. Leaving the blocked state clears it too."
           },
           "description": {
             "type": [

@@ -450,7 +450,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
 }
 
 /// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 53] = [
+const FIELD_ORDER: [&str; 54] = [
     "step",
     "step_title",
     "step_context",
@@ -486,6 +486,7 @@ const FIELD_ORDER: [&str; 53] = [
     "state",
     "blocked_by",
     "origin",
+    "blocked_reason",
     "need",
     "effort",
     "impact",
@@ -639,6 +640,7 @@ fn describe_field(field: &str, entity_type: EntityType) -> &str {
         "state" => "State",
         "blocked_by" => "Blocked by",
         "origin" => "Made from",
+        "blocked_reason" => "Blocked because",
         "need" => "Need",
         "effort" => "Effort",
         "impact" => "Impact",

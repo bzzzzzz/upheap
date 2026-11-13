@@ -146,6 +146,51 @@ async fn blocking_names_the_blocker_and_changes_it_on_request() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn blocking_with_a_reason_says_it_and_repeating_it_writes_nothing() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (a, b) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let alone = cli
+        .run(&["item", "block", a, "--reason", "  the vendor's quote "])
+        .await;
+    let stored = server.read_item(&ada, HEAP, a).await?;
+    let same = cli.run(&["item", "block", a, "--reason", "the vendor's quote"]).await;
+    let both = cli.run(&["item", "block", a, "--by", b, "--reason", "new quote"]).await;
+    let stored_both = server.read_item(&ada, HEAP, a).await?;
+    let by_only = cli.run(&["item", "block", a, "--by", b]).await;
+    let blank = cli.run(&["item", "block", a, "--reason", "  "]).await;
+    let reopened = cli.run(&["item", "reopen", a]).await;
+    let open = server.read_item(&ada, HEAP, a).await?;
+
+    // Assert
+    expect_that!(
+        alone.stdout,
+        eq(&format!(
+            "Blocked {a}: Rotate the staging certs. Waiting for: the vendor's quote\n"
+        ))
+    );
+    expect_that!(stored["blocked_reason"], eq("the vendor's quote"));
+    expect_that!(same.stdout, eq(&format!("{a} is already blocked.\n")));
+    expect_that!(
+        both.stdout,
+        eq(&format!(
+            "Blocked {a}: Rotate the staging certs. Waiting for {b}: new quote\n"
+        ))
+    );
+    expect_that!(stored_both["blocked_reason"], eq("new quote"));
+    expect_that!(by_only.stdout, eq(&format!("{a} is already blocked.\n")));
+    expect_that!(blank.exited(0), eq(false));
+    expect_that!(reopened.exited(0), eq(true));
+    expect_that!(open["blocked_reason"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_bare_blocker_key_is_in_the_heap_of_the_item_named_by_path() -> Result<()> {
     // Arrange: no default heap, so only the item's own path says where anything is
     let server = TestServer::start().await?;

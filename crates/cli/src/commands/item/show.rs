@@ -363,6 +363,9 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
             )),
         ]);
     }
+    if let Some(reason) = &item.blocked_reason {
+        rows.push(vec![Cell::new("Blocked because"), Cell::new(reason.clone())]);
+    }
     for parameter in &item.parameters {
         let Some(option) = &parameter.option else {
             continue;

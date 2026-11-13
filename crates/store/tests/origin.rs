@@ -127,7 +127,13 @@ async fn items_made_from_a_note_read_back_oldest_first_with_their_origin() -> Re
         eq(&vec![first.id, second.id])
     );
     expect_that!(made[0].origin_id, some(eq(note.id)));
-    expect_that!(made[1].state, eq(ItemState::Blocked { by: Some(first.id) }));
+    expect_that!(
+        made[1].state,
+        eq(&ItemState::Blocked {
+            by: Some(first.id),
+            reason: None
+        })
+    );
     expect_that!(none_made, is_empty());
     Ok(())
 }
@@ -148,7 +154,7 @@ async fn a_note_that_became_reads_back_as_became() -> Result<()> {
     expect_that!(saved.is_some(), eq(true));
     expect_that!(
         read.state,
-        eq(ItemState::Became {
+        eq(&ItemState::Became {
             closed_at,
             closed_by: Some(user)
         })

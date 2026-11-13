@@ -302,6 +302,10 @@ fn item_fields(item: &Item) -> Map<String, Value> {
     fields.insert("stage".into(), json!(item.stage.code()));
     fields.insert("state".into(), json!(item.state.kind().code()));
     fields.insert("blocked_by".into(), json!(item.blocked_by().map(|id| id.to_string())));
+    fields.insert(
+        "blocked_reason".into(),
+        json!(item.blocked_reason().map(|reason| reason.as_str())),
+    );
     fields.insert("need".into(), json!(item.need.code()));
     fields.insert("effort".into(), json!(item.effort.map(|s| s.code())));
     fields.insert("impact".into(), json!(item.impact.map(|s| s.code())));

@@ -399,7 +399,9 @@ a fixed time.
    refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
-   same heap when it is set; so does an item made blocked (`blocked_by` on create). Closing a blocker as done frees what it blocks in its heap: in the same transaction,
+   same heap when it is set, also for an item made blocked (`blocked_by` on create). So is the reason in words
+   (`blocked_reason`): leaving the state clears it, and a move to another heap keeps it while the blocker is dropped.
+   Closing a blocker as done frees what it blocks in its heap: in the same transaction,
    under the heap lock, each item it blocks goes to open with its own `item_updated` entry naming the blocker
    (`blocker_done`), and gets its next version. Closing it as won't do writes nothing to them: an item whose blocker is
    closed, closed as became, or in another heap after a move (§2), stays blocked and waits for the person, which is read off the item
@@ -675,8 +677,8 @@ section is how it maps onto this API.
    Questions and comments are named the same way in output, `k3x9a.q2` and `k3x9a.c3`.
 3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
    server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
-   refusals. `item block --by` sets `blocked_by_item_id` in the same request; a bare key there is in the blocked
-   item's heap.
+   refusals. `item block --by` sets `blocked_by_item_id` and `--reason` sets `blocked_reason` in the
+   same request; a bare key there is in the blocked item's heap.
 4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
    sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`
    ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)). Every request carries the

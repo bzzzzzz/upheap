@@ -8,7 +8,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
-use domain::item::{Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title};
+use domain::item::{
+    BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title,
+};
 use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::Condition;
 use sea_orm::{
@@ -553,6 +555,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
         closed_by: Set(item.state.closed_by().map(|id| id_to_db(id.as_uuid()))),
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
+        blocked_reason: Set(item.blocked_reason().map(|reason| reason.as_str().to_owned())),
         origin_id: Set(item.origin_id.map(|id| id_to_db(id.as_uuid()))),
         created_run_id: Set(item.created_run_id.map(|id| id_to_db(id.as_uuid()))),
         made_in_split: Set(item.made_in_split),
@@ -571,10 +574,21 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         .as_deref()
         .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
         .transpose()?;
+    let blocked_reason = row
+        .blocked_reason
+        .as_deref()
+        .map(|raw| BlockReason::parse(raw).map_err(|e| read.corrupt(e.to_string())))
+        .transpose()?;
     let user = |raw: Option<&str>| raw.map(|raw| read.uuid(raw).map(UserId::from_uuid)).transpose();
     let closed_by = user(row.closed_by.as_deref())?;
-    let state = ItemState::from_parts(kind, read.optional_timestamp(row.closed_at)?, closed_by, blocked_by)
-        .map_err(|e| read.corrupt(e.to_string()))?;
+    let state = ItemState::from_parts(
+        kind,
+        read.optional_timestamp(row.closed_at)?,
+        closed_by,
+        blocked_by,
+        blocked_reason,
+    )
+    .map_err(|e| read.corrupt(e.to_string()))?;
     let item_kind = Kind::from_code(&row.kind).ok_or_else(|| read.corrupt(format!("unknown kind {:?}", row.kind)))?;
     let stage = Stage::from_code(&row.stage).ok_or_else(|| read.corrupt(format!("unknown stage {:?}", row.stage)))?;
     if !item_kind.allows(stage) {

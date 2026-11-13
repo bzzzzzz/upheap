@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use domain::item::{Age, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
+use domain::item::{Age, BlockReason, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -445,6 +445,12 @@ pub struct ItemPatchDto {
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Uuid>, nullable)]
     pub blocked_by_item_id: Option<Option<Uuid>>,
+    /// Why the item is blocked, in words: what it waits for outside the heap. 1 to 300 characters. Only a blocked
+    /// item can have one, so send it with `"state": "blocked"` unless the item is blocked already. `null` clears
+    /// it. Leaving the blocked state clears it too.
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>, nullable)]
+    pub blocked_reason: Option<Option<String>>,
 }
 
 impl ItemPatchDto {
@@ -480,6 +486,11 @@ impl ItemPatchDto {
                 .collect(),
             state: self.state.map(StateKind::try_from).transpose()?,
             blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
+            blocked_reason: match &self.blocked_reason {
+                None => None,
+                Some(None) => Some(None),
+                Some(Some(raw)) => Some(Some(BlockReason::parse(raw)?)),
+            },
         })
     }
 }

@@ -256,6 +256,35 @@ async fn item_show_json_with_history_is_one_object_of_both_bodies() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn item_show_gives_the_reason_a_blocked_item_has() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            key(&items[1])?,
+            json!({ "state": "blocked", "blocked_reason": "Waits for the vendor's quote" }),
+        )
+        .await?;
+
+    // Act
+    let shown = cli.run(&["item", "show", key(&items[1])?]).await;
+    let other = cli.run(&["item", "show", key(&items[0])?]).await;
+
+    // Assert
+    expect_that!(
+        value_of(&shown.stdout, "Blocked because"),
+        some(eq("Waits for the vendor's quote"))
+    );
+    expect_that!(value_of(&other.stdout, "Blocked because"), none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_show_names_the_blocker() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

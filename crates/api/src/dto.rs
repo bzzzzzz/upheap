@@ -55,6 +55,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         stage_choices: view.stage_choices.into_iter().map(StageDto::from).collect(),
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
+        blocked_reason: item.state.blocked_reason().map(|reason| reason.as_str().to_owned()),
         blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
         became: view
             .became

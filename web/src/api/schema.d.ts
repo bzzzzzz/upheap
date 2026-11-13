@@ -2084,6 +2084,11 @@ export interface components {
              */
             became: components["schemas"]["MadeItem"][] | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
+            /**
+             * @description Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when
+             *     given; cleared when the item leaves blocked.
+             */
+            blocked_reason?: string | null;
             blocker_gone: null | components["schemas"]["BlockerGone"];
             /**
              * Format: int64
@@ -2237,6 +2242,12 @@ export interface components {
              *     clears it too.
              */
             blocked_by_item_id?: string | null;
+            /**
+             * @description Why the item is blocked, in words: what it waits for outside the heap. 1 to 300 characters. Only a blocked
+             *     item can have one, so send it with `"state": "blocked"` unless the item is blocked already. `null` clears
+             *     it. Leaving the blocked state clears it too.
+             */
+            blocked_reason?: string | null;
             description?: string | null;
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];

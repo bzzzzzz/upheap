@@ -26,6 +26,8 @@ pub struct Model {
     /// Who closed it. `None` for an open item and for one closed before this was recorded.
     pub closed_by: Option<String>,
     pub blocked_by_item_id: Option<String>,
+    /// Why a blocked item is blocked, in words. Set only while the item is blocked.
+    pub blocked_reason: Option<String>,
     /// The item of the run that added this one.
     pub origin_id: Option<String>,
     /// The run that added this item.

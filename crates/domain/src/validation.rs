@@ -143,6 +143,8 @@ pub enum Field {
     Piece,
     /// The item a new item is made from.
     Origin,
+    /// Why an item is blocked, in words.
+    BlockedReason,
 }
 
 impl Field {
@@ -186,6 +188,7 @@ impl Field {
             Self::Link => "link",
             Self::Piece => "piece",
             Self::Origin => "origin",
+            Self::BlockedReason => "blocked_reason",
         }
     }
 }

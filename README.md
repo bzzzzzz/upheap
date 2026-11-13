@@ -142,6 +142,7 @@ cargo run -p cli -- item add "Rotate certs" --task --context-file context.md --s
 cargo run -p cli -- item add "Renew the domain" --reminder 2027-03-12   # out of the list until that date
 cargo run -p cli -- item list --reminders shown                  # adds the reminders to come, in a group of their own
 cargo run -p cli -- item show k3x9a --history                    # name an item by key, team/heap/key or a link
+cargo run -p cli -- item block k3x9a --reason "Waits for the vendor's quote"   # or --by another item
 cargo run -p cli -- item edit k3x9a --context-file context.md    # the item's context; or - for stdin, or --no-context
 cargo run -p cli -- item done k3x9a
 cargo run -p cli -- item to-task k3x9a                           # a note or a reminder becomes a task, keeping its key and history
