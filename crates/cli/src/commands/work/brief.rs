@@ -259,7 +259,10 @@ mod tests {
                 KnownGoal::Defined,
                 "Goal: the item is a defined task, ready to be done.",
             ),
-            (KnownGoal::Done, "Goal: the task is done, as far as you can take it."),
+            (
+                KnownGoal::Done,
+                "Goal: the task is done, as far as you can take it. You propose closing; the person agrees.",
+            ),
         ];
 
         for (goal, mark) in marks {

@@ -150,6 +150,8 @@ cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
 cargo run -p cli -- question request k3x9a "Put a token in the vault."  # a request: replied to with Done or Can't be done
+cargo run -p cli -- question review k3x9a https://github.com/o/r/pull/12 "Paint the fence"  # an agent in a run asks for review; replied to with Approved or Changes asked; --piece, --details-file
+cargo run -p cli -- question propose-done k3x9a "Painted and checked"  # an agent in a run proposes closing; the person replies Close as done or Not yet
 cargo run -p cli -- comment add k3x9a "Used the internal CA."   # a comment on the item; or --file notes.md, or - for stdin
 cargo run -p cli -- comment list k3x9a                          # an item's comments, oldest first
 cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file

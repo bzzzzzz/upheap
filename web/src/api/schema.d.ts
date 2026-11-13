@@ -766,6 +766,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asks for changes to the work an agent brought to a stable state short of done, and answers with the whole item.
+         *     The `line` says what is wrong and is required. The latest turn, which reached its goal, is marked redone; the item's
+         *     stage goes back to where that turn's first run found it (its kind is not changed back, and what the agent wrote
+         *     stays); and a new turn opens to the same goal with the line. `turn_redone` and `turn_opened` are recorded. Any
+         *     member who may edit items may; an agent in a run may not. It needs no `If-Match`, and the item's `version` changes
+         *     only when the stage does. An item with no reached turn to redo (one with an open turn, whose latest turn was taken
+         *     back or was redone already, or a reminder) is `nothing_to_redo`.
+         */
+        post: operations["redo_turn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/retry": {
         parameters: {
             query?: never;
@@ -1434,7 +1459,10 @@ export interface components {
             /** @description Every option in use, exactly once, in the new order (highest priority first) and with its label. */
             options: components["schemas"]["OptionArrangement"][];
         };
-        /** @description A question or request to put on an item. */
+        /**
+         * @description A question, request, review or done proposal to put on an item. A review and a done proposal are accepted only
+         *     from an agent doing a task (a run whose turn goes to done); a person asking by hand is `question_needs_do_turn`.
+         */
         AskQuestionRequest: {
             /**
              * @description For a `question`: none, or from 2 to 10 labels to pick from, each 1 to 100 characters on one line, no two the
@@ -1444,8 +1472,19 @@ export interface components {
             /** @description The long version: Markdown, at most 20,000 characters; blank means none. */
             details?: string | null;
             kind: components["schemas"]["QuestionKind"];
+            /**
+             * @description For a `review`, required: the address of the work to look at, an absolute `http` or `https` link of up to 2,000
+             *     characters. Not for any other kind.
+             */
+            link?: string | null;
             /** @description Whether any number of choices may be picked. Only with `choices`. Defaults to `false`. */
             many?: boolean | null;
+            /**
+             * @description For a `review`: the piece of work it is about, one line of 1 to 2,000 characters, which numbers its rounds;
+             *     blank or `null` means the link itself. Not for any other kind. The server works out the round: 1 plus the
+             *     answered reviews of the same piece.
+             */
+            piece?: string | null;
             /**
              * Format: int32
              * @description The number of one of the item's steps this is about.
@@ -1459,7 +1498,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2092,7 +2131,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "move" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "comment" | "send_to_agent" | "take_back" | "retry";
+        ItemAction: "edit" | "move" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "comment" | "send_to_agent" | "take_back" | "retry" | "redo_turn";
         /** @description The heap a row's item is in, and its team. */
         ItemHeap: {
             /** Format: uuid */
@@ -2503,7 +2542,7 @@ export interface components {
             /** @description Short human-readable summary. May change; don't match on it. */
             title: string;
         };
-        /** @description One question or request on an item. */
+        /** @description One question, request, review or done proposal on an item. */
         Question: {
             allowed_actions: components["schemas"]["QuestionAction"][];
             /**
@@ -2516,7 +2555,7 @@ export interface components {
             asked_label: string;
             /**
              * @description The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
-             *     `Can't be done`.
+             *     `Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`.
              */
             choices: string[];
             /** @description The long version, Markdown; `null` when there is none. */
@@ -2531,6 +2570,7 @@ export interface components {
              */
             number: number;
             reply?: null | components["schemas"]["QuestionReply"];
+            review: null | components["schemas"]["Review"];
             state: components["schemas"]["QuestionState"];
             /**
              * Format: int32
@@ -2563,7 +2603,7 @@ export interface components {
          *     - `request`: something to do, replied to with Done (pick 0) or Can't be done (pick 1).
          * @enum {string}
          */
-        QuestionKind: "question" | "request";
+        QuestionKind: "question" | "request" | "review" | "done_proposal";
         /** @description An edit of a question. For now the only edit is the reply. */
         QuestionPatch: {
             reply?: null | components["schemas"]["QuestionReplyRequest"];
@@ -2722,6 +2762,11 @@ export interface components {
             /** @description What the run did, in a line or two: plain text, 1 to 2,000 characters. */
             result: string;
         };
+        /** @description Asks for changes to the work an agent brought to a stable state short of done. */
+        RedoTurnRequest: {
+            /** @description What is wrong: plain text, 1 to 2,000 characters, line breaks allowed. Required. */
+            line: string;
+        };
         RegisterRequest: {
             display_name: string;
             email: string;
@@ -2738,6 +2783,18 @@ export interface components {
          * @enum {string}
          */
         RemindersMode: "hidden" | "shown";
+        /** @description What a review asks about. */
+        Review: {
+            /** @description The address of the work to look at: an absolute `http` or `https` link. */
+            link: string;
+            /** @description The piece of work the review is about, which numbers its rounds. The link itself when the asker named none. */
+            piece: string;
+            /**
+             * Format: int32
+             * @description 1 plus the answered reviews of the same piece when this was asked; fixed then.
+             */
+            round: number;
+        };
         /** @enum {string} */
         Role: "admin" | "member";
         /** @description A run: one go an agent has at an item's turn. */
@@ -5679,6 +5736,83 @@ export interface operations {
             };
             /** @description `heap_archived` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    redo_turn: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedoTurnRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived`, `item_closed`, `turn_item_blocked` or `nothing_to_redo` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A `line` that is blank or over 2,000 characters */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

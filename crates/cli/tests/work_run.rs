@@ -947,7 +947,7 @@ async fn defined_task_with_go_ahead(server: &TestServer, ada: &TestUser) -> Resu
 
 #[gtest]
 #[tokio::test]
-async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_reply() -> Result<()> {
+async fn doing_a_task_ends_with_a_review_and_the_next_run_reads_the_reply() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada").await?;
@@ -967,9 +967,10 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
                         &start,
                         &[
                             "question",
-                            "request",
+                            "review",
                             &task,
-                            "Review https://example.com/pr/7 and mark the task done",
+                            "https://example.com/pr/7",
+                            "The fence, painted",
                             "--details-file",
                             "-",
                         ],
@@ -1020,11 +1021,8 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
     expect_that!(waiting["waits_for_you"], eq(true));
     expect_that!(second.exited(0), eq(true));
     let second_brief = &again.starts()[0].brief;
-    expect_that!(
-        second_brief,
-        contains_substring("Review https://example.com/pr/7 and mark the task done")
-    );
-    expect_that!(second_brief, contains_substring("Can't be done"));
+    expect_that!(second_brief, contains_substring("Review, round 1 · changes asked"));
+    expect_that!(second_brief, contains_substring("https://example.com/pr/7"));
     expect_that!(second_brief, contains_substring("The corner is missed."));
     expect_that!(third.exited(0), eq(true));
     expect_that!(third.stdout, contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\.$"));

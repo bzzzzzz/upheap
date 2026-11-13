@@ -217,6 +217,18 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Question(QuestionError::Withdrawn { .. }) => {
             simple(StatusCode::CONFLICT, "question_withdrawn", Category::Conflict)
         }
+        ServiceError::Question(QuestionError::NotOnTask { .. }) => {
+            simple(StatusCode::CONFLICT, "question_needs_task", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::NeedsDoTurn { .. }) => {
+            simple(StatusCode::CONFLICT, "question_needs_do_turn", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::ReviewOpen { .. }) => {
+            simple(StatusCode::CONFLICT, "review_open", Category::Conflict)
+        }
+        ServiceError::Question(QuestionError::NotReadyToClose(_)) => {
+            simple(StatusCode::CONFLICT, "not_ready_to_close", Category::Conflict)
+        }
         ServiceError::Comment(CommentError::TooMany { .. }) => {
             simple(StatusCode::CONFLICT, "too_many_comments", Category::Conflict)
         }
@@ -231,6 +243,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::Turn(TurnError::Blocked { .. }) => {
             simple(StatusCode::CONFLICT, "turn_item_blocked", Category::Conflict)
+        }
+        ServiceError::Turn(TurnError::NothingToRedo { .. }) => {
+            simple(StatusCode::CONFLICT, "nothing_to_redo", Category::Conflict)
         }
         ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
         ServiceError::Run(RunError::CostRecorded) => {

@@ -21,7 +21,7 @@ Rules
 - Mark what you inferred as an assumption.
 - Write for someone reading on a phone, later, without this run: the main point first, short, plain, no filler.
 - A refusal (exit 3) says what to do next in its hint. If it says the run is over, stop at once.
-- Never set or change need, tags or due dates, and never close the item: closing is refused.
+- Never set or change need, tags or due dates, and never close the item: closing is refused (a task you are doing is closed by proposing it, see below).
 
 Asking the person
 - When a call is theirs, or something only they have or can do, ask: `upheap question ask <key> "<one line>"`,

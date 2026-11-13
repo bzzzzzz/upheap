@@ -6,8 +6,8 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, SizeDto, StageDto, StepDto,
-    StepProgressDto, UserRefDto,
+    ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto, SizeDto,
+    StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::TurnDto;
 use domain::Timestamp;
@@ -134,6 +134,11 @@ pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZon
         choices: question.choices.labels().to_vec(),
         many: question.many,
         step: question.step.map(|step| step.get()),
+        review: question.review.as_ref().map(|review| ReviewDto {
+            link: review.link.as_str().to_owned(),
+            piece: review.piece.as_str().to_owned(),
+            round: review.round,
+        }),
         state: question.state().into(),
         asked_by: view.asked_by.as_ref().map(UserRefDto::from),
         asked_at: question.asked_at.as_millis(),

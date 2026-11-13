@@ -24,6 +24,9 @@ pub struct Model {
     pub withdrawn_by: Option<String>,
     pub withdrawn_at: Option<i64>,
     pub run_id: Option<String>,
+    pub review_link: Option<String>,
+    pub review_piece: Option<String>,
+    pub review_round: Option<i32>,
     pub version: i32,
 }
 

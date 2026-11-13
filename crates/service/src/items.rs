@@ -11,7 +11,7 @@ use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
     ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
-    allowed_stage_choices, allowed_step_actions,
+    allowed_stage_choices, allowed_step_actions, can_redo_turn,
 };
 use domain::question::{Question, QuestionState, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
@@ -777,36 +777,13 @@ impl Services {
                 .await?
                 .into();
         } else if edited.is_closed() && !current.is_closed() {
-            turns_taken_back = self
-                .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Closed, now)
-                .await?
-                .into();
-            questions_withdrawn = self
-                .withdraw_open_questions(&txn, &access.heap, principal, &current, now)
+            (turns_taken_back, questions_withdrawn) = self
+                .end_work_for_close(&txn, &access.heap, principal, &current, TurnOnClose::TakeBack, now)
                 .await?;
         }
-        let freed = if edited.state.kind() == StateKind::Done && !current.is_closed() {
-            self.free_blocked_items(&txn, &access.heap, principal, &current, now)
-                .await?
-        } else {
-            0
-        };
-        let saved =
-            store::items::update_item(&txn, &edited, expected, now)
-                .await?
-                .ok_or(ServiceError::VersionConflict {
-                    expected,
-                    current: expected.next(),
-                })?;
-        let entry = self.item_audit_entry(
-            &access.heap,
-            principal,
-            AuditAction::ItemUpdated,
-            &saved,
-            diff_items(&current, &saved),
-            now,
-        );
-        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let (saved, freed) = self
+            .save_edited_item(&txn, &access.heap, principal, &current, &edited, now)
+            .await?;
         // A person setting the stage to a turn's goal or past it is the agent's work done by hand: the turn ends as
         // reached, after the item's entry so the history reads in order. Starting or closing took the turn back above.
         if principal.run.is_none() && saved.stage != current.stage {
@@ -833,6 +810,67 @@ impl Services {
 
         tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, freed, "item updated");
         Ok(view)
+    }
+
+    /// What closing `current` ends: its open turn, which `on_turn` says how, and its open questions, withdrawn. Says how
+    /// many turns it ended and how many questions it withdrew. The caller holds the heap lock and goes on to
+    /// [`Self::save_edited_item`], so the history reads in the order things happened.
+    pub(crate) async fn end_work_for_close(
+        &self,
+        txn: &store::DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        current: &Item,
+        on_turn: TurnOnClose,
+        now: Timestamp,
+    ) -> Result<(usize, usize), ServiceError> {
+        let turns_ended = match on_turn {
+            TurnOnClose::TakeBack => self
+                .take_back_open_turn(txn, heap, principal, current.id, TakeBackWhy::Closed, now)
+                .await?
+                .into(),
+            TurnOnClose::Reached => self.reach_open_turn(txn, heap, principal, current, now).await?.into(),
+        };
+        let withdrawn = self.withdraw_open_questions(txn, heap, principal, current, now).await?;
+        Ok((turns_ended, withdrawn))
+    }
+
+    /// Writes `edited`, the new form of `current`, with its `item_updated` entry, if `current` is still the stored
+    /// version. An item closed as done frees the items it blocks first. Says the saved item and how many
+    /// items it freed. The caller holds the heap lock.
+    pub(crate) async fn save_edited_item(
+        &self,
+        txn: &store::DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        current: &Item,
+        edited: &Item,
+        now: Timestamp,
+    ) -> Result<(Item, usize), ServiceError> {
+        // The caller checked that `current` is at the version the request expected.
+        let expected = current.version;
+        let freed = if edited.state.kind() == StateKind::Done && !current.is_closed() {
+            self.free_blocked_items(txn, heap, principal, current, now).await?
+        } else {
+            0
+        };
+        let saved =
+            store::items::update_item(txn, edited, expected, now)
+                .await?
+                .ok_or(ServiceError::VersionConflict {
+                    expected,
+                    current: expected.next(),
+                })?;
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::ItemUpdated,
+            &saved,
+            diff_items(current, &saved),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok((saved, freed))
     }
 
     pub(crate) fn item_audit_entry(
@@ -939,6 +977,15 @@ impl Services {
     }
 }
 
+/// How closing an item ends its open turn.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TurnOnClose {
+    /// The person closed it: the agent's turn is taken back.
+    TakeBack,
+    /// The person agreed to a done proposal: the turn reached its goal.
+    Reached,
+}
+
 /// What an item owns in rows of their own, which a single-item response carries whole.
 pub(crate) struct ItemChildren {
     pub steps: Vec<Step>,
@@ -988,7 +1035,15 @@ pub(crate) async fn build_item_view(
         None => None,
     };
     let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-    let allowed_actions = allowed_item_actions(&item, heap, role, turn.is_some(), stuck, now);
+    let mut allowed_actions = allowed_item_actions(&item, heap, role, turn.is_some(), stuck, now);
+    // Changes can be asked only of an item with no turn open, which is the only one worth the extra read. Lists don't
+    // offer it: they would need the latest turn of every row.
+    if turn.is_none() && !item.is_closed() && item.kind != Kind::Reminder {
+        let latest = store::turns::find_latest_turn(db, item.id, locking).await?;
+        if can_redo_turn(&item, heap, role, latest.as_ref()) {
+            allowed_actions.push(ItemAction::RedoTurn);
+        }
+    }
     let stage_choices = allowed_stage_choices(&item, heap, role);
     let step_actions = allowed_step_actions(&item, heap, role);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;

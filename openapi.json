@@ -3960,6 +3960,129 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/redo": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Asks for changes to the work an agent brought to a stable state short of done, and answers with the whole item.\nThe `line` says what is wrong and is required. The latest turn, which reached its goal, is marked redone; the item's\nstage goes back to where that turn's first run found it (its kind is not changed back, and what the agent wrote\nstays); and a new turn opens to the same goal with the line. `turn_redone` and `turn_opened` are recorded. Any\nmember who may edit items may; an agent in a run may not. It needs no `If-Match`, and the item's `version` changes\nonly when the stage does. An item with no reached turn to redo (one with an open turn, whose latest turn was taken\nback or was redone already, or a reminder) is `nothing_to_redo`.",
+        "operationId": "redo_turn",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedoTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`, `item_closed`, `turn_item_blocked` or `nothing_to_redo`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A `line` that is blank or over 2,000 characters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/retry": {
       "post": {
         "tags": [
@@ -7266,7 +7389,7 @@
       },
       "AskQuestionRequest": {
         "type": "object",
-        "description": "A question or request to put on an item.",
+        "description": "A question, request, review or done proposal to put on an item. A review and a done proposal are accepted only\nfrom an agent doing a task (a run whose turn goes to done); a person asking by hand is `question_needs_do_turn`.",
         "required": [
           "kind",
           "text"
@@ -7292,12 +7415,26 @@
           "kind": {
             "$ref": "#/components/schemas/QuestionKind"
           },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a `review`, required: the address of the work to look at, an absolute `http` or `https` link of up to 2,000\ncharacters. Not for any other kind."
+          },
           "many": {
             "type": [
               "boolean",
               "null"
             ],
             "description": "Whether any number of choices may be picked. Only with `choices`. Defaults to `false`."
+          },
+          "piece": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a `review`: the piece of work it is about, one line of 1 to 2,000 characters, which numbers its rounds;\nblank or `null` means the link itself. Not for any other kind. The server works out the round: 1 plus the\nanswered reviews of the same piece."
           },
           "step": {
             "type": [
@@ -7347,6 +7484,7 @@
           "turn_reached",
           "turn_handed_back",
           "turn_retried",
+          "turn_redone",
           "tag_created",
           "tag_updated",
           "saved_view_created",
@@ -8937,7 +9075,8 @@
           "comment",
           "send_to_agent",
           "take_back",
-          "retry"
+          "retry",
+          "redo_turn"
         ]
       },
       "ItemHeap": {
@@ -10043,13 +10182,14 @@
       },
       "Question": {
         "type": "object",
-        "description": "One question or request on an item.",
+        "description": "One question, request, review or done proposal on an item.",
         "required": [
           "number",
           "kind",
           "text",
           "choices",
           "many",
+          "review",
           "state",
           "asked_at",
           "asked_label",
@@ -10090,7 +10230,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and\n`Can't be done`."
+            "description": "The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and\n`Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`."
           },
           "details": {
             "type": [
@@ -10120,6 +10260,17 @@
               {
                 "$ref": "#/components/schemas/QuestionReply",
                 "description": "`null` unless the question is answered."
+              }
+            ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Review",
+                "description": "What a `review` asks about; `null` for every other kind."
               }
             ]
           },
@@ -10178,7 +10329,9 @@
         "description": "What is being asked.\n\n- `question`: free text, or a pick among `choices`.\n- `request`: something to do, replied to with Done (pick 0) or Can't be done (pick 1).",
         "enum": [
           "question",
-          "request"
+          "request",
+          "review",
+          "done_proposal"
         ]
       },
       "QuestionPatch": {
@@ -10523,6 +10676,20 @@
         },
         "additionalProperties": false
       },
+      "RedoTurnRequest": {
+        "type": "object",
+        "description": "Asks for changes to the work an agent brought to a stable state short of done.",
+        "required": [
+          "line"
+        ],
+        "properties": {
+          "line": {
+            "type": "string",
+            "description": "What is wrong: plain text, 1 to 2,000 characters, line breaks allowed. Required."
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterRequest": {
         "type": "object",
         "required": [
@@ -10555,6 +10722,31 @@
           "hidden",
           "shown"
         ]
+      },
+      "Review": {
+        "type": "object",
+        "description": "What a review asks about.",
+        "required": [
+          "link",
+          "piece",
+          "round"
+        ],
+        "properties": {
+          "link": {
+            "type": "string",
+            "description": "The address of the work to look at: an absolute `http` or `https` link."
+          },
+          "piece": {
+            "type": "string",
+            "description": "The piece of work the review is about, which numbers its rounds. The link itself when the asker named none."
+          },
+          "round": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 plus the answered reviews of the same piece when this was asked; fixed then.",
+            "minimum": 0
+          }
+        }
       },
       "Role": {
         "type": "string",

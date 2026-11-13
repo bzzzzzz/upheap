@@ -303,6 +303,14 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
             .as_ref()
             .map(|key| format!("This run holds {key}; write to it only.")),
         "run_forbidden" => Some("Only the person does that.".to_owned()),
+        "run_done_needs_review" => {
+            Some("Propose closing: upheap question propose-done <key> \"<what was done>\"".to_owned())
+        }
+        "not_ready_to_close" => Some("Finish what it names, then propose again.".to_owned()),
+        "review_open" => Some("Wait for the person's reply to that review.".to_owned()),
+        "question_needs_task" | "question_needs_do_turn" => {
+            Some("Only an agent doing a task asks for review or proposes closing.".to_owned())
+        }
         "not_reached" => Some("Fix what's missing and say reached again.".to_owned()),
         _ => None,
     }
@@ -450,8 +458,13 @@ mod tests {
         for err in [&over, &wrong, &forbidden, &done, &recorded, &missed] {
             expect_that!(err.exit_code(), eq(3));
         }
+        expect_that!(
+            done.to_message(),
+            contains(eq(
+                "hint: Propose closing: upheap question propose-done <key> \"<what was done>\""
+            ))
+        );
         // Their messages say it all: a hint would only contradict them.
-        expect_that!(done.to_message(), not(contains(starts_with("hint:"))));
         expect_that!(recorded.to_message(), not(contains(starts_with("hint:"))));
         expect_that!(over.to_message(), contains(eq("hint: This run is over. Stop.")));
         expect_that!(

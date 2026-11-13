@@ -216,7 +216,12 @@ enum QuestionCommand {
     Ask(commands::question::ask::AskArgs),
     /// Ask for something to do on an item; it is replied to with Done or Can't be done
     Request(commands::question::ask::RequestArgs),
-    /// Reply to a question or a request on an item
+    /// Ask the person to review work at a link, as an agent doing a task; it is replied to with Approved or Changes
+    /// asked
+    Review(commands::question::ask::ReviewArgs),
+    /// Propose closing a task as done, as an agent doing it; the person replies Close as done or Not yet
+    ProposeDone(commands::question::ask::ProposeDoneArgs),
+    /// Reply to a question, a request, a review or a done proposal on an item
     Reply(commands::question::reply::ReplyArgs),
 }
 
@@ -331,6 +336,8 @@ impl Command {
             Self::Step(StepCommand::Edit(args)) => &args.shared,
             Self::Question(QuestionCommand::Ask(args)) => &args.shared,
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
+            Self::Question(QuestionCommand::Review(args)) => &args.shared,
+            Self::Question(QuestionCommand::ProposeDone(args)) => &args.shared,
             Self::Comment(CommentCommand::Add(args)) => &args.shared,
             Self::Comment(CommentCommand::List(args)) => &args.shared,
             Self::Question(QuestionCommand::Reply(args)) => &args.shared,
@@ -476,6 +483,10 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
         Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
+        Command::Question(QuestionCommand::Review(args)) => commands::question::ask::run_review(args, app, out).await,
+        Command::Question(QuestionCommand::ProposeDone(args)) => {
+            commands::question::ask::run_propose_done(args, app, out).await
+        }
         Command::Comment(CommentCommand::Add(args)) => commands::comment::add::run(args, app, out).await,
         Command::Comment(CommentCommand::List(args)) => commands::comment::list::run(args, app, out).await,
         Command::Question(QuestionCommand::Reply(args)) => commands::question::reply::run_reply(args, app, out).await,
