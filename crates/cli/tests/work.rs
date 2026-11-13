@@ -186,13 +186,12 @@ async fn reached_with_a_stage_says_what_it_skipped() -> Result<()> {
             "item",
             "edit",
             &note,
-            "--kind",
-            "task",
             "--description",
             "The certs expire on Friday. Done when: they are rotated.",
             "-q",
         ])
         .await;
+    let task = cli.run(&["item", "to-task", &note, "-q"]).await;
     let step = cli.run(&["step", "add", &note, "Order the certs", "-q"]).await;
 
     // Act
@@ -202,6 +201,7 @@ async fn reached_with_a_stage_says_what_it_skipped() -> Result<()> {
 
     // Assert
     expect_that!(edited.exited(0), eq(true));
+    expect_that!(task.exited(0), eq(true));
     expect_that!(step.exited(0), eq(true));
     expect_that!(
         reached.stdout,
