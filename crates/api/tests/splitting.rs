@@ -261,6 +261,7 @@ async fn a_run_splits_a_note_into_two_tasks_and_the_note_became() -> Result<()> 
     expect_that!(note_now["became"][0]["state"], eq(&json!("open")));
     expect_that!(note_now["became"][1]["state"], eq(&json!("blocked")));
     expect_that!(note_now["became"][1]["kind"], eq(&json!("task")));
+    expect_that!(note_now["became"][0]["heap"]["id"], eq(&json!(w.heap.as_str())));
     let runs = w.app.audit_runs(note["id"].as_str().context("id")?).await?;
     expect_that!(runs.iter().any(|(_, run)| run.is_some()), eq(true));
     let queue = w
@@ -772,5 +773,63 @@ async fn a_run_tried_again_blocks_on_a_task_the_failed_run_of_its_turn_made() ->
     // Assert
     expect_that!(chained.status, eq(StatusCode::CREATED));
     expect_that!(chained.body["state"], eq(&json!("blocked")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_follow_up_a_run_adds_without_from_is_not_what_the_note_became() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("expected").await?;
+    let items = w.items_path().await?;
+
+    // Act: a follow-up task with no origin, at a need above the note's, then became.
+    let follow_up = w
+        .in_run(
+            &run,
+            Method::POST,
+            &items,
+            Some(json!({ "title": "Audit the CA", "need": "critical", "kind": "task", "description": "Later." })),
+        )
+        .await?;
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: it links back to the note, but the note became nothing.
+    expect_that!(follow_up.status, eq(StatusCode::CREATED));
+    expect_that!(follow_up.body["origin"]["key"], eq(&note["key"]));
+    expect_that!(became.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&became), some(eq("nothing_made")));
+    expect_that!(w.get(key_of(&note)).await?["became"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_tried_again_adds_steps_to_the_tasks_the_failed_run_of_its_turn_split() -> Result<()> {
+    // Arrange: the first run makes a task without its step and fails.
+    let w = world().await?;
+    let (note, first) = w.note_in_a_run("expected").await?;
+    let made = w.split_in_run(&first, &note, "Rotate staging", json!({})).await?.body;
+    let failed = w
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/work/runs/{first}/finish"),
+            Some(&w.session),
+            Some(json!({ "failure": "The tool crashed" })),
+        )
+        .await?;
+    anyhow::ensure!(failed.status == StatusCode::OK, "finish failed: {}", failed.body);
+    let second = w.claimed().await?;
+
+    // Act
+    let stepped = w.add_step_in_run(&second, key_of(&made)).await?;
+    let became = w.became_in_run(&second, key_of(&note)).await?;
+
+    // Assert
+    expect_that!(stepped.status, eq(StatusCode::CREATED));
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(became.body["state"], eq(&json!("became")));
     Ok(())
 }

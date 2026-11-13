@@ -32,6 +32,7 @@ pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{GoalMetHow, describe_new_item, describe_new_turn, describe_withdrawal, diff_freed, diff_items};
+use crate::work::split_in_turn;
 use crate::{Principal, RandomSource, ServiceError, Services};
 
 /// A client may keep ranking at an `as_of` for at most this long. Older values are replaced by the current time.
@@ -63,7 +64,7 @@ pub struct ItemView {
     /// The items made from it, oldest first, in any state and heap: `Some` in a single-item response and in the
     /// closed list, `None` in the ranked list and other lists. A split makes a handful of items, and the closed list
     /// is at most [`MAX_CLOSED_PAGE`] rows, so one query reads them for the whole page.
-    pub became: Option<Vec<ItemSummary>>,
+    pub became: Option<Vec<MadeItem>>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
@@ -94,6 +95,14 @@ pub struct ItemView {
     /// The item this one was made from, when the caller may see the heap it is in. `None` otherwise, and in lists,
     /// which don't look it up: the item's own view does.
     pub origin: Option<ItemOrigin>,
+}
+
+/// An item a note was split into, with where it is now.
+#[derive(Clone, Debug)]
+pub struct MadeItem {
+    pub item: ItemSummary,
+    pub heap: Heap,
+    pub team: Team,
 }
 
 /// The item an item was made from, with where it is.
@@ -548,7 +557,8 @@ impl Services {
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
         let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
-        let mut made = made_from_by_origin(&store::items::list_items_made_from(&self.db, &item_ids, false).await?);
+        let made_items = store::items::list_items_made_from(&self.db, &item_ids, false).await?;
+        let mut made = made_from_by_origin(&self.db, &made_items).await?;
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
@@ -1194,7 +1204,8 @@ pub(crate) async fn build_item_view(
         }
         None => None,
     };
-    let became = made_from_by_origin(&store::items::list_items_made_from(db, &[item.id], locking).await?)
+    let became = made_from_by_origin(db, &store::items::list_items_made_from(db, &[item.id], locking).await?)
+        .await?
         .remove(&item.id)
         .unwrap_or_default();
     let (created_by, closed_by) = find_item_users(db, &item).await?;
@@ -1622,15 +1633,38 @@ pub(crate) async fn blocker_summaries(
     Ok(found)
 }
 
-/// `made`, the items made from other items, grouped under the item each was made from, in the order given.
-pub(crate) fn made_from_by_origin(made: &[Item]) -> HashMap<ItemId, Vec<ItemSummary>> {
-    let mut grouped: HashMap<ItemId, Vec<ItemSummary>> = HashMap::new();
+/// `made`, the items split from other items, grouped under the item each was made from, in the order given, each with
+/// the heap it is in now and that heap's team. A split stays in one team (moves do), so whoever sees the note sees
+/// them. The heaps are read once each: a page has a handful of them.
+pub(crate) async fn made_from_by_origin(
+    db: &impl ConnectionTrait,
+    made: &[Item],
+) -> Result<HashMap<ItemId, Vec<MadeItem>>, ServiceError> {
+    let mut heaps: HashMap<HeapId, (Heap, Team)> = HashMap::new();
+    let mut grouped: HashMap<ItemId, Vec<MadeItem>> = HashMap::new();
     for item in made {
-        if let Some(origin) = item.origin_id {
-            grouped.entry(origin).or_default().push(ItemSummary::from(item));
-        }
+        let Some(origin) = item.origin_id else {
+            continue;
+        };
+        let (heap, team) = match heaps.entry(item.heap_id) {
+            std::collections::hash_map::Entry::Occupied(found) => found.get().clone(),
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                let heap = store::heaps::find_heap(db, item.heap_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?;
+                let team = store::teams::find_team(db, heap.team_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?;
+                slot.insert((heap, team)).clone()
+            }
+        };
+        grouped.entry(origin).or_default().push(MadeItem {
+            item: ItemSummary::from(item),
+            heap,
+            team,
+        });
     }
-    grouped
+    Ok(grouped)
 }
 
 /// Fails unless every tag and option `view` filters by, and the parameter it sorts by, belong to the heap whose
@@ -1732,22 +1766,15 @@ pub(crate) async fn new_item_key(
     }
 }
 
-/// Fails with [`RunForbidden::BlockerNotMade`] unless `blocker` is an item a run of `run`'s turn made from the run's
-/// item (Blocks §1: an agent sets blocks only among the items it made in the same turn). A run that failed and was
-/// tried again can still chain on what the first one made.
+/// Fails with [`RunForbidden::BlockerNotMade`] unless `blocker` was split from the run's item by a run of `run`'s turn
+/// (Blocks §1: an agent sets blocks only among the items it made in the same turn). A run that failed and was tried
+/// again can still chain on what the first one made.
 async fn ensure_made_in_turn(db: &impl ConnectionTrait, blocker: ItemId, run: &Run) -> Result<(), ServiceError> {
-    let made_by = store::items::find_item_locking(db, blocker)
-        .await?
-        .filter(|found| found.origin_id == Some(run.item_id))
-        .and_then(|found| found.created_run_id);
-    let in_turn = match made_by {
-        Some(maker) if maker == run.id => true,
-        Some(maker) => store::runs::find_run(db, maker)
-            .await?
-            .is_some_and(|maker| maker.turn_id == run.turn_id),
+    let made = match store::items::find_item_locking(db, blocker).await? {
+        Some(found) => split_in_turn(db, &found, run).await?,
         None => false,
     };
-    if in_turn {
+    if made {
         Ok(())
     } else {
         Err(run_forbidden(RunForbidden::BlockerNotMade))

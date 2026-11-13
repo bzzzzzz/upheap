@@ -8128,7 +8128,7 @@
               },
               {
                 "$ref": "#/components/schemas/OriginInput",
-                "description": "Makes the item from another, which must be an open note of the same heap (a split): the item gets a link to\nit. Not for a reminder. In a run this is required, and the item must be the run's."
+                "description": "Makes the item from another, which must be an open note of the same heap (a split): the item gets a link to\nit, and is one of the items the note became. Not for a reminder. In a run it must be the run's item. A run that\nleaves it out adds a follow-up instead, which links back to the run's item but isn't one of what it became."
               }
             ]
           },
@@ -8973,7 +8973,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/ItemRef"
+              "$ref": "#/components/schemas/MadeItem"
             },
             "description": "The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;\non one item and in the closed list it is a list, empty when nothing was made from it."
           },
@@ -9512,7 +9512,8 @@
             "description": "Unique within the heap; the item's path is `…/items/{key}`."
           },
           "kind": {
-            "$ref": "#/components/schemas/Kind"
+            "$ref": "#/components/schemas/Kind",
+            "description": "Decoding tolerates an older server that doesn't send it, reading `Unknown`; this server always does."
           },
           "state": {
             "$ref": "#/components/schemas/ItemState"
@@ -9779,6 +9780,41 @@
           }
         },
         "additionalProperties": false
+      },
+      "MadeItem": {
+        "type": "object",
+        "description": "An item a note was split into, as the note's `became` lists it, with the heap it is in now.",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "kind",
+          "state",
+          "heap"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap",
+            "description": "The heap it is in now, and its team."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Unique within the heap; the item's path is `…/items/{key}`."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ItemState"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "Me": {
         "type": "object",

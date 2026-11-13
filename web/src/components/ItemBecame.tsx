@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import type { HeapRef, Item } from "../api/client";
+import type { Item } from "../api/client";
 import { becameWords, STATE_LABELS } from "./labels";
 
 const linkClass =
@@ -8,10 +8,10 @@ const linkClass =
 
 /**
  * What a note became (work-with-agents, W8): "Became: 2 tasks" with each of them, its state and a link. Nothing when
- * nothing was made from the item. Where it came from is `ItemFrom`. The items are linked in the heap this one is in:
- * that is where they were made, and a split keeps them in one heap.
+ * nothing was made from the item. Where it came from is `ItemFrom`. Each is linked in the heap it is in now, which a
+ * move may have changed.
  */
-export function ItemBecame({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
+export function ItemBecame({ item }: { item: Item }) {
   const made = item.became ?? [];
   if (made.length === 0) return null;
   return (
@@ -25,7 +25,8 @@ export function ItemBecame({ heapRef, item }: { heapRef: HeapRef; item: Item }) 
           <li key={child.id} className="flex items-baseline gap-2 break-words">
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
-              params={{ ...heapRef, item: child.key }}
+              params={{ team: child.heap.team_slug, heap: child.heap.slug, item: child.key }}
+              search={true}
               className={linkClass}
             >
               {child.title}

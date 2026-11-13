@@ -189,6 +189,10 @@ pub enum StateDto {
     /// A note closed because it was split: the items made from it (`became` on the item) carry on. Set only by
     /// `POST …/became`, never by `PATCH`.
     Became,
+    /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<StateKind> for StateDto {
@@ -204,15 +208,19 @@ impl From<StateKind> for StateDto {
     }
 }
 
-impl From<StateDto> for StateKind {
-    fn from(state: StateDto) -> Self {
+impl TryFrom<StateDto> for StateKind {
+    type Error = ValidationError;
+
+    /// Fails on a state this server doesn't know, which a request can carry.
+    fn try_from(state: StateDto) -> Result<Self, Self::Error> {
         match state {
-            StateDto::Open => Self::Open,
-            StateDto::InProgress => Self::InProgress,
-            StateDto::Blocked => Self::Blocked,
-            StateDto::Done => Self::Done,
-            StateDto::WontDo => Self::WontDo,
-            StateDto::Became => Self::Became,
+            StateDto::Open => Ok(Self::Open),
+            StateDto::InProgress => Ok(Self::InProgress),
+            StateDto::Blocked => Ok(Self::Blocked),
+            StateDto::Done => Ok(Self::Done),
+            StateDto::WontDo => Ok(Self::WontDo),
+            StateDto::Became => Ok(Self::Became),
+            StateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::State }),
         }
     }
 }
@@ -626,8 +634,15 @@ pub struct ItemRefDto {
     /// Unique within the heap; the item's path is `…/items/{key}`.
     pub key: String,
     pub title: String,
+    /// Decoding tolerates an older server that doesn't send it, reading `Unknown`; this server always does.
+    #[serde(default = "unknown_kind")]
+    #[schema(required = true)]
     pub kind: KindDto,
     pub state: StateDto,
+}
+
+const fn unknown_kind() -> KindDto {
+    KindDto::Unknown
 }
 
 /// How a blocker stopped holding the item it blocks. More ways can join.
@@ -805,7 +820,7 @@ pub struct ItemDto {
     /// on one item and in the closed list it is a list, empty when nothing was made from it.
     #[serde(default)]
     #[schema(required = true)]
-    pub became: Option<Vec<ItemRefDto>>,
+    pub became: Option<Vec<MadeItemDto>>,
     pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,
@@ -886,6 +901,20 @@ pub struct ItemDto {
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,
+}
+
+/// An item a note was split into, as the note's `became` lists it, with the heap it is in now.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = MadeItem)]
+pub struct MadeItemDto {
+    pub id: Uuid,
+    /// Unique within the heap; the item's path is `…/items/{key}`.
+    pub key: String,
+    pub title: String,
+    pub kind: KindDto,
+    pub state: StateDto,
+    /// The heap it is in now, and its team.
+    pub heap: crate::waiting::ItemHeapDto,
 }
 
 /// The item another item was made from, named where the second refers to it.
@@ -1209,6 +1238,19 @@ mod tests {
     }
 
     #[gtest]
+    fn an_item_state_a_later_server_added_reads_as_unknown_and_is_refused_in_a_request() -> googletest::Result<()> {
+        let item: ItemRefDto = serde_json::from_value(json!({
+            "id": Uuid::nil(), "key": "k3x9a", "title": "Rotate the certs", "state": "merged",
+        }))?;
+
+        expect_that!(item.state, eq(StateDto::Unknown));
+        // An older server sends no kind on a referenced item.
+        expect_that!(item.kind, eq(KindDto::Unknown));
+        expect_that!(StateKind::try_from(StateDto::Unknown), err(anything()));
+        Ok(())
+    }
+
+    #[gtest]
     fn values_a_client_doesnt_know_are_never_sent() {
         // The server never makes one, and a client that read one can't send it back as if it were a real value.
         expect_that!(serde_json::to_value(FactorDto::Unknown), err(anything()));
@@ -1216,6 +1258,7 @@ mod tests {
         expect_that!(serde_json::to_value(KindDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(StageDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(StepStateDto::Unknown), err(anything()));
+        expect_that!(serde_json::to_value(StateDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(QuestionKindDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(QuestionStateDto::Unknown), err(anything()));
         expect_that!(serde_json::to_value(AuditActionDto::Unknown), err(anything()));
@@ -1226,7 +1269,6 @@ mod tests {
         // Leniency is for reading responses: the enums the server reads from requests stay strict.
         expect_that!(serde_json::from_value::<NeedDto>(json!("urgent")), err(anything()));
         expect_that!(serde_json::from_value::<SizeDto>(json!("xxl")), err(anything()));
-        expect_that!(serde_json::from_value::<StateDto>(json!("archived")), err(anything()));
         expect_that!(serde_json::from_value::<RoleDto>(json!("owner")), err(anything()));
     }
 }

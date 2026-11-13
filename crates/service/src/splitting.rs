@@ -11,7 +11,7 @@ use domain::permission::Permission;
 use domain::run::{RunEnd, RunResult, split_reached_check};
 use domain::step::StepState;
 use domain::turn::TakeBackWhy;
-use domain::{ItemId, ValidationError};
+use domain::{HeapId, ItemId, ValidationError};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
@@ -30,7 +30,8 @@ impl Services {
     /// A person's close takes back the note's open turn and withdraws its open questions, as any close does. In a run
     /// the note must be the run's item, and it is refused with [`ServiceError::NotReached`] (and the run only heard
     /// from) unless it has no open question and every open task made from it has a context and a step that isn't
-    /// dropped. Otherwise each of those tasks becomes defined, the note closes as became, and the run and the turn end
+    /// dropped (those still in the note's heap; one moved away is the person's). Otherwise each of those tasks becomes
+    /// defined, the note closes as became, and the run and the turn end
     /// as reached; no next turn opens.
     pub async fn became_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -69,7 +70,7 @@ impl Services {
                 .filter(|question| question.state() == domain::question::QuestionState::Open)
                 .count();
             let mut checked = Vec::new();
-            for task in made.iter().filter(|item| item.kind == Kind::Task && !item.is_closed()) {
+            for task in made.iter().filter(|item| to_define(item, heap.id)) {
                 let steps = store::steps::list_steps_locking(&txn, task.id).await?;
                 let live = steps.iter().filter(|step| step.state != StepState::Dropped).count();
                 checked.push((task.clone(), live));
@@ -81,7 +82,7 @@ impl Services {
             }
             defined.extend(
                 made.iter()
-                    .filter(|item| item.kind == Kind::Task && !item.is_closed() && item.stage != Stage::Defined),
+                    .filter(|item| to_define(item, heap.id) && item.stage != Stage::Defined),
             );
             for task in &defined {
                 let edited = Item {
@@ -161,6 +162,12 @@ impl Services {
         );
         Ok(view)
     }
+}
+
+/// Whether a run's became checks `item` and makes it defined: an open task in the note's heap, `heap_id`, which is
+/// the heap this holds the lock of. A task made from the note and moved to another heap since is the person's.
+fn to_define(item: &Item, heap_id: HeapId) -> bool {
+    item.kind == Kind::Task && !item.is_closed() && item.heap_id == heap_id
 }
 
 /// What a run says it reached when its note became: how many items, and each by key and title, cut to the result's

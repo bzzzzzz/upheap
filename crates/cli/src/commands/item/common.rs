@@ -303,6 +303,7 @@ pub(super) fn state_text(state: StateDto) -> &'static str {
         StateDto::Done => "done",
         StateDto::WontDo => "won't do",
         StateDto::Became => "became",
+        StateDto::Unknown => "unknown",
     }
 }
 

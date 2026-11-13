@@ -6,8 +6,8 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto,
-    SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, MadeItemDto, QuestionDto, QuestionReplyDto, RankedItemDto,
+    ReviewDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::TurnDto;
 use api_types::waiting::ItemHeapDto;
@@ -53,7 +53,7 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
         became: view
             .became
-            .map(|became| became.into_iter().map(ItemRefDto::from).collect()),
+            .map(|became| became.into_iter().map(to_made_item_dto).collect()),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
@@ -205,4 +205,21 @@ pub(crate) struct IfMatchHeader {
     /// The `version` of what is being edited, for example `"3"`.
     #[param(rename = "If-Match")]
     if_match: String,
+}
+
+fn to_made_item_dto(made: service::items::MadeItem) -> MadeItemDto {
+    MadeItemDto {
+        id: *made.item.id.as_uuid(),
+        key: made.item.key.to_string(),
+        title: made.item.title.as_str().to_owned(),
+        kind: made.item.kind.into(),
+        state: made.item.state.kind().into(),
+        heap: ItemHeapDto {
+            id: *made.heap.id.as_uuid(),
+            slug: made.heap.slug.to_string(),
+            name: made.heap.name.as_str().to_owned(),
+            team_slug: made.team.slug.to_string(),
+            team_name: made.team.name.as_str().to_owned(),
+        },
+    }
 }

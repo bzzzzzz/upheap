@@ -466,8 +466,8 @@ impl Services {
     }
 
     /// [`Self::check_run_write`] for adding a step to `item`: it may also be an item this run added
-    /// (`created_run_id`), which is the only write a run has on one besides what it has on its own item. A split's
-    /// tasks get their steps this way.
+    /// (`created_run_id`), or one split from the run's item by a run of the same turn, so a run tried again can finish
+    /// a split the failed one started. That is the only write a run has on them besides what it has on its own item.
     pub(crate) async fn check_run_step_add(
         &self,
         txn: &impl ConnectionTrait,
@@ -475,8 +475,7 @@ impl Services {
         item: &Item,
         now: Timestamp,
     ) -> Result<Option<RunScope>, ServiceError> {
-        self.check_run_item(txn, principal, item.id, item.created_run_id, now)
-            .await
+        self.check_run_item(txn, principal, item.id, Some(item), now).await
     }
 
     async fn check_run_item(
@@ -484,7 +483,7 @@ impl Services {
         txn: &impl ConnectionTrait,
         principal: Principal,
         item_id: ItemId,
-        added_in: Option<RunId>,
+        made: Option<&Item>,
         now: Timestamp,
     ) -> Result<Option<RunScope>, ServiceError> {
         let Some(run_id) = principal.run else {
@@ -495,7 +494,12 @@ impl Services {
             .filter(|run| run.user_id == principal.user_id)
             .ok_or(ServiceError::NotFound)?;
         let turn = self.ensure_live(txn, &run, now).await?;
-        if run.item_id != item_id && added_in != Some(run.id) {
+        let allowed = run.item_id == item_id
+            || match made {
+                Some(item) => item.created_run_id == Some(run.id) || split_in_turn(txn, item, &run).await?,
+                None => false,
+            };
+        if !allowed {
             let held = store::items::find_item(txn, run.item_id)
                 .await?
                 .ok_or(ServiceError::NotFound)?;
@@ -786,4 +790,19 @@ impl Services {
             },
         })
     }
+}
+
+/// Whether `item` was split from `run`'s item by a run of the same turn: `run` itself, or one before it that failed
+/// or lapsed. A run may chain blocks on such items and add their steps (Blocks §1).
+pub(crate) async fn split_in_turn(db: &impl ConnectionTrait, item: &Item, run: &Run) -> Result<bool, ServiceError> {
+    if !item.made_in_split || item.origin_id != Some(run.item_id) {
+        return Ok(false);
+    }
+    Ok(match item.created_run_id {
+        Some(maker) if maker == run.id => true,
+        Some(maker) => store::runs::find_run(db, maker)
+            .await?
+            .is_some_and(|maker| maker.turn_id == run.turn_id),
+        None => false,
+    })
 }

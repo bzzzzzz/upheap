@@ -208,7 +208,8 @@ pub async fn list_items_blocked_by_locking(
     Ok(items)
 }
 
-/// The items made from any of `origins` (their `origin_id` is one of them), in any state and any heap, oldest first,
+/// The items split from any of `origins` (their `origin_id` is one of them and `made_in_split` is set), in any state
+/// and any heap, oldest first,
 /// with their tags and values. With `lock` the rows are read with locking reads (`FOR SHARE` on MySQL and Postgres)
 /// like [`find_item_locking`], so a write that depends on what was made calls it after [`crate::heaps::lock_heap`].
 ///
@@ -224,6 +225,7 @@ pub async fn list_items_made_from(
     for chunk in ids.chunks(IN_LIST_CHUNK) {
         let query = items::Entity::find()
             .filter(items::Column::OriginId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::MadeInSplit.eq(true))
             .order_by_asc(items::Column::CreatedAt)
             .order_by_asc(items::Column::Id);
         for row in shared_if(query, lock).all(db).await? {
@@ -553,6 +555,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
         origin_id: Set(item.origin_id.map(|id| id_to_db(id.as_uuid()))),
         created_run_id: Set(item.created_run_id.map(|id| id_to_db(id.as_uuid()))),
+        made_in_split: Set(item.made_in_split),
     })
 }
 
@@ -627,6 +630,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
             .as_deref()
             .map(|raw| read.uuid(raw).map(RunId::from_uuid))
             .transpose()?,
+        made_in_split: row.made_in_split,
         version: read.version(row.version)?,
     })
 }

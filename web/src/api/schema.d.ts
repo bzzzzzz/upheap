@@ -2080,7 +2080,7 @@ export interface components {
              * @description The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;
              *     on one item and in the closed list it is a list, empty when nothing was made from it.
              */
-            became: components["schemas"]["ItemRef"][] | null;
+            became: components["schemas"]["MadeItem"][] | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
             blocker_gone: null | components["schemas"]["BlockerGone"];
             /**
@@ -2261,6 +2261,7 @@ export interface components {
             id: string;
             /** @description Unique within the heap; the item's path is `…/items/{key}`. */
             key: string;
+            /** @description Decoding tolerates an older server that doesn't send it, reading `Unknown`; this server always does. */
             kind: components["schemas"]["Kind"];
             state: components["schemas"]["ItemState"];
             title: string;
@@ -2344,6 +2345,18 @@ export interface components {
             sort_parameter?: string | null;
             /** @description Tags of the same heap. Keeps items with any of them. */
             tag?: string[];
+        };
+        /** @description An item a note was split into, as the note's `became` lists it, with the heap it is in now. */
+        MadeItem: {
+            /** @description The heap it is in now, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /** Format: uuid */
+            id: string;
+            /** @description Unique within the heap; the item's path is `…/items/{key}`. */
+            key: string;
+            kind: components["schemas"]["Kind"];
+            state: components["schemas"]["ItemState"];
+            title: string;
         };
         Me: {
             /** @description What the user may do with their account, such as signing out and making teams. */

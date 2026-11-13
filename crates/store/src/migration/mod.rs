@@ -30,7 +30,7 @@ mod m20261127_000024_item_arrives_at;
 mod m20261128_000025_item_comments;
 mod m20261129_000026_reviews_and_redo;
 mod m20261130_000027_item_origin;
-mod m20261201_000028_item_origin_index;
+mod m20261201_000028_item_split;
 
 pub struct Migrator;
 
@@ -65,7 +65,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261128_000025_item_comments::Migration),
             Box::new(m20261129_000026_reviews_and_redo::Migration),
             Box::new(m20261130_000027_item_origin::Migration),
-            Box::new(m20261201_000028_item_origin_index::Migration),
+            Box::new(m20261201_000028_item_split::Migration),
         ]
     }
 }

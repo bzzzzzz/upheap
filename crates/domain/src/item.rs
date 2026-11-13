@@ -537,6 +537,9 @@ pub struct Item {
     /// added it. Set when it is made and never changed; it stays when either item moves. `None` for an item a person
     /// added without one.
     pub origin_id: Option<ItemId>,
+    /// Whether it was split from `origin_id` (`NewItem::origin`, `item add --from`): one of the items that note became.
+    /// An item a run adds without an origin links back to the run's item too, but isn't one of them.
+    pub made_in_split: bool,
     /// The run that added it. `None` for an item a person added. Set together with `origin_id` by
     /// [`Item::added_in_run`].
     pub created_run_id: Option<RunId>,
@@ -568,6 +571,7 @@ impl Item {
             created_at: now,
             created_by: Some(created_by),
             origin_id: fields.origin.map(|origin| origin.item_id),
+            made_in_split: fields.origin.is_some(),
             created_run_id: None,
             version: Version::INITIAL,
         }

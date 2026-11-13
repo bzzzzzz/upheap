@@ -63,10 +63,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
   It is still `NULL` for every other item, and the API shows it only for reminders.
 - **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run
-  that added it, with `created_run_id` set beside it then. It is set when the item is made and never changed, and
-  stays when either item later moves to another heap, as a blocker's link does. An index serves the lookup of what was
-  made from an item, which the item and the closed list show as `became`: a handful of items per note, and at most one
-  page of closed items, read in one query.
+  that added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what
+  the note became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the
+  Became list. All three are set when the item is made and never changed, and stay when either item later moves to
+  another heap, as a blocker's link does. An index on `origin_id` serves the lookup of what a note became, which the
+  item and the closed list show as `became`, each with the heap it is in now: a handful of items per note, and at
+  most one page of closed items, read in one query.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -752,10 +754,10 @@ section is how it maps onto this API.
    (`deserialize_with`), and `Factor` (contributors), `HeldBackGap`, `ClosedGroup` and the audit log's `AuditAction`
    read an unknown value as `Unknown`, a variant
    marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
-   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind` and `Stage`,
-   and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
+   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind`, `Stage` and
+   state (`ItemState`, which gained `became`), and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
    request when converting to the domain type, with `422 value_unknown` naming the field, rather than at parsing
-   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `ItemState`, `Role`,
+   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `Role`,
    and the list view's `StateMode`, `BlockedLayout` and `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
    would still stop an older CLI reading the heap's views; making them lenient the way `Kind` is, left for when it
    happens.

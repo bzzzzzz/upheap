@@ -352,7 +352,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       <ItemSteps heapRef={heapRef} item={item} />
 
       <ItemFrom item={item} />
-      <ItemBecame heapRef={heapRef} item={item} />
+      <ItemBecame item={item} />
 
       <ItemQuestions heapRef={heapRef} item={item} waits={waits} />
 

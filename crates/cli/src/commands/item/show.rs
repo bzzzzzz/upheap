@@ -2,7 +2,7 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    ItemDto, ItemRefDto, KindDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
+    ItemDto, KindDto, MadeItemDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use clap::Args;
@@ -126,7 +126,7 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     if let Some(became) = item.became.as_deref().filter(|became| !became.is_empty()) {
         out.line("Became:")?;
         for made in became {
-            out.line(&format!("  {}", item_ref_text(made)))?;
+            out.line(&format!("  {}", made_item_text(made)))?;
         }
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
@@ -141,8 +141,8 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     render_questions(item, out)
 }
 
-/// Another item as one phrase: `n8c2d "Certs are a mess" (note, became)`.
-fn item_ref_text(item: &ItemRefDto) -> String {
+/// An item a note became as one phrase: `n8c2d "Rotate staging" (task, open)`.
+fn made_item_text(item: &MadeItemDto) -> String {
     format!(
         "{} \"{}\" ({}, {})",
         item.key,

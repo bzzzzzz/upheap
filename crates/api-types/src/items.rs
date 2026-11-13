@@ -317,7 +317,8 @@ pub struct CreateItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameter_values: Option<BTreeMap<Uuid, Uuid>>,
     /// Makes the item from another, which must be an open note of the same heap (a split): the item gets a link to
-    /// it. Not for a reminder. In a run this is required, and the item must be the run's.
+    /// it, and is one of the items the note became. Not for a reminder. In a run it must be the run's item. A run that
+    /// leaves it out adds a follow-up instead, which links back to the run's item but isn't one of what it became.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<OriginInputDto>,
     /// The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked.
@@ -477,7 +478,7 @@ impl ItemPatchDto {
                 .flatten()
                 .map(|(parameter, option)| (ParameterId::from_uuid(*parameter), option.map(OptionId::from_uuid)))
                 .collect(),
-            state: self.state.map(StateKind::from),
+            state: self.state.map(StateKind::try_from).transpose()?,
             blocked_by: self.blocked_by_item_id.map(|id| id.map(ItemId::from_uuid)),
         })
     }
