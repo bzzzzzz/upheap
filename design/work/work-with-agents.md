@@ -546,7 +546,7 @@ change it makes carries the run it was made in.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
-   question; **handed back**, with a reason, when there is nothing to do and the goal can't or needn't be reached,
+   question; **handed back**, with a reason, when there is nothing to do and the goal needn't be reached,
    such as work done elsewhere (the turn goes back to the person, and it isn't a failure); or **failed**. An item
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row

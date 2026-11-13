@@ -3,7 +3,8 @@
 //! It claims the next item of the queue, starts the agent tool on it with a brief, keeps the claim alive, records
 //! how the run ended and what it cost, and waits when there is nothing to do. The server decides how a run ended
 //! (it reached its goal, it handed the turn back, it asked, or it failed); the loop only reports what the tool did.
-//! The tool sits behind [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass their own.
+//! The tool sits behind [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass
+//! their own.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
