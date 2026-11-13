@@ -130,7 +130,7 @@ What it is not:
    other things is closed too, as became (Notes, tasks and reminders §6).
 7. A closed item can be reopened within one week of being closed. After that it can't be reopened.
 8. A blocked item can point to another item as the reason it's blocked. When that item is done, the blocked item goes
-   back to open on its own. When it's closed as won't do, or moved to another heap, the blocked item stays blocked and
+   back to open on its own. When it's closed as won't do or became, or moved to another heap, the blocked item stays blocked and
    waits for the person, who decides what happens to it.
 
 ## Notes, tasks and reminders
