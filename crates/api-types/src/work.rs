@@ -137,7 +137,8 @@ pub struct ItemRunDto {
     pub tool_started_at: Option<i64>,
     /// UTC milliseconds: when the run's agent tool exited. `null` when not recorded.
     pub tool_ended_at: Option<i64>,
-    /// When the run started, ready to show ("today", "yesterday", "3 Nov"), in the request's timezone.
+    /// When the run started, ready to show: the time ("14:02") if it was today, else the date ("yesterday", "3 Nov"),
+    /// in the request's timezone.
     pub started_label: String,
     /// The item's stage when the run started.
     pub from_stage: StageDto,

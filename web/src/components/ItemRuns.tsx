@@ -16,8 +16,11 @@ const usd = (amount: number) => `$${amount.toFixed(2)}`;
 /** How the run ended, in a word; "running" while it hasn't. */
 const endWord = (run: ItemRun) => (run.end ? END_LABELS[run.end] : "running");
 
-/** The exact start, the tool's own when it was recorded, for the label's tooltip. */
-const exactStart = (run: ItemRun) => new Date(run.tool_started_at ?? run.started_at).toLocaleString();
+/** The label's tooltip: the tool's own start when it was recorded, else when the run started, in local time. */
+const startTitle = (run: ItemRun) =>
+  run.tool_started_at == null
+    ? `Started ${new Date(run.started_at).toLocaleString()}`
+    : `Tool started ${new Date(run.tool_started_at).toLocaleString()}`;
 
 /**
  * An item's runs (ux.md, The item): a folded section after the questions, shown only when the item has runs. Opened,
@@ -36,7 +39,7 @@ export function ItemRuns({ item }: { item: Item }) {
           {runs.map((run) => (
             <li key={run.id} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
               <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                <span title={exactStart(run)} className="font-medium">
+                <span title={startTitle(run)} className="font-medium">
                   {run.started_label}
                 </span>
                 <span className="text-ink-soft">

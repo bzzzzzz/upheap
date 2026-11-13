@@ -9666,7 +9666,7 @@
           },
           "started_label": {
             "type": "string",
-            "description": "When the run started, ready to show (\"today\", \"yesterday\", \"3 Nov\"), in the request's timezone."
+            "description": "When the run started, ready to show: the time (\"14:02\") if it was today, else the date (\"yesterday\", \"3 Nov\"),\nin the request's timezone."
           },
           "tool_ended_at": {
             "type": [

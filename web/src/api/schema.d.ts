@@ -2342,7 +2342,10 @@ export interface components {
              * @description UTC milliseconds: when the run was claimed.
              */
             started_at: number;
-            /** @description When the run started, ready to show ("today", "yesterday", "3 Nov"), in the request's timezone. */
+            /**
+             * @description When the run started, ready to show: the time ("14:02") if it was today, else the date ("yesterday", "3 Nov"),
+             *     in the request's timezone.
+             */
             started_label: string;
             /**
              * Format: int64

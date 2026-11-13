@@ -636,7 +636,11 @@ impl Shared<'_> {
         // directory meanwhile.
         let mut marker = None;
         let (driven, tool_started) = match dir {
-            None => self.drive_tool(&run, start).await,
+            None => {
+                // Taken just before the tool is launched, to be sent with `finish` as when the tool started.
+                let started = self.app.now();
+                (self.drive_tool(&run, start).await, Some(started))
+            }
             Some(Ok(dir)) => match self.prepare_directory(&run, &dir).await {
                 Ok(locked) => {
                     marker = Some(locked);
@@ -644,7 +648,8 @@ impl Shared<'_> {
                         dir: Some(dir),
                         ..start
                     };
-                    self.drive_tool(&run, start).await
+                    let started = self.app.now();
+                    (self.drive_tool(&run, start).await, Some(started))
                 }
                 Err(err) => (Driven::Ended(Err(err)), None),
             },
@@ -916,14 +921,7 @@ impl Shared<'_> {
     /// way, the tool ending and the stop signal are still watched. Gives up the tool (which stops it) when the server
     /// says the run is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop
     /// now. The first Ctrl-C only keeps the loop from claiming again.
-    async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> (Driven, Option<jiff::Timestamp>) {
-        // Taken just before the tool is launched, to be sent with `finish` as when the tool started.
-        let started = self.app.now();
-        let driven = self.drive_started_tool(run, start).await;
-        (driven, Some(started))
-    }
-
-    async fn drive_started_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
+    async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
         let mut tool = self.tools.run(start);
         let mut check = tokio::time::interval_at(Instant::now() + self.heartbeat_check, self.heartbeat_check);
         check.set_missed_tick_behavior(MissedTickBehavior::Delay);
