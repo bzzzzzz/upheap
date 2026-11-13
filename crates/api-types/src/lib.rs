@@ -8,6 +8,8 @@
 //! Response types derive `Deserialize` as well as `Serialize`, so a client reads them back; request and query
 //! types derive `Serialize` where a client sends them. This crate has no IO, and nothing in the workspace
 //! but `domain` (outside it: serde, utoipa, jiff and uuid), so a client never links the server.
+// The test fixtures spell whole responses with `json!`, which recurses once per field.
+#![cfg_attr(test, recursion_limit = "256")]
 
 pub mod audit;
 pub mod auth;

@@ -226,8 +226,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    empty. First the **state button**: Start (a play circle) on an open row, Unblock (a red closed padlock in a
    circle, drawn open while the row is hovered or focused, and always with a finger) on a blocked row, Pause (an
    accent circle, lightly filled, with two bars) on an in-progress row. Start moves the item to in progress; Unblock
-   and Pause move it to open. A screen reader hears ", blocked" after a blocked row's title. Second **Done**, a circle
-   with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
+   and Pause move it to open. A screen reader hears ", blocked" after a blocked row's title, or ", blocked: <reason>"
+   when the item says why in words, and the padlock's tooltip carries the reason too; the row itself shows nothing
+   more. Second **Done**, a circle with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
    no line, when the server allows it and no agent has the item; a blue robot mark on a blue tint when an agent has
    it, with a small accent dot when it waits for the person; empty otherwise (a reminder, a blocked item, a reader).
    With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
@@ -305,8 +306,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
    accent), and for a closed item when it closed, or "It can't be reopened." A blocked item says "Blocked by" and
-   links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. Then the chips:
-   the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
+   links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. A reason in words
+   follows: "Blocked: <reason>", or "Blocked by <item>: <reason>" with both. It wraps, never shortened. The web shows
+   the reason but doesn't set it; the CLI and the API do. Then the chips: the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
    one when none does (point 15). A
    reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
    is in ("Up next") and has no rank.

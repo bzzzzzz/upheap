@@ -779,6 +779,9 @@ pub struct ItemDto {
     /// as won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team
     /// after a move: then `blocker_gone` says so.
     pub blocked_by: Option<ItemRefDto>,
+    /// Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when
+    /// given; cleared when the item leaves blocked.
+    pub blocked_reason: Option<String>,
     /// How the blocker stopped holding the item, when it did: closed, or moved to another heap. The item stays blocked
     /// and waits for the caller (`waits_for_you`), who unblocks it, closes it or picks another blocker. `null`
     /// otherwise.
@@ -1107,7 +1110,7 @@ mod tests {
             ],
             "item": {
                 "id": Uuid::nil(), "key": "k3x9a", "heap_id": Uuid::nil(), "title": "Rotate the certs",
-                "description": null, "kind": "habit", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "need": "critical", "effort": null,
+                "description": null, "kind": "habit", "stage": "reviewed", "stage_choices": [], "state": "done", "blocked_by": null, "blocked_reason": null, "need": "critical", "effort": null,
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month",

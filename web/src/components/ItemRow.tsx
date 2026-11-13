@@ -212,7 +212,7 @@ export function ItemRow({
               <span className="sr-only">
                 {item.kind === "task" && ", task"}
                 {item.kind === "reminder" && ", reminder"}
-                {item.state === "blocked" && ", blocked"}
+                {item.state === "blocked" && (item.blocked_reason ? `, blocked: ${item.blocked_reason}` : ", blocked")}
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
@@ -514,7 +514,8 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
 
 /**
  * The way to unblock a blocked item, to open: a closed padlock in a circle, in the blocked colour the swipe's Blocked
- * uses, the row's one sign that it waits on something. It is drawn open while the row is hovered or focused, and always with a finger.
+ * uses, the row's one sign that it waits on something. Its tooltip carries the reason in words, when there is one. It
+ * is drawn open while the row is hovered or focused, and always with a finger.
  */
 function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
   const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";
@@ -524,7 +525,7 @@ function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
       type="button"
       onClick={onPress}
       aria-label={`Unblock ${item.title}`}
-      title="Unblock"
+      title={item.blocked_reason ? `Unblock. Blocked: ${item.blocked_reason}` : "Unblock"}
       className={`${BUTTON} text-overdue-ink`}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">

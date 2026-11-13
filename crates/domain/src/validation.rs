@@ -141,6 +141,8 @@ pub enum Field {
     Link,
     /// The piece of work a review is about.
     Piece,
+    /// Why an item is blocked, in words.
+    BlockedReason,
 }
 
 impl Field {
@@ -183,6 +185,7 @@ impl Field {
             Self::CostUsd => "cost_usd",
             Self::Link => "link",
             Self::Piece => "piece",
+            Self::BlockedReason => "blocked_reason",
         }
     }
 }

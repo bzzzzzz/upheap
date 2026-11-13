@@ -121,8 +121,8 @@ export function HeapPage({
 
 /**
  * Changes an item's state from the list, by a row's buttons, `x`, `s` or a swipe, then offers to undo it
- * (ux.md, The list §3). Undo puts back the state it had, and the blocker with it. After Done, when nothing else is
- * in progress, the toast also offers to start the top open item (ux.md, The list §10).
+ * (ux.md, The list §3). Undo puts back the state it had, and the blocker and the reason with it. After Done, when
+ * nothing else is in progress, the toast also offers to start the top open item (ux.md, The list §10).
  */
 function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
@@ -137,6 +137,7 @@ function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
       (saved) => {
         const restore: ItemPatch = { state: item.state };
         if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
+        if (item.state === "blocked" && item.blocked_reason) restore.blocked_reason = item.blocked_reason;
         setToast({
           message: `“${item.title}” is ${STATE_LABELS[state].toLowerCase()}.`,
           undo: () => update.mutateAsync({ item: saved, patch: restore }).then(undefined, failed),

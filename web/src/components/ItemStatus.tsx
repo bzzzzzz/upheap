@@ -20,7 +20,8 @@ const dot = (
 /**
  * What the item is and where it stands, under its title at every width (ux.md, The item §2): one quiet line that may
  * wrap. The kind and stage with their icons, a reminder's date, the state and, for a closed item, when it closed, or
- * who blocks a blocked one, with a link to that item. Then the chips: the item's place in the list, which opens why,
+ * who blocks a blocked one, with a link to that item, and why in words when a reason was given: it wraps, never
+ * shortened. Then the chips: the item's place in the list, which opens why,
  * and, who has the item when an agent does, or the button that sends it to one when none does. A reminder that is still ahead says when it joins the list under the
  * line. Closed items show the kind only, as the server sends no stage for them.
  */
@@ -40,6 +41,7 @@ export function StatusLine({
   const date = item.kind === "reminder" && item.due ? formatDate(item.due.date) : undefined;
   const closed = item.state === "done" || item.state === "wont_do";
   const blocker = item.state === "blocked" ? item.blocked_by : null;
+  const reason = item.state === "blocked" ? item.blocked_reason : null;
   const focusAfterRender = useFocusAfterRender();
   // Set by a send, until the item shows the agent's chip, which then takes the focus: the send button goes away with the
   // send, so the focus is kept here.
@@ -79,7 +81,7 @@ export function StatusLine({
         )}
         {dot}
         {blocker ? (
-          <span className="flex min-w-0 items-center gap-1 font-medium text-ink">
+          <span className="flex min-w-0 flex-wrap items-center gap-1 font-medium text-ink">
             Blocked by
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
@@ -93,6 +95,11 @@ export function StatusLine({
             >
               <span className="font-mono text-xs">{blocker.key}</span> {blocker.title}
             </Link>
+            {reason && <span className="font-normal text-ink break-words">: {reason}</span>}
+          </span>
+        ) : reason ? (
+          <span className="min-w-0 font-medium break-words text-ink">
+            Blocked: <span className="font-normal">{reason}</span>
           </span>
         ) : (
           <span className={item.state === "in_progress" ? "font-medium text-accent-ink" : "font-medium text-ink"}>

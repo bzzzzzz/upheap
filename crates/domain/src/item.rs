@@ -170,6 +170,22 @@ impl Title {
     }
 }
 
+/// Why an item is blocked, in words: what it waits for outside the heap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlockReason(String);
+
+impl BlockReason {
+    pub const MAX_CHARS: usize = 300;
+
+    pub fn parse(raw: &str) -> Result<Self, ValidationError> {
+        parse_required(raw, Field::BlockedReason, Self::MAX_CHARS).map(Self)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Description(String);
 
@@ -231,14 +247,17 @@ impl StateKind {
 }
 
 /// An item's state. Only the closed states carry a close time and who closed it, and only the blocked state carries
-/// a blocker, so an open item with any of them can't exist.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// a blocker and a reason, so an open item with any of them can't exist.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ItemState {
     Open,
     InProgress,
     /// `by` is the item it waits for, of the same heap, if one was picked.
+    ///
+    /// `reason` is why it waits, in words, when what it waits for isn't an item of the heap.
     Blocked {
         by: Option<ItemId>,
+        reason: Option<BlockReason>,
     },
     /// `closed_by` is `None` only for an item closed before who closed it was recorded.
     Done {
@@ -253,40 +272,45 @@ pub enum ItemState {
 }
 
 /// A stored state, close time, closer and blocker that don't fit together.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("state {kind:?} doesn't match closed_at {closed_at:?}, closed_by {closed_by:?} and blocked_by {blocked_by:?}")]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "state {kind:?} doesn't match closed_at {closed_at:?}, closed_by {closed_by:?}, blocked_by {blocked_by:?} and blocked_reason {blocked_reason:?}"
+)]
 pub struct InconsistentState {
     pub kind: StateKind,
     pub closed_at: Option<Timestamp>,
     pub closed_by: Option<UserId>,
     pub blocked_by: Option<ItemId>,
+    pub blocked_reason: Option<BlockReason>,
 }
 
 impl ItemState {
     /// Builds a state from its stored parts. `closed_at` must be set exactly when `kind` is closed, `closed_by`
-    /// only when it's closed, and `blocked_by` only when it's blocked.
+    /// only when it's closed, and `blocked_by` and `blocked_reason` only when it's blocked.
     pub fn from_parts(
         kind: StateKind,
         closed_at: Option<Timestamp>,
         closed_by: Option<UserId>,
         blocked_by: Option<ItemId>,
+        blocked_reason: Option<BlockReason>,
     ) -> Result<Self, InconsistentState> {
-        match (kind, closed_at, closed_by, blocked_by) {
-            (StateKind::Open, None, None, None) => Ok(Self::Open),
-            (StateKind::InProgress, None, None, None) => Ok(Self::InProgress),
-            (StateKind::Blocked, None, None, by) => Ok(Self::Blocked { by }),
-            (StateKind::Done, Some(closed_at), closed_by, None) => Ok(Self::Done { closed_at, closed_by }),
-            (StateKind::WontDo, Some(closed_at), closed_by, None) => Ok(Self::WontDo { closed_at, closed_by }),
-            _ => Err(InconsistentState {
+        match (kind, closed_at, closed_by, blocked_by, blocked_reason) {
+            (StateKind::Open, None, None, None, None) => Ok(Self::Open),
+            (StateKind::InProgress, None, None, None, None) => Ok(Self::InProgress),
+            (StateKind::Blocked, None, None, by, reason) => Ok(Self::Blocked { by, reason }),
+            (StateKind::Done, Some(closed_at), closed_by, None, None) => Ok(Self::Done { closed_at, closed_by }),
+            (StateKind::WontDo, Some(closed_at), closed_by, None, None) => Ok(Self::WontDo { closed_at, closed_by }),
+            (kind, closed_at, closed_by, blocked_by, blocked_reason) => Err(InconsistentState {
                 kind,
                 closed_at,
                 closed_by,
                 blocked_by,
+                blocked_reason,
             }),
         }
     }
 
-    pub const fn kind(self) -> StateKind {
+    pub const fn kind(&self) -> StateKind {
         match self {
             Self::Open => StateKind::Open,
             Self::InProgress => StateKind::InProgress,
@@ -297,25 +321,33 @@ impl ItemState {
     }
 
     /// `None` unless the state is closed.
-    pub const fn closed_at(self) -> Option<Timestamp> {
+    pub const fn closed_at(&self) -> Option<Timestamp> {
         match self {
-            Self::Done { closed_at, .. } | Self::WontDo { closed_at, .. } => Some(closed_at),
+            Self::Done { closed_at, .. } | Self::WontDo { closed_at, .. } => Some(*closed_at),
             Self::Open | Self::InProgress | Self::Blocked { .. } => None,
         }
     }
 
     /// Who closed the item. `None` unless the state is closed, and for an item closed before this was recorded.
-    pub const fn closed_by(self) -> Option<UserId> {
+    pub const fn closed_by(&self) -> Option<UserId> {
         match self {
-            Self::Done { closed_by, .. } | Self::WontDo { closed_by, .. } => closed_by,
+            Self::Done { closed_by, .. } | Self::WontDo { closed_by, .. } => *closed_by,
             Self::Open | Self::InProgress | Self::Blocked { .. } => None,
         }
     }
 
     /// The item a blocked item waits for. `None` for every other state.
-    pub const fn blocked_by(self) -> Option<ItemId> {
+    pub const fn blocked_by(&self) -> Option<ItemId> {
         match self {
-            Self::Blocked { by } => by,
+            Self::Blocked { by, .. } => *by,
+            Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } => None,
+        }
+    }
+
+    /// Why a blocked item is blocked, in words. `None` for every other state, and for a blocked item without one.
+    pub const fn blocked_reason(&self) -> Option<&BlockReason> {
+        match self {
+            Self::Blocked { reason, .. } => reason.as_ref(),
             Self::Open | Self::InProgress | Self::Done { .. } | Self::WontDo { .. } => None,
         }
     }
@@ -386,6 +418,8 @@ pub struct ItemPatch {
     /// The item this one waits for. Only a blocked item can have one; leaving the blocked state clears it. The
     /// service checks the blocker is in the same heap and that no cycle forms.
     pub blocked_by: Option<Option<ItemId>>,
+    /// Why the item is blocked, in words. Only a blocked item can have one; leaving the blocked state clears it.
+    pub blocked_reason: Option<Option<BlockReason>>,
 }
 
 impl ItemPatch {
@@ -422,7 +456,7 @@ impl From<&Item> for ItemSummary {
             heap_id: item.heap_id,
             key: item.key,
             title: item.title.clone(),
-            state: item.state,
+            state: item.state.clone(),
         }
     }
 }
@@ -554,6 +588,11 @@ impl Item {
         self.state.blocked_by()
     }
 
+    /// Why the item is blocked, in words, if it's blocked and one was given.
+    pub const fn blocked_reason(&self) -> Option<&BlockReason> {
+        self.state.blocked_reason()
+    }
+
     /// How `blocker` stopped holding this item: it is closed, or in another heap. `None` while it holds it, and when
     /// `blocker` isn't the item this one is blocked by.
     pub fn blocker_gone(&self, blocker: &ItemSummary) -> Option<BlockerGone> {
@@ -588,15 +627,22 @@ impl Item {
     pub fn apply_patch(&self, patch: &ItemPatch, actor: UserId, now: Timestamp) -> Result<Option<Self>, ItemError> {
         let mut state = match patch.state {
             Some(target) => self.transition(target, actor, now)?,
-            None => self.state,
+            None => self.state.clone(),
         };
         if state.kind().is_closed() && patch.edits_fields() {
             return Err(ItemError::Closed { item_id: self.id });
         }
         match (&mut state, patch.blocked_by) {
             (_, None) => {}
-            (ItemState::Blocked { by }, Some(blocker)) => *by = blocker,
+            (ItemState::Blocked { by, .. }, Some(blocker)) => *by = blocker,
             // Clearing the blocker of an item that has none is a no-op, whatever its state.
+            (_, Some(None)) => {}
+            (_, Some(Some(_))) => return Err(ItemError::NotBlocked { item_id: self.id }),
+        }
+        match (&mut state, &patch.blocked_reason) {
+            (_, None) => {}
+            (ItemState::Blocked { reason, .. }, Some(new)) => reason.clone_from(new),
+            // Clearing the reason of an item that has none is a no-op, whatever its state.
             (_, Some(None)) => {}
             (_, Some(Some(_))) => return Err(ItemError::NotBlocked { item_id: self.id }),
         }
@@ -655,7 +701,8 @@ impl Item {
 
     /// The item as it is after it moves to `heap_id` under `key`, carrying `tags` and `parameters` of that heap (see
     /// [`crate::item_move::carry_over`]). Everything else stays, and so does the version, which the store bumps on
-    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it left.
+    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it
+    /// left. Its reason stays: it is about the world outside the heap.
     /// The items that waited for this one keep it as their blocker, now gone ([`Item::blocker_gone`]).
     pub fn moved_to(
         &self,
@@ -664,9 +711,12 @@ impl Item {
         tags: BTreeSet<TagId>,
         parameters: BTreeMap<ParameterId, OptionId>,
     ) -> Self {
-        let state = match self.state {
-            ItemState::Blocked { .. } => ItemState::Blocked { by: None },
-            other => other,
+        let state = match &self.state {
+            ItemState::Blocked { reason, .. } => ItemState::Blocked {
+                by: None,
+                reason: reason.clone(),
+            },
+            other => other.clone(),
         };
         Self {
             heap_id,
@@ -694,7 +744,7 @@ impl Item {
     fn transition(&self, target: StateKind, actor: UserId, now: Timestamp) -> Result<ItemState, ItemError> {
         let current = self.state.kind();
         if current == target {
-            return Ok(self.state);
+            return Ok(self.state.clone());
         }
         if let Some(closed_at) = self.state.closed_at() {
             if target.is_closed() {
@@ -710,7 +760,7 @@ impl Item {
         Ok(match target {
             StateKind::Open => ItemState::Open,
             StateKind::InProgress => ItemState::InProgress,
-            StateKind::Blocked => ItemState::Blocked { by: None },
+            StateKind::Blocked => ItemState::Blocked { by: None, reason: None },
             StateKind::Done => ItemState::Done {
                 closed_at: now,
                 closed_by: Some(actor),
@@ -780,7 +830,7 @@ mod tests {
 
         expect_that!(
             closed.state,
-            eq(ItemState::Done {
+            eq(&ItemState::Done {
                 closed_at: at(2),
                 closed_by: Some(actor())
             })
@@ -824,7 +874,7 @@ mod tests {
             .expect("inside window")
             .expect("changed");
 
-        expect_that!(reopened.state, eq(ItemState::Open));
+        expect_that!(reopened.state, eq(&ItemState::Open));
     }
 
     #[gtest]
@@ -901,7 +951,7 @@ mod tests {
             .expect("allowed")
             .expect("changed");
 
-        expect_that!(edited.state, eq(ItemState::InProgress));
+        expect_that!(edited.state, eq(&ItemState::InProgress));
         expect_that!(edited.effort, some(eq(Size::S)));
     }
 
@@ -951,20 +1001,23 @@ mod tests {
     fn inconsistent_stored_state_is_rejected() {
         let other = ItemId::from_uuid(Uuid::from_u128(1));
         expect_that!(
-            ItemState::from_parts(StateKind::Open, Some(at(1)), None, None),
+            ItemState::from_parts(StateKind::Open, Some(at(1)), None, None, None),
             err(anything())
         );
         expect_that!(
-            ItemState::from_parts(StateKind::Done, None, None, None),
+            ItemState::from_parts(StateKind::Done, None, None, None, None),
             err(anything())
         );
         expect_that!(
-            ItemState::from_parts(StateKind::Open, None, None, Some(other)),
+            ItemState::from_parts(StateKind::Open, None, None, Some(other), None),
             err(anything())
         );
         expect_that!(
-            ItemState::from_parts(StateKind::Blocked, None, None, Some(other)),
-            ok(eq(ItemState::Blocked { by: Some(other) }))
+            ItemState::from_parts(StateKind::Blocked, None, None, Some(other), None),
+            ok(eq(&ItemState::Blocked {
+                by: Some(other),
+                reason: None
+            }))
         );
     }
 
@@ -972,26 +1025,26 @@ mod tests {
     fn only_a_closed_stored_state_has_a_closer() {
         for kind in [StateKind::Open, StateKind::InProgress, StateKind::Blocked] {
             expect_that!(
-                ItemState::from_parts(kind, None, Some(actor()), None),
+                ItemState::from_parts(kind, None, Some(actor()), None, None),
                 err(anything()),
                 "{kind:?}"
             );
         }
         expect_that!(
-            ItemState::from_parts(StateKind::Done, None, Some(actor()), None),
+            ItemState::from_parts(StateKind::Done, None, Some(actor()), None, None),
             err(anything())
         );
         expect_that!(
-            ItemState::from_parts(StateKind::WontDo, Some(at(1)), Some(actor()), None),
-            ok(eq(ItemState::WontDo {
+            ItemState::from_parts(StateKind::WontDo, Some(at(1)), Some(actor()), None, None),
+            ok(eq(&ItemState::WontDo {
                 closed_at: at(1),
                 closed_by: Some(actor())
             }))
         );
         // Items closed before closers were recorded.
         expect_that!(
-            ItemState::from_parts(StateKind::Done, Some(at(1)), None, None),
-            ok(eq(ItemState::Done {
+            ItemState::from_parts(StateKind::Done, Some(at(1)), None, None, None),
+            ok(eq(&ItemState::Done {
                 closed_at: at(1),
                 closed_by: None
             }))
@@ -1047,7 +1100,10 @@ mod tests {
     /// The sample item, blocked by [`blocker`], and the blocker as `state`, in `heap_id`.
     fn blocked_and_blocker(state: ItemState, heap_id: HeapId) -> (Item, ItemSummary) {
         let mut blocked = sample_item();
-        blocked.state = ItemState::Blocked { by: Some(blocker()) };
+        blocked.state = ItemState::Blocked {
+            by: Some(blocker()),
+            reason: None,
+        };
         let summary = ItemSummary {
             id: blocker(),
             heap_id,
@@ -1073,15 +1129,15 @@ mod tests {
         let cases = [
             (ItemState::Open, here, None),
             (ItemState::InProgress, here, None),
-            (ItemState::Blocked { by: None }, here, None),
-            (done, here, Some(BlockerGone::Done)),
-            (wont_do, here, Some(BlockerGone::WontDo)),
+            (ItemState::Blocked { by: None, reason: None }, here, None),
+            (done.clone(), here, Some(BlockerGone::Done)),
+            (wont_do.clone(), here, Some(BlockerGone::WontDo)),
             (ItemState::Open, elsewhere, Some(BlockerGone::Moved)),
             // Closed says more than moved.
             (wont_do, elsewhere, Some(BlockerGone::WontDo)),
         ];
         for (state, heap_id, expected) in cases {
-            let (blocked, summary) = blocked_and_blocker(state, heap_id);
+            let (blocked, summary) = blocked_and_blocker(state.clone(), heap_id);
             expect_that!(blocked.blocker_gone(&summary), eq(expected), "{state:?} in {heap_id:?}");
         }
     }
@@ -1095,7 +1151,7 @@ mod tests {
             },
             HeapId::from_uuid(Uuid::nil()),
         );
-        item.state = ItemState::Blocked { by: None };
+        item.state = ItemState::Blocked { by: None, reason: None };
         expect_that!(item.blocker_gone(&summary), none());
         item.state = ItemState::Open;
         expect_that!(item.blocker_gone(&summary), none());
@@ -1105,10 +1161,10 @@ mod tests {
     fn a_freed_item_is_open_and_otherwise_the_same() {
         let (blocked, _) = blocked_and_blocker(ItemState::Open, HeapId::from_uuid(Uuid::nil()));
         let freed = blocked.freed();
-        expect_that!(freed.state, eq(ItemState::Open));
+        expect_that!(freed.state, eq(&ItemState::Open));
         expect_that!(
             Item {
-                state: blocked.state,
+                state: blocked.state.clone(),
                 ..freed
             },
             eq(&blocked)
@@ -1166,7 +1222,7 @@ mod tests {
             .expect("allowed")
             .expect("changed");
 
-        expect_that!(open.state, eq(ItemState::Open));
+        expect_that!(open.state, eq(&ItemState::Open));
         expect_that!(open.blocked_by(), none());
     }
 
@@ -1193,6 +1249,181 @@ mod tests {
             .expect("changed");
 
         expect_that!(edited.blocked_by(), some(eq(blocker())));
+    }
+
+    fn reason(text: &str) -> BlockReason {
+        BlockReason::parse(text).expect("valid")
+    }
+
+    fn block_patch(by: Option<ItemId>, text: Option<&str>) -> ItemPatch {
+        ItemPatch {
+            state: Some(StateKind::Blocked),
+            blocked_by: by.map(Some),
+            blocked_reason: text.map(|text| Some(reason(text))),
+            ..ItemPatch::default()
+        }
+    }
+
+    fn blocked_for(by: Option<ItemId>, text: Option<&str>) -> Item {
+        sample_item()
+            .apply_patch(&block_patch(by, text), actor(), at(1))
+            .expect("allowed")
+            .expect("changed")
+    }
+
+    #[gtest]
+    fn a_block_reason_is_trimmed_and_between_1_and_300_characters() {
+        expect_that!(
+            BlockReason::parse("  waits for a quote  "),
+            ok(eq(&reason("waits for a quote")))
+        );
+        expect_that!(BlockReason::parse("   "), err(anything()));
+        expect_that!(BlockReason::parse(&"x".repeat(300)), ok(anything()));
+        expect_that!(BlockReason::parse(&"x".repeat(301)), err(anything()));
+    }
+
+    #[gtest]
+    fn blocking_with_a_reason_sets_it_with_or_without_a_blocker() {
+        let alone = blocked_for(None, Some("Waits for the vendor"));
+        expect_that!(
+            alone.blocked_reason().map(BlockReason::as_str),
+            some(eq("Waits for the vendor"))
+        );
+        expect_that!(alone.blocked_by(), none());
+
+        let both = blocked_for(Some(blocker()), Some("Waits for the vendor"));
+        expect_that!(
+            both.blocked_reason().map(BlockReason::as_str),
+            some(eq("Waits for the vendor"))
+        );
+        expect_that!(both.blocked_by(), some(eq(blocker())));
+    }
+
+    #[gtest]
+    fn a_reason_on_an_item_that_stays_unblocked_is_refused() {
+        let item = sample_item();
+        let patch = ItemPatch {
+            blocked_reason: Some(Some(reason("x"))),
+            ..ItemPatch::default()
+        };
+        expect_that!(
+            item.apply_patch(&patch, actor(), at(1)),
+            err(eq(&ItemError::NotBlocked { item_id: item.id }))
+        );
+        let clear = ItemPatch {
+            blocked_reason: Some(None),
+            ..ItemPatch::default()
+        };
+        expect_that!(item.apply_patch(&clear, actor(), at(1)), ok(none()));
+    }
+
+    #[gtest]
+    fn a_reason_alone_can_change_an_item_already_blocked() {
+        let blocked = blocked_for(Some(blocker()), Some("old"));
+        let patch = ItemPatch {
+            blocked_reason: Some(Some(reason("new"))),
+            ..ItemPatch::default()
+        };
+        let edited = blocked
+            .apply_patch(&patch, actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
+        expect_that!(edited.blocked_reason().map(BlockReason::as_str), some(eq("new")));
+        expect_that!(edited.blocked_by(), some(eq(blocker())));
+
+        let cleared = edited
+            .apply_patch(
+                &ItemPatch {
+                    blocked_reason: Some(None),
+                    ..ItemPatch::default()
+                },
+                actor(),
+                at(3),
+            )
+            .expect("allowed")
+            .expect("changed");
+        expect_that!(cleared.blocked_reason(), none());
+        expect_that!(cleared.state.kind(), eq(StateKind::Blocked));
+    }
+
+    #[gtest]
+    fn blocking_again_replaces_the_reason_and_keeps_the_blocker() {
+        let blocked = blocked_for(Some(blocker()), Some("old"));
+        let again = blocked
+            .apply_patch(&block_patch(None, Some("new")), actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
+        expect_that!(again.blocked_reason().map(BlockReason::as_str), some(eq("new")));
+        expect_that!(again.blocked_by(), some(eq(blocker())));
+    }
+
+    #[gtest]
+    fn setting_the_blocker_keeps_the_reason() {
+        let blocked = blocked_for(None, Some("old"));
+        let again = blocked
+            .apply_patch(&block_patch(Some(blocker()), None), actor(), at(2))
+            .expect("allowed")
+            .expect("changed");
+        expect_that!(again.blocked_reason().map(BlockReason::as_str), some(eq("old")));
+        expect_that!(again.blocked_by(), some(eq(blocker())));
+    }
+
+    #[gtest]
+    fn every_exit_from_blocked_clears_the_reason() {
+        let blocked = blocked_for(Some(blocker()), Some("old"));
+        for target in [
+            StateKind::Open,
+            StateKind::InProgress,
+            StateKind::Done,
+            StateKind::WontDo,
+        ] {
+            let patch = ItemPatch {
+                state: Some(target),
+                ..ItemPatch::default()
+            };
+            let left = blocked
+                .apply_patch(&patch, actor(), at(2))
+                .expect("allowed")
+                .expect("changed");
+            expect_that!(left.blocked_reason(), none(), "{target:?}");
+        }
+        expect_that!(blocked.freed().blocked_reason(), none());
+    }
+
+    #[gtest]
+    fn moving_keeps_the_reason_and_clears_the_blocker() {
+        let blocked = blocked_for(Some(blocker()), Some("old"));
+        let moved = blocked.moved_to(
+            HeapId::from_uuid(Uuid::from_u128(9)),
+            crate::handle::ItemKey::parse("c8c8c").expect("valid"),
+            BTreeSet::new(),
+            BTreeMap::new(),
+        );
+        expect_that!(moved.state.kind(), eq(StateKind::Blocked));
+        expect_that!(moved.blocked_by(), none());
+        expect_that!(moved.blocked_reason().map(BlockReason::as_str), some(eq("old")));
+    }
+
+    #[gtest]
+    fn a_stored_reason_on_a_state_that_isnt_blocked_is_rejected() {
+        for kind in [StateKind::Open, StateKind::InProgress] {
+            expect_that!(
+                ItemState::from_parts(kind, None, None, None, Some(reason("x"))),
+                err(anything()),
+                "{kind:?}"
+            );
+        }
+        expect_that!(
+            ItemState::from_parts(StateKind::Done, Some(at(1)), None, None, Some(reason("x"))),
+            err(anything())
+        );
+        expect_that!(
+            ItemState::from_parts(StateKind::Blocked, None, None, None, Some(reason("x"))),
+            ok(eq(&ItemState::Blocked {
+                by: None,
+                reason: Some(reason("x"))
+            }))
+        );
     }
 
     #[gtest]
