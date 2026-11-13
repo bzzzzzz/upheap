@@ -32,6 +32,10 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
+        // In a run the heap of the run's item locks first, then this item's, in heap ID order, as every run write does.
+        if let Some(run_id) = principal.run {
+            self.lock_run_and(&txn, principal, run_id, Some(found.heap_id)).await?;
+        }
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
             .map_err(|error| in_run(principal, error))?;

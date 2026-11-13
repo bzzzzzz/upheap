@@ -496,7 +496,8 @@ impl Services {
     /// from. Does nothing outside a run.
     ///
     /// Locks the heap of the run's item and `target` in heap ID order, as `claim_run` and `move_item` do (the same
-    /// heap once), then reads the run under its lock. The caller checks access to `target` after.
+    /// heap once), then reads the run under its lock (see [`Self::lock_run_and`]). The caller checks access to
+    /// `target` after.
     ///
     /// Fails with [`ServiceError::NotFound`] for a run that doesn't exist or is another user's, with
     /// [`RunError::Over`] for one that has ended or lapsed or whose turn isn't open, and with
@@ -512,25 +513,7 @@ impl Services {
         let Some(run_id) = principal.run else {
             return Ok(None);
         };
-        let found = store::runs::find_run(txn, run_id)
-            .await?
-            .filter(|run| run.user_id == principal.user_id)
-            .ok_or(ServiceError::NotFound)?;
-        let held = store::items::find_item(txn, found.item_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
-        let mut heaps = [held.heap_id, target];
-        heaps.sort();
-        for (index, heap_id) in heaps.into_iter().enumerate() {
-            if index == 0 || heap_id != heaps[0] {
-                store::heaps::lock_heap(txn, heap_id)
-                    .await?
-                    .ok_or(ServiceError::NotFound)?;
-            }
-        }
-        let run = store::runs::find_run_locking(txn, run_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let (run, _) = self.lock_run_and(txn, principal, run_id, Some(target)).await?;
         self.ensure_live(txn, &run, now).await?;
         if fields.kind == Kind::Reminder {
             return Err(RunError::Forbidden(RunForbidden::AddReminder).into());
@@ -550,6 +533,19 @@ impl Services {
         principal: Principal,
         run_id: RunId,
     ) -> Result<(Run, Heap), ServiceError> {
+        self.lock_run_and(txn, principal, run_id, None).await
+    }
+
+    /// [`Self::lock_run`], also locking the heap `target` when there is one: the two heaps lock in heap ID order (once
+    /// when they are the same), so a write in a heap other than the run's item's can't deadlock with one that holds
+    /// the run's heap first. Returns the heap of the run's item.
+    pub(crate) async fn lock_run_and(
+        &self,
+        txn: &impl ConnectionTrait,
+        principal: Principal,
+        run_id: RunId,
+        target: Option<HeapId>,
+    ) -> Result<(Run, Heap), ServiceError> {
         let found = store::runs::find_run(txn, run_id)
             .await?
             .filter(|run| run.user_id == principal.user_id)
@@ -558,9 +554,20 @@ impl Services {
             .await?
             .ok_or(ServiceError::NotFound)?;
         authorize_heap(txn, principal, item.heap_id, Permission::EditItems).await?;
-        let heap = store::heaps::lock_heap(txn, item.heap_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let mut ids = vec![item.heap_id];
+        ids.extend(target);
+        ids.sort();
+        ids.dedup();
+        let mut held = None;
+        for heap_id in ids {
+            let locked = store::heaps::lock_heap(txn, heap_id)
+                .await?
+                .ok_or(ServiceError::NotFound)?;
+            if heap_id == item.heap_id {
+                held = Some(locked);
+            }
+        }
+        let heap = held.ok_or(ServiceError::NotFound)?;
         // The item may have moved to another heap while this waited for the lock.
         find_item_locking_in(txn, item.id, heap.id, item.version).await?;
         let run = store::runs::find_run_locking(txn, run_id)

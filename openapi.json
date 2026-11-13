@@ -2463,6 +2463,16 @@
               }
             }
           },
+          "403": {
+            "description": "From inside a run: `run_add_reminder` or `run_add_needs_context`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -2474,7 +2484,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`",
+            "description": "`heap_archived`, or from inside a run `run_over`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7972,7 +7982,7 @@
               },
               {
                 "$ref": "#/components/schemas/Kind",
-                "description": "`\"note\"` when left out or `null`. A new item is as written, so a task starts at that stage, unless an agent run adds it: that one starts with its context. A\n`\"reminder\"` needs `due` with a `date`: that date is when it joins the list, and its due is made firm."
+                "description": "`\"note\"` when left out or `null`. A new item is as written, so a task starts at that stage, unless an agent\nrun adds it: that one starts with its context. A `\"reminder\"` needs `due` with a `date`: that date is when it\njoins the list, and its due is made firm."
               }
             ]
           },

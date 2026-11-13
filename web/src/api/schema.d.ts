@@ -4846,6 +4846,15 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            /** @description From inside a run: `run_add_reminder` or `run_add_needs_context` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4854,7 +4863,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_archived` */
+            /** @description `heap_archived`, or from inside a run `run_over` */
             409: {
                 headers: {
                     [name: string]: unknown;

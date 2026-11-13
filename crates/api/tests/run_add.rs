@@ -343,6 +343,50 @@ async fn a_run_adds_steps_to_what_it_added_and_nothing_else_there() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn a_run_adds_a_step_to_a_task_it_added_in_another_heap() -> Result<()> {
+    // Arrange
+    let s = scene().await?;
+    let me = s.app.send(Method::GET, "/api/v1/me", Some(&s.session), None).await?;
+    let team_slug = me.body["teams"][0]["slug"].as_str().context("slug")?.to_owned();
+    let other = s
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/teams/{team_slug}/heaps"),
+            Some(&s.session),
+            Some(json!({ "name": "Ops" })),
+        )
+        .await?;
+    anyhow::ensure!(other.status == StatusCode::CREATED, "heap failed: {}", other.body);
+    let other_heap = other.body["id"].as_str().context("id")?.to_owned();
+    let added = s
+        .add_to(
+            &other_heap,
+            json!({ "title": "Follow up", "kind": "task", "description": "Context" }),
+        )
+        .await?;
+    anyhow::ensure!(added.status == StatusCode::CREATED, "add failed: {}", added.body);
+    let path = s
+        .path_of(&other_heap, added.body["key"].as_str().context("key")?)
+        .await?;
+
+    // Act
+    let step = s
+        .in_run(
+            Method::POST,
+            &format!("{path}/steps"),
+            Some(json!({ "title": "Do it" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    expect_that!(step.body["steps"][0]["title"], eq(&json!("Do it")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn every_other_write_outside_the_runs_item_is_still_refused() -> Result<()> {
     // Arrange
     let s = scene().await?;
