@@ -17,8 +17,8 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::{
-    GoalMetHow, describe_goal_met, describe_new_turn, describe_reached, describe_redone, describe_retry, describe_take_back,
-    describe_withdrawal,
+    GoalMetHow, describe_goal_met, describe_new_turn, describe_reached, describe_redone, describe_retry,
+    describe_take_back, describe_withdrawal,
 };
 use crate::items::{ItemChildren, ItemView, build_item_view};
 use crate::{Principal, ServiceError, Services};
