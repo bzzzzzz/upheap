@@ -425,10 +425,13 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
     onError: () => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
     },
-    // The lists say which items wait for you, and Waiting for me what does.
-    onSettled: () => {
+    // The lists say which items wait for you, and Waiting for me what does. A reply that closed the item (Close as done)
+    // moves it into the closed list.
+    onSettled: (saved) => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
+      if (saved && (saved.state === "done" || saved.state === "wont_do"))
+        void queryClient.invalidateQueries({ queryKey: closedKey(heap) });
     },
   });
 }
@@ -527,6 +530,37 @@ export function useRetryTurn(heap: HeapRef) {
     },
     onError: (_error, item) => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
+  });
+}
+
+/**
+ * Sends back the work an agent brought to a stable state short of done, with a line saying what is wrong. The answer is
+ * the whole item, with its new turn, which replaces the cached one and the lists' copies. Nothing left to send back
+ * (someone else sent the item on first) fetches the item again.
+ */
+export function useRedoTurn(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ item, line }: { item: Pick<Item, "key">; line: string }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn/redo", {
+          params: { path: { ...heap, item: item.key } },
+          body: { line },
+        }),
+      ),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+      replaceListedItem(queryClient, heap, saved);
+    },
+    onError: (error, { item }) => {
+      if (error instanceof ApiProblem && error.code === "nothing_to_redo") {
+        void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });

@@ -3,12 +3,12 @@ import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import type { Goal, HeapRef, Item, Reach, Turn } from "../api/client";
-import { useSendToAgent, useTakeBack } from "../api/queries";
+import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { chipClass, compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
-import { GOAL_LABELS } from "./labels";
+import { GOAL_LABELS, STAGE_LABELS } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import { Sheet } from "./Sheet";
@@ -380,6 +380,124 @@ function SendForm({
           Cancel
         </Button>
       </div>
+    </form>
+  );
+}
+
+/**
+ * "Changes asked…" in the item's status line when an agent brought the item to a stable state short of done and the
+ * server offers `redo_turn` (ux.md, The item §15): opens a form that says what is wrong and sends the item back, to the
+ * same goal. A popover on a wide screen and a tablet, a sheet on a phone. `onSent` runs once the send has closed the
+ * form, for the caller that moves focus on to the agent chip, which the new turn brings. Cancelling returns focus to
+ * the button.
+ */
+export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef; item: Item; onSent: () => void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const focusAfterRender = useFocusAfterRender();
+  const redo = useRedoTurn(heapRef);
+  const setToast = useToast();
+  const [open, setOpen] = useState(false);
+  // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't cancel it.
+  const sent = useRef(false);
+  if (item.turn || !item.allowed_actions.includes("redo_turn")) return null;
+
+  const close = () => {
+    setOpen(false);
+    focusAfterRender(() => button.current);
+  };
+  const send = (line: string) => {
+    sent.current = false;
+    return redo.mutateAsync({ item, line }).then(
+      () => {
+        sent.current = true;
+        setOpen(false);
+        setToast({ message: "Sent back to the agent." });
+        onSent();
+      },
+      () => undefined,
+    );
+  };
+
+  return (
+    <>
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          redo.reset();
+          setOpen(true);
+        }}
+        className={chipClass}
+      >
+        Changes asked…
+      </button>
+      <PopoverSheet
+        title="Changes asked"
+        triggerRef={button}
+        isOpen={open}
+        onClose={() => {
+          if (!sent.current) close();
+        }}
+        placement="bottom start"
+        size="narrow"
+      >
+        <ChangesAskedForm
+          stage={item.stage}
+          pending={redo.isPending}
+          error={redo.error}
+          onSend={(line) => void send(line)}
+          onCancel={close}
+        />
+      </PopoverSheet>
+    </>
+  );
+}
+
+/** The form that sends the work back: what is wrong, required. Its draft lives here and closing the form drops it. */
+function ChangesAskedForm({
+  stage,
+  pending,
+  error,
+  onSend,
+  onCancel,
+}: {
+  stage: Item["stage"];
+  pending: boolean;
+  error: Error | null;
+  onSend: (line: string) => void;
+  onCancel: () => void;
+}) {
+  const [line, setLine] = useState("");
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (line.trim() !== "" && !pending) onSend(line);
+  };
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      {stage && <p className="text-sm">An agent brought this to: {STAGE_LABELS[stage]}.</p>}
+      <TextField value={line} onChange={setLine} isRequired className="flex flex-col gap-1">
+        <Label className={labelClass}>What's wrong</Label>
+        <TextArea rows={3} className={fieldClass} />
+      </TextField>
+      <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
+        <Button
+          type="submit"
+          isDisabled={pending || line.trim() === ""}
+          className={`${compactButtonClass.primary} ${focusClass}`}
+        >
+          Send back
+        </Button>
+        <Button onPress={onCancel} className={`${compactButtonClass.quiet} ${focusClass}`}>
+          Cancel
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-overdue-ink">
+          {itemProblem(error)}
+        </p>
+      )}
     </form>
   );
 }
