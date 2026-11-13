@@ -679,11 +679,11 @@ section is how it maps onto this API.
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
    sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
-   machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again every 30
-   seconds until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes
-   out before the network is back after a wake isn't a false alarm. The loop stops the tool when the server answers
-   `run_over`. When the tool ends it sends `finish` with the cost the tool reported and,
-   only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
+   machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again at each
+   check until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes out
+   before the network is back after a wake isn't a false alarm. The loop stops the tool when the server answers
+   `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
+   failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
    the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an

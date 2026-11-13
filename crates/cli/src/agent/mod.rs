@@ -148,8 +148,9 @@ pub struct WorkDeps {
     pub idle_wait: Duration,
     /// How often a live run says so, by the wall clock. 5 minutes in the binary: a run lapses after 30.
     pub heartbeat_every: Duration,
-    /// How often the loop looks at the clock to see whether a heartbeat is due, and how long it waits to try again
-    /// after one failed. 30 seconds in the binary.
+    /// How often the loop looks at the clock to see whether a heartbeat is due, and so how often it tries again
+    /// while heartbeats fail (a try that ran into the client's timeout is followed by the next at once). 30 seconds
+    /// in the binary.
     pub heartbeat_check: Duration,
     /// How long to wait between tries to record a run's end. 5 seconds in the binary.
     pub finish_retry: Duration,

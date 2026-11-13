@@ -858,10 +858,10 @@ impl Shared<'_> {
     /// the wall clock and looked at every `heartbeat_check`, since the clock tokio keeps stands still while the
     /// machine sleeps: a heartbeat then goes out soon after it wakes. A heartbeat that fails is tried again at the
     /// next check until one is heard, and said once it has failed [`FAILURES_TO_SAY`] times in a row, so the one that
-    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat's request is on its way,
-    /// the tool ending and the stop signal are still watched. Gives up the tool (which stops it) when the server says the run
-    /// is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop now. The
-    /// first Ctrl-C only keeps the loop from claiming again.
+    /// goes out before the network is back after a wake isn't a false alarm. While a heartbeat's request is on its
+    /// way, the tool ending and the stop signal are still watched. Gives up the tool (which stops it) when the server
+    /// says the run is over, or when the stop signal says to stop now: the person's second Ctrl-C or a request to stop
+    /// now. The first Ctrl-C only keeps the loop from claiming again.
     async fn drive_tool(&self, run: &RunDto, start: ToolStart) -> Driven {
         let mut tool = self.tools.run(start);
         let mut check = tokio::time::interval_at(Instant::now() + self.heartbeat_check, self.heartbeat_check);
@@ -905,7 +905,8 @@ impl Shared<'_> {
                             failures = failures.saturating_add(1);
                             if failures == FAILURES_TO_SAY {
                                 self.note(&format!(
-                                    "{}  {}  warning: couldn't tell the server the run is still going: {}. Trying again every {}.",
+                                    "{}  {}  warning: couldn't tell the server the run is still going: {}. \
+                                     Trying again every {}.",
                                     self.local_time(last.as_millisecond()),
                                     run.item.key,
                                     one_line(&err.to_string()),

@@ -398,10 +398,11 @@ async fn heartbeats_keep_a_long_run_alive_past_the_lapse() -> Result<()> {
         for _ in 0..3 {
             server.advance(Duration::from_minutes(29));
             cli.tokens.save(&server.url, &server.sign_in_cli(&ada).await?)?;
-            // Only the loop reads the tokens meanwhile, once for each heartbeat it starts, one after another: when it
-            // starts the second one after the sign-in, the first has been heard.
-            let loads = cli.tokens.loads();
-            wait_until("two heartbeats after the sign-in", || cli.tokens.loads() >= loads + 2).await?;
+            let heard = server.heard_heartbeats();
+            wait_until("a heartbeat heard after the sign-in", || {
+                server.heard_heartbeats() > heard
+            })
+            .await?;
         }
         release.notify_one();
         anyhow::Ok(())
@@ -430,7 +431,8 @@ async fn heartbeats_the_server_refuses_are_said_once_and_again_when_heard() -> R
     let (_, no_interrupts) = tokio::sync::mpsc::unbounded_channel();
 
     // Act: the server's clock runs 20 minutes without a new sign-in. The access token has expired there, so the
-    // heartbeats are refused, and the run has not lapsed. The test waits for several tries, signs in again, and waits for one to be heard.
+    // heartbeats are refused, and the run has not lapsed. The test waits for several tries, signs in again, and waits
+    // for one to be heard.
     let running = cli.run_work_watched(ONCE, &tool, no_interrupts, &stdout, &stderr);
     let waiting = async {
         entered.notified().await;
