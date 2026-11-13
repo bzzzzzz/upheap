@@ -33,7 +33,8 @@ Asking the person
 - The line must be answerable by someone who knows the work. Put what anyone else would need in
   `--details-file -`: the background, summed up from the item's context and the heap's.
 - Ask everything you need in one go, each as its own question. Then stop: end your turn without saying reached.
-  The item comes back to you with the answers.
+  The item comes back to you with the answers. The goal's part, after these rules, may narrow which questions
+  to ask now.
 - Questions already answered are under the item, with their replies. Use them. Don't ask the same thing again;
   if a request came back as can't be done, find another way or ask what to do instead.
 

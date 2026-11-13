@@ -95,15 +95,19 @@ but not begun), move it back to open with `upheap item reopen <key>`. In progres
 A note is a thought that hasn't been worked out. Work it out, then decide what it is.
 
 1. **Collect.** Find what bears on it: the heap's context, related items (`upheap item list <text>`), the files,
-   code or links it points at, this conversation. Ask the person what only they know: what they meant, why it
-   matters, what they'd want from it. A few questions, asked together.
+   code or links it points at, this conversation. Ask the person only what you can't write the context without:
+   the note has two readings that would lead to different items, or it points at something only they have (a
+   missing link, name, file or account). Ask those together, or nothing when there are none. Scope, details,
+   choices and how to do it can wait for the task to be defined: don't ask them now.
 2. **Write the context.** What it's about, why it matters, what's known, what's still open, and where the material
-   lives. Facts and the person's words; mark what you inferred as an assumption. Set it with
+   lives. Put each point that can wait under "Still open", one line each, written so it can be asked as it is.
+   Facts and the person's words; mark what you inferred as an assumption. Set it with
    `upheap item edit <key> --context-file <file>`, and set effort, need or due if they're now clear.
 3. **Decide,** and say why in a line:
    - **It becomes a task** when someone wants a result, and you can say what done looks like. Run
-     `upheap item to-task`, write "Done when" into the context, and add a step for each part that's known. If the
-     work is really several results, say so and ask before adding the others.
+     `upheap item to-task`, write "Done when" into the context, and add a step for each part that's known. Its
+     "Still open" points come due now: settle them as "Is it defined?" says. If the work is really several
+     results, say so and ask before adding the others.
    - **It stays a note** when it's an idea nobody has decided on, a question still open, or something to keep in
      mind. It goes back to open, with its context.
    - **It's closed** when collecting settled it: `upheap item done` if there's nothing left to do, `upheap item
@@ -119,8 +123,9 @@ say so; otherwise it goes back to open.
 ### Is it defined?
 
 A task is ready when its context says what the problem is and what done looks like. If it doesn't, define it
-first: collect as for a note, ask the person what's missing, write "Done when", add the steps that are known. Once no
-question is open on it, set its stage to defined, if the guide shows how. Then go on.
+first: collect as for a note, settle what you can of its "Still open" from the code and docs (as assumptions),
+ask the person what's missing, write "Done when", add the steps that are known. Once no question is open on it,
+set its stage to defined, if the guide shows how. Then go on.
 
 ### Can an agent do it?
 
