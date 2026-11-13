@@ -2,20 +2,21 @@
 //!
 //! The items are made with `create_item` from an origin. This closes the note as became. A person's close takes back
 //! the note's turn like any close. In a run it is also the run's report that the turn is reached: the check that every
-//! open task made from the note is ready to be defined, the tasks' stage, the note's close and the end of the run and
-//! the turn are one transaction, so a run that dies between them can't strand a closed note with an open turn.
+//! open task made from the note is ready to be defined, the tasks' stage, the note's close, the end of the run and the
+//! turn, and the turns those tasks get when the note was sent all the way are one transaction, so a run that dies
+//! between them can't strand a closed note with an open turn.
 
 use domain::audit::AuditAction;
-use domain::item::{Item, Kind, Stage};
+use domain::item::{Item, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{RunEnd, RunResult, split_reached_check};
 use domain::step::StepState;
 use domain::turn::TakeBackWhy;
-use domain::{HeapId, ItemId, ValidationError};
+use domain::{HeapId, ItemId, TurnId, ValidationError};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
-use crate::audit::{describe_reached, diff_items};
+use crate::audit::{describe_new_turn, describe_reached, diff_items};
 use crate::items::{ItemChildren, ItemView, build_item_view, commit_if_in_run, in_run};
 use crate::{Principal, ServiceError, Services};
 
@@ -31,8 +32,9 @@ impl Services {
     /// the note must be the run's item, and it is refused with [`ServiceError::NotReached`] (and the run only heard
     /// from) unless it has no open question and every open task made from it has a context and a step that isn't
     /// dropped (those still in the note's heap; one moved away is the person's). Otherwise each of those tasks becomes
-    /// defined, the note closes as became, and the run and the turn end
-    /// as reached; no next turn opens.
+    /// defined, the note closes as became, and the run and the turn end as reached; no next turn opens on the note.
+    /// When its turn was sent all the way, each of those tasks that isn't started and has no open turn gets one of
+    /// its own ([`domain::turn::Turn::passed_on`]).
     pub async fn became_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let found = store::items::find_item(&txn, item_id)
@@ -63,6 +65,7 @@ impl Services {
         let mut turns_taken_back = 0_usize;
         let mut questions_withdrawn = 0_usize;
         let mut defined: Vec<&Item> = Vec::new();
+        let mut turns_opened = 0_usize;
         if scope.is_some() {
             let open_questions = store::questions::list_questions_locking(&txn, note.id)
                 .await?
@@ -143,6 +146,36 @@ impl Services {
                 now,
             );
             store::audit::insert_audit_entry(&txn, &entry).await?;
+
+            // All the way §2: sent all the way, the note's turn goes on to the tasks it became, each defined by now.
+            // One the person has started or sent on already stays as the person left it.
+            for task in made
+                .iter()
+                .filter(|item| to_define(item, heap.id) && item.state.kind() != StateKind::InProgress)
+            {
+                if store::turns::find_open_turn_locking(&txn, task.id).await?.is_some() {
+                    continue;
+                }
+                let task = Item {
+                    stage: Stage::Defined,
+                    ..task.clone()
+                };
+                let Some(turn) = scope.turn.passed_on(TurnId::from_uuid(self.new_id(now)), &task, now) else {
+                    // A turn of one state passes nothing on, to any task.
+                    break;
+                };
+                store::turns::insert_turn(&txn, &turn).await?;
+                let entry = self.item_audit_entry(
+                    heap,
+                    principal,
+                    AuditAction::TurnOpened,
+                    &task,
+                    describe_new_turn(&turn),
+                    now,
+                );
+                store::audit::insert_audit_entry(&txn, &entry).await?;
+                turns_opened += 1;
+            }
         }
 
         let children = ItemChildren::read_locking(&txn, saved.id).await?;
@@ -156,6 +189,7 @@ impl Services {
             made = made.len(),
             tasks_defined = defined.len(),
             turns_taken_back,
+            turns_opened,
             questions_withdrawn,
             in_run = principal.run.is_some(),
             "note became"

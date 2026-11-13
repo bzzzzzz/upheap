@@ -21,7 +21,8 @@ ask on the note (`upheap question ask <key>`) and stop.
 3. A task that has to wait for an earlier one gets `--blocked-by <key of that task>` when it is made. Block only on
    tasks made from this note in this turn.
 4. Then `upheap item became <key>`. It closes the note as became and reaches the turn. There is nothing more to do
-   after it.
+   after it. If the note was sent all the way, each open task split from it gets a turn of its own then; don't start
+   them in this run.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).
 
 Don't do the work and don't tick steps.

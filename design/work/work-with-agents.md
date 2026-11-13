@@ -580,7 +580,7 @@ change it makes carries the run it was made in.
 **All the way**
 
 1. When a turn with that reach ends short of done, the next turn on the item opens at once, with the same reach.
-2. Tasks made from the item get it too. Notes and heaps made from it don't.
+2. Tasks split from the item get it too. Follow-up tasks a run adds, and notes and heaps made from it, don't.
 3. It never answers a question, a request or a review.
 
 **Questions and waiting**
