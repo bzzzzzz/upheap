@@ -103,6 +103,15 @@ The tables and columns are in the migrations. These are the conventions they fol
   500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
   `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
+  **A review and a done proposal are question kinds** with fixed choices too (Approved or Changes asked; Close as done
+  or Not yet), asked only by an agent in a run whose turn goes to done, on a task. A review's link, piece (the link
+  itself when none is named) and round live on its row; the round is fixed when it is asked, as one more than the
+  item's answered reviews of that piece, so later events never change it, and a withdrawn or open review doesn't count.
+  A done proposal is refused, with every blocker listed, while any question or step is open or a reviewed piece's
+  latest round isn't approved (`check_close_ready`); a task with no reviews can be proposed closed.
+  An agent never closes a task: its `PATCH` to done is always refused. The person's reply Close as done closes the task
+  in the reply's transaction, by the same path as their own Done: the open turn ends as reached by the person, other
+  open questions are withdrawn, and the items it blocks are freed.
 - **An item's comments are rows of their own** in `item_comments`: an append-only thread under the item's context,
   so an agent or a person adds to an item without rewriting its context, which could change the author's words and
   clash with their edits. A comment has no `version` and is never changed or deleted, and adding one never bumps the
@@ -163,6 +172,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   stage to the goal, unless the person has taken it further meanwhile: it never moves back. Each refusal of a run
   has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
   never has to read a message.
+  **Redo** is the person's way to say a turn that reached a stable state short of done isn't right: it marks that turn
+  `redone` (`redone_at`, `redone_by`), puts the item's stage back to where the turn's first run found it, and opens a
+  turn to the same reach and goal with the person's line, in one transaction. Only the item's latest turn can be
+  redone, and only once; the kind isn't changed back and what the agent wrote stays.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done or
   won't do. In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -587,7 +600,7 @@ the remaining admins.
    by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
    (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
    back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and
-   after, and `TurnRetried`). Closing an item writes its take back, then a withdrawal for each open question, then its
+   after, `TurnRetried`, and `TurnRedone`, with the goal, the stage before and after and the line). Closing an item writes its take back, then a withdrawal for each open question, then its
    own update.
 7. Invite links are never deleted. Making and revoking one are team entries (`InviteLinkCreated`,
    `InviteLinkRevoked`) shown to admins, and a join through one is a membership entry (`MemberJoined`) naming the
@@ -623,7 +636,7 @@ principles; the exit codes are in `crates/cli/src/error.rs`, and the commands an
 section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), an item's questions (ask, request) and comments (add, list), tags
+   task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add, list), tags
    (list, add, edit), parameters (list, add, edit, archive, and their options), heaps (list, pick a default) and
    signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
    write per kind of change (name and weight, tags, option order), each at the version the last returned, because
