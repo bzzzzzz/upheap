@@ -57,6 +57,9 @@ pub struct ToolStart {
     /// Allow rules the person added for this run's access (`--allow` and the turn's own flag), in the tool's syntax,
     /// on top of the tool's own. Already checked to be one rule each.
     pub allow: Vec<String>,
+    /// A file for the tool's streamed output, one event a line, made with the directory it is in. `None` for no log.
+    /// A log that can't be written is a warning, not a failure of the run.
+    pub log: Option<PathBuf>,
 }
 
 /// What the tool reported when it ended.
@@ -209,12 +212,17 @@ fn listen_for_signals() -> UnboundedReceiver<Interrupt> {
     receiver
 }
 
+/// How long a tool may print nothing before it is stopped and its run failed, in the binary.
+const SILENCE_LIMIT: Duration = Duration::from_secs(30 * 60);
+
 /// The tools of this machine: processes started from the programs on `PATH`.
 pub struct SystemTools {
     /// The program to start for [`Tool::Claude`] in place of the one on `PATH`. For tests.
     claude: Option<PathBuf>,
     /// The tools stopped and not yet ended.
     stops: claude::StopTracker,
+    /// How long a tool may print nothing before it is stopped and its run failed. 30 minutes in the binary.
+    silence_limit: Duration,
 }
 
 impl SystemTools {
@@ -222,6 +230,7 @@ impl SystemTools {
         Self {
             claude: None,
             stops: claude::StopTracker::new(),
+            silence_limit: SILENCE_LIMIT,
         }
     }
 
@@ -230,6 +239,15 @@ impl SystemTools {
         Self {
             claude: Some(path),
             stops: claude::StopTracker::new(),
+            silence_limit: SILENCE_LIMIT,
+        }
+    }
+
+    /// These tools, stopping a tool after `limit` without output. For tests.
+    pub fn with_silence_limit(self, limit: Duration) -> Self {
+        Self {
+            silence_limit: limit,
+            ..self
         }
     }
 
@@ -257,9 +275,10 @@ impl AgentTools for SystemTools {
     fn run(&self, start: ToolStart) -> Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>> {
         let program = self.program(start.tool);
         let stops = self.stops.clone();
+        let silence_limit = self.silence_limit;
         Box::pin(async move {
             match start.tool {
-                Tool::Claude => claude::run(program?, start, stops).await,
+                Tool::Claude => claude::run(program?, start, stops, silence_limit).await,
             }
         })
     }

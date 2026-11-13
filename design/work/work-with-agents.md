@@ -374,7 +374,8 @@ week), setup (once or rarely) or recovery.
 
 **A5. A run dies.** Recovery, for A1.
 
-1. The agent tool crashes, is killed, or `upheap work` is stopped in the middle of a turn.
+1. The agent tool crashes, is killed, hangs (showing no output for 30 minutes, when the loop stops it), or
+   `upheap work` is stopped in the middle of a turn.
 2. What the agent had already written stays: ticked steps, context, questions.
 3. The item is still with the agent and still not at a stable state, so it's the next item again, and the next
    run carries on from what's written.
@@ -502,7 +503,9 @@ ended (reached, asked, failed, handed back), the state it started from and reach
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
-hasn't been heard from for a set time.
+hasn't been heard from for a set time. The run is heard by the loop's heartbeat (the loop is up) or any write in
+the run. Whether the agent itself is still working is the loop's to watch, from the tool's output, not the
+server's.
 
 **Agent.** Not an account. An agent acts as the person who runs `upheap work`, with their sign-in, and every
 change it makes carries the run it was made in.
@@ -559,10 +562,12 @@ change it makes carries the run it was made in.
    question; **handed back**, with a reason, when there is nothing to do and the goal needn't be reached,
    such as work done elsewhere (the turn goes back to the person, and it isn't a failure); or **failed**. An item
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
+   So does a run whose tool showed no activity for 30 minutes: the loop stops it and fails it with its own reason.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
    in the table and has no open question. Otherwise the run counts as failed.
 7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
-   wrong. The person retries it or takes it back.
+   wrong. Both kinds of failure, a lapsed claim and a silent tool, count toward stuck. The person retries it or takes
+   it back.
 8. A turn whose item is already at its goal stage or past it never starts a run: `next` skips it, and a claim
    ends it as reached, credited to the person running `upheap work`, and takes the next item. A goal of done is
    never met this way.

@@ -23,6 +23,7 @@ use tokio::time::{Instant, MissedTickBehavior};
 
 use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
+use super::logs;
 use super::{HeapsArgs, NamedHeap, end_word, journey, missing_agents, resolve_named_heaps, waiting_text};
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
@@ -31,7 +32,7 @@ use crate::commands::item::show::item_text;
 use crate::commands::{SharedArgs, UsageError};
 use crate::config::server_key;
 use crate::lookup::HeapHandle;
-use crate::output::{Cell, Mode, Output, Tone, shorten};
+use crate::output::{Cell, Mode, Output, Tone, shorten, spoken_duration};
 use crate::{App, CliError};
 
 /// How many times the end of a run is sent before giving up on the server being out of reach.
@@ -147,6 +148,14 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let mode = out.mode();
     if mode == Mode::Human {
         out.line(&header(&heaps, args.tool, args.once, args.workers))?;
+        if let Some(config_dir) = &app.env.config_dir {
+            let note = format!(
+                "Each run's {} output is saved in {}, as <run id>.jsonl.",
+                args.tool,
+                logs::runs_dir(config_dir).display()
+            );
+            out.note_toned(&note, Tone::Dim)?;
+        }
     }
     let WorkDeps {
         tools,
@@ -179,6 +188,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         finish_retry,
         sweep_every,
         last_sweep: Mutex::new(None),
+        last_log_prune: Mutex::new(None),
         live_dirs: LiveDirs::default(),
         mode,
         out: Mutex::new(out),
@@ -351,6 +361,8 @@ struct Shared<'a> {
     /// When the root was last swept, or began to be; `None` before the first sweep. Taken by the worker that finds
     /// a sweep due, so the others go on claiming.
     last_sweep: Mutex<Option<Instant>>,
+    /// When the old run logs were last removed; `None` before the first time.
+    last_log_prune: Mutex<Option<Instant>>,
     /// The directories runs are in, which a sweep leaves alone.
     live_dirs: LiveDirs,
     mode: Mode,
@@ -461,6 +473,7 @@ impl Shared<'_> {
             if self.is_stopping() {
                 return;
             }
+            self.prune_logs_if_due().await;
             self.sweep_if_due().await;
             let next = match self.work_a_pass().await {
                 Ok(next) => next,
@@ -526,7 +539,7 @@ impl Shared<'_> {
                 cost_usd: None,
                 failure: Some(failure.to_owned()),
             };
-            self.finish_and_print(&run, &request).await?;
+            self.finish_and_print(&run, &request, None).await?;
             return Ok(Next::Wait);
         };
         self.work_one(run, goal).await
@@ -558,7 +571,7 @@ impl Shared<'_> {
                     cost_usd: None,
                     failure: Some(format!("Couldn't read the item before starting: {err}")),
                 };
-                self.finish_and_print(&run, &request).await?;
+                self.finish_and_print(&run, &request, None).await?;
                 // An item that is gone, such as one moved to another heap since the claim, is that item's trouble:
                 // the next may be fine. Anything else would fail every run, so it ends the worker.
                 return if is_about_the_item(&err) {
@@ -579,6 +592,12 @@ impl Shared<'_> {
             runs: run.item.runs,
             failed_runs: run.item.failed_runs,
         });
+        let log = self
+            .app
+            .env
+            .config_dir
+            .as_deref()
+            .map(|config_dir| logs::log_path(config_dir, &run.id.to_string()));
         let start = ToolStart {
             tool: self.tool,
             access: goal.access(),
@@ -590,6 +609,7 @@ impl Shared<'_> {
             ],
             dir: None,
             allow: self.allow.for_access(goal.access()),
+            log: log.clone(),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
         // Registered before the directory is made or touched, and kept until the run is recorded below, so a sweep
@@ -660,7 +680,7 @@ impl Shared<'_> {
                 (request, None)
             }
         };
-        self.finish_and_print(&run, &request).await?;
+        self.finish_and_print(&run, &request, log.as_deref()).await?;
         // Every run would fail the same way, so the worker does not go on.
         if let Some(err) = not_started {
             return Err(err.into());
@@ -686,6 +706,25 @@ impl Shared<'_> {
                 dir: dir.to_owned(),
                 source,
             })
+    }
+
+    /// Removes the run logs more than 7 days old if it has been `sweep_every` since the last time, or never has been:
+    /// before the first claim, then now and then. A worker that finds it due marks it started and does it; the others
+    /// carry on. Needs no `--root`.
+    async fn prune_logs_if_due(&self) {
+        let Some(config_dir) = &self.app.env.config_dir else {
+            return;
+        };
+        {
+            let mut last = lock(&self.last_log_prune);
+            if last.is_some_and(|at| at.elapsed() < self.sweep_every) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        let (runs_dir, now) = (logs::runs_dir(config_dir), SystemTime::from(self.app.now()));
+        // A failed task is a log left for the next time.
+        let _ = tokio::task::spawn_blocking(move || logs::prune(&runs_dir, now)).await;
     }
 
     /// Sweeps the root if it has been `sweep_every` since the last sweep, or never has been. A worker that finds one
@@ -968,12 +1007,18 @@ impl Shared<'_> {
     }
 
     /// Records the end of `run` and prints its line. When the end can't be recorded: with `--once` and the server out
-    /// of reach, the error ends the worker; otherwise a warning says so, and the run lapses on the server.
-    async fn finish_and_print(&self, run: &RunDto, request: &FinishRequestDto) -> Result<(), CliError> {
+    /// of reach, the error ends the worker; otherwise a warning says so, and the run lapses on the server. `log` is the
+    /// run's log, which a failed run's line points to when the file is there.
+    async fn finish_and_print(
+        &self,
+        run: &RunDto,
+        request: &FinishRequestDto,
+        log: Option<&Path>,
+    ) -> Result<(), CliError> {
         match self.finish_with_retry(run, request).await {
             Ok(finished) => {
                 tracing::info!(run_id = %run.id, end = ?finished.value.end, "run ended");
-                self.print_run(&finished).map_err(CliError::from)
+                self.print_run(&finished, log).map_err(CliError::from)
             }
             Err(err) if self.once && is_unreachable(&err) => Err(err),
             Err(err) => {
@@ -1008,8 +1053,8 @@ impl Shared<'_> {
     }
 
     /// What a run that ended prints on stdout: its line, the key with `--quiet`, or the server's body with `--json`.
-    /// The line and the failure under it are written together, under one lock.
-    fn print_run(&self, finished: &Fetched<RunDto>) -> std::io::Result<()> {
+    /// The line, the failure under it and the log under that are written together, under one lock.
+    fn print_run(&self, finished: &Fetched<RunDto>, log: Option<&Path>) -> std::io::Result<()> {
         let run = &finished.value;
         self.write(|out| match self.mode {
             Mode::Json => out.json(&finished.body),
@@ -1040,6 +1085,9 @@ impl Shared<'_> {
                     && let Some(failure) = run.failure.as_deref()
                 {
                     out.line(&format!("       {}", one_line(failure)))?;
+                    if let Some(log) = log.filter(|log| log.exists()) {
+                        out.line(&format!("       Log: {}", log.display()))?;
+                    }
                 }
                 Ok(())
             }
@@ -1141,18 +1189,6 @@ fn local_time(ms: i64, zone: Option<&str>) -> String {
     }
 }
 
-/// `wait` for a person to read: `30 seconds`, `1 minute`, `5 minutes`; at least `1 second`.
-fn spoken_duration(wait: Duration) -> String {
-    let seconds = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
-    let seconds = seconds.max(1);
-    let (count, unit) = if seconds >= 60 && seconds.is_multiple_of(60) {
-        (seconds / 60, "minute")
-    } else {
-        (seconds, "second")
-    };
-    format!("{count} {unit}{}", if count == 1 { "" } else { "s" })
-}
-
 /// How long a run took, from its length in milliseconds: `0m40s`, `2m10s`, `1h05m`.
 fn format_duration(ms: i64) -> String {
     let seconds = ms.max(0) / 1000;
@@ -1187,16 +1223,6 @@ mod tests {
             }),
             body: String::new(),
         })
-    }
-
-    #[gtest]
-    fn a_wait_is_spoken_in_whole_seconds_or_minutes_and_at_least_a_second() {
-        let spoken = |millis| spoken_duration(Duration::from_millis(millis));
-        expect_that!(spoken(5), eq("1 second"));
-        expect_that!(spoken(30_000), eq("30 seconds"));
-        expect_that!(spoken(60_000), eq("1 minute"));
-        expect_that!(spoken(300_000), eq("5 minutes"));
-        expect_that!(spoken(90_000), eq("90 seconds"));
     }
 
     #[gtest]

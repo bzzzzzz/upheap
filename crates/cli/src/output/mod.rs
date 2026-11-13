@@ -4,6 +4,7 @@
 //! writes; API calls and lookups return values.
 
 use std::io::Write;
+use std::time::Duration;
 
 use owo_colors::{OwoColorize, Style};
 
@@ -236,11 +237,33 @@ pub fn shorten(text: &str, width: usize) -> String {
     format!("{kept}…")
 }
 
+/// `wait` for a person to read: `30 seconds`, `1 minute`, `5 minutes`; at least `1 second`.
+pub fn spoken_duration(wait: Duration) -> String {
+    let seconds = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
+    let seconds = seconds.max(1);
+    let (count, unit) = if seconds >= 60 && seconds.is_multiple_of(60) {
+        (seconds / 60, "minute")
+    } else {
+        (seconds, "second")
+    };
+    format!("{count} {unit}{}", if count == 1 { "" } else { "s" })
+}
+
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn a_wait_is_spoken_in_whole_seconds_or_minutes_and_at_least_a_second() {
+        let spoken = |millis| spoken_duration(Duration::from_millis(millis));
+        expect_that!(spoken(5), eq("1 second"));
+        expect_that!(spoken(30_000), eq("30 seconds"));
+        expect_that!(spoken(60_000), eq("1 minute"));
+        expect_that!(spoken(300_000), eq("5 minutes"));
+        expect_that!(spoken(90_000), eq("90 seconds"));
+    }
 
     #[gtest]
     fn long_titles_are_cut_with_an_ellipsis() {
