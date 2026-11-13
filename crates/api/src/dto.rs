@@ -6,14 +6,16 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, QuestionDto, QuestionReplyDto, RankedItemDto, ReviewDto,
-    SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, MadeItemDto, QuestionDto, QuestionReplyDto, RankedItemDto,
+    ReviewDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::{GoalDto, TurnDto};
 use api_types::waiting::ItemHeapDto;
 use domain::Timestamp;
 use domain::due::{describe_ago, describe_date, describe_due, describe_since, group_closed};
+use domain::heap::Heap;
 use domain::item::Kind;
+use domain::team::Team;
 use domain::turn::goal_choices;
 use jiff::tz::TimeZone;
 use service::items::{CommentView, GoneBlocker, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView};
@@ -57,6 +59,9 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         blocked_reason: item.state.blocked_reason().map(|reason| reason.as_str().to_owned()),
         blocker_gone: view.blocker_gone.map(to_blocker_gone_dto),
+        became: view
+            .became
+            .map(|became| became.into_iter().map(to_made_item_dto).collect()),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
@@ -114,17 +119,21 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
             key: origin.item.key.to_string(),
             title: origin.item.title.as_str().to_owned(),
             kind: origin.item.kind.into(),
-            heap: ItemHeapDto {
-                id: *origin.heap.id.as_uuid(),
-                slug: origin.heap.slug.to_string(),
-                name: origin.heap.name.as_str().to_owned(),
-                team_slug: origin.team.slug.to_string(),
-                team_name: origin.team.name.as_str().to_owned(),
-            },
+            heap: to_item_heap_dto(&origin.heap, &origin.team),
         }),
         added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+    }
+}
+
+pub(crate) fn to_item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
+    ItemHeapDto {
+        id: *heap.id.as_uuid(),
+        slug: heap.slug.to_string(),
+        name: heap.name.as_str().to_owned(),
+        team_slug: team.slug.to_string(),
+        team_name: team.name.as_str().to_owned(),
     }
 }
 
@@ -209,4 +218,21 @@ pub(crate) struct IfMatchHeader {
     /// The `version` of what is being edited, for example `"3"`.
     #[param(rename = "If-Match")]
     if_match: String,
+}
+
+fn to_made_item_dto(made: service::items::MadeItem) -> MadeItemDto {
+    MadeItemDto {
+        id: *made.item.id.as_uuid(),
+        key: made.item.key.to_string(),
+        title: made.item.title.as_str().to_owned(),
+        kind: made.item.kind.into(),
+        state: made.item.state.kind().into(),
+        heap: ItemHeapDto {
+            id: *made.heap.id.as_uuid(),
+            slug: made.heap.slug.to_string(),
+            name: made.heap.name.as_str().to_owned(),
+            team_slug: made.team.slug.to_string(),
+            team_name: made.team.name.as_str().to_owned(),
+        },
+    }
 }

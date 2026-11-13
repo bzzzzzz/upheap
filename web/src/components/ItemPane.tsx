@@ -14,6 +14,7 @@ import { ItemFieldList } from "./ItemFieldList";
 import { itemProblem } from "./itemProblems";
 import { ItemActions } from "./ItemMore";
 import { ItemComments } from "./ItemComments";
+import { ItemBecame } from "./ItemBecame";
 import { ItemQuestions, useItemWaits, WaitsForYou } from "./ItemQuestions";
 import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
@@ -252,7 +253,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const [flushDraft, setFlushDraft] = useState<FlushDraft | null>(null);
   const changeState = (state: ItemState) => {
     if (state === item.state) return;
-    if (flushDraft !== null && (state === "done" || state === "wont_do")) {
+    if (flushDraft !== null && isClosed(state)) {
       void flushDraft().then((saved) => saved && changeStateNow(state));
     } else {
       changeStateNow(state);
@@ -351,6 +352,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       <ItemSteps heapRef={heapRef} item={item} />
 
       <ItemFrom item={item} />
+      <ItemBecame item={item} />
 
       <ItemQuestions heapRef={heapRef} item={item} waits={waits} />
 

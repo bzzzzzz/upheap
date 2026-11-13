@@ -2464,7 +2464,7 @@
             }
           },
           "403": {
-            "description": "From inside a run: `run_add_reminder` or `run_add_needs_context`",
+            "description": "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2484,7 +2484,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
+            "description": "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2494,7 +2494,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`",
+            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2789,7 +2789,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over`",
+            "description": "`version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, `became_needs_split` (`state` set to `became`: use `POST …/became`), or from inside a run `run_over`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2810,6 +2810,120 @@
           },
           "428": {
             "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/became": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Closes a note as became, because items were made from it (`POST …/items` with an `origin`). Declarative: it says\nwhat the note should end up as, so it takes no `If-Match` and a note that already became answers `200` unchanged.\nOpen questions are withdrawn, as on any close, and a person's request takes back the note's open turn.",
+        "description": "From inside a run it also reaches the turn: the note must be the run's item, every open task made from it needs a\ncontext and a step (`not_reached`), and on success those tasks become defined, the note closes, and the run and\nthe turn end as reached, with no next turn. `POST /work/runs/{run}/reached` after it succeeds and does nothing.",
+        "operationId": "became_item",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`became_needs_note` (a task or a reminder), `nothing_made` (no item was made from it), `item_closed` (done or won't do), `heap_archived`, or from inside a run `run_over`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "From inside a run: `not_reached`, naming the first open question or made task that isn't ready",
             "content": {
               "application/json": {
                 "schema": {
@@ -7338,6 +7452,14 @@
         },
         "additionalProperties": false
       },
+      "Age": {
+        "type": "string",
+        "description": "Whose age a new item made from another counts from.",
+        "enum": [
+          "keep",
+          "new"
+        ]
+      },
       "ArchiveOptionRequest": {
         "type": "object",
         "properties": {
@@ -7694,6 +7816,7 @@
         "enum": [
           "done",
           "wont_do",
+          "became",
           "moved"
         ]
       },
@@ -7733,6 +7856,13 @@
                 "description": "`null` when nothing in the given heaps waits for an agent."
               }
             ]
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingInHeap"
+            },
+            "description": "As in `WorkNext`."
           },
           "waiting_count": {
             "type": "integer",
@@ -7939,6 +8069,14 @@
           "need"
         ],
         "properties": {
+          "blocked_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked."
+          },
           "description": {
             "type": [
               "string",
@@ -7989,6 +8127,17 @@
           "need": {
             "$ref": "#/components/schemas/Need",
             "description": "Required: every item says how much it's needed."
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OriginInput",
+                "description": "Makes the item from another, which must be an open note of the same heap (a split): the item gets a link to\nit, and is one of the items the note became. Not for a reminder. In a run it must be the run's item. A run that\nleaves it out adds a follow-up instead, which links back to the run's item but isn't one of what it became."
+              }
+            ]
           },
           "parameter_values": {
             "type": [
@@ -8791,6 +8940,7 @@
           "stage_choices",
           "state",
           "blocker_gone",
+          "became",
           "need",
           "tags",
           "parameters",
@@ -8824,6 +8974,16 @@
             ],
             "format": "int64",
             "description": "When a reminder joins the list: the start of its date. Before that it's out of the list. UTC milliseconds.\nSet only when `kind` is `reminder`; `null` otherwise, a task that was a reminder included."
+          },
+          "became": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MadeItem"
+            },
+            "description": "The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;\non one item and in the closed list it is a list, empty when nothing was made from it."
           },
           "blocked_by": {
             "oneOf": [
@@ -9003,7 +9163,7 @@
               },
               {
                 "$ref": "#/components/schemas/ItemOrigin",
-                "description": "The item this one was made from: the item of the run that added it. `null` when it has no origin, when the\ncaller can't view the origin's heap, and in the ranked list and the closed list, which don't look it up."
+                "description": "The item this one was made from: the note it was split from, or the item of the run that added it. `null` when\nit has no origin, when the\ncaller can't view the origin's heap, and in the ranked list and the closed list, which don't look it up."
               }
             ]
           },
@@ -9111,6 +9271,7 @@
           "move",
           "change_state",
           "reopen",
+          "became",
           "make_task",
           "add_step",
           "ask_question",
@@ -9367,6 +9528,7 @@
           "id",
           "key",
           "title",
+          "kind",
           "state"
         ],
         "properties": {
@@ -9378,6 +9540,10 @@
             "type": "string",
             "description": "Unique within the heap; the item's path is `…/items/{key}`."
           },
+          "kind": {
+            "$ref": "#/components/schemas/Kind",
+            "description": "Decoding tolerates an older server that doesn't send it, reading `Unknown`; this server always does."
+          },
           "state": {
             "$ref": "#/components/schemas/ItemState"
           },
@@ -9388,13 +9554,14 @@
       },
       "ItemState": {
         "type": "string",
-        "description": "Item state. `done` and `wont_do` are closed.",
+        "description": "Item state. `done`, `wont_do` and `became` are closed.",
         "enum": [
           "open",
           "in_progress",
           "blocked",
           "done",
-          "wont_do"
+          "wont_do",
+          "became"
         ]
       },
       "ItemTag": {
@@ -9642,6 +9809,41 @@
           }
         },
         "additionalProperties": false
+      },
+      "MadeItem": {
+        "type": "object",
+        "description": "An item a note was split into, as the note's `became` lists it, with the heap it is in now.",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "kind",
+          "state",
+          "heap"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap",
+            "description": "The heap it is in now, and its team."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Unique within the heap; the item's path is `…/items/{key}`."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ItemState"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "Me": {
         "type": "object",
@@ -9927,6 +10129,24 @@
           }
         },
         "additionalProperties": false
+      },
+      "OriginInput": {
+        "type": "object",
+        "description": "The item a new item is made from, and whose age it takes.",
+        "required": [
+          "item_id",
+          "age"
+        ],
+        "properties": {
+          "age": {
+            "$ref": "#/components/schemas/Age",
+            "description": "Required: nothing is inherited silently. `keep` ranks the new item's age from the origin's, `new` from now."
+          },
+          "item_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "Parameter": {
         "type": "object",
@@ -10227,6 +10447,13 @@
               "null"
             ],
             "description": "The input field the error is about, when there is one."
+          },
+          "highest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The highest need code a run may give, for `run_need_above_origin`: the need of the note it splits."
           },
           "hint": {
             "type": [
@@ -11768,6 +11995,25 @@
           }
         }
       },
+      "WaitingInHeap": {
+        "type": "object",
+        "description": "The items waiting for the person in one heap.",
+        "required": [
+          "heap",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "At least 1.",
+            "minimum": 0
+          },
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap"
+          }
+        }
+      },
       "WaitingItem": {
         "type": "object",
         "description": "The item a row is on.",
@@ -12020,6 +12266,13 @@
                 "description": "`null` when nothing in the given heaps waits for an agent."
               }
             ]
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingInHeap"
+            },
+            "description": "How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to\n`waiting_count`."
           },
           "waiting_count": {
             "type": "integer",

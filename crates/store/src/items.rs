@@ -210,6 +210,36 @@ pub async fn list_items_blocked_by_locking(
     Ok(items)
 }
 
+/// The items split from any of `origins` (their `origin_id` is one of them and `made_in_split` is set), in any state
+/// and any heap, oldest first,
+/// with their tags and values. With `lock` the rows are read with locking reads (`FOR SHARE` on MySQL and Postgres)
+/// like [`find_item_locking`], so a write that depends on what was made calls it after [`crate::heaps::lock_heap`].
+///
+/// Size assumption: a split makes a handful of items from a note, and the callers pass one note or one page of
+/// closed items (at most 200), so the result is small. A note split into thousands would want paging here.
+pub async fn list_items_made_from(
+    db: &impl ConnectionTrait,
+    origins: &[ItemId],
+    lock: bool,
+) -> Result<Vec<Item>, StoreError> {
+    let ids: Vec<String> = origins.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut items = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let query = items::Entity::find()
+            .filter(items::Column::OriginId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::MadeInSplit.eq(true))
+            .order_by_asc(items::Column::CreatedAt)
+            .order_by_asc(items::Column::Id);
+        for row in shared_if(query, lock).all(db).await? {
+            items.push(to_item(row)?);
+        }
+    }
+    items.sort_by_key(|item| (item.created_at, *item.id.as_uuid()));
+    attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
+    Ok(items)
+}
+
 /// Every item of `heap_id` in one of `states`, oldest first.
 pub async fn list_items_in_states(
     db: &impl ConnectionTrait,
@@ -528,6 +558,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         blocked_reason: Set(item.blocked_reason().map(|reason| reason.as_str().to_owned())),
         origin_id: Set(item.origin_id.map(|id| id_to_db(id.as_uuid()))),
         created_run_id: Set(item.created_run_id.map(|id| id_to_db(id.as_uuid()))),
+        made_in_split: Set(item.made_in_split),
     })
 }
 
@@ -613,6 +644,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
             .as_deref()
             .map(|raw| read.uuid(raw).map(RunId::from_uuid))
             .transpose()?,
+        made_in_split: row.made_in_split,
         version: read.version(row.version)?,
     })
 }

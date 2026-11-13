@@ -10,6 +10,7 @@ export function blockerCandidatesFor(entries: RankedItem[]): (itemId: string) =>
     id: item.id,
     key: item.key,
     title: item.title,
+    kind: item.kind,
     state: item.state,
   }));
   const reaches = (from: string, target: string) => {

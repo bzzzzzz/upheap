@@ -11,7 +11,7 @@ const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visi
 
 const isChangedMeanwhile = (error: Error) => error instanceof ApiProblem && error.code === "version_conflict";
 
-/** What happened to the blocker: "closed as won't do", "closed as done" or "moved to <heap>". */
+/** What happened to the blocker: "closed as won't do", "closed as done", "which became other items" or "moved to <heap>". */
 function goneWords(gone: BlockerGone) {
   const heap = gone.moved_to ? gone.moved_to.name : null;
   switch (gone.how) {
@@ -19,6 +19,8 @@ function goneWords(gone: BlockerGone) {
       return heap ? `closed as done in ${heap}` : "closed as done";
     case "wont_do":
       return heap ? `closed as won't do in ${heap}` : "closed as won't do";
+    case "became":
+      return heap ? `became other items in ${heap}` : "which became other items";
     case "moved":
       return heap ? `moved to ${heap}` : "moved to another heap";
     default:

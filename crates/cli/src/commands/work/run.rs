@@ -25,7 +25,8 @@ use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::logs;
 use super::{
-    HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_text,
+    HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text,
+    waiting_text,
 };
 use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
@@ -117,10 +118,11 @@ impl AllowRules {
 }
 
 /// Works the queue until stopped: claims an item, starts the tool on it, and records how the run ended. Prints a line
-/// for each run that ends, `14:02  k3x9a  Rotate the certs  note → with context  reached  2m10s  $0.31`, and one
-/// when nothing is left to do. Ctrl-C once stops the loop after the current run, twice stops the run too. `--quiet`
-/// prints the key of each item worked, `--json` each run as the server records its end. Exit 0 when stopped or
-/// `--once` is done, and 5 when the server can't be reached with `--once`. Refused inside a run.
+/// for each run that ends, `14:02  k3x9a  Rotate the certs  Work  note → with context  reached  2m10s  $0.31`, and
+/// one when nothing is left to do. Ctrl-C once stops the loop after the current run, twice stops the run too.
+/// `--quiet` prints the key of each item worked, or `team/heap/key` with several heaps, `--json` each run as the
+/// server records its end. Exit 0 when stopped or `--once` is done, and 5 when the server can't be reached with
+/// `--once`. Refused inside a run.
 ///
 /// With `--workers N`, up to N runs go at once, each on its own item, and a line is printed as each ends. One Ctrl-C
 /// reaches them all: no run starts, the live ones end, and a second Ctrl-C stops them now. With `--once`, each worker
@@ -328,8 +330,9 @@ enum Stop {
 /// What has been said while the loop stays idle or out of reach, shared by every worker so a stretch is said once.
 #[derive(Default)]
 struct Noted {
-    /// How many items waited for the person when the idle line was last printed, while the loop stays idle.
-    idle: Option<u32>,
+    /// What the idle line said about the items that wait for the person (the text after `Nothing to do.`) when it was
+    /// last printed, while the loop stays idle.
+    idle: Option<String>,
     /// Whether the server being out of reach has been said, while it stays so.
     unreachable: bool,
 }
@@ -519,7 +522,7 @@ impl Shared<'_> {
         let claimed = self.claim().await?;
         lock(&self.noted).unreachable = false;
         let Some(run) = claimed.value.run else {
-            self.note_idle(claimed.value.waiting_count)?;
+            self.note_idle(&claimed.value)?;
             return Ok(Next::Wait);
         };
         lock(&self.noted).idle = None;
@@ -1054,12 +1057,17 @@ impl Shared<'_> {
             .map_err(|err| missing_agents(err, Some(&id)))
     }
 
-    /// What a run that ended prints on stdout: its line, the key with `--quiet`, or the server's body with `--json`.
-    /// The line, the failure under it and the log under that are written together, under one lock.
+    /// What a run that ended prints on stdout: its line, the key with `--quiet` (`team/heap/key` with several heaps),
+    /// or the server's body with `--json`. The line, the failure under it and the log under that are written together,
+    /// under one lock.
     fn print_run(&self, finished: &Fetched<RunDto>, log: Option<&Path>) -> std::io::Result<()> {
         let run = &finished.value;
         self.write(|out| match self.mode {
             Mode::Json => out.json(&finished.body),
+            Mode::Quiet if self.heaps.len() > 1 => {
+                let heap = &run.item.heap;
+                out.line(&format!("{}/{}/{}", heap.team_slug, heap.slug, run.item.key))
+            }
             Mode::Quiet => out.line(&run.item.key),
             Mode::Human => {
                 let tone = if run.end == Some(RunEndDto::Failed) {
@@ -1071,6 +1079,7 @@ impl Shared<'_> {
                     Cell::toned(self.local_time(run.started_at), Tone::Dim),
                     Cell::toned(run.item.key.clone(), Tone::Strong),
                     Cell::new(shorten(&run.item.title, TITLE_WIDTH)),
+                    Cell::new(run.item.heap.name.clone()),
                     Cell::new(ended_journey(&run.item, run.end)),
                     Cell::toned(end_word(run.end).unwrap_or("ended"), tone),
                 ];
@@ -1096,43 +1105,56 @@ impl Shared<'_> {
         })
     }
 
-    /// `14:02  k3x9a  Rotate the certs  note → with context  started`, on stderr.
+    /// `14:02  k3x9a  Rotate the certs  Work  note → with context  started`, on stderr.
     fn note_started(&self, run: &RunDto) {
         if self.mode != Mode::Human {
             return;
         }
         let line = format!(
-            "{}  {}  {}  {}  started",
+            "{}  {}  {}  {}  {}  started",
             self.local_time(run.started_at),
             run.item.key,
             shorten(&run.item.title, TITLE_WIDTH),
+            run.item.heap.name,
             journey(&run.item)
         );
         // Nowhere left to say it if stderr is gone.
         let _ = self.write(|out| out.note_toned(&line, Tone::Dim));
     }
 
-    /// `14:06  Nothing to do. 1 item waits for you. Asking again in a minute.`, once for each stretch of idling across
-    /// all workers, and not while a run is live: again only when the number of items that wait for the person changes.
-    fn note_idle(&self, waiting: u32) -> std::io::Result<()> {
+    /// `14:06  Nothing to do. 3 items wait for you: 2 in Work, 1 in House. Asking again in a minute.`, once for each
+    /// stretch of idling across all workers, and not while a run is live: again only when what it says about the items
+    /// that wait for the person changes. With one heap it says how many wait, not where.
+    fn note_idle(&self, claim: &ClaimDto) -> std::io::Result<()> {
         // Idle is only news when nothing is going on: another worker's live run is not "nothing to do".
         if self.live.load(Ordering::SeqCst) > 0 {
             return Ok(());
         }
+        let waiting = if self.heaps.len() > 1 {
+            let by_heap: Vec<(&str, u32)> = claim
+                .waiting
+                .iter()
+                .map(|in_heap| (in_heap.heap.name.as_str(), in_heap.count))
+                .collect();
+            waiting_by_heap_text(claim.waiting_count, &by_heap)
+        } else {
+            waiting_text(claim.waiting_count)
+        };
+        let said = waiting.unwrap_or_default();
         {
             let mut noted = lock(&self.noted);
-            if noted.idle == Some(waiting) {
+            if noted.idle.as_ref() == Some(&said) {
                 return Ok(());
             }
-            noted.idle = Some(waiting);
+            noted.idle = Some(said.clone());
         }
         if self.mode != Mode::Human {
             return Ok(());
         }
         let mut text = String::from("Nothing to do.");
-        if let Some(waiting) = waiting_text(waiting) {
+        if !said.is_empty() {
             text.push(' ');
-            text.push_str(&waiting);
+            text.push_str(&said);
         }
         if !self.once {
             text.push_str(" Asking again in a minute.");
@@ -1221,6 +1243,7 @@ mod tests {
                 field: None,
                 hint: None,
                 item_key: None,
+                highest: None,
                 request_id: None,
             }),
             body: String::new(),

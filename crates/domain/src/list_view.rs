@@ -255,7 +255,7 @@ impl ListView {
                     BlockedLayout::Mixed => Group::Ranked,
                 },
             ),
-            StateKind::Done | StateKind::WontDo => return None,
+            StateKind::Done | StateKind::WontDo | StateKind::Became => return None,
         };
         match mode {
             StateMode::Pinned => Some(Group::Pinned),
@@ -341,6 +341,8 @@ mod tests {
             arrives_at: None,
             tags: BTreeSet::new(),
             parameters: std::collections::BTreeMap::new(),
+            origin: None,
+            blocked_by: None,
         };
         let created = Timestamp::from_millis(0).expect("in range");
         Item::new(

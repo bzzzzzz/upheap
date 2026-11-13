@@ -158,12 +158,64 @@ pub(super) const fn end_word(end: Option<RunEndDto>) -> Option<&'static str> {
     }
 }
 
-/// `1 item waits for you.` or `N items wait for you.`, or nothing at 0.
-pub(super) fn waiting_text(count: u32) -> Option<String> {
+/// `1 item waits for you` or `N items wait for you`, without an ending, or nothing at 0.
+fn waiting_phrase(count: u32) -> Option<String> {
     match count {
         0 => None,
-        1 => Some("1 item waits for you.".to_owned()),
-        n => Some(format!("{n} items wait for you.")),
+        1 => Some("1 item waits for you".to_owned()),
+        n => Some(format!("{n} items wait for you")),
+    }
+}
+
+/// `1 item waits for you.` or `N items wait for you.`, or nothing at 0.
+pub(super) fn waiting_text(count: u32) -> Option<String> {
+    waiting_phrase(count).map(|phrase| format!("{phrase}."))
+}
+
+/// `waiting_text(total)` with where they wait: `3 items wait for you: 2 in Work, 1 in House.`, each heap with its
+/// count in the order given. Without heaps (a server that doesn't say), the plain total.
+pub(super) fn waiting_by_heap_text(total: u32, by_heap: &[(&str, u32)]) -> Option<String> {
+    let phrase = waiting_phrase(total)?;
+    if by_heap.is_empty() {
+        return Some(format!("{phrase}."));
+    }
+    let split: Vec<String> = by_heap
+        .iter()
+        .map(|(name, count)| format!("{count} in {name}"))
+        .collect();
+    Some(format!("{phrase}: {}.", split.join(", ")))
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::waiting_by_heap_text;
+
+    #[gtest]
+    fn one_heap_with_one_item_says_where_it_waits() {
+        expect_that!(
+            waiting_by_heap_text(1, &[("House", 1)]),
+            some(eq("1 item waits for you: 1 in House."))
+        );
+    }
+
+    #[gtest]
+    fn several_heaps_are_listed_in_the_order_given() {
+        expect_that!(
+            waiting_by_heap_text(3, &[("Work", 2), ("House", 1)]),
+            some(eq("3 items wait for you: 2 in Work, 1 in House."))
+        );
+    }
+
+    #[gtest]
+    fn without_heaps_it_is_the_plain_total() {
+        expect_that!(waiting_by_heap_text(2, &[]), some(eq("2 items wait for you.")));
+    }
+
+    #[gtest]
+    fn nothing_waiting_says_nothing() {
+        expect_that!(waiting_by_heap_text(0, &[]), none());
     }
 }
 

@@ -317,6 +317,93 @@ async fn next_with_nothing_to_do_says_how_many_wait_for_the_person() -> Result<(
     expect_that!(next.status, eq(StatusCode::OK));
     expect_that!(next.body["item"], eq(&Value::Null));
     expect_that!(next.body["waiting_count"], eq(&json!(1)));
+    let waiting = next.body["waiting"].as_array().context("waiting")?;
+    expect_that!(waiting.len(), eq(1));
+    expect_that!(waiting[0]["count"], eq(&json!(1)));
+    expect_that!(waiting[0]["heap"]["slug"], eq(&json!("personal")));
+    let claimed = w.claim().await?;
+    expect_that!(claimed.status, eq(StatusCode::OK));
+    expect_that!(claimed.body["run"], eq(&Value::Null));
+    expect_that!(claimed.body["waiting"], eq(&next.body["waiting"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn next_lists_the_waiting_items_by_heap() -> Result<()> {
+    // Arrange: "Personal" has two waiting items, "Garage" one (with two questions, which count once), and "Attic"
+    // has nothing waiting.
+    let w = world().await?;
+    let url = w.app.heap_url(&w.heap).await?;
+    let team = url.split("/heaps/").next().context("heap url")?;
+    let mut refs = vec![w.heap_ref.clone()];
+    let mut heap_ids = vec![w.heap.clone()];
+    for name in ["Garage", "Attic"] {
+        let created = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{team}/heaps"),
+                Some(&w.session),
+                Some(json!({ "name": name })),
+            )
+            .await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create heap failed: {}",
+            created.body
+        );
+        let id = created.body["id"].as_str().context("heap id")?.to_owned();
+        refs.push(heap_ref(&w.app, &id).await?);
+        heap_ids.push(id);
+    }
+    for (heap, titles) in [(&heap_ids[0], vec!["One", "Two"]), (&heap_ids[1], vec!["Three"])] {
+        for title in titles {
+            let item = w.app.new_item(&w.session, heap, json!({ "title": title })).await?;
+            let key = item["key"].as_str().context("key")?;
+            let questions = format!("{}/items/{key}/questions", w.app.heap_url(heap).await?);
+            let count = if title == "Three" { 2 } else { 1 };
+            for _ in 0..count {
+                let asked = w
+                    .app
+                    .send(
+                        Method::POST,
+                        &questions,
+                        Some(&w.session),
+                        Some(json!({ "kind": "question", "text": "Which?" })),
+                    )
+                    .await?;
+                anyhow::ensure!(asked.status == StatusCode::CREATED, "ask failed: {}", asked.body);
+            }
+        }
+    }
+
+    // Act
+    let next = w
+        .app
+        .send(
+            Method::GET,
+            &format!("/api/v1/work/next?heaps={}", refs.join(",")),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert: by heap name, Attic having none.
+    expect_that!(next.status, eq(StatusCode::OK));
+    expect_that!(next.body["waiting_count"], eq(&json!(3)));
+    let waiting = next.body["waiting"].as_array().context("waiting")?;
+    let seen: Vec<(&str, u64)> = waiting
+        .iter()
+        .map(|entry| {
+            (
+                entry["heap"]["name"].as_str().unwrap_or_default(),
+                entry["count"].as_u64().unwrap_or_default(),
+            )
+        })
+        .collect();
+    expect_that!(seen, elements_are![eq(&("Garage", 1)), eq(&("Personal", 2))]);
+    expect_that!(waiting[0]["heap"]["team_slug"], eq(&json!("ada")));
     Ok(())
 }
 
@@ -1296,11 +1383,13 @@ async fn a_run_writes_only_to_its_own_item_and_only_while_it_lasts() -> Result<(
     expect_that!(wrong_item.body["item_key"], eq(&json!(mine)));
     expect_that!(unknown_run.status, eq(StatusCode::NOT_FOUND));
     expect_that!(reached.status, eq(StatusCode::OK));
-    for response in [&after, &heartbeat, &reached_again] {
+    for response in [&after, &heartbeat] {
         expect_that!(response.status, eq(StatusCode::CONFLICT));
         expect_that!(code(response), some(eq("run_over")));
         expect_that!(response.body["title"], eq(&json!("This run is over.")));
     }
+    // Saying it again after reaching is nothing to do (Boundaries §6), not an error.
+    expect_that!(reached_again.status, eq(StatusCode::OK));
     Ok(())
 }
 

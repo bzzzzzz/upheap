@@ -587,7 +587,7 @@ change it makes carries the run it was made in.
 **All the way**
 
 1. When a turn with that reach ends short of done, the next turn on the item opens at once, with the same reach.
-2. Tasks made from the item get it too. Notes and heaps made from it don't.
+2. Tasks split from the item get it too. Follow-up tasks a run adds, and notes and heaps made from it, don't.
 3. It never answers a question, a request or a review.
 
 **Questions and waiting**
@@ -1079,13 +1079,14 @@ C1 · upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>] 
 
 $ upheap work run --tool claude --heap work --heap house
 Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
-14:02  k3x9a  Rotate the certs    note → with context    reached   2m10s   $0.31
-14:05  p2m4q  Paint the fence     note → with context    asked     0m40s   $0.08
-14:06  w7d2c  Fix the footer      task → defined (skipped with context)    reached   1m30s   $0.12
-14:07  Nothing to do. 1 item waits for you. Asking again in a minute.
+14:02  k3x9a  Rotate the certs    Work    note → with context    reached   2m10s   $0.31
+14:05  p2m4q  Paint the fence     House   note → with context    asked     0m40s   $0.08
+14:06  w7d2c  Fix the footer      Work    task → defined (skipped with context)    reached   1m30s   $0.12
+14:07  Nothing to do. 1 item waits for you: 1 in House. Asking again in a minute.
 
 --heap    repeatable; with none, the default heap. Heaps agents make from these are included.
 --once    do one run, or nothing when there is nothing, and exit.
+--quiet   prints the key of each item worked, or team/heap/key with several heaps.
 --workers keep up to N runs going at once (1 to 8, default 1), each on its own item. Above 1, needs --root.
 --root    each item runs in <dir>/<team>/<heap>/<key>, kept and reused for its next run; removed once the item
           is closed or can't be found, or 7 days after a run last started or ended in it (swept at start, then hourly).
@@ -1191,6 +1192,8 @@ The quoted text is the short version, one line. --details-file is the long one, 
 instructions tell the agent to sum up there what the person needs from the item's context and the heap's.
 Each prints one line saying what changed, and --quiet prints the key of what was made.
 `item became` is refused while nothing was made from the item.
+In a run, `item became` also ends the run and the turn as reached, so a split ends with it; a later `work reached`
+succeeds and does nothing.
 `work reached` and `work hand-back` take no item: the run knows it.
 ```
 

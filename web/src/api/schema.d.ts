@@ -593,6 +593,30 @@ export interface paths {
         patch: operations["update_item"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/became": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Closes a note as became, because items were made from it (`POST …/items` with an `origin`). Declarative: it says
+         *     what the note should end up as, so it takes no `If-Match` and a note that already became answers `200` unchanged.
+         *     Open questions are withdrawn, as on any close, and a person's request takes back the note's open turn.
+         * @description From inside a run it also reaches the turn: the note must be the run's item, every open task made from it needs a
+         *     context and a step (`not_reached`), and on success those tasks become defined, the note closes, and the run and
+         *     the turn end as reached, with no next turn. `POST /work/runs/{run}/reached` after it succeeds and does nothing.
+         */
+        post: operations["became_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/comments": {
         parameters: {
             query?: never;
@@ -1434,6 +1458,11 @@ export interface components {
             /** @description 1 to 300 characters. */
             title: string;
         };
+        /**
+         * @description Whose age a new item made from another counts from.
+         * @enum {string}
+         */
+        Age: "keep" | "new";
         ArchiveOptionRequest: {
             /**
              * Format: uuid
@@ -1568,7 +1597,7 @@ export interface components {
          * @description How a blocker stopped holding the item it blocks. More ways can join.
          * @enum {string}
          */
-        BlockerGoneHow: "done" | "wont_do" | "moved";
+        BlockerGoneHow: "done" | "wont_do" | "became" | "moved";
         /** @description What the signed-in user gives to change their password. */
         ChangePasswordRequest: {
             /** @description The password now in use, to show it is the user and not someone at their open browser. */
@@ -1582,6 +1611,8 @@ export interface components {
         /** @description A claim: the run started on the first item of the queue. */
         Claim: {
             run?: null | components["schemas"]["Run"];
+            /** @description As in `WorkNext`. */
+            waiting?: components["schemas"]["WaitingInHeap"][];
             /**
              * Format: int32
              * @description As in `WorkNext`.
@@ -1676,6 +1707,11 @@ export interface components {
             share_percent: number;
         };
         CreateItemRequest: {
+            /**
+             * Format: uuid
+             * @description The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked.
+             */
+            blocked_by?: string | null;
             description?: string | null;
             due?: null | components["schemas"]["DueInput"];
             effort?: null | components["schemas"]["Size"];
@@ -1683,6 +1719,7 @@ export interface components {
             kind?: null | components["schemas"]["Kind"];
             /** @description Required: every item says how much it's needed. */
             need: components["schemas"]["Need"];
+            origin?: null | components["schemas"]["OriginInput"];
             /** @description An option for each parameter to set, by parameter ID: options in use of the same heap's parameters in use. */
             parameter_values?: {
                 [key: string]: string;
@@ -2044,6 +2081,11 @@ export interface components {
              *     Set only when `kind` is `reminder`; `null` otherwise, a task that was a reminder included.
              */
             arrives_at?: number | null;
+            /**
+             * @description The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;
+             *     on one item and in the closed list it is a list, empty when nothing was made from it.
+             */
+            became: components["schemas"]["MadeItem"][] | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
             /**
              * @description Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when
@@ -2147,7 +2189,7 @@ export interface components {
          * @description An action the caller can take on an item. Clients show controls only for these.
          * @enum {string}
          */
-        ItemAction: "edit" | "move" | "change_state" | "reopen" | "make_task" | "add_step" | "ask_question" | "comment" | "send_to_agent" | "take_back" | "retry" | "redo_turn";
+        ItemAction: "edit" | "move" | "change_state" | "reopen" | "became" | "make_task" | "add_step" | "ask_question" | "comment" | "send_to_agent" | "take_back" | "retry" | "redo_turn";
         /** @description The heap a row's item is in, and its team. */
         ItemHeap: {
             /** Format: uuid */
@@ -2240,14 +2282,16 @@ export interface components {
             id: string;
             /** @description Unique within the heap; the item's path is `…/items/{key}`. */
             key: string;
+            /** @description Decoding tolerates an older server that doesn't send it, reading `Unknown`; this server always does. */
+            kind: components["schemas"]["Kind"];
             state: components["schemas"]["ItemState"];
             title: string;
         };
         /**
-         * @description Item state. `done` and `wont_do` are closed.
+         * @description Item state. `done`, `wont_do` and `became` are closed.
          * @enum {string}
          */
-        ItemState: "open" | "in_progress" | "blocked" | "done" | "wont_do";
+        ItemState: "open" | "in_progress" | "blocked" | "done" | "wont_do" | "became";
         /** @description A tag on an item: enough to show it. */
         ItemTag: {
             /** Format: uuid */
@@ -2322,6 +2366,18 @@ export interface components {
             sort_parameter?: string | null;
             /** @description Tags of the same heap. Keeps items with any of them. */
             tag?: string[];
+        };
+        /** @description An item a note was split into, as the note's `became` lists it, with the heap it is in now. */
+        MadeItem: {
+            /** @description The heap it is in now, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /** Format: uuid */
+            id: string;
+            /** @description Unique within the heap; the item's path is `…/items/{key}`. */
+            key: string;
+            kind: components["schemas"]["Kind"];
+            state: components["schemas"]["ItemState"];
+            title: string;
         };
         Me: {
             /** @description What the user may do with their account, such as signing out and making teams. */
@@ -2441,6 +2497,13 @@ export interface components {
             id: string;
             label: string;
         };
+        /** @description The item a new item is made from, and whose age it takes. */
+        OriginInput: {
+            /** @description Required: nothing is inherited silently. `keep` ranks the new item's age from the origin's, `new` from now. */
+            age: components["schemas"]["Age"];
+            /** Format: uuid */
+            item_id: string;
+        };
         Parameter: {
             allowed_actions: components["schemas"]["ParameterAction"][];
             /**
@@ -2558,6 +2621,8 @@ export interface components {
             code: string;
             /** @description The input field the error is about, when there is one. */
             field?: string | null;
+            /** @description The highest need code a run may give, for `run_need_above_origin`: the need of the note it splits. */
+            highest?: string | null;
             /**
              * @description A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
              *     at, such as `my-team` for `My-Team`.
@@ -3228,6 +3293,15 @@ export interface components {
             /** @description The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. */
             item: components["schemas"]["ItemRef"];
         };
+        /** @description The items waiting for the person in one heap. */
+        WaitingInHeap: {
+            /**
+             * Format: int32
+             * @description At least 1.
+             */
+            count: number;
+            heap: components["schemas"]["ItemHeap"];
+        };
         /** @description The item a row is on. */
         WaitingItem: {
             /** Format: uuid */
@@ -3315,6 +3389,11 @@ export interface components {
         /** @description The first item of the queue, if there is one. */
         WorkNext: {
             item?: null | components["schemas"]["WorkItem"];
+            /**
+             * @description How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+             *     `waiting_count`.
+             */
+            waiting?: components["schemas"]["WaitingInHeap"][];
             /**
              * Format: int32
              * @description How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
@@ -4867,7 +4946,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
-            /** @description From inside a run: `run_add_reminder` or `run_add_needs_context` */
+            /** @description From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4884,7 +4963,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
+            /** @description `heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4893,7 +4972,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter` */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5055,7 +5134,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, or from inside a run `run_over` */
+            /** @description `version_conflict`, `item_closed`, `reopen_window_expired`, `heap_archived`, `kind_change_not_allowed`, `stage_needs_task`, `became_needs_split` (`state` set to `became`: use `POST …/became`), or from inside a run `run_over` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5075,6 +5154,79 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    became_item: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `became_needs_note` (a task or a reminder), `nothing_made` (no item was made from it), `item_closed` (done or won't do), `heap_archived`, or from inside a run `run_over` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description From inside a run: `not_reached`, naming the first open question or made task that isn't ready */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

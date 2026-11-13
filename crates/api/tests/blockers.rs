@@ -103,7 +103,9 @@ async fn a_blocker_takes_on_the_priority_of_what_it_blocks() -> Result<()> {
     expect_that!(blocked["state"], eq(&json!("blocked")));
     expect_that!(
         blocked["blocked_by"],
-        eq(&json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "Upgrade database", "state": "open" }))
+        eq(
+            &json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "Upgrade database", "kind": "note", "state": "open" })
+        )
     );
     expect_that!(list["ranked"][0]["item"]["title"], eq(&json!("Upgrade database")));
     expect_that!(list["ranked"][0]["contributors"][0]["factor"], eq(&json!("blocks")));
@@ -343,7 +345,9 @@ async fn closing_a_blocker_as_wont_do_makes_what_it_blocks_wait_for_the_person()
     expect_that!(after["version"], eq(&item["version"]));
     expect_that!(
         after["blocked_by"],
-        eq(&json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "Pick a host", "state": "wont_do" }))
+        eq(
+            &json!({ "id": id(&blocker)?, "key": blocker["key"], "title": "Pick a host", "kind": "note", "state": "wont_do" })
+        )
     );
     expect_that!(
         after["blocker_gone"],
@@ -362,7 +366,7 @@ async fn closing_a_blocker_as_wont_do_makes_what_it_blocks_wait_for_the_person()
             "question": null,
             "stuck": null,
             "blocker": {
-                "item": { "id": id(&blocker)?, "key": blocker["key"], "title": "Pick a host", "state": "wont_do" },
+                "item": { "id": id(&blocker)?, "key": blocker["key"], "title": "Pick a host", "kind": "note", "state": "wont_do" },
                 "gone": { "how": "wont_do", "moved_to": null },
                 "allowed_actions": ["change_state"],
             },

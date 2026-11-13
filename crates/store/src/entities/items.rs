@@ -32,6 +32,8 @@ pub struct Model {
     pub origin_id: Option<String>,
     /// The run that added this item.
     pub created_run_id: Option<String>,
+    /// Whether it was split from `origin_id`.
+    pub made_in_split: bool,
     pub version: i32,
 }
 

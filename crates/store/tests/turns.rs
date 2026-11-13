@@ -79,6 +79,8 @@ async fn item(world: &World, key: &str) -> Result<Item> {
         arrives_at: None,
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
+        origin: None,
+        blocked_by: None,
     };
     let item = Item::new(
         ItemId::from_uuid(Uuid::now_v7()),

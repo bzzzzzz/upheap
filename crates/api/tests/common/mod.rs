@@ -547,6 +547,19 @@ impl TestApp {
         Ok(row.try_get("", "n")?)
     }
 
+    /// An item's `arrives_at` as stored, in UTC milliseconds, which the API shows only for reminders. Read straight
+    /// from the database.
+    pub async fn item_arrives_at(&self, item_id: &str) -> Result<Option<i64>> {
+        let id: uuid::Uuid = item_id.parse()?;
+        let sql = format!("SELECT arrives_at FROM items WHERE id = '{id}'");
+        let row = self
+            .db
+            .query_one_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?
+            .context("no item row")?;
+        Ok(row.try_get("", "arrives_at")?)
+    }
+
     /// A new password reset link for the account `login` names, as the operator's command makes it, and returns its
     /// token: the last part of the link.
     pub async fn make_reset_link(&self, login: &str) -> Result<String> {

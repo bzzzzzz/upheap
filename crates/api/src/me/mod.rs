@@ -9,12 +9,10 @@ use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
 use api_types::waiting::{
-    ItemHeapDto, WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
+    WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
 };
 use axum::Json;
 use axum::extract::State;
-use domain::heap::Heap;
-use domain::team::Team;
 use domain::user::DisplayName;
 use domain::{Timestamp, ValidationError};
 use jiff::tz::TimeZone;
@@ -25,7 +23,7 @@ use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::dto::{IfMatchHeader, to_blocker_gone_dto, to_question_dto, to_ranked_dto, to_turn_dto};
+use crate::dto::{IfMatchHeader, to_blocker_gone_dto, to_item_heap_dto, to_question_dto, to_ranked_dto, to_turn_dto};
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::{ApiError, AppState};
@@ -97,16 +95,6 @@ async fn update_me(
         .update_display_name(principal, display_name, expected)
         .await?;
     Ok(Json(UserDto::from(&user)))
-}
-
-fn to_item_heap_dto(heap: &Heap, team: &Team) -> ItemHeapDto {
-    ItemHeapDto {
-        id: *heap.id.as_uuid(),
-        slug: heap.slug.to_string(),
-        name: heap.name.as_str().to_owned(),
-        team_slug: team.slug.to_string(),
-        team_name: team.name.as_str().to_owned(),
-    }
 }
 
 fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> WaitingRowDto {
