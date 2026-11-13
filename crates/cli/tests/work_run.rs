@@ -1034,11 +1034,13 @@ async fn doing_a_task_ends_with_a_request_to_review_and_the_next_run_reads_the_r
 
 #[gtest]
 #[tokio::test]
-async fn with_a_root_each_run_gets_a_directory_of_its_own_under_it_named_by_its_item() -> Result<()> {
+async fn with_a_root_each_item_runs_in_root_team_heap_key() -> Result<()> {
     // Arrange: two notes to prepare, and a root that isn't there yet.
     let (server, ada, cli, first) = with_prepared_note().await?;
     let second = add_note(&server, &ada, "Order the certificate").await?;
-    let tool = idle_agent(None);
+    // Each run prepares its note, so the next claims the other.
+    let tool = context_writing_agent(&cli.agent(), 0.1);
+    add_note(&server, &ada, "Renew the domain").await?;
     let parent = tempfile::tempdir()?;
     let root = parent.path().join("runs");
     let root_arg = root.to_string_lossy().into_owned();
@@ -1049,29 +1051,277 @@ async fn with_a_root_each_run_gets_a_directory_of_its_own_under_it_named_by_its_
     let two = cli.run_work(&once_in_root, &tool).await;
     let without = cli.run_work(ONCE, &tool).await;
 
-    // Assert: the loop makes the root, and hands the tool a directory to make in it.
+    // Assert: the loop makes the root and the directory, and hands the tool the directory.
     expect_that!(one.exited(0), eq(true));
     expect_that!(two.exited(0), eq(true));
     expect_that!(without.exited(0), eq(true));
-    expect_that!(root.is_dir(), eq(true));
     let starts = tool.starts();
     let dirs: Vec<_> = starts.iter().map(|start| start.dir.clone()).collect();
     assert_that!(dirs.len(), eq(3));
     let (Some(a), Some(b)) = (&dirs[0], &dirs[1]) else {
         anyhow::bail!("the runs with a root have no directory: {dirs:?}");
     };
-    expect_that!(a.parent(), some(eq(root.as_path())));
-    expect_that!(b.parent(), some(eq(root.as_path())));
-    expect_that!(a, not(eq(b)));
-    let names = [a, b].map(|dir| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
-    expect_that!(names, each(matches_regex(r"[0-9a-z]+-[0-9a-f-]{36}")));
+    expect_that!(a.parent(), some(eq(root.join("ada").join("personal").as_path())));
+    expect_that!(b.parent(), some(eq(root.join("ada").join("personal").as_path())));
     // Each is named by the key of the item it worked, whichever of the two the queue gave it.
-    let keys = [format!("{first}-"), format!("{second}-")];
+    let mut keys = [a, b].map(|dir| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
+    keys.sort();
+    let mut worked = [first, second];
+    worked.sort();
+    expect_that!(keys, eq(&worked));
+    expect_that!(a.join(".upheap-run").is_file(), eq(true));
+    expect_that!(b.join(".upheap-run").is_file(), eq(true));
     expect_that!(
-        names.iter().all(|name| keys.iter().any(|key| name.starts_with(key))),
-        eq(true)
+        std::fs::read_to_string(a.join(".upheap-run"))?,
+        matches_regex(r"run [0-9a-f-]{36}\nstarted \d{4}-\d\d-\d\dT[0-9:.]+Z\n")
     );
     expect_that!(dirs[2], none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_later_run_on_the_same_item_starts_in_the_same_directory_with_what_was_left() -> Result<()> {
+    // Arrange: the first run leaves a file and fails; the marker is dated back so a rewrite shows.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path().join("runs");
+    let root_arg = root.to_string_lossy().into_owned();
+    let once_in_root = [ONCE, &["--root", &root_arg]].concat();
+    let failing = StandIn::new(|start: ToolStart| async move {
+        if let Some(dir) = &start.dir {
+            std::fs::write(dir.join("left.txt"), "half done").expect("the directory is there");
+        }
+        Ok(ToolReport {
+            failure: Some("it broke".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+    let marker = root.join("ada/personal").join(&note).join(".upheap-run");
+
+    // Act
+    let first = cli.run_work(&once_in_root, &failing).await;
+    let old = std::time::SystemTime::now() - StdDuration::from_secs(3600);
+    std::fs::File::options().write(true).open(&marker)?.set_modified(old)?;
+    let again = idle_agent(None);
+    let second = cli.run_work(&once_in_root, &again).await;
+
+    // Assert
+    expect_that!(first.exited(0), eq(true));
+    expect_that!(second.exited(0), eq(true));
+    let (first_start, second_start) = (&failing.starts()[0], &again.starts()[0]);
+    expect_that!(second_start.dir, eq(&first_start.dir));
+    expect_that!(
+        std::fs::read_to_string(root.join("ada/personal").join(&note).join("left.txt"))?,
+        eq("half done")
+    );
+    expect_that!(std::fs::metadata(&marker)?.modified()?, gt(old));
+    Ok(())
+}
+
+/// A kept directory for `key` in `heap` of `team` under `root`, with a marker last written `days` days ago and a
+/// file in it.
+fn kept_directory(root: &std::path::Path, team: &str, heap: &str, key: &str, days: u64) -> Result<std::path::PathBuf> {
+    let dir = root.join(team).join(heap).join(key);
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("work.txt"), "what the agent left")?;
+    let marker = dir.join(".upheap-run");
+    std::fs::write(&marker, "run x\nstarted y\n")?;
+    let at = std::time::SystemTime::now() - StdDuration::from_secs(days * 24 * 60 * 60);
+    std::fs::File::options().write(true).open(marker)?.set_modified(at)?;
+    Ok(dir)
+}
+
+/// A server with Ada, a heap that leaves its notes alone, the CLI signed in as Ada, and an open note in it. Nothing
+/// is claimed there, so a run only sweeps.
+async fn with_a_note_nobody_claims() -> Result<(TestServer, TestUser, TestCli, String)> {
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let note = add_note(&server, &ada, "Rotate the certs").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    Ok((server, ada, cli, note))
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_the_directory_of_a_closed_item() -> Result<()> {
+    // Arrange: one item done and one not wanted, each with a kept directory, in a heap of their own.
+    let (server, ada, cli, done) = with_a_note_nobody_claims().await?;
+    let wont = add_note(&server, &ada, "Order the certificate").await?;
+    server.edit_item(&ada, HEAP, &done, json!({ "state": "done" })).await?;
+    server
+        .edit_item(&ada, HEAP, &wont, json!({ "state": "wont_do" }))
+        .await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let first = kept_directory(root, "ada", "personal", &done, 1)?;
+    let second = kept_directory(root, "ada", "personal", &wont, 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: both are gone, and so are the heap and team directories they leave empty.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(first.exists(), eq(false));
+    expect_that!(second.exists(), eq(false));
+    expect_that!(root.join("ada").exists(), eq(false));
+    expect_that!(
+        outcome.stderr,
+        contains_regex(format!(r"(?m)^\d\d:\d\d  Removed ada/personal/{done}: the item is closed\.$").as_str())
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_regex(format!(r"(?m)^\d\d:\d\d  Removed ada/personal/{wont}: the item is closed\.$").as_str())
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_the_directory_of_an_item_that_cannot_be_found() -> Result<()> {
+    // Arrange: a key that isn't in Ada's heap, and a heap Ada has no such item or heap in.
+    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let no_item = kept_directory(root, "ada", "personal", "zzzzz", 1)?;
+    let no_heap = kept_directory(root, "ada", "elsewhere", "zzzzz", 1)?;
+    let no_team = kept_directory(root, "other", "personal", "zzzzz", 1)?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    for dir in [no_item, no_heap, no_team] {
+        expect_that!(dir.exists(), eq(false), "{}", dir.display());
+    }
+    expect_that!(
+        outcome.stderr,
+        contains_substring("Removed ada/personal/zzzzz: the item can't be found.")
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_removes_a_directory_unused_for_7_days_and_keeps_a_recent_one() -> Result<()> {
+    // Arrange: two open items, one last used 8 days ago and one 6 days ago.
+    let (server, ada, cli, old_item) = with_a_note_nobody_claims().await?;
+    let recent_item = add_note(&server, &ada, "Order the certificate").await?;
+    let parent = tempfile::tempdir()?;
+    let old = kept_directory(parent.path(), "ada", "personal", &old_item, 8)?;
+    let recent = kept_directory(parent.path(), "ada", "personal", &recent_item, 6)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(old.exists(), eq(false));
+    expect_that!(
+        std::fs::read_to_string(recent.join("work.txt"))?,
+        eq("what the agent left")
+    );
+    expect_that!(
+        outcome.stderr,
+        contains_substring(format!("Removed ada/personal/{old_item}: unused for 7 days.").as_str())
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_keeps_an_open_items_directory() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let dir = kept_directory(parent.path(), "ada", "personal", &note, 1)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--quiet", "--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: nothing is removed and nothing is said about the sweep.
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        std::fs::read_to_string(dir.join("work.txt"))?,
+        eq("what the agent left")
+    );
+    expect_that!(outcome.stderr, not(contains_substring("Removed")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_says_nothing_in_quiet_mode_when_it_removes() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let dir = kept_directory(parent.path(), "ada", "personal", "zzzzz", 1)?;
+    let root_arg = parent.path().to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(
+            &[
+                "work", "run", "--tool", "claude", "--once", "--quiet", "--root", &root_arg,
+            ],
+            &idle_agent(None),
+        )
+        .await;
+
+    // Assert
+    expect_that!(dir.exists(), eq(false));
+    expect_that!(outcome.stdout, eq(""));
+    expect_that!(outcome.stderr, eq(""));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sweep_leaves_old_run_directories_and_anything_else_alone() -> Result<()> {
+    // Arrange: all of these would be removed if they were kept directories of a missing item.
+    let (_server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let old_run = root.join("zzzzz-0191d3c2-7b1e-7a60-8a43-5b2f4a1c9d10");
+    std::fs::create_dir_all(&old_run)?;
+    std::fs::write(old_run.join("CLAUDE.md"), "old")?;
+    std::fs::write(old_run.join(".upheap-run"), "old")?;
+    let no_marker = root.join("ada/personal/zzzzz");
+    std::fs::create_dir_all(&no_marker)?;
+    std::fs::write(no_marker.join("work.txt"), "mine")?;
+    std::fs::write(root.join("stray.txt"), "stray")?;
+    let too_deep = kept_directory(&root.join("ada"), "personal", "zzzzz", "yyyyy", 30)?;
+    let too_shallow = root.join("ada/zzzzz");
+    std::fs::create_dir_all(&too_shallow)?;
+    std::fs::write(too_shallow.join(".upheap-run"), "x")?;
+    let root_arg = root.to_string_lossy().into_owned();
+
+    // Act
+    let outcome = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(std::fs::read_to_string(old_run.join("CLAUDE.md"))?, eq("old"));
+    expect_that!(std::fs::read_to_string(no_marker.join("work.txt"))?, eq("mine"));
+    expect_that!(std::fs::read_to_string(root.join("stray.txt"))?, eq("stray"));
+    expect_that!(too_deep.join("work.txt").is_file(), eq(true));
+    expect_that!(too_shallow.join(".upheap-run").is_file(), eq(true));
+    expect_that!(outcome.stderr, not(contains_substring("Removed")));
     Ok(())
 }
 

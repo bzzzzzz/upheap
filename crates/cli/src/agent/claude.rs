@@ -121,17 +121,15 @@ fn last_line(text: &str) -> Option<&str> {
     text.lines().rev().map(str::trim).find(|line| !line.is_empty())
 }
 
-/// What Claude reads as its instructions in a run's own directory.
-const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
+/// What Claude reads as its instructions in an item's directory.
+pub(super) const WORKSPACE_INSTRUCTIONS: &str = include_str!("claude/workspace.md");
 
-/// Makes `dir`, which must not exist yet, with what Claude reads from the directory it starts in: `CLAUDE.md`. Makes
-/// the directories above it too.
+/// Makes `dir` if it isn't there, and the directories above it, and writes what Claude reads from the directory it
+/// starts in: `CLAUDE.md`, over any an earlier run left. Whatever else is in `dir` is left as it is.
 fn set_up_directory(dir: &Path) -> std::io::Result<()> {
-    if let Some(root) = dir.parent() {
-        std::fs::create_dir_all(root)?;
-    }
-    // Not `create_dir_all`: a directory that is there already is someone else's, and its files are not written over.
-    std::fs::create_dir(dir)?;
+    // `create_dir_all` succeeds on a directory that is there, which is the point: it is an item's, kept between runs.
+    // It fails on a file in the way, which is a `NoDirectory` error to the caller.
+    std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("CLAUDE.md"), WORKSPACE_INSTRUCTIONS)
 }
 

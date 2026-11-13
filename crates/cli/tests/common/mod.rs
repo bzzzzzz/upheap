@@ -500,6 +500,8 @@ impl TestCli {
             idle_wait: StdDuration::from_millis(20),
             heartbeat_every: self.heartbeat_every,
             finish_retry: StdDuration::from_millis(5),
+            // Sweep before every claim, so a test sees what a sweep does.
+            sweep_every: StdDuration::ZERO,
         }
     }
 
@@ -790,6 +792,7 @@ impl Agent {
                 idle_wait: StdDuration::from_millis(1),
                 heartbeat_every: StdDuration::from_millis(1),
                 finish_retry: StdDuration::from_millis(1),
+                sweep_every: StdDuration::ZERO,
             },
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;

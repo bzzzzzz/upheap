@@ -672,10 +672,19 @@ section is how it maps onto this API.
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
    item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
-   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names a new
-   directory for each run and the tool makes it, with its own instructions (for Claude, `CLAUDE.md`), and starts
-   there: a run then begins from nothing and can't see another run's files, and what it needs to carry on is in
-   the item's comments and on the remote. There the tool is allowed any command, edit and read, passed on its
+   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names one
+   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run, and the tool makes it if it is
+   missing, writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
+   record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
+   left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
+   `.upheap-run` in it, and that file's modification time is when a run last started there. The loop sweeps the
+   root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
+   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's). Any
+   other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
+   and a server out of reach ends the sweep. Only directories at that depth with a marker are looked at, so the
+   old `<key>-<run id>` ones and anything else are never touched, and a directory a run of this loop is in or
+   about to start in is skipped. A removal renames the directory away under the lock that guards that set and
+   deletes it after releasing it, since deleting a clone is slow. There the tool is allowed any command, edit and read, passed on its
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
    wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
    `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's
