@@ -134,9 +134,16 @@ impl ApiClient {
         self.read_json(response).await
     }
 
-    /// `POST /api/v1/<path>` with no body, for an endpoint that answers `204`, as the holder of `token`.
+    /// `POST /api/v1/<path>` with no body, for an endpoint that answers `204`, as the holder of `token`. The request
+    /// says `Content-Length: 0` on purpose: a proxy such as Cloud Run's front end answers a POST with no length
+    /// `411 Length Required` before it reaches the server.
     pub async fn post_empty(&self, path: &[&str], token: &str) -> Result<(), ClientError> {
-        let request = self.http.post(self.api_url(path)).bearer_auth(token);
+        let request = self
+            .http
+            .post(self.api_url(path))
+            .header(reqwest::header::CONTENT_LENGTH, 0)
+            .body(Vec::new())
+            .bearer_auth(token);
         let response = self.send(request).await?;
         if !response.status().is_success() {
             return Err(self.read_failure(response).await);
