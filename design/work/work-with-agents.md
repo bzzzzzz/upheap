@@ -612,7 +612,10 @@ change it makes carries the run it was made in.
 
 1. Read everything in the heaps `upheap work` was given.
 2. Write only inside a run that holds a claim: the item's context, steps and state, questions on it, and the
-   moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item.
+   moves in Kinds and moves. Adding a step to an existing task is the one write outside its own item, besides
+   adding an item: a run may add a task or a note, with a context, to any heap the person can edit. The new item
+   links back to the run's item and records the run, starts with its context written and gets no Prepare turn. It may
+   take steps from the run that added it, and no other write. A run adds no reminder.
 3. Set effort, impact and due time on what it makes, and its need at a split (Kinds and moves §3). It never
    changes the need of an item that exists.
 4. Never: close anything, as done or won't do (it proposes closing a task, Review §2), answer a question,
@@ -1181,6 +1184,9 @@ Each is exit 3 with the server's message and code, and a hint saying what to do 
   The item changed since it was read          "Read it again: upheap item show k3x9a"
   The turn was taken back, or the claim lapsed  "This run is over. Stop."
   A write outside the run's own item          names the item the run holds
+  A reminder added in a run                   "Add it as a task or a note; leave the date in its context."
+  An item added in a run with no context      "Add it again with --context-file - and say what it is and why
+                                              it came up."
   A need above the note's                     names the highest it may give
   Closing a task, in a run                    "Propose closing: upheap question propose-done k3x9a ..."
   A proposal without what Review §2 asks      names everything missing: open steps, an open question or

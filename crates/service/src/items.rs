@@ -18,7 +18,7 @@ use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, Ra
 use domain::run::{LAPSE_FAILURE, RunError, RunForbidden};
 use domain::step::{Step, StepProgress, progress};
 use domain::tag::Tag;
-use domain::team::Role;
+use domain::team::{Membership, Role, Team};
 use domain::turn::{Reach, TakeBackWhy, Turn, TurnSource, with_agent};
 use domain::user::User;
 use domain::{
@@ -86,6 +86,17 @@ pub struct ItemView {
     pub turn: Option<TurnView>,
     /// Whether an agent has the item (see [`domain::turn::with_agent`]).
     pub with_agent: bool,
+    /// The item this one was made from, when the caller may see the heap it is in. `None` otherwise, and in lists,
+    /// which don't look it up: the item's own view does.
+    pub origin: Option<ItemOrigin>,
+}
+
+/// The item an item was made from, with where it is.
+#[derive(Clone, Debug)]
+pub struct ItemOrigin {
+    pub item: Item,
+    pub heap: Heap,
+    pub team: Team,
 }
 
 /// A blocker that stopped holding the item it blocks, as Waits for you and Waiting for me show it.
@@ -352,6 +363,7 @@ impl Services {
                 waits_for_you: false,
                 turn: None,
                 with_agent: false,
+                origin: None,
             }
         };
 
@@ -564,6 +576,7 @@ impl Services {
                     waits_for_you: false,
                     turn: None,
                     with_agent: false,
+                    origin: None,
                 }
             })
             .collect();
@@ -584,12 +597,14 @@ impl Services {
         fields: NewItem,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let now = self.now();
+        // In a run the heaps lock first, in heap ID order, then the run is read and checked live.
+        let run = self.check_run_add(&txn, principal, heap_id, &fields, now).await?;
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
         let parameters = store::parameters::list_parameters_locking(&txn, heap_id).await?;
         check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
 
-        let now = self.now();
         let key = new_item_key(&txn, &*self.random, heap_id).await?;
         let item = Item::new(
             ItemId::from_uuid(self.new_id(now)),
@@ -599,6 +614,10 @@ impl Services {
             principal.user_id,
             now,
         );
+        let item = match &run {
+            Some(run) => item.added_in_run(run.item_id, run.id),
+            None => item,
+        };
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
             &access.heap,
@@ -613,7 +632,8 @@ impl Services {
         // Opening a turn). A new task's turn goes to defined, never to done. It acts only here, on create, so it never
         // opens a second turn on an item.
         // A reminder gets none: no turn opens on one.
-        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder {
+        // A run's item is already prepared, so it gets none.
+        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder && run.is_none() {
             let turn = Turn::open(
                 TurnId::from_uuid(self.new_id(now)),
                 &item,
@@ -638,9 +658,17 @@ impl Services {
             None
         };
         let created_by = store::users::find_user(&txn, principal.user_id).await?;
+        let origin = find_origin(&txn, principal.user_id, &item).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%heap_id, item_id = %item.id, user_id = %principal.user_id, prepared = opened.is_some(), "item created");
+        tracing::info!(
+            %heap_id,
+            item_id = %item.id,
+            user_id = %principal.user_id,
+            run_id = ?item.created_run_id,
+            prepared = opened.is_some(),
+            "item created"
+        );
         // The creator opened the turn, if there is one.
         let turn = opened.map(|turn| TurnView {
             turn,
@@ -673,6 +701,7 @@ impl Services {
             // A new item has no questions, so an open turn is an agent having it.
             with_agent: turn.is_some(),
             turn,
+            origin,
         })
     }
 
@@ -688,7 +717,7 @@ impl Services {
         build_item_view(
             &self.db,
             &access.heap,
-            access.membership.role,
+            &access.membership,
             item,
             ItemChildren {
                 steps,
@@ -743,7 +772,6 @@ impl Services {
         let parameters = store::parameters::list_parameters_locking(&txn, current.heap_id).await?;
 
         let now = self.now();
-        let role = access.membership.role;
         // The patch is applied first, so editing an item that stays closed fails with `item_closed`.
         let mut edited = current.apply_patch(&patch, principal.user_id, now)?;
         check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
@@ -759,7 +787,7 @@ impl Services {
         }
         let Some(edited) = edited else {
             let children = ItemChildren::read_locking(&txn, current.id).await?;
-            let view = build_item_view(&txn, &access.heap, role, current, children, now).await?;
+            let view = build_item_view(&txn, &access.heap, &access.membership, current, children, now).await?;
             // A write in a run that changes nothing still tells the run it was heard.
             commit_if_in_run(txn, principal).await?;
             return Ok(view);
@@ -805,7 +833,7 @@ impl Services {
             }
         }
         let children = ItemChildren::read_locking(&txn, saved.id).await?;
-        let view = build_item_view(&txn, &access.heap, role, saved, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, saved, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(heap_id = %view.item.heap_id, item_id = %view.item.id, user_id = %principal.user_id, version = view.item.version.get(), turns_taken_back, questions_withdrawn, freed, "item updated");
@@ -1012,16 +1040,49 @@ impl ItemChildren {
     }
 }
 
+/// The item `item` was made from, when it has one and `viewer` may view the heap it is in. An origin the viewer can't
+/// see reads as none, as one that is gone does, so a heap's existence isn't shown to people outside it.
+async fn find_origin(
+    db: &impl ConnectionTrait,
+    viewer: UserId,
+    item: &Item,
+) -> Result<Option<ItemOrigin>, ServiceError> {
+    let Some(origin_id) = item.origin_id else {
+        return Ok(None);
+    };
+    let Some(origin) = store::items::find_item(db, origin_id).await? else {
+        return Ok(None);
+    };
+    let Some(heap) = store::heaps::find_heap(db, origin.heap_id).await? else {
+        return Ok(None);
+    };
+    let may_view = store::teams::find_membership(db, heap.team_id, viewer)
+        .await?
+        .is_some_and(|membership| Permission::ViewHeap.is_granted_to(membership.role));
+    if !may_view {
+        return Ok(None);
+    }
+    let team = store::teams::find_team(db, heap.team_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    Ok(Some(ItemOrigin {
+        item: origin,
+        heap,
+        team,
+    }))
+}
+
 /// The view of `item`, with its steps, questions and comments, as `role` sees it in `heap` at `now`. It reads the heap's tags
 /// and parameters, the blocker and the users, so it can run inside the transaction that wrote the item.
 pub(crate) async fn build_item_view(
     db: &impl ConnectionTrait,
     heap: &Heap,
-    role: Role,
+    membership: &Membership,
     item: Item,
     children: ItemChildren,
     now: Timestamp,
 ) -> Result<ItemView, ServiceError> {
+    let role = membership.role;
     let ItemChildren {
         steps,
         questions,
@@ -1069,7 +1130,9 @@ pub(crate) async fn build_item_view(
     );
     let questions = build_question_views(db, heap, role, &item, questions).await?;
     let comments = build_comment_views(db, comments).await?;
+    let origin = find_origin(db, membership.user_id, &item).await?;
     Ok(ItemView {
+        origin,
         parameters: describe_values(&item, &parameters),
         item,
         tags,

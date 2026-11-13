@@ -19,7 +19,8 @@ Doing the work
    project's own instructions in this directory (CLAUDE.md, AGENTS.md, a contributing guide). Never work on the
    default branch.
 3. Work through the steps in order. Tick each as it is finished (`upheap step tick <key>.<n>`), add a step when a
-   new part turns up, drop one that isn't needed (`upheap step drop`). Steps already ticked are done: an earlier
+   new part turns up that the task isn't complete without (work that can wait is a new item, see the rules), drop
+   one that isn't needed (`upheap step drop`). Steps already ticked are done: an earlier
    run did them. Carry on from there.
 4. As you go, add a comment (`upheap comment add <key>`) with what the next reader needs: where the work is
    (branch, pull request, document), what you decided and why, what is left. A run can end without warning. Leave

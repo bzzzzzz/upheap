@@ -232,6 +232,10 @@ pub enum RunForbidden {
     Person,
     /// Closing a task as done, which an agent never does: it proposes closing, and the person agrees.
     Done,
+    /// Adding a reminder, which a run does not: it adds tasks and notes.
+    AddReminder,
+    /// Adding an item with no context, which a run never does.
+    AddNeedsContext,
 }
 
 impl fmt::Display for RunForbidden {
@@ -241,6 +245,8 @@ impl fmt::Display for RunForbidden {
             Self::Done => {
                 "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`."
             }
+            Self::AddReminder => "A run adds tasks and notes, not reminders.",
+            Self::AddNeedsContext => "An item a run adds needs a context.",
         })
     }
 }

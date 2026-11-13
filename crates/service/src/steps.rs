@@ -32,10 +32,29 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
+        // In a run the heap of the run's item and this item's lock in heap ID order, as `claim_run`, `move_item` and
+        // `create_item` do: the step may go on an item the run added in another heap.
+        let run_heap = match principal.run {
+            Some(run_id) => Some(
+                self.lock_run_and(&txn, principal, run_id, Some(found.heap_id))
+                    .await?
+                    .1
+                    .id,
+            ),
+            None => None,
+        };
+        // Only the run's own heap being archived means the run is over; another archived heap is just archived.
         let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
             .await
-            .map_err(|error| in_run(principal, error))?;
-        self.check_run_write(&txn, principal, item_id, self.now()).await?;
+            .map_err(|error| {
+                if run_heap == Some(found.heap_id) {
+                    in_run(principal, error)
+                } else {
+                    error
+                }
+            })?;
+        // A run may add steps to an item it added, as well as to its own.
+        self.check_run_step_add(&txn, principal, &found, self.now()).await?;
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
@@ -60,7 +79,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, access.membership.role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -111,7 +130,6 @@ impl Services {
         }
 
         let now = self.now();
-        let role = access.membership.role;
         let Some(edited) = current.apply_patch(&patch) else {
             let children = ItemChildren {
                 steps,
@@ -120,7 +138,7 @@ impl Services {
                 open_turn: store::turns::find_open_turn_locking(&txn, item.id).await?,
                 locking: true,
             };
-            let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
+            let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
             // A write in a run that changes nothing still tells the run it was heard.
             commit_if_in_run(txn, principal).await?;
             return Ok(view);
@@ -141,7 +159,7 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
-        let view = build_item_view(&txn, &access.heap, role, item, children, now).await?;
+        let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
