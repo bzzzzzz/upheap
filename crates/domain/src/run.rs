@@ -128,7 +128,8 @@ impl RunLink {
 pub struct RunEnded {
     pub end: RunEnd,
     pub at: Timestamp,
-    /// What the run said it reached. Set exactly when it ended as [`RunEnd::Reached`] or [`RunEnd::HandedBack`], where it is the reason.
+    /// What the run said it reached. Set exactly when it ended as [`RunEnd::Reached`] or [`RunEnd::HandedBack`],
+    /// where it is the reason.
     pub result: Option<RunResult>,
     pub links: Vec<RunLink>,
     /// Why it failed. Set exactly when it ended as [`RunEnd::Failed`].

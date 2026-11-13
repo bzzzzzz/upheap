@@ -193,7 +193,11 @@ impl GoalMetHow {
 }
 
 /// A turn that ended because its item was at the goal, for its `turn_reached` entry: the run path's diff, and how.
+/// The stage is left out when it didn't change, as for a claim that found the item already there.
 pub(crate) fn describe_goal_met(goal: Goal, before: Stage, after: Stage, how: GoalMetHow) -> Value {
+    if before == after {
+        return json!({ "goal": goal.code(), "how": how.code() });
+    }
     json!({
         "goal": goal.code(),
         "stage": { "before": before.code(), "after": after.code() },

@@ -99,7 +99,8 @@ fn parse_heap_refs(refs: &[String]) -> Result<Vec<(Handle, Handle)>, ValidationE
 
 impl Services {
     /// The first item of the queue over `heaps` (each `team/heap` by slug) and how many items wait for the person.
-    /// A turn whose item is already at its goal is skipped, not ended. Writes nothing: a lapsed run counts as ended, failed, but isn't written (decision: lapses are written lazily).
+    /// A turn whose item is already at its goal is skipped, not ended. Writes nothing: a lapsed run counts as ended,
+    /// failed, but isn't written (decision: lapses are written lazily).
     ///
     /// Fails with a validation error unless `heaps` names 1 to 20 well-formed heaps, [`ServiceError::NotFound`] for a
     /// heap outside the caller's teams, [`ServiceError::HeapArchived`] for an archived one, and

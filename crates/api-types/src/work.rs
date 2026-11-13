@@ -100,7 +100,8 @@ pub struct RunDto {
     pub ended_at: Option<i64>,
     /// `null` while the run has not ended.
     pub end: Option<RunEndDto>,
-    /// What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or `handed_back`.
+    /// What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or
+    /// `handed_back`.
     pub result: Option<String>,
     pub links: Vec<String>,
     /// Why the run failed; `null` unless it ended as `failed`.

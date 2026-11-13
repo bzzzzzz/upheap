@@ -6756,7 +6756,7 @@
         "tags": [
           "work"
         ],
-        "summary": "Says the run found nothing to do for the turn's goal, because the item is already there or the work was done\nelsewhere. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and\n`turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the\nitem is the person's again.",
+        "summary": "Says the run has nothing to do and the turn's goal can't or needn't be reached, such as when the work was done\nelsewhere. An item that already has what the goal needs is `reached`, not handed back. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and\n`turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the\nitem is the person's again.",
         "operationId": "hand_back",
         "parameters": [
           {
@@ -6821,7 +6821,7 @@
             }
           },
           "422": {
-            "description": "`invalid_fields` (`field` `reason`): empty or over 2,000 characters",
+            "description": "`field_empty` or `field_too_long` (`field` `reason`): empty or over 2,000 characters",
             "content": {
               "application/json": {
                 "schema": {
@@ -10637,7 +10637,7 @@
               "string",
               "null"
             ],
-            "description": "What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or `handed_back`."
+            "description": "What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or\n`handed_back`."
           },
           "started_at": {
             "type": "integer",

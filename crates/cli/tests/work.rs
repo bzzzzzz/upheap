@@ -102,7 +102,12 @@ async fn hand_back_gives_the_turn_back_with_a_reason() -> Result<()> {
 
     // Act
     let handed = cli
-        .run(&["work", "hand-back", "--reason", "It already has its context"])
+        .run(&[
+            "work",
+            "hand-back",
+            "--reason",
+            "Already fixed in #123; nothing left to prepare",
+        ])
         .await;
     let again = cli.run(&["work", "hand-back", "--reason", "Again", "--json"]).await;
     let finished = cli.run(&["work", "finish", "--cost-usd", "0.12"]).await;

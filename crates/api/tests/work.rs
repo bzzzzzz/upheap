@@ -1702,10 +1702,8 @@ async fn a_claim_ends_a_turn_already_at_its_goal_and_takes_the_next_item() -> Re
         .find(|(action, _)| action == "turn_reached")
         .context("no turn_reached entry")?;
     expect_that!(reached.1["how"], eq(&json!("already_met")));
-    expect_that!(
-        reached.1["stage"],
-        eq(&json!({ "before": "with_context", "after": "with_context" }))
-    );
+    // The stage didn't change, so the entry doesn't say it did.
+    expect_that!(reached.1.get("stage"), none());
     Ok(())
 }
 

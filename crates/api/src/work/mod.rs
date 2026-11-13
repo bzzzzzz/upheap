@@ -228,8 +228,8 @@ async fn reached(
     Ok(Json(run_dto(&view)))
 }
 
-/// Says the run found nothing to do for the turn's goal, because the item is already there or the work was done
-/// elsewhere. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and
+/// Says the run has nothing to do and the turn's goal can't or needn't be reached, such as when the work was done
+/// elsewhere. An item that already has what the goal needs is `reached`, not handed back. The run ends as `handed_back` with the reason as its result, the turn ends as handed back, and
 /// `turn_handed_back` is recorded. It is not a failure: the item's stage doesn't change, no next turn opens, and the
 /// item is the person's again.
 #[utoipa::path(post, path = "/work/runs/{run}/hand-back", tag = "work", security(("session" = [])),
@@ -239,7 +239,7 @@ async fn reached(
         (status = 400, description = "`invalid_body`", body = Problem),
         (status = 404, description = "No such run, or not the caller's", body = Problem),
         (status = 409, description = "`run_over`: the run has ended or lapsed, or its turn was taken back", body = Problem),
-        (status = 422, description = "`invalid_fields` (`field` `reason`): empty or over 2,000 characters", body = Problem),
+        (status = 422, description = "`field_empty` or `field_too_long` (`field` `reason`): empty or over 2,000 characters", body = Problem),
     ))]
 async fn hand_back(
     State(state): State<AppState>,

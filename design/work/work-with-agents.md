@@ -546,14 +546,16 @@ change it makes carries the run it was made in.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
-   question; **handed back**, with a reason, when it finds nothing to do for the goal (the turn goes back to the
-   person, and it isn't a failure); or **failed**. A claim that lapses counts as failed.
+   question; **handed back**, with a reason, when there is nothing to do and the goal can't or needn't be reached,
+   such as work done elsewhere (the turn goes back to the person, and it isn't a failure); or **failed**. An item
+   that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
    in the table and has no open question. Otherwise the run counts as failed.
 7. After a set number of failed runs in a row, the turn is stuck: the item waits for the person, with what went
    wrong. The person retries it or takes it back.
-8. A turn whose item is already at its goal stage or past it is never claimed: the claim ends it as reached,
-   credited to the person, and takes the next item. A goal of done is never met this way.
+8. A turn whose item is already at its goal stage or past it never starts a run: `next` skips it, and a claim
+   ends it as reached, credited to the person running `upheap work`, and takes the next item. A goal of done is
+   never met this way.
 9. An agent sets a task in progress when it starts doing it. Turns that prepare don't change the work state.
 
 **All the way**
@@ -791,7 +793,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C4 | `item edit --context-file`, `heap edit --context-file` | A1, A4 | Constant | Core | Filling in context is the first turn of every note |
 | C5 | `step add`, `tick`, `drop`, `edit` | A1 | Constant | Core | Doing a task is ticking its steps |
 | C6 | `question ask`, `request`, `review` | A2, A6 | Constant | Core | The agent's only way to reach the person |
-| C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | A turn ends no other way, bar a hand-back (C7a) |
+| C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | An agent ends a turn no other way, bar a hand-back (C7a) |
 | C7a | `work hand-back`: the run found nothing to do and gives the turn back | A1 | Weekly | Enabler | Without it a run that finds the work done must say reached, or fail |
 | C8 | `item to-task` | A1 | Daily | Core | Golden path step 6 |
 | C9 | Splitting: `item add --from`, `item became` | A4 | Weekly | Core | Golden path step 6 |
@@ -1135,7 +1137,7 @@ upheap item became n8c2d                                   after making things f
 
 upheap item done k3x9a                                     a task, once its reviews are approved
 upheap work reached --result "Rotation script merged." [--link https://example.com/pull/12]...
-upheap work hand-back --reason "It already has its context."
+upheap work hand-back --reason "Already fixed in #123; nothing left to prepare."
 
 --from     what the new thing was made from. With it, --need and --age are required: nothing is
            inherited silently. --age keep counts from the note's creation, --age new from now.

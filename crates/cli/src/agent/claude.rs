@@ -67,8 +67,8 @@ pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -
 /// every run gets, for the reason [`UPHEAP_COMMANDS`] leaves it out.
 const IN_OWN_DIRECTORY: [&str; 6] = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
 
-/// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached or handing the turn back. Not all
-/// of `upheap`: text an agent reads could talk it into `upheap auth logout`, which the server has no say in.
+/// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached or
+/// handing the turn back. Not all of `upheap`: text an agent reads could talk it into `upheap auth logout`, which the server has no say in.
 const UPHEAP_COMMANDS: [&str; 11] = [
     "Bash(upheap item:*)",
     "Bash(upheap step:*)",
