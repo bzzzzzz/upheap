@@ -23,6 +23,17 @@
       }
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!--
+      Installable as an app (manifest.webmanifest). iOS ignores the manifest's icons and title, so it gets its own.
+      The browser bar, and the status bar of the installed app, take the canvas colour (--canvas in index.css) of the
+      device's theme.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Upheap" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafaf9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0c0a09" />
     <title>Upheap</title>
   </head>
   <body>
