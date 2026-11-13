@@ -4863,7 +4863,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_archived`, or from inside a run `run_over` */
+            /** @description `heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
             409: {
                 headers: {
                     [name: string]: unknown;

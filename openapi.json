@@ -2484,7 +2484,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`, or from inside a run `run_over`",
+            "description": "`heap_archived`; from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
             "content": {
               "application/json": {
                 "schema": {
