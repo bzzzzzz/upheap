@@ -697,7 +697,7 @@ impl Shared<'_> {
         // read with: a sign-in that lands during the sweep can't make another account's answers look like this one's.
         // If the server is out of reach the sweep ends here. If it answered but who is signed in can't be read, its
         // answers remove nothing this time, as with any error that keeps directories; age still does.
-        let signed_in = match self.signed_in().await {
+        let mut signed_in = match self.signed_in().await {
             Ok(signed_in) => Some(signed_in),
             Err(err) if is_unreachable(&err) => return,
             Err(err) => {
@@ -728,7 +728,10 @@ impl Shared<'_> {
             }
             let reason = if kept::is_unused(directory.age) {
                 kept::Reason::Unused
-            } else if let (true, Some((client, token, _))) = (directory.mine, &signed_in) {
+            } else if let (true, Some((client, token, owner))) = (directory.mine, signed_in.as_mut()) {
+                if !self.still_signed_in(client, token, owner).await {
+                    return;
+                }
                 let read = read_closed_at(client, token, &directory).await;
                 match kept::verdict(read.as_ref().copied()) {
                     Verdict::Keep => {
@@ -784,6 +787,25 @@ impl Shared<'_> {
         let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
         let owner = Owner::new(self.server.as_str(), &me.value.user.id.to_string());
         Ok((client, token, owner))
+    }
+
+    /// Whether `token`, or the one that replaced it, still signs in as `owner`. A long sweep (deleting clones is
+    /// slow) can outlive its token; a new one is taken only once `GET /me` shows it is the same account, so a sign-in
+    /// as someone else meanwhile ends the sweep instead of mixing two accounts' answers.
+    async fn still_signed_in(&self, client: &ApiClient, token: &mut String, owner: &Owner) -> bool {
+        let Ok(fresh) = self.app.access_token(client).await else {
+            return false;
+        };
+        if fresh == *token {
+            return true;
+        }
+        match client.get::<MeDto>(&["me"], NO_QUERY, &fresh).await {
+            Ok(me) if Owner::new(self.server.as_str(), &me.value.user.id.to_string()) == *owner => {
+                *token = fresh;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// What a run reads before it starts: the heap and the item, and with a root, who is signed in now, whose
