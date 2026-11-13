@@ -208,6 +208,34 @@ pub async fn list_items_blocked_by_locking(
     Ok(items)
 }
 
+/// The items made from any of `origins` (their `origin` is one of them), in any state and any heap, oldest first,
+/// with their tags and values. With `lock` the rows are read with locking reads (`FOR SHARE` on MySQL and Postgres)
+/// like [`find_item_locking`], so a write that depends on what was made calls it after [`crate::heaps::lock_heap`].
+///
+/// Size assumption: a split makes a handful of items from a note, and the callers pass one note or one page of
+/// closed items (at most 200), so the result is small. A note split into thousands would want paging here.
+pub async fn list_items_made_from(
+    db: &impl ConnectionTrait,
+    origins: &[ItemId],
+    lock: bool,
+) -> Result<Vec<Item>, StoreError> {
+    let ids: Vec<String> = origins.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut items = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let query = items::Entity::find()
+            .filter(items::Column::OriginItemId.is_in(chunk.iter().map(String::as_str)))
+            .order_by_asc(items::Column::CreatedAt)
+            .order_by_asc(items::Column::Id);
+        for row in shared_if(query, lock).all(db).await? {
+            items.push(to_item(row)?);
+        }
+    }
+    items.sort_by_key(|item| (item.created_at, *item.id.as_uuid()));
+    attach_tags(db, &mut items).await?;
+    attach_values(db, &mut items).await?;
+    Ok(items)
+}
+
 /// Every item of `heap_id` in one of `states`, oldest first.
 pub async fn list_items_in_states(
     db: &impl ConnectionTrait,
@@ -523,6 +551,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
         closed_by: Set(item.state.closed_by().map(|id| id_to_db(id.as_uuid()))),
         blocked_by_item_id: Set(item.blocked_by().map(|id| id_to_db(id.as_uuid()))),
+        origin_item_id: Set(item.origin.map(|id| id_to_db(id.as_uuid()))),
     })
 }
 
@@ -535,6 +564,11 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         StateKind::from_code(&row.state).ok_or_else(|| read.corrupt(format!("unknown state {:?}", row.state)))?;
     let blocked_by = row
         .blocked_by_item_id
+        .as_deref()
+        .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+        .transpose()?;
+    let origin = row
+        .origin_item_id
         .as_deref()
         .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
         .transpose()?;
@@ -585,6 +619,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
         // Filled in by `attach_tags` and `attach_values`; the row alone doesn't hold them.
         tags: BTreeSet::new(),
         parameters: BTreeMap::new(),
+        origin,
         created_at: read.timestamp(row.created_at)?,
         created_by: user(row.created_by.as_deref())?,
         version: read.version(row.version)?,
