@@ -756,8 +756,9 @@ impl Services {
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
     /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
-    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked
-    /// on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from), then by heap, then by position.
+    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already
+    /// worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from),
+    /// then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
