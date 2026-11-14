@@ -41,7 +41,8 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 ## Workspace
 
 Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` and
-`server → mail` beside it. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and property-tested in isolation, and `store` and `api` never depend on each other.
+`server → mail` beside it. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
+property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
 linking the server. The crates and their roles are listed in [README.md](../README.md#layout); each crate's root
 module says what it owns.
