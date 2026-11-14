@@ -15,6 +15,8 @@ use crate::{Principal, ServiceError, Services};
 #[derive(Debug)]
 pub struct MeView {
     pub user: User,
+    /// Whether the user has a local password: not a user who signs in through an OpenID Connect provider.
+    pub has_password: bool,
     pub teams: Vec<TeamView>,
 }
 
@@ -41,6 +43,9 @@ impl Services {
         let user = store::users::find_user(&self.db, principal.user_id)
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
+        let has_password = store::users::find_password_hash(&self.db, principal.user_id)
+            .await?
+            .is_some();
         let teams = store::teams::list_teams_for_user(&self.db, principal.user_id).await?;
         let team_ids: Vec<_> = teams.iter().map(|(team, _)| team.id).collect();
         let member_counts = store::teams::count_members_by_team(&self.db, &team_ids).await?;
@@ -68,7 +73,11 @@ impl Services {
                 }
             })
             .collect();
-        Ok(MeView { user, teams })
+        Ok(MeView {
+            user,
+            has_password,
+            teams,
+        })
     }
 }
 

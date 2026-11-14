@@ -43,6 +43,8 @@ jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
 # which is pure Rust, so building needs no libdbus. On macOS the CLI runs the system's `security` tool instead.
 keyring = "4"
 mime_guess = "2"
+# OIDC sign-in: discovery, PKCE, nonce and ID token checks are security code, so the maintained crate does them.
+openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
 # The server's allocator: musl's own, which the Alpine image would otherwise use, is slow under many threads.
 mimalloc = "0.1"
 owo-colors = "4"

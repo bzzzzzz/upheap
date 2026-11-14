@@ -18,6 +18,7 @@ pub mod items;
 pub mod me;
 mod moves;
 pub mod oauth;
+pub mod oidc;
 pub mod parameters;
 pub mod password_reset;
 mod personal;
@@ -63,15 +64,18 @@ pub struct Settings {
     pub session_ttl: Duration,
     /// How many sign-in attempts an email address gets.
     pub sign_in_limit: SignInLimit,
+    /// The OpenID Connect provider people may sign in through, if the operator set one.
+    pub oidc: Option<oidc::OidcSettings>,
 }
 
 impl Default for Settings {
-    /// Registration closed, 30-day sessions and the default sign-in limit.
+    /// Registration closed, 30-day sessions, the default sign-in limit and no provider.
     fn default() -> Self {
         Self {
             allow_registration: false,
             session_ttl: Duration::from_days(30),
             sign_in_limit: SignInLimit::DEFAULT,
+            oidc: None,
         }
     }
 }
