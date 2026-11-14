@@ -2752,6 +2752,35 @@ async fn started_work_comes_before_a_slightly_higher_scored_item() -> Result<()>
 
 #[gtest]
 #[tokio::test]
+async fn started_work_keeps_the_boost_at_the_next_stage_of_an_all_the_way_send() -> Result<()> {
+    // Arrange: a run took the first item to its first stage, so the next turn is open with no runs of its own; the
+    // second item scores a little above it.
+    let w = world().await?;
+    let started = w
+        .add("Rotate the certs", json!({ "impact": "m", "effort": "m" }))
+        .await?;
+    w.send_all_the_way(&started).await?;
+    let run = w.claimed().await?;
+    w.write_context(&run, &started, "The certs expire on Friday").await?;
+    w.reached(&run).await?;
+    w.finish(&run, json!({})).await?;
+    let fresh = w.add("Tidy the logs", json!({ "impact": "l", "effort": "m" })).await?;
+    w.send_turn(&fresh).await?;
+
+    // Act
+    let next = w.next().await?;
+    let claimed = w.claim().await?;
+
+    // Assert
+    expect_that!(next.body["item"]["key"], eq(&json!(started)));
+    expect_that!(next.body["item"]["runs"], eq(&json!(0)));
+    expect_that!(claimed.status, eq(StatusCode::CREATED));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(started)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_critical_item_passes_started_nice_to_have_work() -> Result<()> {
     // Arrange: an agent has had a go at a nice-to-have; a critical item of the same size comes in.
     let w = world().await?;

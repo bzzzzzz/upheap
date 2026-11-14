@@ -756,8 +756,8 @@ impl Services {
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
     /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
-    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when its turn already
-    /// had a run, then by heap, then by position.
+    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked
+    /// on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from), then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
@@ -808,12 +808,18 @@ impl Services {
             }
         }
 
-        // Runs so far on each candidate's turn: a turn with any is started work, and gets the boost.
+        // Runs so far on each candidate's turn, and the sends that have had a run on any turn: a candidate in one is
+        // started work, and gets the boost.
         let candidate_turns: Vec<TurnId> = by_heap
             .values()
             .flat_map(|turns| turns.values().map(|turn| turn.id))
             .collect();
+        let candidate_sends: Vec<TurnId> = by_heap
+            .values()
+            .flat_map(|turns| turns.values().map(|turn| turn.send_id))
+            .collect();
         let runs_by_turn = store::runs::count_runs_for_turns(db, &candidate_turns).await?;
+        let started_sends = store::runs::sends_with_runs(db, &candidate_sends).await?;
 
         // (score times the person's heap priority, boosted when started, heap index, position) of the best candidate
         // so far, and the candidate.
@@ -837,7 +843,7 @@ impl Services {
                     met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
-                let boost = if runs_by_turn.contains_key(&turn.id) {
+                let boost = if started_sends.contains(&turn.send_id) {
                     STARTED_BOOST
                 } else {
                     1.0

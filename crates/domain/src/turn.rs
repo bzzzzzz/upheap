@@ -215,6 +215,9 @@ pub struct Redone {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Turn {
     pub id: TurnId,
+    /// The first turn of the send this turn belongs to: its own ID for a turn a person or the prepare setting
+    /// opened, copied by the next stage of an all-the-way send and by a split's turn for its task.
+    pub send_id: TurnId,
     pub item_id: ItemId,
     pub reach: Reach,
     /// The stable state it goes to, fixed when it opened: a note made a task meanwhile doesn't change it.
@@ -302,6 +305,7 @@ impl Turn {
     ) -> Self {
         Self {
             id,
+            send_id: id,
             item_id: item.id,
             reach,
             goal,
@@ -361,6 +365,7 @@ impl Turn {
         }
         Some(Self {
             id,
+            send_id: self.send_id,
             item_id: self.item_id,
             reach: self.reach,
             goal: goal_for(item),
@@ -384,6 +389,7 @@ impl Turn {
         }
         Some(Self {
             id,
+            send_id: self.send_id,
             item_id: task.id,
             reach: self.reach,
             goal: goal_for(task),
@@ -436,6 +442,7 @@ impl Turn {
     pub fn redo(&self, id: TurnId, line: TurnLine, by: UserId, now: Timestamp) -> Self {
         Self {
             id,
+            send_id: id,
             item_id: self.item_id,
             reach: self.reach,
             goal: self.goal,
@@ -748,6 +755,7 @@ mod tests {
             next,
             some(eq(&Turn {
                 id,
+                send_id: turn.send_id,
                 item_id: turn.item_id,
                 reach: Reach::AllTheWay,
                 goal: Goal::Defined,
@@ -809,6 +817,7 @@ mod tests {
             passed,
             some(eq(&Turn {
                 id,
+                send_id: turn.send_id,
                 item_id: task.id,
                 reach: Reach::AllTheWay,
                 goal: Goal::Done,
@@ -887,6 +896,8 @@ mod tests {
         );
         let redone = turn.redone_by(person, Timestamp::EPOCH);
 
+        expect_that!(next.send_id, eq(next.id));
+        expect_that!(next.send_id, not(eq(turn.send_id)));
         expect_that!(next.goal, eq(Goal::WithContext));
         expect_that!(next.reach, eq(Reach::AllTheWay));
         expect_that!(next.line, some(eq(&line)));

@@ -5,7 +5,7 @@
 //! A run that nobody has heard from for [`domain::run::CLAIM_LAPSE`] is still stored as not ended until something
 //! touches it: whether it is lapsed is the caller's to say, from `heard_at` and the time (architecture.md, Runs).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use domain::item::Stage;
 use domain::run::{Run, RunEnd, RunEnded, RunLink, RunResult};
@@ -281,6 +281,39 @@ pub async fn count_runs_for_turns(
         }
     }
     Ok(counts)
+}
+
+/// Which of `send_ids` have had a run, ended or not, on any turn of that send (`item_turns.send_id`), in one grouped
+/// query per [`IN_LIST_CHUNK`] sends.
+pub async fn sends_with_runs(db: &impl ConnectionTrait, send_ids: &[TurnId]) -> Result<HashSet<TurnId>, StoreError> {
+    let ids: Vec<String> = send_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut started = HashSet::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_runs::Entity::find()
+            .select_only()
+            .join(
+                JoinType::InnerJoin,
+                item_runs::Entity::belongs_to(item_turns::Entity)
+                    .from(item_runs::Column::TurnId)
+                    .to(item_turns::Column::Id)
+                    .into(),
+            )
+            .column_as(item_turns::Column::SendId, "group_key")
+            .column_as(item_runs::Column::Id.count(), "count")
+            .filter(item_turns::Column::SendId.is_in(chunk.iter().map(String::as_str)))
+            .group_by(item_turns::Column::SendId)
+            .into_model::<GroupCount>()
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.group_key,
+            };
+            started.insert(TurnId::from_uuid(read.uuid(&row.group_key)?));
+        }
+    }
+    Ok(started)
 }
 
 /// The failure text of the latest failed run of each of `turn_ids` that has one, in one query per [`IN_LIST_CHUNK`]

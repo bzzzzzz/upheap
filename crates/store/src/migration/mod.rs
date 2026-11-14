@@ -39,6 +39,7 @@ mod m20261205_000033_heap_priorities;
 mod m20261206_000034_heap_origin;
 mod m20261207_000035_personal_tokens;
 mod m20261208_000036_reply_changed;
+mod m20261209_000037_turn_send;
 
 pub struct Migrator;
 
@@ -82,6 +83,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261206_000034_heap_origin::Migration),
             Box::new(m20261207_000035_personal_tokens::Migration),
             Box::new(m20261208_000036_reply_changed::Migration),
+            Box::new(m20261209_000037_turn_send::Migration),
         ]
     }
 }
