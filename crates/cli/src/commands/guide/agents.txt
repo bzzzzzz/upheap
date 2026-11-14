@@ -45,7 +45,8 @@ Long text
 The usual order of work
 1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
 2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
-   with its context, comments, steps, and questions with their answers.
+   with its context, comments, steps, and questions with their answers. A reply marked "changed since your last
+   run" was changed by the person after your last run: the new reply is the one to act on.
    A reminder, added with `upheap item add "<title>" --reminder <date>`, stays out of the list until that date;
    `upheap item list --reminders shown` lists those still to come.
 3. Write what you learn, decide or do where the next reader will look: as a comment on the item, with
@@ -81,7 +82,7 @@ The usual order of work
    when you can list them, or with `upheap question request` for something only they can do. The item then waits
    for them, and their answer reads back in `upheap item show`. When they answer in the conversation, record it
    with `upheap question reply k3x9a.q1 --pick Internal` or `--comment "..."`. Their sign-in is what replies, so
-   reply only with what they said.
+   reply only with what they said. Change a reply already given (`--change`) only when they ask you to.
 5. An agent never closes a task: in a run `upheap item done` is refused. When you do a task in a run, put the work
    where it is reviewed and ask for review with `upheap question review k3x9a <link> "<what it is>"`; the person
    replies Approved or Changes asked, and asking again about the same piece is the next round. When nothing is

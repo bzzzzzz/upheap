@@ -245,7 +245,7 @@ enum QuestionCommand {
     Review(commands::question::ask::ReviewArgs),
     /// Propose closing a task as done, as an agent doing it; the person replies Close as done or Not yet
     ProposeDone(commands::question::ask::ProposeDoneArgs),
-    /// Reply to a question, a request, a review or a done proposal on an item
+    /// Reply to a question, a request, a review or a done proposal on an item, or change the reply of an answered one
     Reply(commands::question::reply::ReplyArgs),
 }
 

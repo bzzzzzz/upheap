@@ -97,7 +97,7 @@ pub enum CliError {
 pub enum QuestionRefusal {
     /// It was taken back unanswered: its item closed, or its agent's turn was taken back. Nothing brings it back.
     Withdrawn,
-    /// It has another reply, and a reply can't be changed here.
+    /// It has another reply, and the command didn't say `--change`.
     AnsweredDifferently,
 }
 
@@ -108,7 +108,7 @@ impl QuestionRefusal {
                 format!("{name} was withdrawn, so there is nothing to reply to")
             }
             Self::AnsweredDifferently => {
-                format!("{name} is answered already with another reply, which can't be changed here")
+                format!("{name} is answered already with another reply; add --change to replace it")
             }
         }
     }

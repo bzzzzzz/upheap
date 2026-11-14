@@ -126,9 +126,8 @@ pub(crate) fn describe_new_comment(comment: &Comment) -> Value {
     })
 }
 
-/// The reply to a question, for its `question_answered` entry: the labels picked, joined, and the comment, each
-/// `null` when there is none.
-pub(crate) fn describe_reply(question: &Question) -> Value {
+/// The labels `question`'s reply picked, joined, and its comment, each `None` when there is none.
+fn reply_parts(question: &Question) -> (Option<String>, Option<&str>) {
     let reply = question.reply.as_ref();
     let picked: Vec<&str> = reply
         .map(|reply| {
@@ -140,12 +139,44 @@ pub(crate) fn describe_reply(question: &Question) -> Value {
                 .collect()
         })
         .unwrap_or_default();
+    (
+        (!picked.is_empty()).then(|| picked.join(", ")),
+        reply
+            .and_then(|reply| reply.comment.as_ref())
+            .map(|comment| comment.as_str()),
+    )
+}
+
+/// The reply to a question, for its `question_answered` entry: the labels picked, joined, and the comment, each
+/// `null` when there is none.
+pub(crate) fn describe_reply(question: &Question) -> Value {
+    let (reply, reply_comment) = reply_parts(question);
     json!({
         "question": question.number.get(),
         "question_text": question.text.as_str(),
-        "reply": (!picked.is_empty()).then(|| picked.join(", ")),
-        "reply_comment": reply.and_then(|reply| reply.comment.as_ref()).map(|comment| comment.as_str()),
+        "reply": reply,
+        "reply_comment": reply_comment,
     })
+}
+
+/// A reply changed from `before` to `after`, the same question, for its `reply_changed` entry: the question, and
+/// the picks and the comment as before and after, only those that changed.
+pub(crate) fn describe_reply_change(before: &Question, after: &Question) -> Value {
+    let (picked_before, comment_before) = reply_parts(before);
+    let (picked_after, comment_after) = reply_parts(after);
+    let mut fields = Map::new();
+    fields.insert("question".into(), json!(after.number.get()));
+    fields.insert("question_text".into(), json!(after.text.as_str()));
+    if picked_before != picked_after {
+        fields.insert("reply".into(), json!({"before": picked_before, "after": picked_after}));
+    }
+    if comment_before != comment_after {
+        fields.insert(
+            "reply_comment".into(),
+            json!({"before": comment_before, "after": comment_after}),
+        );
+    }
+    Value::Object(fields)
 }
 
 /// The question withdrawn when its item was closed, or taken back from the agent that asked it, for its

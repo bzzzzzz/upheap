@@ -202,6 +202,29 @@ test("Not yet on a proposal with no reviews keeps the task open", async ({ page,
   expect(fetched.state).not.toBe("done");
 });
 
+test("changing Not yet to Close as done closes the task, and focus stays on the row", async ({ page, heapPath }) => {
+  const task = await taskInRun(page, heapPath, "Paint the fence", 0);
+  await ask(page, task, { kind: "done_proposal", text: "Nothing is left" });
+  await reply(page, task.item, 1, 1);
+  await openByKey(page, heapPath, task.key);
+  await itemPane(page)
+    .getByText(/^1 answered/)
+    .click();
+  const questions = itemPane(page).getByRole("region", { name: "Questions" });
+  await expect(questions).toContainText("→ Not yet");
+
+  await questions.getByRole("button", { name: "Change reply", exact: true }).click();
+  await questions.getByRole("button", { name: "Close as done", exact: true }).click();
+
+  // Only the closed item has Reopen; the closed item offers no Change reply, so focus stays on the row.
+  await expect(itemPane(page).getByRole("button", { name: "Reopen" })).toBeVisible();
+  await expect(questions).toContainText("→ Close as done");
+  await expect(questions.getByRole("button", { name: "Change reply", exact: true })).toHaveCount(0);
+  await expect(questions.getByRole("listitem").filter({ hasText: "Close as done" })).toBeFocused();
+  const fetched = await (await page.request.get(task.item)).json();
+  expect(fetched.state).toBe("done");
+});
+
 /** An item an agent brought to "with context" and left, with the page open on it. */
 async function reachedItem(page: Page, heapPath: string) {
   const created = await page.request.post(`/api/v1${heapPath}/items`, {

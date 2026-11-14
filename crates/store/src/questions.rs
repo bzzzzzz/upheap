@@ -186,6 +186,7 @@ pub async fn update_question(
                 .and_then(|reply| reply.replied_by)
                 .map(|user| id_to_db(user.as_uuid()))),
             replied_at: Set(reply.map(|reply| reply.replied_at.as_millis())),
+            reply_changed: Set(reply.is_some_and(|reply| reply.changed)),
             withdrawn_by: Set(withdrawal
                 .and_then(|withdrawal| withdrawal.withdrawn_by)
                 .map(|user| id_to_db(user.as_uuid()))),
@@ -239,6 +240,7 @@ fn to_row(question: &Question) -> Result<item_questions::ActiveModel, StoreError
             .and_then(|reply| reply.replied_by)
             .map(|user| id_to_db(user.as_uuid()))),
         replied_at: Set(reply.map(|reply| reply.replied_at.as_millis())),
+        reply_changed: Set(reply.is_some_and(|reply| reply.changed)),
         withdrawn_by: Set(withdrawal
             .and_then(|withdrawal| withdrawal.withdrawn_by)
             .map(|user| id_to_db(user.as_uuid()))),
@@ -308,6 +310,7 @@ fn to_question(row: item_questions::Model) -> Result<Question, StoreError> {
                     .map(|user| read.uuid(user).map(UserId::from_uuid))
                     .transpose()?,
                 replied_at: read.timestamp(replied_at)?,
+                changed: row.reply_changed,
             })
         }
         _ => return Err(read.corrupt("the state and the reply disagree".to_owned())),

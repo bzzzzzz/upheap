@@ -13,7 +13,7 @@ use domain::permission::{
     ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
     allowed_stage_choices, allowed_step_actions, can_redo_turn,
 };
-use domain::question::{Question, QuestionState, waits_for_you};
+use domain::question::{Question, QuestionState, changed_since, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
 use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
 use domain::step::{Step, StepNumber, StepProgress, StepState, progress};
@@ -178,6 +178,9 @@ pub struct QuestionView {
     /// Who closed the item and so withdrew it, when it's withdrawn and that is known.
     pub withdrawn_by: Option<User>,
     pub allowed_actions: Vec<QuestionAction>,
+    /// Whether its reply was changed after the start of the item's latest ended run ([`changed_since`]). `false` where
+    /// the item's runs aren't read.
+    pub changed_since_last_run: bool,
 }
 
 /// A comment with the user who wrote it.
@@ -1323,7 +1326,12 @@ pub(crate) async fn build_item_view(
         stuck,
         blocker_gone.is_some(),
     );
-    let questions = build_question_views(db, heap, role, &item, questions).await?;
+    let last_ended_run_start = runs
+        .iter()
+        .filter(|(run, _)| run.ended.is_some())
+        .map(|(run, _)| run.started_at)
+        .max();
+    let questions = build_question_views(db, heap, role, &item, questions, last_ended_run_start).await?;
     let comments = build_comment_views(db, comments).await?;
     let runs = runs.into_iter().map(|(run, goal)| ItemRunView { run, goal }).collect();
     let origin = find_origin(db, membership.user_id, &item).await?;
@@ -1417,7 +1425,8 @@ pub(crate) async fn turn_views(
         .collect())
 }
 
-/// `questions` of `item` with the users who asked and replied, and what `role` may do with each. The questions of
+/// `questions` of `item` with the users who asked and replied, what `role` may do with each and whether a changed reply
+/// is news since `last_ended_run_start`. The questions of
 /// an item are few ([`domain::question::MAX_QUESTIONS`]) and so are the people who answer them.
 async fn build_question_views(
     db: &impl ConnectionTrait,
@@ -1425,6 +1434,7 @@ async fn build_question_views(
     role: Role,
     item: &Item,
     questions: Vec<Question>,
+    last_ended_run_start: Option<Timestamp>,
 ) -> Result<Vec<QuestionView>, ServiceError> {
     let ids: Vec<UserId> = questions
         .iter()
@@ -1451,6 +1461,7 @@ async fn build_question_views(
         .into_iter()
         .map(|question| QuestionView {
             allowed_actions: allowed_question_actions(item, heap, role, question.state()),
+            changed_since_last_run: changed_since(&question, last_ended_run_start),
             asked_by: pick_user(&users, question.asked_by),
             replied_by: pick_user(&users, question.reply.as_ref().and_then(|reply| reply.replied_by)),
             withdrawn_by: pick_user(

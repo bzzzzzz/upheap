@@ -210,6 +210,7 @@ pub(crate) fn to_question_dto(view: QuestionView, as_of: Timestamp, tz: &TimeZon
         withdrawn_by: view.withdrawn_by.as_ref().map(UserRefDto::from),
         version: question.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(Into::into).collect(),
+        changed_since_last_run: view.changed_since_last_run,
     }
 }
 

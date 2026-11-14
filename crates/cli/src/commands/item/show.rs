@@ -304,6 +304,9 @@ fn render_questions(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
         if let Some(step) = question.step {
             head.push_str(&format!(" · step {}.{step}", item.key));
         }
+        if question.changed_since_last_run {
+            head.push_str(" · changed since your last run");
+        }
         out.line(&format!("  {name:<width$}  {head}"))?;
         for line in question_lines(question) {
             out.line(&format!("{indent}{line}"))?;

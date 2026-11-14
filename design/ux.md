@@ -404,7 +404,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     questions, which read in the fold as "Withdrawn".
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
     withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone); a review also shows its link and piece under the text, and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
-    and all are withdrawn. It only reads; changing a reply is later.
+    and all are withdrawn. On an open item each answered question has **Change reply** under its reply (none for a
+    viewer, in an archived heap or on a withdrawn question). It opens the reply controls of an open question, filled
+    with the current reply, with **Cancel**; sending shows the new reply, and Cancel drops the draft. After either,
+    focus returns to Change reply, or to the row when the change closed the item (Not yet to Close as done); after a change a polite live region says Changed the reply to “<text>”. If it fails the
+    controls stay with the draft and the reason shows under them.
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
