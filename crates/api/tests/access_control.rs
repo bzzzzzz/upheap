@@ -56,6 +56,8 @@ enum Target {
     ItemWithQuestion,
     /// An open note with a task made from it, in `{item}`.
     NoteWithTaskMade,
+    /// An open note in `{item}`, and an open task of the heap, whose ID the body names.
+    NoteAndTask,
     Tag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
@@ -118,6 +120,8 @@ enum RequestBody {
     Rename,
     /// The second heap of [`Target::ItemAndSecondHeap`], to move the item to.
     MoveItem,
+    /// The task of [`Target::NoteAndTask`], to make the note a step of.
+    NoteToStep,
     /// A step to add.
     NewStep,
     /// A step ticked.
@@ -738,6 +742,14 @@ fn endpoints() -> Vec<Endpoint> {
             edit,
             Target::NoteWithTaskMade,
             RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/to-step",
+            edit,
+            Target::NoteAndTask,
+            RequestBody::NoteToStep,
             StatusCode::OK,
         ),
         row(
@@ -1365,6 +1377,24 @@ impl World {
         Ok(created.body)
     }
 
+    async fn create_task(&self) -> Result<Value> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/items", self.heap_path()),
+                Some(&self.admin.session),
+                Some(json!({ "need": "expected", "title": "A task", "kind": "task" })),
+            )
+            .await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create task failed: {}",
+            created.body
+        );
+        Ok(created.body)
+    }
+
     fn unique_name(&self, prefix: &str) -> String {
         format!("{prefix}{}", self.unique_names.fetch_add(1, Ordering::Relaxed))
     }
@@ -1395,6 +1425,7 @@ impl World {
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
+            RequestBody::NoteToStep => Some(json!({ "task_id": parameter["id"] })),
             RequestBody::MoveItem => Some(json!({ "heap_id": parameter["id"] })),
             RequestBody::NewStep => Some(json!({ "title": "A step" })),
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
@@ -1557,6 +1588,12 @@ impl World {
                 let (key, version) = self.create_task_with_step().await?;
                 path = path.replace("{item}", &key).replace("{step}", "1");
                 if_match = Some(version);
+            }
+            Target::NoteAndTask => {
+                let (key, _) = self.create_item(false).await?;
+                path = path.replace("{item}", &key);
+                // The body reads the task's ID from here.
+                parameter = self.create_task().await?;
             }
             Target::NoteWithTaskMade => {
                 let key = self.create_note_with_task_made().await?;
