@@ -270,6 +270,7 @@ fn to_row(turn: &Turn) -> item_turns::ActiveModel {
     let ended = turn.ended;
     item_turns::ActiveModel {
         id: Set(id_to_db(turn.id.as_uuid())),
+        send_id: Set(id_to_db(turn.send_id.as_uuid())),
         item_id: Set(id_to_db(turn.item_id.as_uuid())),
         reach: Set(turn.reach.code().to_owned()),
         goal: Set(turn.goal.code().to_owned()),
@@ -328,6 +329,7 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
     };
     Ok(Turn {
         id: TurnId::from_uuid(read.uuid(&row.id)?),
+        send_id: TurnId::from_uuid(read.uuid(&row.send_id)?),
         item_id: ItemId::from_uuid(read.uuid(&row.item_id)?),
         reach,
         goal,

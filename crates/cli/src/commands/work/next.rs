@@ -20,8 +20,8 @@ pub struct NextArgs {
 }
 
 /// Prints the first item of the queue: `k3x9a  Rotate the certs   Work   note → with context`, with `started, ready
-/// to go on` when the turn has had runs. Nothing to do prints how many items wait for you. `--quiet` prints the key,
-/// or nothing; `--json` the server's answer. Exit 0 either way.
+/// to go on` when a run has already worked on its send. Nothing to do prints how many items wait for you. `--quiet`
+/// prints the key, or nothing; `--json` the server's answer. Exit 0 either way.
 pub async fn run(args: NextArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
@@ -42,7 +42,7 @@ pub async fn run(args: NextArgs, app: &App, out: &mut Output) -> Result<(), CliE
                 Cell::new(item.heap.name.clone()),
                 Cell::new(journey(item)),
             ];
-            if item.runs > 0 {
+            if item.started {
                 row.push(Cell::toned("started, ready to go on", Tone::Dim));
             }
             for line in out.render_table(&[row]) {

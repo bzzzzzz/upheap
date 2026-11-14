@@ -95,6 +95,7 @@ fn work_item_dto(work: &WorkItem) -> WorkItemDto {
         reach: work.turn.reach.into(),
         line: work.turn.line.as_ref().map(|line| line.as_str().to_owned()),
         runs: work.runs,
+        started: work.started,
         failed_runs: work.turn.failed_runs,
     }
 }
@@ -127,8 +128,9 @@ fn parse_tool_time(millis: i64) -> Result<Timestamp, ServiceError> {
 /// The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
 /// claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
 /// stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your
-/// priority for that heap, times 3 when the item's open turn already had a run (started work goes on first),
-/// highest first, then by heap name and the item's position. Any member who may edit items in every given heap may
+/// priority for that heap, times 3 when a run has already worked on this send of the item: its open turn, or an
+/// earlier stage of the same all-the-way send or the note it was split from (started work goes on first), highest
+/// first, then by heap name and the item's position. Any member who may edit items in every given heap may
 /// ask.
 #[utoipa::path(get, path = "/work/next", tag = "work", security(("session" = [])),
     params(NextQuery),

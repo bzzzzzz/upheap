@@ -240,6 +240,7 @@ mod tests {
             reach: ReachDto::One,
             line: None,
             runs: 1,
+            started: true,
             failed_runs: 0,
         }
     }

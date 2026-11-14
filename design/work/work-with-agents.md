@@ -567,11 +567,11 @@ change it makes carries the run it was made in.
 2. The queue is one list over all the given heaps. An item's place is its priority score in its own heap,
    times the priority the person running `upheap work` gave that heap. So the top items of every heap get worked,
    and raising a heap's priority moves all of its items up.
-3. **Started work comes first.** An item whose turn already has a run, and which is ready to go on, gets a large
+3. **Started work comes first.** An item whose send already has a run, and which is ready to go on, gets a large
    boost in the queue: large enough that only something much more important passes it. Half-done work is
    finished before new work of about the same importance is begun. The boost is ×3, a number in the formula
-   like the others, and counts any run on the open turn, however it ended. It is the queue's only: the person's
-   lists keep the plain score.
+   like the others, and counts any run on the open turn or an earlier stage of the same send, however it ended. It
+   is the queue's only: the person's lists keep the plain score.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one

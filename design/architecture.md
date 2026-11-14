@@ -139,7 +139,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   single-item response carry all of them, at most 200 times 20,000 characters, while a list row carries `comments:
   null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
   `MEDIUMTEXT` on MySQL.
-- **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with a reach (one state, or
+- **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with the send it belongs to
+  (`send_id`, the ID of the send's first turn: a turn a person or the prepare setting opens starts a send, and the
+  next stage of an all-the-way send and a split's turn for its task carry it on), a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens, or picked by the
   person: defined, for a note as written; then stored), the person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
   prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached) and how many of its runs in a
@@ -172,10 +174,11 @@ The tables and columns are in the migrations. These are the conventions they fol
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
   item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
-  `STARTED_BOOST` (3) when the open turn already had a run, however it ended, then heap name, then position. The
-  boost lets half-done work go on before new work of about the same importance while something much more important
-  still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the plain score. A claim takes the
-  locks of every given heap in ID order, as the item writes do, so two claims at once get different items.
+  `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
+  position. The boost lets half-done work go on before new work of about the same importance while something much
+  more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
+  plain score. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
+  get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
   wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
