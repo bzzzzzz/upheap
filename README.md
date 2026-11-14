@@ -173,8 +173,8 @@ tar -xzf "upheap-$arch-unknown-linux-musl.tar.gz" -C ~/.local/bin upheap
 
 `~/.local/bin` must be on your `PATH`; some distributions add it only if it existed when you logged in.
 
-On Linux the sign-in is kept in the Secret Service, so a desktop keyring (GNOME Keyring or KWallet) must be running, or use a personal token in `UPHEAP_TOKEN` (see
-[Machines without a browser](#machines-without-a-browser)).
+On Linux the sign-in is kept in the Secret Service, so a desktop keyring (GNOME Keyring or KWallet) must be running, or use a personal token in
+`UPHEAP_TOKEN` (see [Machines without a browser](#machines-without-a-browser)).
 
 Or build it with `cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
 
@@ -236,8 +236,8 @@ cargo run -p cli -- auth logout
 
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
 `UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. `UPHEAP_TOKEN`, a personal token made on the web
-app's Account page, wins over the keychain sign-in: when it is set, every command uses it and never opens a browser.
-With `UPHEAP_RUN` set to a run's ID, every
+app's Account page, wins over the keychain sign-in: when it is set, every command uses it and never opens a
+browser, except `auth login` and `auth logout`, which manage the keychain sign-in. With `UPHEAP_RUN` set to a run's ID, every
 request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
 reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
 starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
@@ -259,7 +259,8 @@ comes before the heap's context on how the work is done. The file is read once, 
 rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
 comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth`, though a rule as
 wide as `Bash` lets a run get around that through a shell. Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
-signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool, or a `UPHEAP_TOKEN` the server refuses), 1 anything else.
+signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool, or a
+`UPHEAP_TOKEN` the server refuses), 1 anything else.
 
 ### Machines without a browser
 

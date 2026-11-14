@@ -442,3 +442,19 @@ async fn a_change_revokes_personal_tokens_and_counts_them() -> Result<()> {
     expect_that!(problem_code(&used), eq("token_revoked"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn the_old_session_cannot_make_a_personal_token_after_a_change() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+    change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
+
+    // Act
+    let made = app.make_personal_token(&session, "ci", None).await?;
+
+    // Assert
+    expect_that!(made.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}

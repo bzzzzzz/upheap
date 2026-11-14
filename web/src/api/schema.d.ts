@@ -2994,8 +2994,8 @@ export interface components {
         PasswordChanged: {
             /**
              * Format: int32
-             * @description How many other sign-ins the change ended that were still live: other browsers, and clients such as the
-             *     command line. The browser it was made from stays signed in on a new session, and isn't counted.
+             * @description How many other sign-ins the change ended that were still live: other browsers, clients such as the
+             *     command line, and personal tokens. The browser it was made from stays signed in on a new session, and isn't counted.
              */
             ended_sign_ins: number;
         };

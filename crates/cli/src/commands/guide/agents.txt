@@ -11,7 +11,8 @@ Naming
 
 Signing in
 - UPHEAP_TOKEN holds a personal token made on the web app's Account page. When it is set, every command uses it
-  instead of the keychain sign-in, and never opens a browser. UPHEAP_SERVER says which server it belongs to.
+  instead of the keychain sign-in, and never opens a browser, except `auth login` and `auth logout`, which manage
+  the keychain sign-in. UPHEAP_SERVER says which server it belongs to.
 
 Output
 - Results go to stdout, errors to stderr. Without a flag the output is text for people.

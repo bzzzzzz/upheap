@@ -5,12 +5,13 @@
 //! secret, the database only its SHA-256. It is shown once, in the answer to making it.
 
 use domain::oauth::DeviceName;
-use domain::personal_token::{PERSONAL_TOKEN_PREFIX, TokenExpiry, TokenState};
+use domain::personal_token::{LAST_USED_PRECISION, PERSONAL_TOKEN_PREFIX, TokenExpiry, TokenState};
 use domain::{PersonalTokenId, Timestamp, ValidationError};
 
-use crate::auth::{random_token, sha256_hex};
+use crate::auth::{SessionToken, random_token, sha256_hex};
 use crate::oauth::OAuthSecret;
 use crate::{Principal, ServiceError, Services};
+use store::{StoreError, TransactionTrait};
 
 /// One of the user's live personal tokens.
 #[derive(Debug)]
@@ -44,10 +45,14 @@ pub struct MadePersonalToken {
 }
 
 impl Services {
-    /// Makes a personal token for the caller, good for `expiry` from now.
+    /// Makes a personal token for the caller, good for `expiry` from now. The caller's `session` is checked again
+    /// in the transaction that inserts the token, after the personal team is locked as a password change locks it,
+    /// so a token can't be made with a session that change has ended. Fails with
+    /// [`ServiceError::Unauthenticated`] when the session is gone.
     pub async fn make_personal_token(
         &self,
         principal: Principal,
+        session: &SessionToken,
         name: &DeviceName,
         expiry: TokenExpiry,
     ) -> Result<MadePersonalToken, ServiceError> {
@@ -61,8 +66,20 @@ impl Services {
             .transpose()?;
         let secret = OAuthSecret::from_client(format!("{PERSONAL_TOKEN_PREFIX}{}", random_token()));
         let id = PersonalTokenId::from_uuid(self.new_id(now));
+        let user = store::users::find_user(&self.db, principal.user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let personal_team = self.load_personal_team(&user).await?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        store::teams::lock_team(&txn, personal_team).await?;
+        if store::sessions::find_session_user(&txn, &session.to_hash(), now)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::Unauthenticated);
+        }
         store::personal_tokens::insert_personal_token(
-            &self.db,
+            &txn,
             &store::personal_tokens::NewPersonalToken {
                 id,
                 user_id: principal.user_id,
@@ -73,6 +90,7 @@ impl Services {
             },
         )
         .await?;
+        txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(user_id = %principal.user_id, token_id = %id, "personal token made");
         Ok(MadePersonalToken {
             token: PersonalToken {
@@ -119,7 +137,13 @@ impl Services {
             TokenState::Revoked => return Err(ServiceError::TokenRevoked),
             TokenState::Expired => return Err(ServiceError::TokenExpired),
         }
-        store::personal_tokens::touch_personal_token(&self.db, token.id, now).await?;
+        // The write is conditional too; skipping the call keeps a busy token from taking the write lock per request.
+        let fresh = token
+            .last_used_at
+            .is_some_and(|used| now.checked_sub(LAST_USED_PRECISION).is_some_and(|stale| used > stale));
+        if !fresh {
+            store::personal_tokens::touch_personal_token(&self.db, token.id, now).await?;
+        }
         Ok(Principal {
             user_id: token.user_id,
             run: None,

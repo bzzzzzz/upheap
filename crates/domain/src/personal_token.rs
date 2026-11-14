@@ -7,6 +7,9 @@ use crate::{Duration, Timestamp};
 /// What a personal token's secret starts with. It tells one from an OAuth token and lets secret scanners find it.
 pub const PERSONAL_TOKEN_PREFIX: &str = "uph_";
 
+/// How stale `last_used_at` may get before a use writes it again, so a burst of requests writes once a minute.
+pub const LAST_USED_PRECISION: Duration = Duration::from_minutes(1);
+
 /// How long a token lasts from when it is made, as the person picks it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TokenExpiry {

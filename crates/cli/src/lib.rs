@@ -66,7 +66,7 @@ pub struct Environment {
     pub heap: Option<String>,
     /// `UPHEAP_RUN`: the run an agent writes in. Sent as `Upheap-Run` with every request.
     pub run: Option<String>,
-    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command then uses instead of the keychain sign-in.
+    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command but `auth login` and `auth logout` then uses instead of the keychain sign-in.
     pub token: Option<String>,
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
@@ -145,8 +145,8 @@ impl Deps {
         UPHEAP_SERVER  The server's address\n  \
         UPHEAP_HEAP    The heap to work in\n  \
         UPHEAP_RUN     The run an agent writes in\n  \
-        UPHEAP_TOKEN   A personal token made on the web app's Account page; when set, every command uses it\n                 \
-        instead of the keychain sign-in, and never opens a browser"
+        UPHEAP_TOKEN   A personal token made on the web app's Account page; when set, every command but\n                 \
+        `auth login` and `auth logout` uses it instead of the keychain sign-in, and never opens a browser"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -432,6 +432,9 @@ where
         Some(shared) if shared.quiet => Mode::Quiet,
         _ => Mode::Human,
     };
+    // `auth login` and `auth logout` manage the keychain sign-in and never use the token, so a `401` they hit isn't
+    // the token's.
+    let env_token_used = has_env_token && !matches!(cli.command, Command::Auth(_));
     let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
     let result = match cli.command {
         // Before the config file is read, so the guide can be read on a machine where nothing is set up yet.
@@ -452,7 +455,7 @@ where
         // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
         Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
-            let err = if has_env_token { err.refused_env_token() } else { err };
+            let err = if env_token_used { err.refused_env_token() } else { err };
             report(&err, &mut out, in_run);
             ExitCode::from(err.exit_code())
         }

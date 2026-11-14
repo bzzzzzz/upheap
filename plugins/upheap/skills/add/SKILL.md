@@ -39,7 +39,9 @@ descriptions, contexts, steps, questions and your reply. Write all of it this wa
      page, under Command line, and set `UPHEAP_TOKEN` (and `UPHEAP_SERVER`) in this environment.
    - Exit code 6 with a message naming `UPHEAP_TOKEN`: the token was revoked or has expired, or the server doesn't
      know it. Stop and ask the person for a new one, made the same way.
-   - Exit code 5 (server unreachable) or 6 (the keychain or config is broken): stop and pass on the message.
+   - Exit code 5 (server unreachable) or 6 (the keychain or config is broken): stop and pass on the message. When
+     it's the keychain that can't be used, also tell them they can make a token on the Account page, under Command
+     line, and set `UPHEAP_TOKEN` in this environment.
 
 Stopping means saying what's wrong and what the person should do, and keeping what they asked to add in your reply
 so it isn't lost.

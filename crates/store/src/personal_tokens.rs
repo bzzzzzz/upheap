@@ -3,7 +3,8 @@
 //! Revoked and expired rows are kept, so a request that presents one can be told why it was refused; they are tiny
 //! and a person makes a handful.
 
-use domain::{Duration, PersonalTokenId, Timestamp, UserId};
+use domain::personal_token::LAST_USED_PRECISION;
+use domain::{PersonalTokenId, Timestamp, UserId};
 use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 
@@ -12,9 +13,6 @@ use crate::codes::{RowReader, id_to_db};
 use crate::entities::personal_tokens;
 
 const TABLE: &str = "personal_tokens";
-
-/// How stale `last_used_at` may get before a use writes it again, so a burst of requests writes once a minute.
-const LAST_USED_PRECISION: Duration = Duration::from_minutes(1);
 
 /// A personal token to store.
 #[derive(Debug)]

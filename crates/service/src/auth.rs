@@ -41,7 +41,7 @@ impl SessionToken {
         Self(random_token())
     }
 
-    fn to_hash(&self) -> String {
+    pub(crate) fn to_hash(&self) -> String {
         sha256_hex(&self.0)
     }
 }

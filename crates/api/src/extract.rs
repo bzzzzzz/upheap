@@ -124,7 +124,12 @@ impl FromRequestParts<AppState> for CurrentUser {
         let principal = if has_bearer_scheme(&parts.headers) {
             let token = bearer_token(&parts.headers).ok_or(ApiError::BearerRejected)?;
             let authenticated = if token.expose().starts_with(PERSONAL_TOKEN_PREFIX) {
-                state.services.authenticate_personal_token(&token).await
+                // An OAuth token is random too and may begin the same way, so one that is no personal token's is
+                // tried as that.
+                match state.services.authenticate_personal_token(&token).await {
+                    Err(ServiceError::Unauthenticated) => state.services.authenticate_access_token(&token).await,
+                    other => other,
+                }
             } else {
                 state.services.authenticate_access_token(&token).await
             };

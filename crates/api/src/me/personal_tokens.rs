@@ -4,7 +4,7 @@
 use api_types::me::{PersonalTokenDto, PersonalTokenListDto, PersonalTokenMadeDto, PersonalTokenMakeDto};
 use axum::Json;
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use domain::due::{describe_ago, describe_date};
 use domain::oauth::DeviceName;
 use domain::validation::Field;
@@ -19,7 +19,7 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, ClientTimeZone, SessionUser, TimeZoneHeader};
+use crate::extract::{ApiJson, ApiPath, ClientTimeZone, SessionUser, TimeZoneHeader, session_token};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -87,15 +87,18 @@ async fn list_personal_tokens(
 async fn make_personal_token(
     State(state): State<AppState>,
     SessionUser(principal): SessionUser,
+    headers: HeaderMap,
     ClientTimeZone(tz): ClientTimeZone,
     ApiJson(body): ApiJson<PersonalTokenMakeDto>,
 ) -> Result<(StatusCode, Json<PersonalTokenMadeDto>), ApiError> {
+    // `SessionUser` found this cookie valid, so a missing one only means the session ended in between.
+    let session = session_token(&headers).ok_or(ServiceError::Unauthenticated)?;
     let name = DeviceName::parse(&body.name)
         .map_err(|_| ServiceError::Invalid(ValidationError::FieldInvalid { field: Field::Name }))?
         .ok_or(ServiceError::Invalid(ValidationError::Empty { field: Field::Name }))?;
     let made = state
         .services
-        .make_personal_token(principal, &name, body.expires_in.into())
+        .make_personal_token(principal, &session, &name, body.expires_in.into())
         .await?;
     let as_of = state.services.now();
     Ok((
