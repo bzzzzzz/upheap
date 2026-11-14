@@ -235,7 +235,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
 
 /// The ID of the item `typed` names (`name` is it, parsed): a key is in `heap`, the heap the new item goes to; a path
 /// or link names its own heap.
-pub(super) async fn item_id_of(
+pub(in crate::commands) async fn item_id_of(
     name: ItemName,
     typed: &str,
     heap: &HeapHandle,

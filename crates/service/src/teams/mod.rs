@@ -19,7 +19,7 @@ use store::{ConnectionTrait, StoreError};
 use uuid::Uuid;
 
 use crate::access::authorize_team;
-use crate::items::count_open_items;
+use crate::items::{ItemOrigin, count_open_items};
 use crate::{Principal, ServiceError, Services};
 
 /// A team as one of its members sees it.
@@ -53,6 +53,8 @@ pub struct HeapView {
     pub open_count: u32,
     /// Empty unless the caller is an admin of the heap's team.
     pub allowed_actions: Vec<HeapAction>,
+    /// The note the heap was made from. Read for one heap, `None` in lists, which don't look it up.
+    pub origin: Option<ItemOrigin>,
 }
 
 /// `heap` as a member with `role` sees it, with its open items counted at `now`.
@@ -63,7 +65,25 @@ pub(crate) async fn load_heap_view(
     now: Timestamp,
 ) -> Result<HeapView, ServiceError> {
     let open_count = count_heap_open_items(db, heap.id, now).await?;
-    Ok(to_heap_view(heap, role, open_count))
+    with_origin(db, to_heap_view(heap, role, open_count)).await
+}
+
+/// `view` with the note its heap was made from. The note is in the heap's team, so whoever sees the heap sees it.
+pub(crate) async fn with_origin(db: &impl ConnectionTrait, mut view: HeapView) -> Result<HeapView, ServiceError> {
+    let Some(origin_id) = view.heap.origin_id else {
+        return Ok(view);
+    };
+    let Some(item) = store::items::find_item(db, origin_id).await? else {
+        return Ok(view);
+    };
+    let heap = store::heaps::find_heap(db, item.heap_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    let team = store::teams::find_team(db, heap.team_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    view.origin = Some(ItemOrigin { item, heap, team });
+    Ok(view)
 }
 
 /// How many open items `heap_id` has (see [`HeapView::open_count`]).
@@ -85,6 +105,7 @@ pub(crate) fn to_heap_view(heap: Heap, role: Role, open_count: u32) -> HeapView 
         open_count,
         allowed_actions: allowed_heap_actions(&heap, role),
         heap,
+        origin: None,
     }
 }
 

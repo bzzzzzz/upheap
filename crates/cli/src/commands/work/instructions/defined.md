@@ -30,9 +30,17 @@ ask on the note (`upheap question ask <key>`) and stop.
 If the note is a part of an open task in this heap, make it a step of that task instead:
 `upheap item to-step <key> --task <task>`. It closes the note and reaches the turn; there is nothing more to do
 after it.
+If the note is a project of its own, too big for tasks in this heap, make it a heap instead: first
+`upheap heap add "<name>" --from <key> --context-file -`, with the heap's context on stdin (what the project is, where
+its work lives and what finishing it means). Then make each of its tasks, with the context and steps as above, and
+its notes (with a context), in the new heap: `upheap item add "<title>" --task --heap <team/heap> --from <team/heap/key>
+--need <need> --age keep|new --context-file - --step "<title>"`, naming the note by its team/heap/key. Then
+`upheap item became <key>`, which reaches the turn. The heap needs at least one task or note made from this one; its
+tasks are defined by then, and get no turn in this run.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).
 
 Don't do the work and don't tick steps.
 
 Reached needs: a task with a context, at least one step, and no open question. For a split: no open question on the
-note, and every open task made from it with a context and at least one step.
+note, and every open task made from it with a context and at least one step. For a heap made from it: a context on
+the heap, at least one open task or note made from this one in it, and a context on each of those notes.

@@ -5,12 +5,13 @@ mod invite_links;
 mod manage;
 
 use api_types::heaps::HeapDto;
-use api_types::teams::{CreateNamedDto, MemberActionDto, MemberDto, TeamActionDto, TeamDto};
+use api_types::teams::{CreateHeapDto, CreateNamedDto, MemberActionDto, MemberDto, TeamActionDto, TeamDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use domain::ItemId;
 use domain::handle::Handle;
-use domain::text::Name;
+use domain::text::{Context, Name};
 use domain::validation::Field;
 use service::ServiceError;
 use service::teams::{MemberView, TeamDetail};
@@ -72,6 +73,17 @@ pub(crate) fn to_slug(body: &CreateNamedDto) -> Result<Option<Handle>, ServiceEr
         .transpose()?)
 }
 
+/// The name, slug and context of a new heap.
+fn to_new_heap(body: &CreateHeapDto) -> Result<(Name, Option<Handle>, Option<Context>), ServiceError> {
+    let slug = body
+        .slug
+        .as_deref()
+        .map(|raw| Handle::parse(raw, Field::Slug))
+        .transpose()?;
+    let context = body.context.as_deref().map(Context::parse).transpose()?.flatten();
+    Ok((Name::parse(&body.name)?, slug, context))
+}
+
 /// The team with its members and heaps.
 #[utoipa::path(get, path = "/teams/{team}", tag = "teams", security(("session" = [])),
     params(TeamParams),
@@ -81,24 +93,34 @@ async fn get_team(State(state): State<AppState>, path: TeamPath) -> Result<Json<
     Ok(Json(to_team_dto(detail)))
 }
 
-/// Adds a heap to the team. Admins only.
+/// Adds a heap to the team. Admins only. With `origin_id` the heap is made from that open note of the team, which stays
+/// open until `became`; a heap made from a note is in the queue of whoever works the note's heap. Inside a run the
+/// heap must be made from the run's item, with a `context`, and the run goes on.
 #[utoipa::path(post, path = "/teams/{team}/heaps", tag = "heaps", security(("session" = [])),
-    params(TeamParams), request_body = CreateNamedDto,
+    params(TeamParams), request_body = CreateHeapDto,
     responses(
         (status = 201, body = HeapDto),
-        (status = 403, body = Problem),
+        (status = 403, description = "A member, or from inside a run: `run_forbidden` (no `origin_id`), `run_add_needs_context` (no `context`) or `run_wrong_item` (`origin_id` is not the run's item, named in `item_key`)", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`handle_taken` (`field` `slug`)", body = Problem),
+        (status = 409, description = "`handle_taken` (`field` `slug`), `origin_not_a_note` or `origin_closed` (`origin_id`), or from inside a run `run_over`", body = Problem),
         (status = 422, description = "Invalid fields, or `invalid_handle` with a `hint`", body = Problem),
     ))]
 async fn create_heap(
     State(state): State<AppState>,
     path: TeamPath,
-    ApiJson(body): ApiJson<CreateNamedDto>,
+    ApiJson(body): ApiJson<CreateHeapDto>,
 ) -> Result<(StatusCode, Json<HeapDto>), ApiError> {
+    let (name, slug, context) = to_new_heap(&body)?;
     let view = state
         .services
-        .create_heap(path.principal, path.team_id, to_name(&body)?, to_slug(&body)?)
+        .create_heap(
+            path.principal,
+            path.team_id,
+            name,
+            slug,
+            context,
+            body.origin_id.map(ItemId::from_uuid),
+        )
         .await?;
     Ok((StatusCode::CREATED, Json(to_heap_dto(view))))
 }

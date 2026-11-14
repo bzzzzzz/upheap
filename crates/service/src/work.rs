@@ -574,6 +574,41 @@ impl Services {
         Ok(Some(run))
     }
 
+    /// Checks that the run `principal` carries may make a heap from `origin`, and tells the run it was heard from.
+    /// Does nothing outside a run. A run makes a heap only from its own item, with a context (`has_context`).
+    ///
+    /// Fails with [`RunForbidden::Person`] without an origin, [`RunForbidden::AddNeedsContext`] without a context,
+    /// [`ServiceError::NotFound`] for a run that doesn't exist or is another user's, [`RunError::WrongItem`] when the
+    /// origin isn't the run's item, and [`RunError::Over`] for a run that is over.
+    pub(crate) async fn check_run_make_heap(
+        &self,
+        txn: &impl ConnectionTrait,
+        principal: Principal,
+        origin: Option<ItemId>,
+        has_context: bool,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        let Some(run_id) = principal.run else {
+            return Ok(());
+        };
+        let Some(origin) = origin else {
+            return Err(RunError::Forbidden(RunForbidden::Person).into());
+        };
+        if !has_context {
+            return Err(RunError::Forbidden(RunForbidden::AddNeedsContext).into());
+        }
+        let (run, _) = self.lock_run_and(txn, principal, run_id, None).await?;
+        self.ensure_live(txn, &run, now).await?;
+        if run.item_id != origin {
+            let held = store::items::find_item(txn, run.item_id)
+                .await?
+                .ok_or(ServiceError::NotFound)?;
+            return Err(RunError::WrongItem { key: held.key }.into());
+        }
+        store::runs::touch_run(txn, run.id, now).await?;
+        Ok(())
+    }
+
     /// The run `run_id` as the caller's, read under the lock of its item's heap, with that heap. Fails with
     /// [`ServiceError::NotFound`] unless the caller made the run and may still edit in its heap.
     async fn lock_run(
@@ -664,8 +699,8 @@ impl Services {
         Ok(())
     }
 
-    /// The heaps of a queue request, found for the caller in the order given. Checked outside any transaction: the
-    /// caller locks them afterwards if it writes.
+    /// The heaps of a queue request, found for the caller in the order given, and the heaps made from their items.
+    /// Checked outside any transaction: the caller locks them afterwards if it writes.
     async fn resolve_queue_heaps(&self, principal: Principal, refs: &[String]) -> Result<Vec<QueueHeap>, ServiceError> {
         let mut heaps = Vec::new();
         for (team, slug) in parse_heap_refs(refs)? {
@@ -679,6 +714,25 @@ impl Services {
                 heap: access.heap,
                 team,
             });
+        }
+        // A heap made from an item in one of these counts as given too, and so on down: a made heap's items are the
+        // work of the note it came from. Access is by team role, so no check per heap. An archived heap has no open
+        // turn to give and would fail a claim, so it adds nothing.
+        let mut seen: HashSet<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
+        let mut frontier: Vec<HeapId> = seen.iter().copied().collect();
+        while !frontier.is_empty() {
+            let mut next = Vec::new();
+            for made in store::heaps::list_heaps_made_from_items_in(&self.db, &frontier).await? {
+                if made.is_archived() || !seen.insert(made.id) {
+                    continue;
+                }
+                let team = store::teams::find_team(&self.db, made.team_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?;
+                next.push(made.id);
+                heaps.push(QueueHeap { heap: made, team });
+            }
+            frontier = next;
         }
         // Heaps weigh the same for now, so ties between heaps go by name, then ID, as Waiting for me orders them.
         heaps.sort_by(|a, b| (a.heap.name.as_str(), a.heap.id).cmp(&(b.heap.name.as_str(), b.heap.id)));

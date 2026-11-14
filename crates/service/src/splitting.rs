@@ -13,8 +13,9 @@ use domain::heap::Heap;
 use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::question::QuestionState;
-use domain::run::{NotReached, RunEnd, RunResult, split_reached_check};
+use domain::run::{NotReached, RunEnd, RunResult, made_heaps_check, split_reached_check};
 use domain::step::{NewStep, Step, StepState, check_steps_editable, place_step};
+use domain::team::Team;
 use domain::text::Context;
 use domain::turn::{TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, StepId, Timestamp, TurnId, ValidationError};
@@ -71,6 +72,14 @@ impl Services {
             return Err(ServiceError::NothingMade { item_id });
         }
 
+        // Heaps made from the note count as made: a run's became checks them and defines the tasks in them.
+        let made_heaps = if scope.is_some() {
+            store::heaps::list_heaps_made_from(&txn, &[note.id]).await?
+        } else {
+            Vec::new()
+        };
+        let mut defining = vec![heap.id];
+        defining.extend(made_heaps.iter().map(|made| made.id));
         let mut turns_taken_back = 0_usize;
         let mut questions_withdrawn = 0_usize;
         let mut defined: Vec<&Item> = Vec::new();
@@ -84,19 +93,28 @@ impl Services {
                 .filter(|question| question.state() == domain::question::QuestionState::Open)
                 .count();
             let mut checked = Vec::new();
-            for task in made.iter().filter(|item| to_define(item, heap.id)) {
+            for task in made.iter().filter(|item| to_define(item, &defining)) {
                 let steps = store::steps::list_steps_locking(&txn, task.id).await?;
                 let live = steps.iter().filter(|step| step.state != StepState::Dropped).count();
                 checked.push((task.clone(), live));
             }
-            if let Err(missed) = split_reached_check(open_questions, &checked) {
+            let in_made_heaps: Vec<(Heap, Vec<Item>)> = made_heaps
+                .iter()
+                .map(|made_heap| {
+                    let items = made.iter().filter(|item| item.heap_id == made_heap.id).cloned();
+                    (made_heap.clone(), items.collect())
+                })
+                .collect();
+            if let Err(missed) =
+                split_reached_check(open_questions, &checked).and_then(|()| made_heaps_check(&in_made_heaps))
+            {
                 // The run is plainly still going, so it was heard from; the check already touched it.
                 commit_if_in_run(txn, principal).await?;
                 return Err(missed.into());
             }
             defined.extend(
                 made.iter()
-                    .filter(|item| to_define(item, heap.id) && item.stage != Stage::Defined),
+                    .filter(|item| to_define(item, &defining) && item.stage != Stage::Defined),
             );
             for task in &defined {
                 let edited = Item {
@@ -164,7 +182,15 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
 
         if let Some(scope) = scope {
-            let result = became_result(&made)?;
+            let team = match made_heaps.first() {
+                Some(made_heap) => Some(
+                    store::teams::find_team(&txn, made_heap.team_id)
+                        .await?
+                        .ok_or(ServiceError::NotFound)?,
+                ),
+                None => None,
+            };
+            let result = became_result(&made, &made_heaps, team.as_ref())?;
             let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
             store::runs::end_run(&txn, &ended_run).await?;
             self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
@@ -173,7 +199,7 @@ impl Services {
             // One the person has started or sent on already stays as the person left it, even when became just ended
             // that turn.
             for task in made.iter().filter(|item| {
-                to_define(item, heap.id) && item.state.kind() != StateKind::InProgress && !sent_on.contains(&item.id)
+                open_task_in(item, heap.id) && item.state.kind() != StateKind::InProgress && !sent_on.contains(&item.id)
             }) {
                 if store::turns::find_open_turn_locking(&txn, task.id).await?.is_some() {
                     continue;
@@ -383,20 +409,51 @@ impl Services {
     }
 }
 
-/// Whether a run's became checks `item` and makes it defined: an open task in the note's heap, `heap_id`, which is
-/// the heap this holds the lock of. A task made from the note and moved to another heap since is the person's.
-fn to_define(item: &Item, heap_id: HeapId) -> bool {
+/// Whether a run's became checks `item` and makes it defined: an open task in the note's heap or in a heap made from
+/// the note, `heap_ids`. A task made from the note and moved to another heap since is the person's.
+fn to_define(item: &Item, heap_ids: &[HeapId]) -> bool {
+    item.kind == Kind::Task && !item.is_closed() && heap_ids.contains(&item.heap_id)
+}
+
+/// Whether a note's turn, sent all the way, passes on to `item`: an open task in the note's own heap, `heap_id`. The
+/// tasks of a heap made from the note get no turn.
+fn open_task_in(item: &Item, heap_id: HeapId) -> bool {
     item.kind == Kind::Task && !item.is_closed() && item.heap_id == heap_id
 }
 
-/// What a run says it reached when its note became: how many items, and each by key and title, cut to the result's
-/// longest length.
-fn became_result(made: &[Item]) -> Result<RunResult, ValidationError> {
-    let items: Vec<String> = made
+/// What a run says it reached when its note became: each heap made from it, with how many items are in it, and then
+/// how many of the other items and each by key and title, cut to the result's longest length. `team` is the team
+/// of the heaps.
+fn became_result(made: &[Item], made_heaps: &[Heap], team: Option<&Team>) -> Result<RunResult, ValidationError> {
+    let noun = |count: usize| if count == 1 { "item" } else { "items" };
+    let mut parts: Vec<String> = Vec::new();
+    for made_heap in made_heaps {
+        let count = made.iter().filter(|item| item.heap_id == made_heap.id).count();
+        let slug = team.map_or(String::new(), |team| format!("{}/", team.slug));
+        parts.push(format!(
+            "heap {slug}{} \"{}\" ({count} {})",
+            made_heap.slug,
+            made_heap.name.as_str(),
+            noun(count)
+        ));
+    }
+    let own: Vec<&Item> = made
+        .iter()
+        .filter(|item| made_heaps.iter().all(|made_heap| made_heap.id != item.heap_id))
+        .collect();
+    let items: Vec<String> = own
         .iter()
         .map(|item| format!("{} \"{}\"", item.key, item.title.as_str()))
         .collect();
-    let noun = if made.len() == 1 { "item" } else { "items" };
-    let text = format!("Became {} {noun}: {}", made.len(), items.join(", "));
+    let mut text = String::from("Became");
+    if !parts.is_empty() {
+        text.push_str(&format!(" {}", parts.join(", ")));
+    }
+    if !own.is_empty() {
+        if !parts.is_empty() {
+            text.push_str(" and");
+        }
+        text.push_str(&format!(" {} {}: {}", own.len(), noun(own.len()), items.join(", ")));
+    }
     RunResult::parse(&text.chars().take(RunResult::MAX_CHARS).collect::<String>())
 }

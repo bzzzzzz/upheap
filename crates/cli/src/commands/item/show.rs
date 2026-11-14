@@ -129,13 +129,17 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     }
     let became = item.became.as_deref().unwrap_or_default();
     let became_steps = item.became_steps.as_deref().unwrap_or_default();
-    if !became.is_empty() || !became_steps.is_empty() {
+    let became_heaps = item.became_heaps.as_deref().unwrap_or_default();
+    if !became.is_empty() || !became_steps.is_empty() || !became_heaps.is_empty() {
         out.line("Became:")?;
         for made in became {
             out.line(&format!("  {}", made_item_text(made)))?;
         }
         for made in became_steps {
             out.line(&format!("  {}", made_step_text(made)))?;
+        }
+        for made in became_heaps {
+            out.line(&format!("  heap {}/{} \"{}\"", made.team_slug, made.slug, made.name))?;
         }
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {

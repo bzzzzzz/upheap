@@ -94,6 +94,11 @@ pub struct HeapDto {
     pub weights: HeapWeightsDto,
     /// Send back in `If-Match` when renaming or changing the context or weights.
     pub version: u32,
+    /// The note this heap was made from (`POST /teams/{team}/heaps` with `origin_id`), in the heap's team. `null` for a
+    /// heap that wasn't made from a note, and in lists, which don't look it up: one heap's own read does.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub origin: Option<crate::common::ItemOriginDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<HeapActionDto>,
 }

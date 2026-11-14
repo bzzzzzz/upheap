@@ -3,7 +3,7 @@
 use crate::handle::Handle;
 use crate::parameter::Weight;
 use crate::text::{Context, Name};
-use crate::{HeapId, TeamId, Timestamp, Version};
+use crate::{HeapId, ItemId, TeamId, Timestamp, Version};
 
 /// The heap's ranking weights. Each weight scales one factor's influence relative to the others; `0` turns the
 /// factor off. The custom parameters' weights count next to these.
@@ -92,6 +92,8 @@ pub struct Heap {
     pub context: Option<Context>,
     /// Whether every item added here is sent to an agent to take it one stable state forward (Work with agents, Opening a turn).
     pub agents_prepare: bool,
+    /// The note this heap was made from, when a note became it. Never changed.
+    pub origin_id: Option<ItemId>,
     /// `None` while the heap is active.
     pub archived_at: Option<Timestamp>,
     pub version: Version,

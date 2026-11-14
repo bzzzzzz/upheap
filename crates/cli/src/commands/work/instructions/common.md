@@ -25,7 +25,7 @@ Rules
 - Mark what you inferred as an assumption.
 - Write for someone reading on a phone, later, without this run: the main point first, short, plain, no filler.
 - A refusal (exit 3) says what to do next in its hint. If it says the run is over, stop at once.
-- Never set or change this item's need, tags or due dates, and never close it: closing is refused (a task you are doing is closed by proposing it, see below). The only exception is `upheap item became`, after a split, and `upheap item to-step`.
+- Never set or change this item's need, tags or due dates, and never close it: closing is refused (a task you are doing is closed by proposing it, see below). The only exception is `upheap item became`, after a split, and `upheap item to-step`. A heap is made only from this item, with `upheap heap add --from`, with its context.
 
 Asking the person
 - When a call is theirs, or something only they have or can do, ask: `upheap question ask <key> "<one line>"`,

@@ -107,6 +107,7 @@ async fn world() -> Result<World> {
         policy: HeapPolicy::default(),
         context: None,
         agents_prepare: false,
+        origin_id: None,
         archived_at: None,
         version: Version::INITIAL,
     };
