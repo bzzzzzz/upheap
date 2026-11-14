@@ -24,12 +24,15 @@ export function DataChart({
   buckets,
   series,
   format = String,
+  decimals = false,
   empty,
 }: {
   title: string;
   buckets: DataBucket[];
   series: DataSeries[];
   format?: (value: number) => string;
+  /** Whether the axis may step in fractions, as dollars do: a day's spend is often cents. Counts step in whole numbers. */
+  decimals?: boolean;
   /** What to say instead of bars when nothing happened in the whole period. */
   empty: string | null;
 }) {
@@ -64,7 +67,8 @@ export function DataChart({
                 title={title}
                 margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
                 onClick={(state) => {
-                  const index = Number(state.activeTooltipIndex);
+                  // A tap off the bars has no index; Number(null) would be 0, the first bucket.
+                  const index = state.activeTooltipIndex == null ? NaN : Number(state.activeTooltipIndex);
                   setPicked(Number.isInteger(index) ? index : undefined);
                 }}
               >
@@ -77,7 +81,7 @@ export function DataChart({
                 <YAxis
                   width={40}
                   tickCount={4}
-                  allowDecimals={false}
+                  allowDecimals={decimals}
                   tick={{ fontSize: 11, fill: "var(--muted)" }}
                   tickLine={false}
                   axisLine={false}

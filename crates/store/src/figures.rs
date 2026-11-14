@@ -2,8 +2,11 @@
 //! of heaps. Each returns plain rows, one per run or item; the caller buckets them by day or week in the client's
 //! time zone, which SQL can't do portably across SQLite, MySQL and Postgres.
 //!
-//! Size assumption: a team's rows in the longest period (91 days) are thousands of items and runs at most, so they
-//! fit in memory. Beyond that, count with `GROUP BY` on precomputed UTC day columns instead.
+//! Size assumption: the rows returned are a team's items and runs in the longest period (91 days), thousands at most,
+//! so they fit in memory. The created-items and runs reads filter by time after selecting by heap, so they scan every
+//! item of the team's heaps and those items' runs: fine at the thousands of items a heap holds today. Beyond that, add
+//! an index on `items (heap_id, created_at)` and on `item_runs (started_at)`, then count with `GROUP BY` on precomputed
+//! UTC day columns.
 
 use domain::data::{ClosedRow, RunRow};
 use domain::item::StateKind;

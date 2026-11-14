@@ -113,7 +113,14 @@ function Figures({ data, days }: { data: TeamData | undefined; days: DataDays })
   const emptyText = nothing ? `Nothing in these ${days === "90" ? "13 weeks" : `${days} days`}.` : null;
   const frame = (title: string, series: DataSeries[], format?: (value: number) => string) =>
     data ? (
-      <DataChart title={title} buckets={data.buckets} series={series} format={format} empty={emptyText} />
+      <DataChart
+        title={title}
+        buckets={data.buckets}
+        series={series}
+        format={format}
+        decimals={format !== undefined}
+        empty={emptyText}
+      />
     ) : (
       <section aria-label={title} className="rounded-[14px] border border-line bg-surface p-3">
         <h2 className="text-sm font-semibold">{title}</h2>
