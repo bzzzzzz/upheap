@@ -1,5 +1,5 @@
 // An edited text in history as the server's word diff: removed words struck through in red, added ones in teal, and
-// long unchanged stretches folded around the edits (ux.md, History).
+// long unchanged stretches folded around the edits (ux.md, The item, point 22).
 import { useState } from "react";
 
 import type { AuditDiffPiece } from "../api/client";

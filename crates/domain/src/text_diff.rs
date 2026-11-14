@@ -1,4 +1,4 @@
-//! A word diff between two versions of a text, for showing an edit in history (ux.md, History).
+//! A word diff between two versions of a text, for showing an edit in history (ux.md, The item, point 22).
 //!
 //! Words and the whitespace between them are the units, so line breaks survive. A run of edits split only by spaces
 //! reads as one removed phrase and one added phrase, rather than word against word. When too little stays the same,
