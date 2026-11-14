@@ -17,14 +17,14 @@ pub const REDIRECT_MAX_CHARS: usize = 2048;
 
 /// Whether `path` may be a sign-in's `redirect`: a path of this app, so a sign-in can't be used to send someone to
 /// another site. It starts with `/`, the second character is not `/` or `\` (browsers read both as a host), and it
-/// holds no ASCII control character or space, and is at most
-/// [`REDIRECT_MAX_CHARS`] long.
+/// holds only printable ASCII (no control character, space or other character that a header can't carry), and is at
+/// most [`REDIRECT_MAX_CHARS`] long.
 pub fn is_app_path(path: &str) -> bool {
     let mut chars = path.chars();
     chars.next() == Some('/')
         && !matches!(chars.next(), Some('/' | '\\'))
         && path.chars().count() <= REDIRECT_MAX_CHARS
-        && !path.chars().any(|c| c.is_ascii_control() || c == ' ')
+        && path.chars().all(|c| c.is_ascii_graphic())
 }
 
 /// The display name of a user who signs in through a provider for the first time: the provider's `name` claim if it
@@ -51,7 +51,17 @@ mod tests {
 
     #[test]
     fn rejects_other_redirects() {
-        for path in ["//evil", "/\\evil", "https://x", "evil", "", "/a b", "/a\tb", "/a\nb"] {
+        for path in [
+            "//evil",
+            "/\\evil",
+            "https://x",
+            "evil",
+            "",
+            "/a b",
+            "/a\tb",
+            "/a\nb",
+            "/teams/café",
+        ] {
             assert!(!is_app_path(path), "{path:?}");
         }
     }

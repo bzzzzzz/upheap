@@ -164,7 +164,7 @@ pub enum OidcStart {
 }
 
 /// What the provider's redirect to the callback carried.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct OidcCallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,
@@ -233,10 +233,11 @@ impl Services {
                     kind = discovery_kind(&error),
                     "provider sign-in not started: discovery failed"
                 );
-                return Ok(OidcStart::Refused(refused(
-                    OidcRefusal::ProviderUnreachable,
-                    redirect.map(str::to_owned),
-                )));
+                return Ok(OidcStart::Refused(OidcRefused {
+                    reason: OidcRefusal::ProviderUnreachable,
+                    redirect: redirect.map(str::to_owned),
+                    login: None,
+                }));
             }
         };
 
@@ -306,11 +307,12 @@ impl Services {
             }))
         };
 
-        let (current, state) = match (&found, cookie_state, &query.state) {
-            (Some(row), Some(cookie), Some(state)) if cookie == state && row.expires_at > now => (row, state.as_str()),
+        let (current, state_hash) = match (&found, cookie_state, query.state.as_deref(), &state_hash) {
+            (Some(row), Some(cookie), Some(state), Some(hash)) if cookie == state && row.expires_at > now => {
+                (row, hash)
+            }
             _ => return refuse(OidcRefusal::SignInExpired, "no live sign-in for this browser", None).await,
         };
-        let state_hash = sha256_hex(state);
         let Some(code) = query.code.filter(|_| query.error.is_none()) else {
             return refuse(
                 OidcRefusal::ProviderRefused,
@@ -330,7 +332,7 @@ impl Services {
                 .ok_or_else(|| StoreError::corrupt("user_identities", &claims.subject, "no such user"))?;
             let txn = self.db.begin().await.map_err(StoreError::from)?;
             let grant = self.open_session(&txn, user, now).await?;
-            store::oidc_sign_ins::delete_oidc_sign_in(&txn, &state_hash).await?;
+            store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
             txn.commit().await.map_err(StoreError::from)?;
             tracing::info!(user_id = %grant.user.id, "user signed in through the provider");
             return Ok(OidcCallback::SignedIn {
@@ -360,7 +362,7 @@ impl Services {
             email,
             display_name,
         };
-        if !store::oidc_sign_ins::set_oidc_sign_in_verified(&self.db, &state_hash, &identity, ends_at).await? {
+        if !store::oidc_sign_ins::set_oidc_sign_in_verified(&self.db, state_hash, &identity, ends_at).await? {
             return refuse(OidcRefusal::SignInExpired, "the sign-in ended meanwhile", None).await;
         }
         tracing::info!("provider sign-in verified, waiting for a username");
@@ -413,14 +415,6 @@ impl Services {
             .ok_or(ServiceError::NotFound)?;
         let verified = row.verified.clone().ok_or(ServiceError::NotFound)?;
         Ok((row, verified))
-    }
-}
-
-fn refused(reason: OidcRefusal, redirect: Option<String>) -> OidcRefused {
-    OidcRefused {
-        reason,
-        redirect,
-        login: None,
     }
 }
 

@@ -210,14 +210,19 @@ fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
 
 /// The session token from the `Cookie` header, if there is one.
 pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
+    cookie_value(headers, SESSION_COOKIE).map(SessionToken::from_client)
+}
+
+/// The value of the cookie called `name` in the `Cookie` headers, if there is one.
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(';'))
         .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(name, _)| *name == SESSION_COOKIE)
-        .map(|(_, value)| SessionToken::from_client(value.to_owned()))
+        .find(|(cookie, _)| *cookie == name)
+        .map(|(_, value)| value.to_owned())
 }
 
 /// A `Set-Cookie` value that stores `token` as the session cookie.
@@ -318,14 +323,7 @@ const OIDC_COOKIE_PATH: &str = "/api/v1/auth/oidc";
 
 /// The state of the sign-in through the provider this browser started, from the `Cookie` header, if there is one.
 pub(crate) fn oidc_state(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get_all(header::COOKIE)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(';'))
-        .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(name, _)| *name == OIDC_COOKIE)
-        .map(|(_, value)| value.to_owned())
+    cookie_value(headers, OIDC_COOKIE)
 }
 
 /// A `Set-Cookie` value that keeps `state` for the 15 minutes a sign-in through the provider lasts. `Secure` when

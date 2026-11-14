@@ -42,7 +42,7 @@ async fn provider(State(state): State<AppState>) -> Result<axum::Json<OidcProvid
 #[derive(Debug, Deserialize, IntoParams)]
 struct StartQuery {
     /// The app path to go to once signed in, such as `/invite/<token>`. Dropped unless it starts with a single `/`
-    /// and holds no control character or space.
+    /// and holds only printable ASCII (no space).
     redirect: Option<String>,
 }
 
@@ -64,13 +64,13 @@ async fn start(State(state): State<AppState>, Query(query): Query<StartQuery>) -
             authorize_url,
             state: sign_in_state,
         } => {
-            let mut response = see_other(&authorize_url);
-            if let Some(cookie) = oidc_cookie(&sign_in_state, &state.cookies) {
-                response.headers_mut().append(header::SET_COOKIE, cookie);
-            }
+            let cookie = oidc_cookie(&sign_in_state, &state.cookies)
+                .ok_or(ApiError::Internal("the sign-in state is not a cookie value"))?;
+            let mut response = see_other(&authorize_url)?;
+            response.headers_mut().append(header::SET_COOKIE, cookie);
             Ok(response)
         }
-        OidcStart::Refused(refused) => Ok(refusal(&app_url, &refused, &state.cookies)),
+        OidcStart::Refused(refused) => refusal(&app_url, &refused, &state.cookies),
     }
 }
 
@@ -114,15 +114,15 @@ async fn callback(
         .await?
     {
         OidcCallback::SignedIn { grant, redirect } => {
-            let mut response = see_other(&format!("{app_url}{}", redirect.as_deref().unwrap_or("/")));
+            let mut response = see_other(&format!("{app_url}{}", redirect.as_deref().unwrap_or("/")))?;
             set_session(&mut response, &grant, cookies)?;
             response
                 .headers_mut()
                 .append(header::SET_COOKIE, clear_oidc_cookie(cookies));
             Ok(response)
         }
-        OidcCallback::NeedsUsername => Ok(see_other(&format!("{app_url}/login/provider"))),
-        OidcCallback::Refused(refused) => Ok(refusal(&app_url, &refused, cookies)),
+        OidcCallback::NeedsUsername => see_other(&format!("{app_url}/login/provider")),
+        OidcCallback::Refused(refused) => refusal(&app_url, &refused, cookies),
     }
 }
 
@@ -174,22 +174,23 @@ async fn register(
     Ok(response)
 }
 
-fn see_other(location: &str) -> Response {
-    // The locations are the configured base URL, a validated app path or a provider URL: always valid header values.
-    match HeaderValue::from_str(location) {
-        Ok(location) => (StatusCode::SEE_OTHER, [(header::LOCATION, location)]).into_response(),
-        Err(_) => ApiError::Service(service::ServiceError::Unauthenticated).into_response(),
-    }
+fn see_other(location: &str) -> Result<Response, ApiError> {
+    // The locations are the configured base URL, a validated app path (printable ASCII) or a provider URL, which
+    // are valid header values; anything else is a bug.
+    let location =
+        HeaderValue::from_str(location).map_err(|_| ApiError::Internal("a redirect location is not a header value"))?;
+    Ok((StatusCode::SEE_OTHER, [(header::LOCATION, location)]).into_response())
 }
 
 fn set_session(response: &mut Response, grant: &SessionGrant, cookies: &CookieSettings) -> Result<(), ApiError> {
-    let cookie = session_cookie(&grant.token, cookies).ok_or(service::ServiceError::Unauthenticated)?;
+    let cookie =
+        session_cookie(&grant.token, cookies).ok_or(ApiError::Internal("the session token is not a cookie value"))?;
     response.headers_mut().append(header::SET_COOKIE, cookie);
     Ok(())
 }
 
 /// To the sign-in page, told why, with the state cookie ended.
-fn refusal(app_url: &str, refused: &OidcRefused, cookies: &CookieSettings) -> Response {
+fn refusal(app_url: &str, refused: &OidcRefused, cookies: &CookieSettings) -> Result<Response, ApiError> {
     let mut query = form_urlencoded::Serializer::new(String::new());
     query.append_pair("sign_in_error", refused.reason.code());
     if let Some(redirect) = &refused.redirect {
@@ -198,9 +199,9 @@ fn refusal(app_url: &str, refused: &OidcRefused, cookies: &CookieSettings) -> Re
     if let Some(login) = &refused.login {
         query.append_pair("login", login);
     }
-    let mut response = see_other(&format!("{app_url}/login?{}", query.finish()));
+    let mut response = see_other(&format!("{app_url}/login?{}", query.finish()))?;
     response
         .headers_mut()
         .append(header::SET_COOKIE, clear_oidc_cookie(cookies));
-    response
+    Ok(response)
 }

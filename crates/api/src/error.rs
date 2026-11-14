@@ -43,6 +43,9 @@ pub enum ApiError {
     /// The `Authorization` header holds no bearer token, or one that is unknown, expired or revoked.
     BearerRejected,
     NoSuchRoute,
+    /// A state the code should never reach, such as a value it built that a header can't carry. Answers `internal`;
+    /// the reason is logged, not sent.
+    Internal(&'static str),
     /// A service error caused by one query parameter or body field, which the problem names as its `field`.
     InField {
         error: ServiceError,
@@ -137,6 +140,7 @@ fn classify(err: &ApiError) -> Classified {
             Category::Permission,
         ),
         ApiError::NoSuchRoute => simple(StatusCode::NOT_FOUND, "not_found", "Not found", Category::Permission),
+        ApiError::Internal(_) => unexpected(),
         ApiError::Service(err) => classify_service(err),
     }
 }

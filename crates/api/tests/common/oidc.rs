@@ -32,6 +32,8 @@ pub const APP_URL: &str = "https://upheap.example.test";
 
 /// A test key, made for these tests only. It signs nothing real.
 const TEST_SIGNING_KEY: &str = include_str!("../fixtures/oidc-test-signing-key.pem");
+/// A second test key that the provider doesn't publish, to sign tokens that must be rejected.
+const WRONG_SIGNING_KEY: &str = include_str!("../fixtures/oidc-test-wrong-signing-key.pem");
 const KEY_ID: &str = "test-key";
 
 /// What the provider vouches for with one code.
@@ -41,6 +43,23 @@ pub struct Claims {
     pub email: Option<String>,
     pub email_verified: Option<bool>,
     pub name: Option<String>,
+    /// What is wrong with the ID token, if anything. A valid token by default.
+    pub fault: TokenFault,
+}
+
+/// How the fake provider spoils an ID token, to show the server rejects it.
+#[derive(Clone, Debug, Default)]
+pub struct TokenFault {
+    /// Instead of the nonce the start sent.
+    pub nonce: Option<String>,
+    /// Instead of the client ID.
+    pub audience: Option<String>,
+    /// Instead of the issuer.
+    pub issuer: Option<String>,
+    /// Instead of one hour from now (a negative one is already past).
+    pub expires_in: Option<chrono::Duration>,
+    /// Sign with the key the provider doesn't publish.
+    pub wrong_key: bool,
 }
 
 impl Claims {
@@ -51,6 +70,7 @@ impl Claims {
             email: Some(email.to_owned()),
             email_verified: Some(true),
             name: Some(name.to_owned()),
+            fault: TokenFault::default(),
         }
     }
 }
@@ -72,6 +92,7 @@ struct Grant {
 struct Shared {
     issuer: String,
     key: CoreRsaPrivateSigningKey,
+    wrong_key: CoreRsaPrivateSigningKey,
     grants: Mutex<HashMap<String, Grant>>,
 }
 
@@ -87,9 +108,13 @@ impl FakeProvider {
         let issuer = format!("http://{}/realm/", listener.local_addr()?);
         let key = CoreRsaPrivateSigningKey::from_pem(TEST_SIGNING_KEY, Some(JsonWebKeyId::new(KEY_ID.to_owned())))
             .map_err(anyhow::Error::msg)?;
+        let wrong_key =
+            CoreRsaPrivateSigningKey::from_pem(WRONG_SIGNING_KEY, Some(JsonWebKeyId::new(KEY_ID.to_owned())))
+                .map_err(anyhow::Error::msg)?;
         let shared = Arc::new(Shared {
             issuer: issuer.clone(),
             key,
+            wrong_key,
             grants: Mutex::new(HashMap::new()),
         });
         let router = Router::new()
@@ -233,22 +258,28 @@ fn id_token(shared: &Shared, grant: &Grant) -> Option<String> {
     if let Some(name) = &grant.claims.name {
         standard = standard.set_name(Some(LocalizedClaim::from(EndUserName::new(name.clone()))));
     }
+    let fault = &grant.claims.fault;
+    let issuer = fault.issuer.as_ref().unwrap_or(&shared.issuer);
+    let audience = fault.audience.as_deref().unwrap_or(CLIENT_ID);
+    let expires_in = fault.expires_in.unwrap_or(chrono::Duration::hours(1));
+    let nonce = fault.nonce.as_ref().unwrap_or(&grant.nonce);
+    // Issued before it expired, even when it has.
+    let issued_at = now.min(now + expires_in - chrono::Duration::minutes(1));
     let claims = CoreIdTokenClaims::new(
-        IssuerUrl::new(shared.issuer.clone()).ok()?,
-        vec![Audience::new(CLIENT_ID.to_owned())],
-        now + chrono::Duration::hours(1),
-        now,
+        IssuerUrl::new(issuer.clone()).ok()?,
+        vec![Audience::new(audience.to_owned())],
+        now + expires_in,
+        issued_at,
         standard,
         EmptyAdditionalClaims {},
     )
-    .set_nonce(Some(Nonce::new(grant.nonce.clone())));
-    CoreIdToken::new(
-        claims,
-        &shared.key,
-        CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
-        None,
-        None,
-    )
-    .ok()
-    .map(|token| token.to_string())
+    .set_nonce(Some(Nonce::new(nonce.clone())));
+    let key = if fault.wrong_key {
+        &shared.wrong_key
+    } else {
+        &shared.key
+    };
+    CoreIdToken::new(claims, key, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256, None, None)
+        .ok()
+        .map(|token| token.to_string())
 }

@@ -164,7 +164,7 @@ const loginRoute = createRoute({
     return (
       <AuthPage
         notice={notice}
-        providerRedirect={redirect}
+        providerRedirect={page?.href}
         refusal={refusal}
         initialLogin={login}
         onSignedIn={() => goAfterSignIn(router, page)}

@@ -5,7 +5,7 @@ mod common;
 
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode, header};
-use common::oidc::{self, APP_URL, AuthorizationRequest, Claims, FakeProvider, LABEL};
+use common::oidc::{self, APP_URL, AuthorizationRequest, Claims, FakeProvider, LABEL, TokenFault};
 use common::{CSRF, TestApp, TestResponse};
 use domain::Duration;
 use googletest::prelude::*;
@@ -352,6 +352,70 @@ async fn a_sign_in_the_provider_refused_or_that_took_too_long_is_refused() -> Re
     h.app.clock.advance(Duration::from_minutes(16));
     let late = finish(&h, &started, sam()).await?;
     expect_that!(location(&late)?, eq(&refusal_location("sign_in_expired")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_id_token_that_should_be_rejected_is_refused_and_nothing_is_made() -> Result<()> {
+    let h = harness().await?;
+    let faults = [
+        (
+            "wrong nonce",
+            TokenFault {
+                nonce: Some("another-nonce".to_owned()),
+                ..TokenFault::default()
+            },
+        ),
+        (
+            "wrong audience",
+            TokenFault {
+                audience: Some("another-client".to_owned()),
+                ..TokenFault::default()
+            },
+        ),
+        (
+            "wrong issuer",
+            TokenFault {
+                issuer: Some("https://another-issuer.example.test/".to_owned()),
+                ..TokenFault::default()
+            },
+        ),
+        (
+            "expired",
+            TokenFault {
+                // Real time: openidconnect doesn't read the server's clock.
+                expires_in: Some(chrono::Duration::hours(-1)),
+                ..TokenFault::default()
+            },
+        ),
+        (
+            "bad signature",
+            TokenFault {
+                wrong_key: true,
+                ..TokenFault::default()
+            },
+        ),
+    ];
+    for (name, fault) in faults {
+        let started = begin(&h.app, None).await?;
+        let answered = finish(&h, &started, Claims { fault, ..sam() }).await?;
+        expect_that!(answered.status, eq(StatusCode::SEE_OTHER), "{name}");
+        expect_that!(
+            location(&answered)?,
+            eq(&refusal_location("provider_refused")),
+            "{name}"
+        );
+        expect_that!(
+            answered.headers.get_all(header::SET_COOKIE).iter().count(),
+            eq(1),
+            "{name}: only the state cookie is ended"
+        );
+        expect_that!(h.app.count_rows("user_identities").await?, eq(0), "{name}");
+        expect_that!(h.app.count_rows("users").await?, eq(0), "{name}");
+        expect_that!(h.app.count_rows("sessions").await?, eq(0), "{name}");
+        expect_that!(h.app.count_rows("oidc_sign_ins").await?, eq(0), "{name}");
+    }
     Ok(())
 }
 
