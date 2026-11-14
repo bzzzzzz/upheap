@@ -10,8 +10,8 @@ use std::time::Duration as StdDuration;
 use anyhow::{Context, Result};
 use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart};
 use common::{
-    Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key, lines_with,
-    wait_until,
+    Agent, Buffer, HEAP, Outcome, START, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key,
+    lines_with, wait_until,
 };
 use domain::Duration;
 use googletest::prelude::*;
@@ -727,6 +727,10 @@ async fn one_ctrl_c_during_a_run_lets_it_end_and_stops_the_loop_before_the_next_
     let looping = cli.run_work_watched(LOOP, &tool, interrupts, &stdout, &stderr);
     let pressing = async {
         entered.notified().await;
+        // The machine's clock three minutes past the server's, which the run was claimed at.
+        let real_now = jiff::Timestamp::now().as_millisecond();
+        cli.clock_offset
+            .store(START - real_now + 3 * 60 * 1000, Ordering::SeqCst);
         interrupt.send(Interrupt::CtrlC)?;
         wait_until("the stopping note", || {
             stderr
@@ -751,7 +755,7 @@ async fn one_ctrl_c_during_a_run_lets_it_end_and_stops_the_loop_before_the_next_
     let started = item_key_of(&tool.starts()[0]);
     expect_that!(
         lines_after(&outcome.stderr, "Stopping after this run."),
-        elements_are![matches_regex(format!(r"^  {started}  \S.*  \d+m\d\ds$"))]
+        elements_are![matches_regex(format!(r"^  {started}  \S.*  3m0\ds$"))]
     );
     Ok(())
 }
@@ -967,6 +971,8 @@ async fn one_ctrl_c_with_two_runs_lets_both_end_and_claims_nothing_new() -> Resu
             matches_regex(r"^  \w+  (Rotate the certs|Tidy the wiki|Water the plants) +\d+m\d\ds$")
         );
     }
+    // In columns: the durations, all as wide, end both lines at the same place.
+    expect_that!(listed[0].chars().count(), eq(listed[1].chars().count()));
     Ok(())
 }
 

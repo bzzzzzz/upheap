@@ -512,6 +512,10 @@ impl Shared<'_> {
             }
             self.prune_logs_if_due().await;
             self.sweep_if_due().await;
+            // A sweep can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed are all.
+            if self.is_stopping() {
+                return;
+            }
             let next = match self.work_a_pass().await {
                 Ok(next) => next,
                 Err(err) if after_failure(&err, self.once) == AfterFailure::TryAgain => {
