@@ -173,7 +173,7 @@ impl Buckets {
                     Some(RunEnd::Reached) => bucket.runs.reached += 1,
                     Some(RunEnd::Asked) => bucket.runs.asked += 1,
                     Some(RunEnd::Failed) => bucket.runs.failed += 1,
-                    Some(RunEnd::TakenBack | RunEnd::HandedBack) | None => bucket.runs.other += 1,
+                    Some(RunEnd::TakenBack | RunEnd::HandedBack | RunEnd::Limited) | None => bucket.runs.other += 1,
                 }
             }
         }
@@ -359,6 +359,7 @@ mod tests {
             run(day, Some(RunEnd::Failed), Some(250_000)),
             run(day, Some(RunEnd::TakenBack), None),
             run(day, Some(RunEnd::HandedBack), Some(0)),
+            run(day, Some(RunEnd::Limited), Some(0)),
             run(day, None, None),
         ];
 
@@ -376,7 +377,7 @@ mod tests {
                 reached: 1,
                 asked: 1,
                 failed: 1,
-                other: 3
+                other: 4
             })
         );
         expect_that!(figures.totals, eq(today));

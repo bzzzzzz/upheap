@@ -3,6 +3,8 @@
 //! It claims the next item of the queue, starts the agent tool on it with a brief, keeps the claim alive, records
 //! how the run ended and what it cost, and waits when there is nothing to do. The server decides how a run ended
 //! (it reached its goal, it handed the turn back, it asked, or it failed); the loop only reports what the tool did.
+//! When the tool stopped at the account's usage limit, the run is recorded as limited and every worker holds until the
+//! limit resets, then claims again; the queue gives that item first place.
 //! The tool sits behind [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass
 //! their own.
 
@@ -28,7 +30,9 @@ use super::{
     HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text,
     waiting_text,
 };
-use crate::agent::{Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, WorkDeps, make_root};
+use crate::agent::{
+    Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, UsageLimit, WorkDeps, make_root,
+};
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::item::show::item_text;
@@ -40,6 +44,12 @@ use crate::{App, CliError};
 
 /// How many times the end of a run is sent before giving up on the server being out of reach.
 const FINISH_TRIES: u32 = 3;
+
+/// How long past the reset the loop holds, so a run doesn't start in the second the limit lifts.
+const LIMIT_MARGIN: Duration = Duration::from_secs(60);
+
+/// How long the loop holds when the tool didn't say when its limit resets.
+const LIMIT_FALLBACK: Duration = Duration::from_secs(30 * 60);
 
 /// The longest title a run's line shows, in characters.
 const TITLE_WIDTH: usize = 40;
@@ -132,6 +142,10 @@ impl AllowRules {
 /// starts in. It is the same one for every run on the item, as the last run left it. The loop removes it once the
 /// item is closed or can't be found, or when no run has been in it for 7 days. Directories from before, named by
 /// an item's key and a run's ID, are never touched.
+///
+/// A run whose tool stopped at the account's usage limit ends as `limited`, not failed. The loop then claims nothing
+/// until the limit resets and a minute more (30 minutes when the tool gave no time), by the wall clock, and says so;
+/// live runs end as usual. With `--once` it says when to run again and exits at once.
 pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> Result<(), CliError> {
     if app.env.run.is_some() {
         return Err(UsageError::RunInRun.into());
@@ -201,6 +215,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         pressed: AtomicBool::new(false),
         stopping_noted: AtomicBool::new(false),
         first_error: Mutex::new(None),
+        hold: Mutex::new(None),
         stop,
     };
     shared.work_the_queue(interrupts()).await
@@ -242,6 +257,14 @@ enum Next {
     Again,
     /// Wait before claiming again.
     Wait,
+    /// The tool stopped at the account's usage limit: claim nothing until it resets.
+    Hold(UsageLimit),
+}
+
+/// Why and until when the loop claims nothing, because the tool's usage limit was reached.
+struct Hold {
+    /// When claiming may start again.
+    until: jiff::Timestamp,
 }
 
 /// What the loop does when a claim, or the reads that follow it, fail.
@@ -391,6 +414,8 @@ struct Shared<'a> {
     stopping_noted: AtomicBool,
     /// The error that ended the first worker that failed; the command fails with it once every worker has ended.
     first_error: Mutex<Option<CliError>>,
+    /// The hold on claiming, while there is one. One for every worker.
+    hold: Mutex<Option<Hold>>,
     stop: watch::Sender<Stop>,
 }
 
@@ -516,6 +541,9 @@ impl Shared<'_> {
             if self.is_stopping() {
                 return;
             }
+            if !self.wait_for_hold().await {
+                return;
+            }
             let next = match self.work_a_pass().await {
                 Ok(next) => next,
                 Err(err) if after_failure(&err, self.once) == AfterFailure::TryAgain => {
@@ -525,6 +553,8 @@ impl Shared<'_> {
                 Err(err) => return self.end_with(err),
             };
             match next {
+                Next::Hold(limit) if self.once => return self.note_limit_once(&limit),
+                Next::Hold(limit) => self.hold_for(&limit),
                 _ if self.once => return,
                 Next::Again => {}
                 Next::Wait => {
@@ -716,12 +746,23 @@ impl Shared<'_> {
         {
             tracing::warn!(run_id = %run.id, error = %err, "couldn't mark the run's directory as used");
         }
+        let mut limit = None;
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
                 tracing::debug!(run_id = %run.id, last_message = ?report.last_message, "the tool ended");
+                // The failure text is for the log only: a limited run keeps none.
+                let failure = match report.limit {
+                    Some(hit) => {
+                        tracing::info!(run_id = %run.id, failure = ?report.failure, limit = ?hit, "the tool hit its usage limit");
+                        limit = Some(hit);
+                        None
+                    }
+                    None => report.failure,
+                };
                 let request = tool_times(FinishRequestDto {
                     cost_usd: report.cost_usd,
-                    failure: report.failure,
+                    limited: limit.is_some(),
+                    failure,
                     ..Default::default()
                 });
                 (request, None)
@@ -748,7 +789,7 @@ impl Shared<'_> {
         if let Some(err) = not_started {
             return Err(err.into());
         }
-        Ok(Next::Again)
+        Ok(limit.map_or(Next::Again, Next::Hold))
     }
 
     /// Makes `dir` if it isn't there and writes the marker that says a run started in it now. Returns the marker, which
@@ -1248,11 +1289,108 @@ impl Shared<'_> {
         self.note(&format!("{now}  Can't reach the server. Trying again in a minute."));
     }
 
+    /// Starts the hold for `limit`, or moves its end later: until the limit resets and [`LIMIT_MARGIN`] more, or
+    /// [`LIMIT_FALLBACK`] from now without a time. Never moves an end earlier. Says so, in human mode, when the hold
+    /// starts or its end moves.
+    fn hold_for(&self, limit: &UsageLimit) {
+        let now = self.app.now();
+        let until = hold_end(limit, now);
+        {
+            let mut hold = lock(&self.hold);
+            if hold
+                .as_ref()
+                .is_some_and(|held| held.until > now && held.until >= until)
+            {
+                return;
+            }
+            *hold = Some(Hold { until });
+        }
+        if self.mode != Mode::Human {
+            return;
+        }
+        let window = limit
+            .window
+            .as_ref()
+            .map_or(String::new(), |window| format!(" ({window})"));
+        let text = format!(
+            "Claude limit reached{window}, waiting until {}.",
+            self.local_time_or_date(until.as_millisecond())
+        );
+        let at = self.local_time(now.as_millisecond());
+        // Nowhere left to say it if stdout is gone.
+        let _ = self.write(|out| {
+            out.line_parts(&[
+                (at.as_str(), Tone::Dim),
+                ("  ", Tone::Plain),
+                (text.as_str(), Tone::Plain),
+            ])
+        });
+    }
+
+    /// `--once` after a run hit the limit: when to run again, on stderr. Nothing is waited for.
+    fn note_limit_once(&self, limit: &UsageLimit) {
+        if self.mode != Mode::Human {
+            return;
+        }
+        let window = limit
+            .window
+            .as_ref()
+            .map_or(String::new(), |window| format!(" ({window})"));
+        let again = match limit.resets_at {
+            Some(resets_at) => format!(
+                "It resets at {}; run again after {}.",
+                self.local_time_or_date(resets_at.as_millisecond()),
+                self.local_time_or_date(hold_end(limit, self.app.now()).as_millisecond())
+            ),
+            None => format!("Try again in {}.", spoken_duration(LIMIT_FALLBACK)),
+        };
+        self.note(&format!("Claude limit reached{window}. {again}"));
+    }
+
+    /// Waits while a hold lasts, by the wall clock, looked at every `heartbeat_check` so a machine that slept through
+    /// the reset carries on soon after it wakes. Clears the hold once it is over. False when the loop was told to stop,
+    /// which ends the worker at once.
+    async fn wait_for_hold(&self) -> bool {
+        loop {
+            let now = self.app.now();
+            let remaining = {
+                let mut hold = lock(&self.hold);
+                match hold.as_ref().map(|held| held.until) {
+                    None => return true,
+                    Some(until) if until <= now => {
+                        *hold = None;
+                        return true;
+                    }
+                    Some(until) => {
+                        Duration::from_millis(u64::try_from(until.as_millisecond() - now.as_millisecond()).unwrap_or(0))
+                    }
+                }
+            };
+            let wait = remaining.min(self.heartbeat_check);
+            if tokio::time::timeout(wait, self.stop_reaches(Stop::AfterRuns))
+                .await
+                .is_ok()
+            {
+                return false;
+            }
+        }
+    }
+
     /// Waits `idle_wait` before asking again. False when the loop was told to stop, which ends the worker at once.
     async fn wait_to_ask_again(&self) -> bool {
         tokio::time::timeout(self.idle_wait, self.stop_reaches(Stop::AfterRuns))
             .await
             .is_err()
+    }
+
+    /// [`Self::local_time`], or `Nov 15 12:21` when `ms` is on another day than now.
+    fn local_time_or_date(&self, ms: i64) -> String {
+        let zone = zone_of(self.app.env.time_zone.as_deref());
+        let at = |ms| jiff::Timestamp::from_millisecond(ms).map(|at| at.to_zoned(zone.clone()));
+        match (at(ms), at(self.app.now().as_millisecond())) {
+            (Ok(there), Ok(today)) if there.date() != today.date() => there.strftime("%b %-d %H:%M").to_string(),
+            _ => self.local_time(ms),
+        }
     }
 
     /// `ms`, UTC milliseconds, as `14:02` in the machine's time zone, or UTC without one.
@@ -1261,19 +1399,28 @@ impl Shared<'_> {
     }
 }
 
+/// When claiming may start again after `limit`: a minute past its reset, or half an hour from `now` without one.
+fn hold_end(limit: &UsageLimit, now: jiff::Timestamp) -> jiff::Timestamp {
+    let (from, wait) = limit.resets_at.map_or((now, LIMIT_FALLBACK), |at| (at, LIMIT_MARGIN));
+    from.checked_add(wait).unwrap_or(from)
+}
+
 /// Locks `mutex`. A worker that panicked while writing leaves nothing half-done worth refusing for, so poison is
 /// ignored.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// The time zone named by `zone`, or UTC when there is none or it is unknown.
+fn zone_of(zone: Option<&str>) -> jiff::tz::TimeZone {
+    zone.and_then(|name| jiff::tz::TimeZone::get(name).ok())
+        .unwrap_or(jiff::tz::TimeZone::UTC)
+}
+
 /// `ms`, UTC milliseconds, as `HH:MM` in the time zone named by `zone`, or in UTC when there is none or it is unknown.
 fn local_time(ms: i64, zone: Option<&str>) -> String {
-    let zone = zone
-        .and_then(|name| jiff::tz::TimeZone::get(name).ok())
-        .unwrap_or(jiff::tz::TimeZone::UTC);
     match jiff::Timestamp::from_millisecond(ms) {
-        Ok(at) => at.to_zoned(zone).strftime("%H:%M").to_string(),
+        Ok(at) => at.to_zoned(zone_of(zone)).strftime("%H:%M").to_string(),
         Err(_) => "--:--".to_owned(),
     }
 }

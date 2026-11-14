@@ -287,6 +287,45 @@ async fn runs_are_counted_by_turn_and_the_latest_failure_is_found() -> Result<()
 
 #[gtest]
 #[tokio::test]
+async fn a_turn_is_last_limited_only_while_its_latest_run_ended_limited() -> Result<()> {
+    // Arrange: one turn whose latest run is limited after a failed one, one whose limited run was followed by a
+    // failed one, and one with no run ended.
+    let world = world().await?;
+    let (item, turn, first) = run_on_new_item(&world, "k3x9a", 5_000).await?;
+    let (other_item, other, other_first) = run_on_new_item(&world, "m4y8b", 5_000).await?;
+    let (_, idle, _) = run_on_new_item(&world, "p5z7c", 5_000).await?;
+    let later = Run::start(RunId::from_uuid(Uuid::now_v7()), &item, turn.id, world.user, at(7_000)?);
+    let other_later = Run::start(
+        RunId::from_uuid(Uuid::now_v7()),
+        &other_item,
+        other.id,
+        world.user,
+        at(7_000)?,
+    );
+    store::runs::insert_run(&world.db, &later).await?;
+    store::runs::insert_run(&world.db, &other_later).await?;
+    for (run, end, at_ms) in [
+        (&first, RunEnd::Failed, 6_000),
+        (&later, RunEnd::Limited, 8_000),
+        (&other_first, RunEnd::Limited, 6_000),
+        (&other_later, RunEnd::Failed, 8_000),
+    ] {
+        store::runs::end_run(&world.db, &run.ended_as(end, at(at_ms)?, None, Vec::new(), None)).await?;
+    }
+
+    // Act
+    let limited = store::runs::turns_last_limited(&world.db, &[turn.id, other.id, idle.id]).await?;
+    let none = store::runs::turns_last_limited(&world.db, &[]).await?;
+
+    // Assert
+    expect_that!(limited.len(), eq(1));
+    expect_that!(limited.contains(&turn.id), eq(true));
+    expect_that!(none.is_empty(), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_turns_failed_runs_are_stored_and_only_an_open_turn_takes_them() -> Result<()> {
     // Arrange
     let world = world().await?;

@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufRead
 use tokio::process::Command;
 use tokio::time::Instant;
 
-use super::{Access, Tool, ToolError, ToolReport, ToolStart};
+use super::{Access, Tool, ToolError, ToolReport, ToolStart, UsageLimit};
 use crate::output::{shorten, spoken_duration};
 
 /// The most a run may cost, in US dollars: what the server accepts.
@@ -99,7 +99,16 @@ const UPHEAP_COMMANDS: [&str; 11] = [
 /// It ended normally when it exited 0 and its JSON says `is_error` is not true; otherwise it failed, and the failure
 /// is named by what is known, best first: the subtype of the error it reported, its exit code with the last line of
 /// its stderr, a signal, or output that could not be read. The cost is believed only from 0 to a million dollars.
-pub(super) fn read_report(exit: Exit, result_line: Option<&str>, stderr: &str) -> ToolReport {
+///
+/// A failed run hit the usage limit when `rejected_line`, the stream's last `rate_limit_event` that was rejected and
+/// not an overage, is there, or the result says `api_error` is `usage_limit_reached`. The reset time and the window
+/// come from the rejected event only; the result's text is not read for them.
+pub(super) fn read_report(
+    exit: Exit,
+    result_line: Option<&str>,
+    rejected_line: Option<&str>,
+    stderr: &str,
+) -> ToolReport {
     let output: Option<Value> = result_line
         .and_then(|line| serde_json::from_str(line.trim()).ok())
         .filter(Value::is_object);
@@ -131,10 +140,27 @@ pub(super) fn read_report(exit: Exit, result_line: Option<&str>, stderr: &str) -
         }),
         Exit::Signal => Some("claude was stopped by a signal.".to_owned()),
     };
+    let limit = failure.is_some().then(|| {
+        let rejected: Option<Value> = rejected_line.and_then(|line| serde_json::from_str(line.trim()).ok());
+        let info = rejected.as_ref().and_then(|event| event.get("rate_limit_info"));
+        (rejected.is_some() || field("api_error").and_then(Value::as_str) == Some("usage_limit_reached")).then(|| {
+            UsageLimit {
+                resets_at: info
+                    .and_then(|info| info.get("resetsAt"))
+                    .and_then(Value::as_i64)
+                    .and_then(|seconds| jiff::Timestamp::from_second(seconds).ok()),
+                window: info
+                    .and_then(|info| info.get("rateLimitType"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            }
+        })
+    });
     ToolReport {
         cost_usd,
         failure,
         last_message,
+        limit: limit.flatten(),
     }
 }
 
@@ -406,7 +432,11 @@ pub(super) async fn run(
     })?;
     let mut running = Running::new(child, stops);
     let activity = Activity::new();
-    let mut stream = Stream { result_line: None, log };
+    let mut stream = Stream {
+        result_line: None,
+        rejected_line: None,
+        log,
+    };
     let mut stderr_bytes = Vec::new();
     let silent = {
         let (stdin, stdout, stderr) = running.pipes();
@@ -440,11 +470,12 @@ pub(super) async fn run(
     };
     let stderr_text = String::from_utf8_lossy(&stderr_bytes);
     let result_line = stream.result_line.as_deref().map(String::from_utf8_lossy);
+    let rejected_line = stream.rejected_line.as_deref().map(String::from_utf8_lossy);
     if silent {
         running.stop().await;
         // A tool that printed its result and then hung has done its work: report that.
         return Ok(match result_line {
-            Some(line) => read_report(Exit::Code(0), Some(&line), &stderr_text),
+            Some(line) => read_report(Exit::Code(0), Some(&line), rejected_line.as_deref(), &stderr_text),
             None => ToolReport {
                 failure: Some(format!(
                     "The agent showed no activity for {}.",
@@ -463,7 +494,12 @@ pub(super) async fn run(
             });
         }
     };
-    Ok(read_report(exit, result_line.as_deref(), &stderr_text))
+    Ok(read_report(
+        exit,
+        result_line.as_deref(),
+        rejected_line.as_deref(),
+        &stderr_text,
+    ))
 }
 
 /// Opens the run's log for appending, with the directory it is in made. A log that can't be had is a warning and no
@@ -492,6 +528,8 @@ async fn open_log(path: PathBuf) -> Option<tokio::fs::File> {
 struct Stream {
     /// The last line that was a `result` event.
     result_line: Option<Vec<u8>>,
+    /// The last line that was a `rate_limit_event` the account was rejected by, not counting one for overage use.
+    rejected_line: Option<Vec<u8>>,
     /// The run's log; `None` without one, or once writing to it failed.
     log: Option<tokio::fs::File>,
 }
@@ -520,6 +558,8 @@ impl Stream {
         self.log_line(line).await;
         if is_result_line(line) {
             self.result_line = Some(line.to_vec());
+        } else if is_rejected_line(line) {
+            self.rejected_line = Some(line.to_vec());
         }
     }
 
@@ -546,6 +586,19 @@ impl Stream {
 fn is_result_line(line: &[u8]) -> bool {
     serde_json::from_slice::<Value>(line)
         .is_ok_and(|event| event.is_object() && event.get("type").and_then(Value::as_str) == Some("result"))
+}
+
+/// Whether `line` is a JSON object whose `type` is `rate_limit_event` with status `rejected` and `isUsingOverage` not
+/// true: the account's usage limit was reached.
+fn is_rejected_line(line: &[u8]) -> bool {
+    let Ok(event) = serde_json::from_slice::<Value>(line) else {
+        return false;
+    };
+    event.get("type").and_then(Value::as_str) == Some("rate_limit_event")
+        && event.get("rate_limit_info").is_some_and(|info| {
+            info.get("status").and_then(Value::as_str) == Some("rejected")
+                && info.get("isUsingOverage").and_then(Value::as_bool) != Some(true)
+        })
 }
 
 /// When the tool last printed, which the pipes it is read through keep up to date.
@@ -890,19 +943,84 @@ mod tests {
         ];
 
         for (name, exit, stdout, stderr, cost, failure) in cases {
-            let report = read_report(exit, Some(stdout).filter(|line| !line.is_empty()), stderr);
+            let report = read_report(exit, Some(stdout).filter(|line| !line.is_empty()), None, stderr);
 
             expect_that!(report.cost_usd, eq(cost), "{name}: cost");
             expect_that!(report.failure.as_deref(), eq(failure), "{name}: failure");
         }
     }
 
+    const WARNING: &str = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1794687600,"rateLimitType":"five_hour","utilization":0.99,"overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false,"surpassedThreshold":0.9},"uuid":"9030abd5-db6f-4797-b965-c62f6dfbc274","session_id":"ee45"}"#;
+    const REJECTED: &str = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1794687600,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false},"uuid":"5e7a81a9-7f74-43fc-b664-1f174490a445","session_id":"ee45"}"#;
+    const LIMIT_RESULT: &str = r#"{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":429,"api_error_type":"rate_limit_error","api_error":"usage_limit_reached","result":"You've hit your 5-hour limit · resets 12:20pm (America/Los_Angeles)","total_cost_usd":3.4656993,"num_turns":48,"session_id":"ee45"}"#;
+
+    #[gtest]
+    fn a_failed_run_with_a_rejected_event_hit_the_limit_with_its_reset_time_and_window() {
+        let report = read_report(Exit::Code(1), Some(LIMIT_RESULT), Some(REJECTED), "");
+
+        expect_that!(
+            report.limit,
+            some(eq(&UsageLimit {
+                resets_at: jiff::Timestamp::from_second(1_794_687_600).ok(),
+                window: Some("five_hour".to_owned()),
+            }))
+        );
+    }
+
+    #[gtest]
+    fn the_stream_keeps_the_rejected_event_and_not_a_warning_or_an_overage() {
+        let overage = REJECTED.replace(r#""isUsingOverage":false"#, r#""isUsingOverage":true"#);
+
+        expect_that!(is_rejected_line(REJECTED.as_bytes()), eq(true));
+        expect_that!(is_rejected_line(WARNING.as_bytes()), eq(false));
+        expect_that!(is_rejected_line(overage.as_bytes()), eq(false));
+        expect_that!(is_rejected_line(LIMIT_RESULT.as_bytes()), eq(false));
+        expect_that!(is_rejected_line(b"not json"), eq(false));
+    }
+
+    #[gtest]
+    fn the_api_error_alone_is_a_limit_without_a_reset_time() {
+        let report = read_report(Exit::Code(1), Some(LIMIT_RESULT), None, "");
+
+        expect_that!(
+            report.limit,
+            some(eq(&UsageLimit {
+                resets_at: None,
+                window: None,
+            }))
+        );
+    }
+
+    #[gtest]
+    fn a_rejected_event_in_a_run_that_did_not_fail_is_no_limit() {
+        let report = read_report(Exit::Code(0), Some(r#"{"is_error":false}"#), Some(REJECTED), "");
+
+        expect_that!(report.limit, none());
+    }
+
+    #[gtest]
+    fn a_failure_with_neither_sign_is_no_limit() {
+        let report = read_report(
+            Exit::Code(1),
+            Some(r#"{"is_error":true,"subtype":"error_max_turns"}"#),
+            None,
+            "",
+        );
+
+        expect_that!(report.limit, none());
+    }
+
     #[gtest]
     fn the_last_message_is_the_result_when_there_is_one() {
-        let report = read_report(Exit::Code(0), Some(r#"{"is_error":false,"result":"All done"}"#), "");
+        let report = read_report(
+            Exit::Code(0),
+            Some(r#"{"is_error":false,"result":"All done"}"#),
+            None,
+            "",
+        );
 
         expect_that!(report.last_message, some(eq("All done")));
-        expect_that!(read_report(Exit::Code(0), Some("{}"), "").last_message, none());
+        expect_that!(read_report(Exit::Code(0), Some("{}"), None, "").last_message, none());
     }
 
     #[gtest]
@@ -923,6 +1041,7 @@ mod tests {
         // Arrange
         let mut stream = Stream {
             result_line: None,
+            rejected_line: None,
             log: None,
         };
         let lines: [&[u8]; 5] = [
@@ -950,6 +1069,7 @@ mod tests {
     async fn a_stream_with_no_result_event_has_no_result_line() {
         let mut stream = Stream {
             result_line: None,
+            rejected_line: None,
             log: None,
         };
 

@@ -514,7 +514,7 @@ stage to the turn's goal or past it. A reached turn can later be marked **redone
 runs.
 
 **Run.** One start of the agent tool on one item, inside a turn. It records when it started and ended, how it
-ended (reached, asked, failed, handed back), the state it started from and reached, a **result** (a line or two and links to
+ended (reached, asked, failed, handed back, or stopped by the usage limit), the state it started from and reached, a **result** (a line or two and links to
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
