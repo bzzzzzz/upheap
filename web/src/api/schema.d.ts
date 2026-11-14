@@ -298,8 +298,8 @@ export interface paths {
          * The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.
          *     Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
          *     carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
-         *     in its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in
-         *     its heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,
+         *     in its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap
+         *     name, then the item's position in its heap. The view takes no tag, parameter or sort. At most 500 rows come back,
          *     pinned first; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_items"];
@@ -391,9 +391,9 @@ export interface paths {
          * What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
          *     stuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved
          *     to another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
-         *     ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-         *     position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
-         *     for now.
+         *     ranking score in its own heap times your priority for that heap, highest first (blockers' inheritance included),
+         *     then by heap name, the item's position, a stuck or blocker row before the item's questions, and the question's
+         *     number.
          *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
          *     most 500 rows come back; `count` is the true total. Read-only, for any member.
          */
@@ -1371,8 +1371,8 @@ export interface paths {
         /**
          * The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
          *     claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
-         *     stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking, highest
-         *     first, then by heap name and the item's position; every heap weighs the same for now. Any member who may edit items
+         *     stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your
+         *     priority for that heap, highest first, then by heap name and the item's position. Any member who may edit items
          *     in every given heap may ask.
          */
         get: operations["next_item"];

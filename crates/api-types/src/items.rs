@@ -209,6 +209,10 @@ pub struct AcrossHeapsItemDto {
     /// The heap the item is in, and its team.
     pub heap: ItemHeapDto,
     /// Your priority for the item's heap, 1 to 10.
+    // Decoding tolerates an older server that doesn't send it (as 1); every response of this server does, so the
+    // schema says required.
+    #[serde(default = "crate::heaps::default_heap_priority")]
+    #[schema(required = true)]
     pub heap_priority: u8,
     /// The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`
     /// names what holds it back in that heap.

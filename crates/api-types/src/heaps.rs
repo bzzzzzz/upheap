@@ -98,6 +98,10 @@ pub struct HeapDto {
     pub weights: HeapWeightsDto,
     /// Your priority for this heap, 1 to 10: how its items compare with your other heaps' in the lists across heaps.
     /// Each person has their own; nobody else sees it. Set with `PUT …/priority`.
+    // Decoding tolerates an older server that doesn't send it (as 1); every response of this server does, so the
+    // schema says required.
+    #[serde(default = "default_heap_priority")]
+    #[schema(required = true)]
     pub priority: u8,
     /// Send back in `If-Match` when renaming or changing the context or weights.
     pub version: u32,
@@ -183,4 +187,9 @@ pub struct HeapPriorityRequestDto {
     /// 1 to 10.
     #[schema(minimum = 1, maximum = 10)]
     pub priority: i64,
+}
+
+/// The heap priority of a heap nobody has set one for, for decoding a response from a server that has none.
+pub fn default_heap_priority() -> u8 {
+    domain::heap::HeapPriority::DEFAULT.get()
 }

@@ -126,8 +126,8 @@ fn parse_tool_time(millis: i64) -> Result<Timestamp, ServiceError> {
 
 /// The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
 /// claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
-/// stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking, highest
-/// first, then by heap name and the item's position; every heap weighs the same for now. Any member who may edit items
+/// stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your
+/// priority for that heap, highest first, then by heap name and the item's position. Any member who may edit items
 /// in every given heap may ask.
 #[utoipa::path(get, path = "/work/next", tag = "work", security(("session" = [])),
     params(NextQuery),

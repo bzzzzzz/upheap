@@ -249,7 +249,6 @@ function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet
       {canSet ? (
         <ToggleButtonGroup
           aria-labelledby="heap-priority"
-          aria-describedby={hintId}
           selectionMode="single"
           disallowEmptySelection
           selectedKeys={[String(priority)]}
@@ -262,7 +261,13 @@ function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet
           className="mt-3 grid grid-cols-5 gap-1 sm:flex sm:flex-wrap"
         >
           {PRIORITIES.map((value) => (
-            <ToggleButton key={value} id={String(value)} className={`${choiceButtonClass} rounded-lg sm:w-10`}>
+            // On each button: the group passes no `aria-describedby` on, so a screen reader would never hear the hint.
+            <ToggleButton
+              key={value}
+              id={String(value)}
+              aria-describedby={hintId}
+              className={`${choiceButtonClass} rounded-lg sm:w-10`}
+            >
               {value}
             </ToggleButton>
           ))}

@@ -709,7 +709,7 @@ async fn heap_priority_sets_yours_and_heap_show_says_so() -> Result<()> {
     let other = cli.run(&["heap", "show", "infra/backlog"]).await;
 
     // Assert
-    expect_that!(set.stdout, eq("Your priority for ops is 3.\n"));
+    expect_that!(set.stdout, eq("Your priority for ops: 3.\n"));
     expect_that!(again.exited(0), eq(true));
     expect_that!(show.stdout, contains_substring(" · your priority: 3\n"));
     let body: serde_json::Value = serde_json::from_str(&json.stdout)?;

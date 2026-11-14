@@ -154,9 +154,9 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
 /// What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is
 /// stuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved
 /// to another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's
-/// ranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's
-/// position, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same
-/// for now.
+/// ranking score in its own heap times your priority for that heap, highest first (blockers' inheritance included),
+/// then by heap name, the item's position, a stuck or blocker row before the item's questions, and the question's
+/// number.
 /// Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At
 /// most 500 rows come back; `count` is the true total. Read-only, for any member.
 #[utoipa::path(get, path = "/me/waiting", tag = "me", security(("session" = [])),
@@ -182,8 +182,8 @@ async fn get_waiting(
 /// The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.
 /// Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
 /// carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
-/// in its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in
-/// its heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,
+/// in its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap
+/// name, then the item's position in its heap. The view takes no tag, parameter or sort. At most 500 rows come back,
 /// pinned first; `count` is the true total. Read-only, for any member.
 #[utoipa::path(get, path = "/me/items", tag = "me", security(("session" = [])),
     params(AcrossHeapsQuery, TimeZoneHeader),

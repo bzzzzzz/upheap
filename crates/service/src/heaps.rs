@@ -366,6 +366,9 @@ impl Services {
             .ok_or(ServiceError::Unauthenticated)?;
         let personal_team = self.load_personal_team(&user).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
+        // The personal team first, as the other writes to it lock it, so they take locks in one order; it also
+        // serialises two sets of the same person, so each audit entry's "before" is the value it replaced.
+        store::teams::lock_team(&txn, personal_team).await?;
         let access = authorize_heap(&txn, principal, heap_id, Permission::ViewHeap).await?;
         let role = access.membership.role;
         let before = load_heap_priority(&txn, principal.user_id, heap_id).await?;

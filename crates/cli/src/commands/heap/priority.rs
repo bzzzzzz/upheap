@@ -48,7 +48,7 @@ pub async fn run(args: PriorityArgs, app: &App, out: &mut Output) -> Result<(), 
         Mode::Json => out.json(&saved.body)?,
         Mode::Quiet => {}
         Mode::Human => out.line(&format!(
-            "Your priority for {} is {}.",
+            "Your priority for {}: {}.",
             saved.value.name, saved.value.priority
         ))?,
     }

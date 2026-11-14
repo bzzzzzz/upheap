@@ -47,6 +47,10 @@ pub struct WaitingRowDto {
     pub item: WaitingItemDto,
     pub heap: ItemHeapDto,
     /// Your priority for the row's heap, 1 to 10.
+    // Decoding tolerates an older server that doesn't send it (as 1); every response of this server does, so the
+    // schema says required.
+    #[serde(default = "crate::heaps::default_heap_priority")]
+    #[schema(required = true)]
     pub heap_priority: u8,
     /// The open question, as the item carries it. Set on a `question` row.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
