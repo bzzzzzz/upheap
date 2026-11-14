@@ -79,7 +79,7 @@ Confirming an address
 13. **C** With mail set up, a new account confirms its address by a link before it can sign in. This holds for an
     account made through an invite link too.
 14. An account that existed before mail was set up, or was made while mail was off, counts as confirmed.
-    (Assumption, asked on qd2ja.)
+    (Assumption.)
 15. A user waiting to confirm can ask for the mail again.
 16. The operator can confirm an account's address by hand, with a server command.
 17. Using any link mailed to an address confirms it, a reset link included.
@@ -340,22 +340,20 @@ If it wasn't you, ignore this mail. Your password stays as it is.
 
 ### Stage 1: reset by mail, end to end
 
-Each piece is a task in Upheap, in the Upheap development planning heap.
-
-1. **Design** (qd2ja, step 1): this doc, and product.md no longer promising "no email". Done when merged.
-2. **Mail foundation** (qd2ja, steps 3–5): optional SMTP settings and sender; a sender other pieces call, with the
+1. **Design:** this doc, and product.md no longer promising "no email". Done when merged.
+2. **Mail foundation:** optional SMTP settings and sender; a sender other pieces call, with the
    development transport (log and file); `upheap-server mail test`; the operator docs, in README.md beside
    Resetting a password, and decisions.md's entry for Choice 1. Done when: unset, the server behaves as today;
    set, a test mail goes out; the tests send mail through the file transport. Commitments 1–5.
-3. **Production mail** (qd2ja, steps 2 and 6): the owner picks the provider, sets up the sending domain, and puts
+3. **Production mail:** the owner picks the provider, sets up the sending domain, and puts
    the settings in Cloud Run; operations.md records it. Done when `mail test` from production arrives.
-4. **Reset by mail** (jh7jt): Forgot your password? with mail, the mailed link, the count of its own, history
+4. **Reset by mail:** Forgot your password? with mail, the mailed link, the count of its own, history
    entries. Done when the golden path works in production. Commitments 6–12, 20 in part.
 
 ### Stage 2
 
-- **Change an address** (63e7d): the Email card, the change link, the notice to the old address. Commitments 18–20.
-- **Confirm an address** (3a691): Check your mail, the confirm page, sign-in refusing a waiting account, the
+- **Change an address:** the Email card, the change link, the notice to the old address. Commitments 18–20.
+- **Confirm an address:** Check your mail, the confirm page, sign-in refusing a waiting account, the
   confirm command. Commitments 13–17.
 
 ## Parked
