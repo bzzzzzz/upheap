@@ -1470,9 +1470,9 @@ export interface paths {
          * The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
          *     claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
          *     stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your
-         *     priority for that heap, times 3 when a run has already worked on this send of the item: its open turn, or an earlier stage of the same
-         *     all-the-way send or the note it was split from (started work goes on first),
-         *     highest first, then by heap name and the item's position. Any member who may edit items in every given heap may
+         *     priority for that heap, times 3 when a run has already worked on this send of the item: its open turn, or an
+         *     earlier stage of the same all-the-way send or the note it was split from (started work goes on first), highest
+         *     first, then by heap name and the item's position. Any member who may edit items in every given heap may
          *     ask.
          */
         get: operations["next_item"];
@@ -3977,6 +3977,11 @@ export interface components {
             runs: number;
             /** @description Where the item is now. */
             stage: components["schemas"]["Stage"];
+            /**
+             * @description Whether a run has already worked on this send of the item: its open turn, or an earlier stage of the same
+             *     all-the-way send or the note it was split from. Such an item gets the queue's started-work boost.
+             */
+            started: boolean;
             title: string;
         };
         /** @description The first item of the queue, if there is one. */

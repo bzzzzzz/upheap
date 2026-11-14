@@ -23,7 +23,7 @@ pub const STUCK_AFTER: u32 = 3;
 /// Why a lapsed run failed.
 pub const LAPSE_FAILURE: &str = "Nothing was heard from the run for 30 minutes.";
 
-/// What the queue multiplies an item's score by when its open turn already had a run, so half-done work goes on
+/// What the queue multiplies an item's score by when a run has already worked on its send, so half-done work goes on
 /// before new work of about the same importance, and only something much more important passes it. The agents'
 /// queue only: the person's lists rank by the plain score.
 pub const STARTED_BOOST: f64 = 3.0;

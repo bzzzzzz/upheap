@@ -283,8 +283,8 @@ pub async fn count_runs_for_turns(
     Ok(counts)
 }
 
-/// Which of `send_ids` have had a run, ended or not, on any turn of that send (`item_turns.send_id`), in one grouped
-/// query per [`IN_LIST_CHUNK`] sends.
+/// Which of `send_ids` have had a run, ended or not, on any turn of that send (`item_turns.send_id`), in one query
+/// per [`IN_LIST_CHUNK`] sends.
 pub async fn sends_with_runs(db: &impl ConnectionTrait, send_ids: &[TurnId]) -> Result<HashSet<TurnId>, StoreError> {
     let ids: Vec<String> = send_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
     let mut started = HashSet::new();
@@ -298,19 +298,18 @@ pub async fn sends_with_runs(db: &impl ConnectionTrait, send_ids: &[TurnId]) -> 
                     .to(item_turns::Column::Id)
                     .into(),
             )
-            .column_as(item_turns::Column::SendId, "group_key")
-            .column_as(item_runs::Column::Id.count(), "count")
+            .column(item_turns::Column::SendId)
+            .distinct()
             .filter(item_turns::Column::SendId.is_in(chunk.iter().map(String::as_str)))
-            .group_by(item_turns::Column::SendId)
-            .into_model::<GroupCount>()
+            .into_tuple::<String>()
             .all(db)
             .await?;
-        for row in rows {
+        for send_id in rows {
             let read = RowReader {
-                table: TABLE,
-                id: &row.group_key,
+                table: "item_turns",
+                id: &send_id,
             };
-            started.insert(TurnId::from_uuid(read.uuid(&row.group_key)?));
+            started.insert(TurnId::from_uuid(read.uuid(&send_id)?));
         }
     }
     Ok(started)

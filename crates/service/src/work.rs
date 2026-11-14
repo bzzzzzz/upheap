@@ -40,6 +40,8 @@ pub struct WorkItem {
     pub turn: Turn,
     /// How many runs the turn has had, ended or not.
     pub runs: u32,
+    /// Whether a run has already worked on this send of the item, which gets the queue's [`STARTED_BOOST`].
+    pub started: bool,
 }
 
 /// The first item of the queue, if there is one, and how many items wait for the person.
@@ -809,17 +811,11 @@ impl Services {
             }
         }
 
-        // Runs so far on each candidate's turn, and the sends that have had a run on any turn: a candidate in one is
-        // started work, and gets the boost.
-        let candidate_turns: Vec<TurnId> = by_heap
-            .values()
-            .flat_map(|turns| turns.values().map(|turn| turn.id))
-            .collect();
+        // The sends that have had a run on any turn: a candidate in one is started work, and gets the boost.
         let candidate_sends: Vec<TurnId> = by_heap
             .values()
             .flat_map(|turns| turns.values().map(|turn| turn.send_id))
             .collect();
-        let runs_by_turn = store::runs::count_runs_for_turns(db, &candidate_turns).await?;
         let started_sends = store::runs::sends_with_runs(db, &candidate_sends).await?;
 
         // (score times the person's heap priority, boosted when started, heap index, position) of the best candidate
@@ -867,11 +863,16 @@ impl Services {
         let first = match best {
             Some(((_, heap_index, _), item, turn)) => {
                 let queue = &heaps[heap_index];
-                let runs = runs_by_turn.get(&turn.id).copied().unwrap_or(0);
+                let runs = store::runs::count_runs_for_turns(db, &[turn.id])
+                    .await?
+                    .get(&turn.id)
+                    .copied()
+                    .unwrap_or(0);
                 Some(WorkItem {
                     item,
                     heap: queue.heap.clone(),
                     team: queue.team.clone(),
+                    started: started_sends.contains(&turn.send_id),
                     turn,
                     runs,
                 })
@@ -905,6 +906,9 @@ impl Services {
             .get(&turn.id)
             .copied()
             .unwrap_or(0);
+        let started = store::runs::sends_with_runs(db, &[turn.send_id])
+            .await?
+            .contains(&turn.send_id);
         Ok(RunView {
             run,
             work: WorkItem {
@@ -913,6 +917,7 @@ impl Services {
                 team,
                 turn,
                 runs,
+                started,
             },
         })
     }

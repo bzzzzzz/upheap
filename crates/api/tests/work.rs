@@ -2745,6 +2745,7 @@ async fn started_work_comes_before_a_slightly_higher_scored_item() -> Result<()>
     expect_that!(list.body["ranked"][0]["item"]["key"], eq(&json!(fresh)));
     expect_that!(next.body["item"]["key"], eq(&json!(started)));
     expect_that!(next.body["item"]["runs"], eq(&json!(1)));
+    expect_that!(next.body["item"]["started"], eq(&json!(true)));
     expect_that!(claimed.status, eq(StatusCode::CREATED));
     expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(started)));
     Ok(())
@@ -2774,6 +2775,7 @@ async fn started_work_keeps_the_boost_at_the_next_stage_of_an_all_the_way_send()
     // Assert
     expect_that!(next.body["item"]["key"], eq(&json!(started)));
     expect_that!(next.body["item"]["runs"], eq(&json!(0)));
+    expect_that!(next.body["item"]["started"], eq(&json!(true)));
     expect_that!(claimed.status, eq(StatusCode::CREATED));
     expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(started)));
     Ok(())
@@ -2806,6 +2808,7 @@ async fn a_critical_item_passes_started_nice_to_have_work() -> Result<()> {
 
     // Assert
     expect_that!(next.body["item"]["key"], eq(&json!(critical)));
+    expect_that!(next.body["item"]["started"], eq(&json!(false)));
     expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(critical)));
     Ok(())
 }

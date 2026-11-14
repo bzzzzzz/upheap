@@ -42,7 +42,7 @@ pub async fn run(args: NextArgs, app: &App, out: &mut Output) -> Result<(), CliE
                 Cell::new(item.heap.name.clone()),
                 Cell::new(journey(item)),
             ];
-            if item.runs > 0 {
+            if item.started {
                 row.push(Cell::toned("started, ready to go on", Tone::Dim));
             }
             for line in out.render_table(&[row]) {

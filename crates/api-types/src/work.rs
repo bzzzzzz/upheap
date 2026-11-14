@@ -33,6 +33,9 @@ pub struct WorkItemDto {
     pub line: Option<String>,
     /// How many runs the turn has had, ended or not. More than 0 means the work was started before.
     pub runs: u32,
+    /// Whether a run has already worked on this send of the item: its open turn, or an earlier stage of the same
+    /// all-the-way send or the note it was split from. Such an item gets the queue's started-work boost.
+    pub started: bool,
     /// How many of the turn's runs in a row failed. At 3 the turn is stuck and not in the queue.
     pub failed_runs: u32,
 }

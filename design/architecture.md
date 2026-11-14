@@ -169,10 +169,11 @@ The tables and columns are in the migrations. These are the conventions they fol
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
   item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
-  `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then position. The
-  boost lets half-done work go on before new work of about the same importance while something much more important
-  still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the plain score. A claim takes the
-  locks of every given heap in ID order, as the item writes do, so two claims at once get different items.
+  `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
+  position. The boost lets half-done work go on before new work of about the same importance while something much
+  more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
+  plain score. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
+  get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
   wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
