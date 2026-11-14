@@ -2429,20 +2429,24 @@ async fn a_worker_claims_again_while_another_run_goes_on() -> Result<()> {
         cli.run_work_watched(&args, &tool, interrupts, &stdout, &stderr),
     );
     let pressing = async {
-        wait_until("two runs ended while one is live", || {
-            lines_with(&stdout.contents(), "reached").len() == 2
-        })
-        .await?;
-        interrupt.send(Interrupt::CtrlC)?;
-        wait_until("the stopping note", || stderr.contents().contains("Stopping after")).await?;
+        let pressed = async {
+            wait_until("two runs ended while one is live", || {
+                lines_with(&stdout.contents(), "reached").len() == 2
+            })
+            .await?;
+            interrupt.send(Interrupt::CtrlC)?;
+            wait_until("the stopping note", || stderr.contents().contains("Stopping after")).await
+        }
+        .await;
+        // Released on every path, so a wait that fails is what the test reports, not the gated run hanging.
         gate.add_permits(1);
-        anyhow::Ok(())
+        pressed
     };
     let (outcome, pressed) = tokio::join!(looping, pressing);
-    let outcome = outcome?;
 
     // Assert
     pressed?;
+    let outcome = outcome?;
     expect_that!(outcome.exited(0), eq(true));
     expect_that!(lines_with(&outcome.stdout, "reached").len(), eq(3));
     expect_that!(tool.starts().len(), eq(3));

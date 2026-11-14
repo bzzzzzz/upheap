@@ -395,9 +395,15 @@ impl TestServer {
 }
 
 /// An HTTP client for the test server, which ignores any proxy the environment names, as the CLI does for a server on
-/// this machine.
+/// this machine. Built once and shared, as the CLI's is: each build reads the system's root certificates, which is slow
+/// when many tests ask at once.
 fn local_client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder().no_proxy().build()?)
+    static SHARED: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(http) = SHARED.get() {
+        return Ok(http.clone());
+    }
+    let http = reqwest::Client::builder().no_proxy().build()?;
+    Ok(SHARED.get_or_init(|| http).clone())
 }
 
 /// The value of `name` in `url`'s query.
