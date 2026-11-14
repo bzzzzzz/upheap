@@ -364,6 +364,47 @@ test("due starts at None in the Add dialog", async ({ page }) => {
   await expect(row(page, "Someday")).not.toContainText("next week");
 });
 
+test("the tag suggestions show in full over the dialog's footer, and keep their keys", async ({ page }) => {
+  test.skip(isPhone(page), "A phone picks tags in their own sheet, with the suggestions in its flow.");
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await fillIn(page, "Sort the shed");
+  // Five tags of the heap that "chore" matches, taken off the item again so they are offered.
+  for (const name of ["chore-a", "chore-b", "chore-c", "chore-d", "chore-e"]) await addNewTag(page, name);
+  const input = dialog.getByLabel("Add a tag");
+  for (let left = 5; left > 0; left--) {
+    await input.press("Backspace");
+    await expect(dialog.getByRole("button", { name: /^Remove tag / })).toHaveCount(left - 1);
+  }
+
+  // Tags is near the dialog's foot: the five matches and Create tag all show, none under Cancel and Add.
+  await input.fill("chore");
+  const options = page.getByRole("listbox", { name: "Tags" }).getByRole("option");
+  await expect(options).toHaveCount(6);
+  const footer = await dialog.getByRole("button", { name: "Cancel" }).boundingBox();
+  for (const option of await options.all()) {
+    await expect(option).toBeInViewport({ ratio: 1 });
+    const box = await option.boundingBox();
+    const top = Math.round(box?.y ?? 0);
+    const bottom = Math.round((box?.y ?? 0) + (box?.height ?? 0));
+    const clear = bottom <= Math.round(footer?.y ?? 0) || top >= Math.round((footer?.y ?? 0) + (footer?.height ?? 0));
+    expect(clear).toBe(true);
+  }
+
+  // The keys work as they did: arrows move, Enter picks, Escape clears the text and leaves the dialog open.
+  await input.press("ArrowDown");
+  await input.press("Enter");
+  await expect(dialog.getByRole("button", { name: "Remove tag chore-b" })).toBeVisible();
+  await expect(input).toHaveValue("");
+  await input.fill("chore");
+  await expect(options).toHaveCount(5);
+  await input.press("Escape");
+  await expect(input).toHaveValue("");
+  await expect(options).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(input).toBeFocused();
+});
+
 test("on a phone, Add is a sheet of one-tap chips, with More fields", async ({ page }) => {
   test.skip(!isPhone(page), "Only a phone has the chips.");
   await openAdd(page);
