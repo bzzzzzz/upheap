@@ -188,6 +188,8 @@ pub(crate) enum GoalMetHow {
     StageSet,
     /// A claim found the item already there.
     AlreadyMet,
+    /// A run's became made the item defined, as a task split from its note.
+    Became,
 }
 
 impl GoalMetHow {
@@ -196,6 +198,7 @@ impl GoalMetHow {
         match self {
             Self::StageSet => "stage_set",
             Self::AlreadyMet => "already_met",
+            Self::Became => "became",
         }
     }
 }

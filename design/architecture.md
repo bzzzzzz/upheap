@@ -171,7 +171,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   failure, and withdraws the open questions asked in a run of it; the person's own stay open. A turn also ends as
   reached, with no run, when its item's stage is at the turn's goal (`Turn::goal_met_by`; never for done): at the
   person's edit that sets the stage (`how: stage_set`), or, as a safety net for any other way an item got there, when
-  a claim finds it (`already_met`) before choosing, so a met turn never costs a run; `next` skips such turns without
+  a claim finds it (`already_met`) before choosing, so a met turn never costs a run, or when a run's became
+  defines a task split from its note (`became`, below); `next` skips such turns without
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
@@ -191,9 +192,11 @@ The tables and columns are in the migrations. These are the conventions they fol
   checks that no question is open and every open task split from the note, in the note's heap, has a context and
   a step
   (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
-  run and turn end as reached with no follow-on on the note. If that turn was sent all the way, each of those tasks
-  not started and without an open turn gets one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener,
-  to done); a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
+  run and turn end as reached with no follow-on on the note. A task's own open turn that defined meets (the heap's
+  prepare turn, or one the person sent) ends as reached there too, as a stage edit ends it (`end_met_turn`, how
+  `became`). If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
+  one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener, to done), but not one
+  whose ended turn the person sent: that task stays as they left it; a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`). The audit API sends an entry's run (`run`, with
   the run's item and its heap now when the caller may view that heap) and the web app marks the entry as the agent's;
   a question's run isn't shown yet. `work reached` checks

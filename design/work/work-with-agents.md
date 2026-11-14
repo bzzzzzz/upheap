@@ -1200,7 +1200,9 @@ instructions tell the agent to sum up there what the person needs from the item'
 Each prints one line saying what changed, and --quiet prints the key of what was made.
 `item became` is refused while nothing was made from the item.
 In a run, `item became` also ends the run and the turn as reached, so a split ends with it; a later `work reached`
-succeeds and does nothing.
+succeeds and does nothing. A task it defines that had its own open turn to defined has that turn ended as reached.
+A task whose turn the person sent stays as they left it; one with the heap's prepare turn gets the note's turn when
+the note was sent all the way.
 `work reached` and `work hand-back` take no item: the run knows it.
 ```
 
