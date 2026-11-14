@@ -837,6 +837,11 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub became_steps: Option<Vec<MadeStepDto>>,
+    /// The heaps made from this note, oldest first (`heap add --from`). `null` in the ranked list and other lists; on
+    /// one item and in the closed list it is a list, empty when no heap was made from it.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub became_heaps: Option<Vec<crate::waiting::ItemHeapDto>>,
     pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,

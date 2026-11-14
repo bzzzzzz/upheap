@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useMatch, useNavigate } from "@tanstack/react-router";
 import { Archive, Check, ChevronRight, Plus, Search, X } from "lucide-react";
 import { useCallback, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
@@ -25,6 +25,13 @@ import { teamName } from "./teamName";
 type SwitcherTeam = Me["teams"][number];
 type Entry = { team: SwitcherTeam; heap: SwitcherTeam["heaps"][number] };
 
+/** How many open items the person's heaps hold in all, archived ones left out: what the list across heaps counts. */
+export const openItemCount = (me: Me) =>
+  me.teams.reduce(
+    (total, team) => total + team.heaps.reduce((sum, heap) => sum + (heap.archived ? 0 : heap.open_count), 0),
+    0,
+  );
+
 /** From this many unarchived heaps it gets a search field, Recent and folding teams (design/ux.md, Phone details). */
 const LONG_LIST = 8;
 /** How many recent heaps show. */
@@ -40,7 +47,8 @@ const chipClass =
 /**
  * Every heap, by team, with a check on the one on screen (ux.md, Phone details): a popover beside the rail on a
  * tablet or under the sidebar's heap button on a wide screen, a sheet on a phone. With many heaps it adds search,
- * Recent and folding teams. It ends with a new heap in the heap's own team, where the user may create one.
+ * Recent and folding teams. On a phone it starts with All heaps, the list across them, which a wider screen reaches
+ * from the sidebar. It ends with a new heap in the heap's own team, where the user may create one.
  */
 export function HeapSwitcher({
   me,
@@ -118,7 +126,11 @@ function SwitcherBody({
   const phone = useMedia(PHONE);
   const coarse = useMedia(TOUCH);
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
-  const current = entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  // On All items the kept heap is only where Add goes; only the All heaps row is the current one.
+  const current = onAll
+    ? undefined
+    : entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
   const several = me.teams.length > 1;
 
@@ -243,6 +255,26 @@ function SwitcherBody({
         </>
       ) : (
         <>
+          {phone && (
+            <MenuSection aria-label="All heaps" className="flex flex-col">
+              <MenuItem
+                id="all"
+                textValue="All heaps"
+                href={{ to: "/all" }}
+                onAction={close}
+                className={`${rowClass} ${onAll ? currentRowClass : ""}`}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  All heaps
+                  {onAll && <span className="sr-only">, current</span>}
+                </span>
+                <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">{openItemCount(me)}</span>
+                <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
+                  {onAll && <Check className="size-4" strokeWidth={3} />}
+                </span>
+              </MenuItem>
+            </MenuSection>
+          )}
           {long && recent.length > 0 && (
             <MenuSection
               aria-label="Recent"

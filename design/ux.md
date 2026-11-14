@@ -98,8 +98,8 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Width                | Navigation                                                                                                                                                                                                                | List                                                     | Item                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
 | Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -119,9 +119,16 @@ person's heaps, fetched with the page and again every 30 seconds while the tab i
 question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and after a reply
 or an item's change.
 
+**All items** sits under Waiting for me, in the same bordered block of the sidebar and the rail: a layers icon, "All
+items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
+of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
+those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
+current on `/all`, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. The tabs and the top
+bar are as on Waiting for me.
+
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
+that is `/waiting` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
 there and active, else the first active heap, else the first.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
@@ -137,7 +144,8 @@ and the link name, edited in place, a note that a new link name breaks old links
 link: /teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads
 the values.
 
-The **Context** tab holds the Context card. It shows the heap's context as Markdown text (see Toolkit), or a muted
+The **Context** tab holds the Context card. A heap made from a note says "From: “<note title>”, a note in <heap
+name>" above it, linking to the note. It shows the heap's context as Markdown text (see Toolkit), or a muted
 line saying what a context holds when there is none. Anyone who can open Settings sees the tab. A member with
 `edit_context` sees an Edit button (not on an archived heap), which
 turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
@@ -467,8 +475,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 19. **From and Became** sit above Questions, only when they apply, and the items they name open in the pane. An item made
     from another says "From: “<title>”, a note". A note that was split says "Became: 3 tasks" ("items" when the
     kinds are mixed) and lists each, with its state. A note that became a step says "Became: a step" and lists "A step
-    of “<task title>”", with the step's state. A step made from a note says "From: “<title>”, a note" under its
-    context. Each links to the heap that item is in now, and both show read-only too.
+    of “<task title>”", with the step's state. A note that became a heap says "Became: a heap" when that is all it
+    became, and lists "Heap “<name>”", linking to the heap's list. A step made from a note says "From: “<title>”, a
+    note" under its context. Each links to the heap that item is in now, and both show read-only too.
 20. **Runs** is a folded section after Questions and before History, shown only when the item has runs, under the
     heading "Runs 3 · $1.20": the count and the runs' total cost, with no cost part when no run reported one. Opened,
     a row for each run, newest first: when it started (the time today, else the date as the server words it), "from →
@@ -593,11 +602,42 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
     task back to the agent with the comment. Close as done is the only reply with a toast: "“<title>” is done." with
     **Open**, which opens the closed item (Reopen is there). Not yet has none.
 
+## All items
+
+The page at `/all`: every open item of the person's active heaps in one ranked list, the server's (`GET /me/items`:
+the item's score in its heap times the person's priority for that heap). It has no sort, saved views, tag or parameter
+filter, heap filter, position numbers or reminders to come.
+
+1. The heading is "All items · 12" (no count at zero) and under it a quiet line, "All your heaps, most important
+   first." The groups are the list's: the pinned one titled as there, "Up next" only under a pinned one, and Blocked.
+   Past 500 rows, "Showing the 500 most important of n." sits under the list.
+2. A row is the list's row, with the name of its heap, quiet, after the tags on a tablet or wide screen and first on the
+   second line on a phone; the team's name follows after " · " only when the person is in more than one team. It shows
+   no tag or parameter chips, as there is no filter for them to join. Start, Pause, Unblock, Done, the robot, `x`, `s`,
+   `a`, the swipes and Undo work as in the list, in the item's own heap. Done offers no start of the next item.
+3. An item opens over the list as on a heap's list (a pane, a panel, a sheet), and nothing switches heap. The address
+   is `/all?item=<team>/<heap>/<key>`, as a key is only unique within its heap, and a value that isn't that opens
+   nothing. The pane's ↑ and ↓ walk the rows on screen, across heaps, and its position is the one in this list. Closing goes back, or to `/all` with the rest of
+   the search, and gives the focus to the row.
+4. The toolbar is the search and Filters. The panel has Show (Open, In progress and Blocked, each Pinned, Shown or
+   Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort and Impact. Its chips, Reset
+   all and the hidden note are the list's. The panel can't say how many items the filters leave out of the total, so it
+   shows the number the view matches. The view is in the address.
+5. Add opens the Add dialog in the heap the shell keeps (the one opened last), with the need, effort and impact
+   filters filled in, and the dialog's title can change the heap. It is disabled when there is no such heap or it is
+   archived. On a phone the + in the tabs does the same, with no view. Once added, the toast names the heap
+   ("Added “X” to Launch."), not a place, as the item's place in its heap's list isn't its place here, and Open it opens
+   the item over this page.
+6. Loading says "Loading…"; with nothing open, "Nothing open in your heaps."; with filters or a search that leave
+   nothing, "No items match."; a failed first load shows its message. A failed refresh keeps the rows. The list is
+   fetched again every 30 seconds and after any change that changes a heap's list, and keeps its order within the
+   session, as a heap's list does.
+
 ## Closed
 
 Done, won't-do and became items, most recently closed first, under Today, This week and Earlier from each item's
 `closed_group`. One intro line explains the week limit. Each row has the title, which opens the item, "Done · today
-by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items" when the kinds are mixed; "Became a step of “<task title>”" for a note that became a step), and Reopen while the item is inside its week, 44 px on a phone; once it can't
+by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items" when the kinds are mixed; "Became a step of “<task title>”" for a note that became a step; "Became heap “<name>”" for one that became a heap), and Reopen while the item is inside its week, 44 px on a phone; once it can't
 be reopened the row shows nothing more, with no per-row dates or "closed for good" labels. Load more pages. A
 closed item opens over the Open list, and closing it returns to Closed.
 

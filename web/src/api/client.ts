@@ -7,6 +7,8 @@ export type Schemas = components["schemas"];
 export type Item = Schemas["Item"];
 export type RankedItem = Schemas["RankedItem"];
 export type RankedList = Schemas["RankedList"];
+export type AcrossHeapsList = Schemas["AcrossHeapsList"];
+export type AcrossHeapsItem = Schemas["AcrossHeapsItem"];
 export type ClosedItems = Schemas["ClosedItems"];
 export type Me = Schemas["Me"];
 export type ClientSignIn = Schemas["ClientSignIn"];
@@ -87,6 +89,9 @@ export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/teams/{team}/heaps/{heap}/items"]["get"]["parameters"]["query"]>,
   "as_of"
 >;
+
+/** The view parameters of the list across heaps, without `as_of`. */
+export type AcrossHeapsQuery = Omit<NonNullable<paths["/api/v1/me/items"]["get"]["parameters"]["query"]>, "as_of">;
 
 /**
  * A heap as paths name it: its team's slug and its own (design/architecture.md, Handles). It is exactly the path parameters

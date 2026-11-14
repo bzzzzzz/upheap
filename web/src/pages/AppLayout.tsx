@@ -19,6 +19,7 @@ import {
   CircleCheck,
   Ellipsis,
   Inbox,
+  Layers,
   List,
   Plus,
   Settings,
@@ -26,13 +27,13 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { HeapRef, Me } from "../api/client";
 import { useHeap, useMe, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
-import { HeapSwitcher } from "../components/HeapSwitcher";
+import { HeapSwitcher, openItemCount } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { Logo } from "../components/Logo";
 import { useKeyboardInset, usePhoneTabsHeight } from "../components/media";
@@ -49,10 +50,12 @@ export function AppLayout() {
   // The heap's list, also with an item open over it.
   const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
   // The heap on screen counts as opened once per visit, for the switcher's Recent.
-  // Pages with no heap in their address keep the heap opened last, where Waiting for me needs the heap's views.
+  // Pages with no heap in their address keep the heap opened last, where Waiting for me, All items and Data need the heap's
+  // views.
   const onWaiting = useMatch({ from: "/app/waiting", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
-  const shellHeap = heapRef ?? ((onWaiting || onData) && me ? keptHeap(me) : undefined);
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  const shellHeap = heapRef ?? ((onWaiting || onAll || onData) && me ? keptHeap(me) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -65,7 +68,7 @@ export function AppLayout() {
     // right-hand padding.
     <ToastProvider>
       <NoticeLine />
-      <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : undefined}>
+      <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : onAll ? "all" : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
             {me && <Sidebar me={me} heapRef={shellHeap} />}
@@ -89,7 +92,7 @@ export function AppLayout() {
  * The heap the shell keeps on a page without one in its address: the one opened last that is still there and active,
  * else the first active heap, else the first heap.
  */
-function keptHeap(me: Me): HeapRef | undefined {
+export function keptHeap(me: Me): HeapRef | undefined {
   const entries = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
   const kept =
     readRecentHeaps()
@@ -155,7 +158,7 @@ function NavLink({
   current,
   count,
   ...link
-}: LinkProps & { icon: LucideIcon; label: string; current?: boolean; count?: number }) {
+}: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number }) {
   return (
     <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
@@ -234,8 +237,19 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
         Upheap
       </div>
 
-      <div className="lg:border-b lg:border-line lg:pb-4">
+      <div className="flex flex-col gap-1 lg:gap-0.5 lg:border-b lg:border-line lg:pb-4">
         <WaitingLink />
+        <NavLink
+          to="/all"
+          icon={Layers}
+          label={
+            <>
+              <span className="lg:hidden">All</span>
+              <span className="max-lg:hidden">All items</span>
+            </>
+          }
+          count={openItemCount(me)}
+        />
       </div>
 
       <div className="lg:hidden">
@@ -348,6 +362,8 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   // On the list, Add starts from its view; the heap's other pages have none.
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
+  // On All items there is no view to start from, but the item still opens over that page.
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
   const [more, setMore] = useState(false);
   // The heap's pages that only More leads to, so More shows as active on them.
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
@@ -383,7 +399,15 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
         <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
         <span>More</span>
       </button>
-      {adding && <AddItemDialog heapRef={heapRef} view={view} search={search} onClose={() => setAdding(false)} />}
+      {adding && (
+        <AddItemDialog
+          heapRef={heapRef}
+          view={view}
+          search={search}
+          acrossHeaps={onAll}
+          onClose={() => setAdding(false)}
+        />
+      )}
       <MoreSheet me={me} heapRef={heapRef} isOpen={more} onClose={() => setMore(false)} />
     </nav>
   );

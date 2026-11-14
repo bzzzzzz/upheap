@@ -16,7 +16,8 @@ import {
 import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
 import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
-import { parseListSearch } from "./components/listView";
+import { parseAcrossSearch, parseListSearch } from "./components/listView";
+import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
@@ -496,6 +497,29 @@ const waitingRoute = createRoute({
   component: WaitingPage,
 });
 
+/**
+ * Every open item across the heaps in one list (ux.md, All items). The item open over it is in the search, as
+ * `team/heap/key`, because a key is only unique within its heap.
+ */
+const allRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/all",
+  validateSearch: parseAcrossSearch,
+  component: function AllRoute() {
+    const view = allRoute.useSearch();
+    const navigate = allRoute.useNavigate();
+    // View changes replace the history entry, as the heap list's do, and the open item stays open.
+    return (
+      <AllItemsPage
+        view={view}
+        onViewChange={(next) =>
+          void navigate({ search: parseAcrossSearch({ ...next, item: view.item }), replace: true })
+        }
+      />
+    );
+  },
+});
+
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
 const routeTree = rootRoute.addChildren([
@@ -526,6 +550,7 @@ const routeTree = rootRoute.addChildren([
     teamActivityRoute,
     dataRoute,
     waitingRoute,
+    allRoute,
     accountRoute,
   ]),
 ]);

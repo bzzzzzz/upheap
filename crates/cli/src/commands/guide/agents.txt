@@ -54,6 +54,11 @@ The usual order of work
    and chain them with `--blocked-by <task>`. Then close the note with `upheap item became k3x9a`.
    A note that belongs to a task that exists becomes a step of it: `upheap item to-step k3x9a --task m2p4q`; it
    closes the note as became.
+   A note too big for tasks becomes a heap of its own: `upheap heap add "<name>" --from k3x9a --context-file -`
+   (the heap's context on stdin: what the project is and where its work lives). Then add its tasks and notes there
+   with `upheap item add "<title>" --heap <new> --from k3x9a --need expected --age keep`, and close the note with
+   `upheap item became k3x9a`. The heap goes to the note's team, and
+   its items join the queue with it. In a run the heap is made only from the run's item, with a context.
    `upheap item show` lists what a note became, and where a task came from.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
    open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead;

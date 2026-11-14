@@ -106,6 +106,25 @@ pub struct CreateNamedDto {
     pub slug: Option<String>,
 }
 
+/// A new heap, optionally made from a note.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[schema(as = CreateHeapRequest)]
+pub struct CreateHeapDto {
+    /// 1 to 100 characters.
+    pub name: String,
+    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
+    /// one made from the name: "My Heap" gets `my-heap`, or `my-heap-2` if that is taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    /// What the project is, in Markdown, as `PATCH …/heaps/{heap}` takes it; blank is none. Required in a run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    /// The open note of this team the heap is made from. The note stays as it is; it closes with `became`. Required
+    /// in a run, where it must be the run's item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_id: Option<Uuid>,
+}
+
 #[derive(Deserialize, ToSchema)]
 #[schema(as = AddMemberRequest)]
 pub struct AddMemberDto {

@@ -23,7 +23,7 @@ use domain::turn::{Goal, Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_ag
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
-    Duration, HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, TurnId, UserId, ValidationError, Version,
+    Duration, HeapId, ItemId, OptionId, ParameterId, TagId, TeamId, Timestamp, TurnId, UserId, ValidationError, Version,
 };
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
@@ -67,6 +67,8 @@ pub struct ItemView {
     pub became: Option<Vec<MadeItem>>,
     /// The steps of other tasks made from it, oldest first: `Some` where `became` is, `None` in other lists.
     pub became_steps: Option<Vec<MadeStep>>,
+    /// The heaps made from it, oldest first: `Some` where `became` is, `None` in other lists.
+    pub became_heaps: Option<Vec<MadeHeap>>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
@@ -102,6 +104,13 @@ pub struct ItemView {
     /// The note each of the steps was made from, by step number, for the steps whose note the caller may see. Empty
     /// where `steps` is `None`.
     pub step_origins: HashMap<StepNumber, ItemOrigin>,
+}
+
+/// A heap a note became, with its team.
+#[derive(Clone, Debug)]
+pub struct MadeHeap {
+    pub heap: Heap,
+    pub team: Team,
 }
 
 /// A step a note became, with the task it is a step of and where that task is now.
@@ -389,6 +398,7 @@ impl Services {
                 // What an item became is read for one item or the closed list.
                 became: None,
                 became_steps: None,
+                became_heaps: None,
                 created_by,
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
@@ -592,6 +602,8 @@ impl Services {
             &store::steps::list_steps_made_from(&self.db, &item_ids, false).await?,
         )
         .await?;
+        let mut made_heaps =
+            made_heaps_by_origin(&self.db, store::heaps::list_heaps_made_from(&self.db, &item_ids).await?).await?;
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
@@ -609,6 +621,7 @@ impl Services {
                 let closed_by = pick_user(&users, item.state.closed_by());
                 let became = made.remove(&item.id).unwrap_or_default();
                 let became_steps = made_steps.remove(&item.id).unwrap_or_default();
+                let became_heaps = made_heaps.remove(&item.id).unwrap_or_default();
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
@@ -618,6 +631,7 @@ impl Services {
                     blocker_gone: None,
                     became: Some(became),
                     became_steps: Some(became_steps),
+                    became_heaps: Some(became_heaps),
                     created_by,
                     closed_by,
                     allowed_actions,
@@ -669,7 +683,7 @@ impl Services {
         let run = self.check_run_add(&txn, principal, heap_id, &fields, now).await?;
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         let origin_item = match fields.origin {
-            Some(origin) => Some(self.find_origin(&txn, &fields, heap_id, origin).await?),
+            Some(origin) => Some(self.find_origin(&txn, &fields, &access.heap, origin).await?),
             None => None,
         };
         if let Some(run) = &run {
@@ -784,6 +798,7 @@ impl Services {
         Ok(ItemView {
             became: Some(Vec::new()),
             became_steps: Some(Vec::new()),
+            became_heaps: Some(Vec::new()),
             item,
             tags,
             parameters: values,
@@ -808,12 +823,13 @@ impl Services {
         })
     }
 
-    /// The open note `origin` names, read under the heap lock, for an item about to be made in `heap_id` from it.
+    /// The open note `origin` names, read under the heap lock, for an item about to be made in `heap` from it. The
+    /// note is an item of `heap`, or the note `heap` was made from.
     async fn find_origin(
         &self,
         txn: &impl ConnectionTrait,
         fields: &NewItem,
-        heap_id: HeapId,
+        heap: &Heap,
         origin: NewOrigin,
     ) -> Result<Item, ServiceError> {
         if fields.kind == Kind::Reminder {
@@ -822,7 +838,7 @@ impl Services {
         let item_id = origin.item_id;
         let found = store::items::find_item_locking(txn, item_id)
             .await?
-            .filter(|found| found.heap_id == heap_id)
+            .filter(|found| found.heap_id == heap.id || heap.origin_id == Some(item_id))
             .ok_or(ServiceError::OriginNotInHeap { item_id })?;
         if found.kind != Kind::Note {
             return Err(ServiceError::OriginNotANote { item_id });
@@ -1273,6 +1289,15 @@ pub(crate) async fn build_item_view(
     } else {
         Vec::new()
     };
+    // Only a note becomes a heap.
+    let became_heaps = if item.kind == Kind::Note {
+        made_heaps_by_origin(db, store::heaps::list_heaps_made_from(db, &[item.id]).await?)
+            .await?
+            .remove(&item.id)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     // A step's note was in the task's heap when the step was made, and a move stays in the team, so whoever sees the
     // task sees the note: no check per step.
     let mut step_origins = HashMap::new();
@@ -1311,6 +1336,7 @@ pub(crate) async fn build_item_view(
         blocker_gone,
         became: Some(became),
         became_steps: Some(became_steps),
+        became_heaps: Some(became_heaps),
         step_origins,
         created_by,
         closed_by,
@@ -1760,6 +1786,32 @@ pub(crate) async fn made_steps_by_origin(
             heap,
             team,
         });
+    }
+    Ok(grouped)
+}
+
+/// `made`, heaps made from notes, grouped under the note each was made from, in the order given, each with its team.
+pub(crate) async fn made_heaps_by_origin(
+    db: &impl ConnectionTrait,
+    made: Vec<Heap>,
+) -> Result<HashMap<ItemId, Vec<MadeHeap>>, ServiceError> {
+    let mut teams: HashMap<TeamId, Team> = HashMap::new();
+    let mut grouped: HashMap<ItemId, Vec<MadeHeap>> = HashMap::new();
+    for heap in made {
+        let Some(origin) = heap.origin_id else {
+            continue;
+        };
+        let team = match teams.entry(heap.team_id) {
+            std::collections::hash_map::Entry::Occupied(found) => found.get().clone(),
+            std::collections::hash_map::Entry::Vacant(slot) => slot
+                .insert(
+                    store::teams::find_team(db, heap.team_id)
+                        .await?
+                        .ok_or(ServiceError::NotFound)?,
+                )
+                .clone(),
+        };
+        grouped.entry(origin).or_default().push(MadeHeap { heap, team });
     }
     Ok(grouped)
 }
