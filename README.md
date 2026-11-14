@@ -210,6 +210,8 @@ cargo run -p cli -- item became k3x9a                            # the note is c
 cargo run -p cli -- item to-step n8c2d --task k3x9a              # the note becomes the last step of the task, and closes as became
 cargo run -p cli -- heap add "Blog move" --from n8c2d --context-file context.md   # the note becomes a heap of its own
 cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
+cargo run -p cli -- item send k3x9a --line "Use the new CA."     # to an agent, to the next stable state; --all-the-way goes on until done
+cargo run -p cli -- item take-back k3x9a                         # the agent's turn ends; what it changed stays
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
@@ -295,7 +297,7 @@ To have an agent work your items:
 6. Run `upheap work run --tool claude --root ~/agent-runs` and leave it running. Ctrl-C stops it. The flags are
    above, with the other commands.
 7. Add a note (`upheap item add "..." --need expected`), answer what the agent asks (in the web app, or with
-   `upheap question reply`), and send items on from the web app with "Send to an agent".
+   `upheap question reply`), and send items on with `upheap item send` or from the web app with "Send to an agent".
 
 ### From Claude Code
 

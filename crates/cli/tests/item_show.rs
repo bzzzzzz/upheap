@@ -100,7 +100,7 @@ async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<
 
 #[gtest]
 #[tokio::test]
-async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_none() -> Result<()> {
+async fn item_show_lists_the_runs_and_marks_the_agents_changes_in_history() -> Result<()> {
     // Arrange: a note an agent reached the goal of, with a link and a cost, and a note nobody worked.
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;
@@ -138,7 +138,7 @@ async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_no
     cli.env.run = None;
 
     // Act
-    let shown = cli.run(&["item", "show", &worked]).await;
+    let shown = cli.run(&["item", "show", &worked, "--history"]).await;
     let without = cli.run(&["item", "show", &idle]).await;
 
     // Assert
@@ -159,6 +159,10 @@ async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_no
     expect_that!(lines.next(), some(eq("    Wrote the context")));
     expect_that!(lines.next(), some(eq("    https://example.test/pull/12")));
     expect_that!(without.stdout, not(contains_substring("Runs")));
+    // The agent's edit reads as the agent's; Ada's own send reads as hers.
+    let (_, history) = shown.stdout.split_once("\nHistory\n").context("a History section")?;
+    expect_that!(history, contains_substring("Ada's agent edited item"));
+    expect_that!(history, contains_regex("(?m)  Ada opened a turn on"));
     Ok(())
 }
 
