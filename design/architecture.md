@@ -101,7 +101,8 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
-  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), and one withdrawn when its
+  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), which the person may change
+  while the item is open (`reply_changed` marks it, and `replied_by`/`replied_at` are then the change's), and one withdrawn when its
   item was closed stays, withdrawn (`withdrawn_at`, `withdrawn_by`). An item has at most 100,
   so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
   the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
@@ -676,7 +677,8 @@ the remaining admins.
    recorded the same way (`CommentAdded`, "commented on"), with its number and its whole text, so History shows what
    was said. A question's are
    recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
-   question's number and text and, once answered, the labels picked and the comment. So are a question withdrawn
+   question's number and text and, once answered, the labels picked and the comment; changing a reply is
+   `ReplyChanged`, with the picks and comment before and after. So are a question withdrawn
    by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
    (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
    back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and

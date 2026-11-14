@@ -485,7 +485,8 @@ impl From<QuestionState> for QuestionStateDto {
 #[serde(rename_all = "snake_case")]
 #[schema(as = QuestionAction)]
 pub enum QuestionActionDto {
-    /// Reply to the question. Offered while it is open, on an open item the caller may edit.
+    /// Reply to the question. Offered while it is open or answered, on an open item the caller may edit. On an answered
+    /// question it changes the reply.
     Reply,
 }
 
@@ -574,6 +575,14 @@ pub struct QuestionDto {
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<QuestionActionDto>,
+    /// Whether the person changed the reply after the start of the item's latest ended run, so an agent that read the
+    /// old reply should act on the new one. `false` for a reply never changed, for an item with no ended run, for a
+    /// question that isn't answered, and where the item's runs aren't read (Waiting for me).
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub changed_since_last_run: bool,
 }
 
 /// How far a task's steps have got.

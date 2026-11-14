@@ -91,8 +91,6 @@ pub enum CliError {
 pub enum QuestionRefusal {
     /// It was taken back unanswered: its item closed, or its agent's turn was taken back. Nothing brings it back.
     Withdrawn,
-    /// It has another reply, and a reply can't be changed here.
-    AnsweredDifferently,
 }
 
 impl QuestionRefusal {
@@ -100,9 +98,6 @@ impl QuestionRefusal {
         match self {
             Self::Withdrawn => {
                 format!("{name} was withdrawn, so there is nothing to reply to")
-            }
-            Self::AnsweredDifferently => {
-                format!("{name} is answered already with another reply, which can't be changed here")
             }
         }
     }

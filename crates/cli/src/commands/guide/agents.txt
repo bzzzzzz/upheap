@@ -38,7 +38,8 @@ Long text
 The usual order of work
 1. `upheap heap show`: the heap's context says what the project is and how work is done in it. Read it first.
 2. `upheap item list`: the ranked list, the most worth doing first. `upheap item show` prints one item in full,
-   with its context, comments, steps, and questions with their answers.
+   with its context, comments, steps, and questions with their answers. A reply marked "changed since your last
+   run" was changed by the person after your last run: the new reply is the one to act on.
    A reminder, added with `upheap item add "<title>" --reminder <date>`, stays out of the list until that date;
    `upheap item list --reminders shown` lists those still to come.
 3. Write what you learn, decide or do where the next reader will look: as a comment on the item, with

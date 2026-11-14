@@ -423,6 +423,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
         (AuditAction::QuestionAnswered, _) => ("answered a question on", true),
+        (AuditAction::ReplyChanged, _) => ("changed the reply to a question on", true),
         (AuditAction::QuestionWithdrawn, _) => ("withdrew a question on", true),
         (AuditAction::CommentAdded, _) => ("commented on", true),
         (AuditAction::TurnOpened, _) => ("opened a turn on", true),
@@ -497,6 +498,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::ItemMoved
         | AuditAction::TurnReached
         | AuditAction::TurnRedone
+        | AuditAction::ReplyChanged
         | AuditAction::StepUpdated
         | AuditAction::TagUpdated
         | AuditAction::SavedViewUpdated

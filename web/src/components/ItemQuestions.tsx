@@ -21,6 +21,7 @@ import { Markdown } from "./Markdown";
 import { proposalSummary } from "./proposalSummary";
 import { StuckRow } from "./StuckRow";
 import { useToast } from "./UndoToast";
+import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserName } from "./userName";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
@@ -390,7 +391,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
             Someone else replied to “{text}” meanwhile.
           </p>
         ))}
-      <AnsweredQuestions item={item} />
+      <AnsweredQuestions heapRef={heapRef} item={item} />
     </section>
   );
 }
@@ -473,15 +474,18 @@ function ReplyControls({
   describedBy,
   question,
   pending,
+  initial,
   onSend,
 }: {
   describedBy: string;
   question: Question;
   pending: boolean;
+  /** The reply being changed, which fills the controls; none for an open question. */
+  initial?: Question["reply"];
   onSend: (reply: QuestionReply) => void;
 }) {
-  const [comment, setComment] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [picked, setPicked] = useState<string[]>((initial?.picked ?? []).map(String));
   const trimmed = comment.trim();
   const note = trimmed === "" ? null : comment;
 
@@ -600,10 +604,11 @@ function ReplyControls({
 
 /**
  * The questions that don't wait, folded under the open ones: the answered ones and the ones closing the item withdrew.
- * The summary counts the answered, and the withdrawn when there are no answered, as "2 answered" or "1 closed".
- * Read-only.
+ * The summary counts the answered, and the withdrawn when there are no answered, as "2 answered" or "1 closed". An
+ * answered question the server offers `reply` on has Change reply.
  */
-function AnsweredQuestions({ item }: { item: Item }) {
+function AnsweredQuestions({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
+  const [message, setMessage] = useState("");
   const listed = (item.questions ?? []).filter(
     (question) => question.state === "answered" || question.state === "withdrawn",
   );
@@ -612,27 +617,113 @@ function AnsweredQuestions({ item }: { item: Item }) {
   const closed = listed.length - answered;
   const summary = answered > 0 ? `${answered} answered${closed > 0 ? `, ${closed} closed` : ""}` : `${closed} closed`;
   return (
-    <details className="group">
-      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden="true"
-          className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
-        />
-        {summary}
-      </summary>
-      <ul className="mt-1 flex flex-col divide-y divide-line pl-3">
-        {listed.map((question) => (
-          <li key={question.number} className="flex flex-col gap-1 py-3 first:pt-1 last:pb-1">
-            <QuestionHead
-              itemId={item.id}
-              line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
+    <>
+      <span role="status" className="sr-only">
+        {message}
+      </span>
+      <details className="group">
+        <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden="true"
+            className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+          />
+          {summary}
+        </summary>
+        <ul className="mt-1 flex flex-col divide-y divide-line pl-3">
+          {listed.map((question) => (
+            <AnsweredRow
+              key={question.number}
+              heapRef={heapRef}
+              item={item}
               question={question}
+              onChanged={() => setMessage(`Changed the reply to “${question.text}”.`)}
             />
-            <Outcome question={question} />
-          </li>
-        ))}
-      </ul>
-    </details>
+          ))}
+        </ul>
+      </details>
+    </>
+  );
+}
+
+/** One listed question, with its Change reply when it is answered and the server offers `reply`. */
+function AnsweredRow({
+  heapRef,
+  item,
+  question,
+  onChanged,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  question: Question;
+  onChanged: () => void;
+}) {
+  const [changing, setChanging] = useState(false);
+  const reply = useReplyToQuestion(heapRef, item.key);
+  const focusAfterRender = useFocusAfterRender();
+  const row = useRef<HTMLLIElement>(null);
+  const canChange = question.state === "answered" && question.allowed_actions.includes("reply");
+
+  const open = () => {
+    reply.reset();
+    setChanging(true);
+    focusAfterRender(() =>
+      row.current?.querySelector<HTMLElement>("[data-changing] :is(input, textarea, button):not(:disabled)"),
+    );
+  };
+  const close = () => {
+    setChanging(false);
+    focusAfterRender(() => row.current?.querySelector<HTMLElement>("[data-change-reply]"));
+  };
+  const send = (body: QuestionReply) =>
+    reply.mutateAsync({ question, reply: body }).then(
+      () => {
+        onChanged();
+        close();
+      },
+      () => {},
+    );
+
+  return (
+    <li ref={row} className="flex flex-col gap-1 py-3 first:pt-1 last:pb-1">
+      <QuestionHead
+        itemId={item.id}
+        line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
+        question={question}
+      />
+      <Outcome question={question} />
+      {canChange && !changing && (
+        <Button
+          data-change-reply=""
+          onPress={open}
+          className={`${compactButtonClass.bordered} ${focusClass} self-start max-sm:w-full`}
+        >
+          Change reply
+        </Button>
+      )}
+      {canChange && changing && (
+        <div data-changing="" className="flex flex-col gap-2">
+          <ReplyControls
+            describedBy={textId(item.id, question)}
+            question={question}
+            pending={reply.isPending}
+            initial={question.reply}
+            onSend={send}
+          />
+          <Button
+            onPress={close}
+            isDisabled={reply.isPending}
+            className={`${compactButtonClass.bordered} ${focusClass} self-start max-sm:w-full`}
+          >
+            Cancel
+          </Button>
+          {reply.error && (
+            <p role="alert" className="text-sm text-overdue-ink">
+              {itemProblem(reply.error)}
+            </p>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

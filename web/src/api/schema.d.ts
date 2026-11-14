@@ -823,8 +823,9 @@ export interface paths {
         head?: never;
         /**
          * Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the
-         *     question's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is
-         *     `question_answered`. Replying to an open question of a closed item is `item_closed`.
+         *     question's `version` in `If-Match`; the item's `version` doesn't change. On an answered question the reply is
+         *     changed, with the same reply a no-op; if the version is stale, someone else replied or changed it meanwhile and the
+         *     refusal is `question_answered`. Replying to a question of a closed item is `item_closed`.
          */
         patch: operations["reply_to_question"];
         trace?: never;
@@ -1705,7 +1706,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -3082,6 +3083,12 @@ export interface components {
             asked_by?: null | components["schemas"]["UserRef"];
             /** @description When it was asked, ready to show: "today", "2 days ago". */
             asked_label: string;
+            /**
+             * @description Whether the person changed the reply after the start of the item's latest ended run, so an agent that read the
+             *     old reply should act on the new one. `false` for a reply never changed, for an item with no ended run, for a
+             *     question that isn't answered, and where the item's runs aren't read (Waiting for me).
+             */
+            changed_since_last_run: boolean;
             /**
              * @description The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
              *     `Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`.

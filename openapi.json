@@ -3668,7 +3668,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the\nquestion's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is\n`question_answered`. Replying to an open question of a closed item is `item_closed`.",
+        "summary": "Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the\nquestion's `version` in `If-Match`; the item's `version` doesn't change. On an answered question the reply is\nchanged, with the same reply a no-op; if the version is stale, someone else replied or changed it meanwhile and the\nrefusal is `question_answered`. Replying to a question of a closed item is `item_closed`.",
         "operationId": "reply_to_question",
         "parameters": [
           {
@@ -8144,6 +8144,7 @@
           "step_updated",
           "question_asked",
           "question_answered",
+          "reply_changed",
           "question_withdrawn",
           "comment_added",
           "turn_opened",
@@ -11623,7 +11624,8 @@
           "withdrawn_at",
           "withdrawn_by",
           "version",
-          "allowed_actions"
+          "allowed_actions",
+          "changed_since_last_run"
         ],
         "properties": {
           "allowed_actions": {
@@ -11651,6 +11653,10 @@
           "asked_label": {
             "type": "string",
             "description": "When it was asked, ready to show: \"today\", \"2 days ago\"."
+          },
+          "changed_since_last_run": {
+            "type": "boolean",
+            "description": "Whether the person changed the reply after the start of the item's latest ended run, so an agent that read the\nold reply should act on the new one. `false` for a reply never changed, for an item with no ended run, for a\nquestion that isn't answered, and where the item's runs aren't read (Waiting for me)."
           },
           "choices": {
             "type": "array",

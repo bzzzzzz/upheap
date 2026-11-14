@@ -3,8 +3,9 @@
 //! The CLI reads the item first, for the question's version and its choices, which it needs to turn what was typed
 //! into the indices the API takes. The server owns every other rule: how many picks, whether a comment is needed,
 //! an open question on an open item. Repeating a command is safe: a question answered already with this very reply
-//! is said to be, and makes no write. Another reply is refused, since it would be lost, and so is a withdrawn
-//! question.
+//! is said to be, and makes no write. Another reply to an answered question changes it, sent with the question's
+//! version, so a change made meanwhile by someone else is refused rather than overwritten. A withdrawn question is
+//! refused.
 
 use api_types::common::{QuestionDto, QuestionStateDto};
 use api_types::questions::{QuestionPatchDto, ReplyDto};
@@ -75,13 +76,7 @@ pub async fn run_reply(args: ReplyArgs, app: &App, out: &mut Output) -> Result<(
         });
     }
     let picked = match_choices(&full_name, &args.picks, &question.choices)?;
-    if question.state == QuestionStateDto::Answered {
-        if !is_same_reply(question, &picked, comment.as_deref()) {
-            return Err(CliError::QuestionRefused {
-                name: full_name,
-                refusal: QuestionRefusal::AnsweredDifferently,
-            });
-        }
+    if question.state == QuestionStateDto::Answered && is_same_reply(question, &picked, comment.as_deref()) {
         match out.mode() {
             Mode::Json => out.json(&item.body)?,
             Mode::Quiet => {}
@@ -95,13 +90,15 @@ pub async fn run_reply(args: ReplyArgs, app: &App, out: &mut Output) -> Result<(
     let replied = api
         .patch_question(&at.key, question.number, question.version, &patch)
         .await?;
+    let verb = if question.state == QuestionStateDto::Answered {
+        "Changed the reply to"
+    } else {
+        "Replied to"
+    };
     match out.mode() {
         Mode::Json => out.json(&replied.body)?,
         Mode::Quiet => {}
-        Mode::Human => out.line(&format!(
-            "Replied to {}.q{}: {}",
-            at.key, question.number, question.text
-        ))?,
+        Mode::Human => out.line(&format!("{verb} {}.q{}: {}", at.key, question.number, question.text))?,
     }
     Ok(())
 }

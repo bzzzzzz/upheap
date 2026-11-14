@@ -75,6 +75,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::StepUpdated
         | AuditAction::QuestionAsked
         | AuditAction::QuestionAnswered
+        | AuditAction::ReplyChanged
         | AuditAction::QuestionWithdrawn
         | AuditAction::CommentAdded
         | AuditAction::TurnOpened
@@ -210,10 +211,11 @@ pub enum QuestionAction {
     Reply,
 }
 
-/// What `role` can do with a question of `item` in `heap`: reply to it while it is open, the item is open and the
-/// heap is active. An open question of a closed item reads only until the item is reopened.
+/// What `role` can do with a question of `item` in `heap`: reply to it while it is open or answered (an answered one
+/// has its reply changed), the item is open and the heap is active. A question of a closed item reads only until the
+/// item is reopened.
 pub fn allowed_question_actions(item: &Item, heap: &Heap, role: Role, state: QuestionState) -> Vec<QuestionAction> {
-    if item.is_closed() || state != QuestionState::Open || !can_edit_heap_content(heap, role) {
+    if item.is_closed() || state == QuestionState::Withdrawn || !can_edit_heap_content(heap, role) {
         return Vec::new();
     }
     vec![QuestionAction::Reply]
@@ -904,7 +906,7 @@ mod tests {
         );
         expect_that!(
             reply(&item(Kind::Task, false), &heap(false), QuestionState::Answered),
-            is_empty()
+            elements_are![eq(&QuestionAction::Reply)]
         );
         expect_that!(
             reply(&item(Kind::Task, false), &heap(false), QuestionState::Withdrawn),
@@ -912,6 +914,10 @@ mod tests {
         );
         expect_that!(
             reply(&item(Kind::Task, true), &heap(false), QuestionState::Open),
+            is_empty()
+        );
+        expect_that!(
+            reply(&item(Kind::Task, true), &heap(false), QuestionState::Answered),
             is_empty()
         );
         expect_that!(

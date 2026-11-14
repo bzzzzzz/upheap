@@ -278,6 +278,8 @@ pub struct Reply {
     /// `None` when it can't be traced.
     pub replied_by: Option<UserId>,
     pub replied_at: Timestamp,
+    /// Whether this reply replaced an earlier one; `replied_by`/`replied_at` are then the change's.
+    pub changed: bool,
 }
 
 /// When and by whom a question was withdrawn.
@@ -532,10 +534,10 @@ impl Question {
     }
 
     /// This question replied to by `replied_by` at `now`, picking `picked` and saying `comment`. The result keeps
-    /// the old version; the store bumps it on write.
+    /// the old version; the store bumps it on write. On an answered question the new reply replaces the old one and
+    /// is marked [`Reply::changed`].
     ///
-    /// Fails with [`QuestionError::Answered`] when it already has a reply, with [`QuestionError::Withdrawn`] when it
-    /// was withdrawn, and with a validation error when the
+    /// Fails with [`QuestionError::Withdrawn`] when it was withdrawn, and with a validation error when the
     /// reply doesn't fit the question: a question without choices takes a comment and no pick; one with choices
     /// takes one pick, or one or more when `many`; a pick is a distinct index of the choices. Picks are kept in
     /// ascending order.
@@ -546,9 +548,6 @@ impl Question {
         replied_by: UserId,
         now: Timestamp,
     ) -> Result<Self, ReplyError> {
-        if self.reply.is_some() {
-            return Err(QuestionError::Answered { number: self.number }.into());
-        }
         if self.withdrawal.is_some() {
             return Err(QuestionError::Withdrawn { number: self.number }.into());
         }
@@ -562,9 +561,20 @@ impl Question {
                 comment,
                 replied_by: Some(replied_by),
                 replied_at: now,
+                changed: self.reply.is_some(),
             }),
             ..self.clone()
         })
+    }
+
+    /// Whether replying with `picked` and `comment` would leave the reply as it is: the same picks, as a set, and the
+    /// same comment. `false` for a question without a reply, and for a reply that doesn't fit the question.
+    pub fn is_same_reply(&self, picked: &[u32], comment: Option<&Context>) -> bool {
+        let Some(reply) = &self.reply else {
+            return false;
+        };
+        self.check_picks(picked)
+            .is_ok_and(|picked| picked == reply.picked && reply.comment.as_ref() == comment)
     }
 
     fn check_picks(&self, picked: &[u32]) -> Result<Vec<u32>, ValidationError> {
@@ -694,6 +704,17 @@ pub fn check_close_ready(steps: &[Step], questions: &[Question]) -> Result<(), V
         }
     }
     if blockers.is_empty() { Ok(()) } else { Err(blockers) }
+}
+
+/// Whether `question`'s reply was changed after the start of the item's latest ended run, `last_ended_run_start`
+/// (`None` when no run has ended): the run reading the item now started after the change, so the person's change
+/// is news to it, and the mark goes once a run that started after the change has ended. `false` for a reply never
+/// changed and for a question without a reply.
+pub fn changed_since(question: &Question, last_ended_run_start: Option<Timestamp>) -> bool {
+    match (&question.reply, last_ended_run_start) {
+        (Some(reply), Some(start)) => reply.changed && reply.replied_at > start,
+        _ => false,
+    }
 }
 
 fn round_of(question: &Question) -> u32 {
@@ -990,15 +1011,81 @@ mod tests {
     }
 
     #[gtest]
-    fn an_answered_question_is_not_replied_to_again() {
-        let answered = reply(&question(QuestionKind::Question, &[], false), &[], "x").expect("valid");
+    fn replying_to_an_answered_question_changes_its_reply() {
+        let first = reply(&question(QuestionKind::Question, &["Yes", "No"], false), &[0], "").expect("valid");
+        let later = Timestamp::from_millis(5_000).expect("valid");
+        let other = UserId::from_uuid(Uuid::from_u128(12));
 
+        let changed = first
+            .reply(&[1], Context::parse("Sorry").expect("valid"), other, later)
+            .expect("valid");
+
+        expect_that!(first.reply.as_ref().map(|reply| reply.changed), some(eq(false)));
+        expect_that!(picked_of(&changed), some(eq(&vec![1])));
+        let reply = changed.reply.expect("answered");
+        expect_that!(reply.changed, eq(true));
+        expect_that!(reply.replied_by, some(eq(other)));
+        expect_that!(reply.replied_at, eq(later));
+        expect_that!(reply.comment.map(|c| c.as_str().to_owned()), some(eq("Sorry")));
+    }
+
+    #[gtest]
+    fn a_changed_reply_must_fit_the_question_as_a_first_one_does() {
+        let answered = reply(&question(QuestionKind::Question, &["Yes", "No"], false), &[0], "").expect("valid");
+        let free = reply(&question(QuestionKind::Question, &[], false), &[], "x").expect("valid");
+
+        expect_that!(reply(&answered, &[], ""), err(eq(&invalid(ValidationError::PickNone))));
         expect_that!(
-            reply(&answered, &[], "y"),
-            err(eq(&ReplyError::Question(QuestionError::Answered {
-                number: QuestionNumber::FIRST
-            })))
+            reply(&answered, &[5], ""),
+            err(eq(&invalid(ValidationError::PickOutOfRange)))
         );
+        expect_that!(
+            reply(&free, &[], ""),
+            err(eq(&invalid(ValidationError::Empty { field: Field::Comment })))
+        );
+    }
+
+    #[gtest]
+    fn the_same_reply_is_told_by_picks_as_a_set_and_the_trimmed_comment() {
+        let open = question(QuestionKind::Question, &["A", "B", "C"], true);
+        let answered = reply(&open, &[2, 0], " Both ").expect("valid");
+        let comment = Context::parse("Both").expect("valid");
+
+        expect_that!(answered.is_same_reply(&[0, 2], comment.as_ref()), eq(true));
+        expect_that!(answered.is_same_reply(&[2, 0], comment.as_ref()), eq(true));
+        expect_that!(answered.is_same_reply(&[0], comment.as_ref()), eq(false));
+        expect_that!(answered.is_same_reply(&[0, 2], None), eq(false));
+        expect_that!(answered.is_same_reply(&[9], comment.as_ref()), eq(false));
+        expect_that!(open.is_same_reply(&[0], None), eq(false));
+    }
+
+    #[gtest]
+    fn a_reply_is_changed_since_a_run_when_it_was_changed_after_that_runs_start() {
+        let at = |millis| Timestamp::from_millis(millis).expect("valid");
+        let open = question(QuestionKind::Question, &[], false);
+        let first = open
+            .reply(
+                &[],
+                Context::parse("a").expect("valid"),
+                UserId::from_uuid(Uuid::from_u128(11)),
+                at(1_000),
+            )
+            .expect("valid");
+        let changed = first
+            .reply(
+                &[],
+                Context::parse("b").expect("valid"),
+                UserId::from_uuid(Uuid::from_u128(11)),
+                at(3_000),
+            )
+            .expect("valid");
+
+        expect_that!(changed_since(&changed, Some(at(2_000))), eq(true));
+        expect_that!(changed_since(&changed, Some(at(3_000))), eq(false));
+        expect_that!(changed_since(&changed, Some(at(4_000))), eq(false));
+        expect_that!(changed_since(&changed, None), eq(false));
+        expect_that!(changed_since(&first, Some(at(0))), eq(false));
+        expect_that!(changed_since(&open, Some(at(0))), eq(false));
     }
 
     #[gtest]

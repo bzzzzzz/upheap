@@ -566,7 +566,7 @@ async fn question_reply_to_a_question_the_item_does_not_have_points_to_item_show
 
 #[gtest]
 #[tokio::test]
-async fn question_reply_to_an_answered_question_is_refused_with_the_servers_message() -> Result<()> {
+async fn question_reply_to_an_answered_question_changes_the_reply() -> Result<()> {
     // Arrange
     let (server, ada, _, task) = with_task().await?;
     let cli = cli_in_heap(&server, &ada).await?;
@@ -579,10 +579,10 @@ async fn question_reply_to_an_answered_question_is_refused_with_the_servers_mess
         .await;
 
     // Assert
-    expect_that!(run.exited(3), eq(true));
-    expect_that!(run.stderr, contains_substring("answered"));
+    expect_that!(run.exited(0), eq(true));
+    expect_that!(run.stdout, eq(&format!("Changed the reply to {task}.q1: Why?\n")));
     let read = server.read_item(&ada, HEAP, &task).await?;
-    expect_that!(read["questions"][0]["reply"]["comment"], eq("First"));
+    expect_that!(read["questions"][0]["reply"]["comment"], eq("Second"));
     Ok(())
 }
 
@@ -707,8 +707,8 @@ async fn repeating_a_reply_is_safe_and_another_reply_is_refused() -> Result<()> 
     expect_that!(quiet.exited(0), eq(true));
     let body: Value = serde_json::from_str(&json.stdout)?;
     expect_that!(body["questions"][0]["state"], eq("answered"));
-    expect_that!(other.exited(3), eq(true));
-    expect_that!(other.stderr, contains_substring("answered already with another reply"));
+    expect_that!(other.exited(0), eq(true));
+    expect_that!(other.stdout, contains_substring("Changed the reply to"));
     Ok(())
 }
 

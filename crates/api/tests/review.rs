@@ -797,3 +797,45 @@ async fn an_agent_in_a_run_cannot_ask_for_changes() -> Result<()> {
     expect_that!(code(&refused), some(eq("run_forbidden")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_changed_reply_is_marked_for_the_next_run_and_the_mark_goes_when_a_run_after_it_ends() -> Result<()> {
+    // Arrange: a review asked in a run, which the person answers while the run is going.
+    let w = world().await?;
+    let (key, run1) = w.task_in_a_done_run(1).await?;
+    w.review(&run1, &key, PR1, None).await?;
+    w.app.clock.advance(domain::Duration::from_millis(1));
+    let first = w.reply(&key, 1, 1, Some("Rename it.")).await?;
+    w.app.clock.advance(domain::Duration::from_millis(1));
+
+    // Act: the person changes the reply while the run goes, then the run ends, a later run starts and ends.
+    let changed = w.reply(&key, 1, 0, None).await?;
+    w.app.clock.advance(domain::Duration::from_millis(1));
+    w.finish(&run1).await?;
+    let after_first_run = w.get(&key).await?;
+    w.app.clock.advance(domain::Duration::from_millis(1));
+    let run2 = w.claimed().await?;
+    w.app.clock.advance(domain::Duration::from_millis(1));
+    let during_second_run = w.get(&key).await?;
+    w.finish(&run2).await?;
+    let after_second_run = w.get(&key).await?;
+
+    // Assert
+    expect_that!(question(&first.body, 1)["changed_since_last_run"], eq(&json!(false)));
+    expect_that!(question(&changed.body, 1)["changed_since_last_run"], eq(&json!(false)));
+    expect_that!(question(&changed.body, 1)["reply"]["picked"], eq(&json!([0])));
+    expect_that!(
+        question(&after_first_run, 1)["changed_since_last_run"],
+        eq(&json!(true))
+    );
+    expect_that!(
+        question(&during_second_run, 1)["changed_since_last_run"],
+        eq(&json!(true))
+    );
+    expect_that!(
+        question(&after_second_run, 1)["changed_since_last_run"],
+        eq(&json!(false))
+    );
+    Ok(())
+}

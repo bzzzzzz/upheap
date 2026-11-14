@@ -16,7 +16,7 @@ use domain::{ItemId, QuestionId, Version};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
-use crate::audit::{describe_new_question, describe_reply};
+use crate::audit::{describe_new_question, describe_reply, describe_reply_change};
 use crate::items::{ItemChildren, ItemView, TurnOnClose, build_item_view, in_run};
 use crate::{Principal, ServiceError, Services};
 
@@ -110,11 +110,12 @@ impl Services {
     }
 
     /// Replies to question `number` of an item if the question is still at version `expected`, picking `picked`
-    /// (indices into its choices) and saying `comment`. Fails with [`ServiceError::NotFound`] when the item has
-    /// no such question, with [`ItemError::Closed`](domain::item::ItemError::Closed) on a closed item, with
-    /// [`QuestionError::Answered`] when it already has a reply, with [`QuestionError::Withdrawn`] when closing the
-    /// item withdrew it, and with a validation error when the reply doesn't
-    /// fit the question.
+    /// (indices into its choices) and saying `comment`. On an answered question the reply is changed: the new one
+    /// replaces the old, with its own entry, and the same reply writes nothing. Fails with [`ServiceError::NotFound`]
+    /// when the item has no such question, with [`ItemError::Closed`](domain::item::ItemError::Closed) on a closed
+    /// item, with [`QuestionError::Answered`] when it is answered and `expected` is not its version, with
+    /// [`QuestionError::Withdrawn`] when closing the item withdrew it, and with a validation error when the reply
+    /// doesn't fit the question.
     ///
     /// Agreeing to a done proposal (the first choice, Close as done) closes the task as done in the same transaction:
     /// the item's open turn ends as reached by the person, any other open question is withdrawn, and the items the
@@ -142,18 +143,25 @@ impl Services {
             .find(|question| question.number == number)
             .ok_or(ServiceError::NotFound)?;
         check_questions_editable(&item)?;
-        // Before the version: someone else's reply moved it, and "already answered" is the more useful thing to say.
-        if current.reply.is_some() {
-            return Err(QuestionError::Answered { number }.into());
-        }
         if current.withdrawal.is_some() {
             return Err(QuestionError::Withdrawn { number }.into());
         }
         if current.version != expected {
+            // Someone else's reply or change moved it, and "already answered" is the more useful thing to say.
+            if current.reply.is_some() {
+                return Err(QuestionError::Answered { number }.into());
+            }
             return Err(ServiceError::VersionConflict {
                 expected,
                 current: current.version,
             });
+        }
+
+        if current.is_same_reply(picked, comment.as_ref()) {
+            let children = ItemChildren::read_locking(&txn, item.id).await?;
+            let view = build_item_view(&txn, &access.heap, &access.membership, item, children, self.now()).await?;
+            txn.commit().await.map_err(StoreError::from)?;
+            return Ok(view);
         }
 
         let now = self.now();
@@ -169,14 +177,12 @@ impl Services {
                 expected,
                 current: expected.next(),
             })?;
-        let entry = self.item_audit_entry(
-            &access.heap,
-            principal,
-            AuditAction::QuestionAnswered,
-            &item,
-            describe_reply(&saved),
-            now,
-        );
+        let (action, diff) = if current.reply.is_some() {
+            (AuditAction::ReplyChanged, describe_reply_change(current, &saved))
+        } else {
+            (AuditAction::QuestionAnswered, describe_reply(&saved))
+        };
+        let entry = self.item_audit_entry(&access.heap, principal, action, &item, diff, now);
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let agreed_to_close = saved.kind == QuestionKind::DoneProposal
             && saved.reply.as_ref().is_some_and(|reply| reply.picked == [AGREE_PICK]);
