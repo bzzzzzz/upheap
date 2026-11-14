@@ -1101,8 +1101,8 @@ The agent tool gets: the instructions for working with Upheap, the heap's contex
 prints, the state to reach, and the person's line.
 How a run ended is read off it: it said `work reached` and the check passed; or `work hand-back`; or it left an open
 question; otherwise it failed. Cost is what the tool reported, or blank.
-Ctrl-C: once, the current run (every current run, with --workers) finishes and the loop stops; twice, the runs are
-stopped and count as failed.
+Ctrl-C: once, the current run (every current run, with --workers) finishes and the loop stops, and each live run is
+listed with how long it has been going; twice, the runs are stopped and count as failed.
 Exits:  0 stopped by the person, or --once done; 2 no heap named and no default; 4 not signed in;
         5 server unreachable with --once (without it the loop waits and tries again); 6 the tool isn't
         installed or wouldn't start.

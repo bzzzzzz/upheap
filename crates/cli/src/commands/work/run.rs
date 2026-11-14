@@ -7,7 +7,7 @@
 //! their own.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, SystemTime};
 
@@ -197,7 +197,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         mode,
         out: Mutex::new(out),
         noted: Mutex::new(Noted::default()),
-        live: AtomicUsize::new(0),
+        live: Mutex::new(Vec::new()),
         pressed: AtomicBool::new(false),
         stopping_noted: AtomicBool::new(false),
         first_error: Mutex::new(None),
@@ -337,6 +337,15 @@ struct Noted {
     unreachable: bool,
 }
 
+/// A live run, as the note that the loop is stopping lists it.
+struct LiveRun {
+    id: uuid::Uuid,
+    key: String,
+    title: String,
+    /// UTC milliseconds: when the run was claimed.
+    started_at: i64,
+}
+
 /// The loop's context: what it works on, how, and what it has said so far. One, borrowed by every worker.
 ///
 /// The workers and the interrupt listener run on the task that runs the command, joined together, not as spawned
@@ -374,8 +383,8 @@ struct Shared<'a> {
     /// Locked only to write, never across an `.await`, so lines from two workers never tear or interleave.
     out: Mutex<&'a mut Output>,
     noted: Mutex<Noted>,
-    /// How many runs are live: claimed and not yet recorded and printed.
-    live: AtomicUsize,
+    /// The runs that are live: claimed and not yet recorded and printed, in the order they were claimed.
+    live: Mutex<Vec<LiveRun>>,
     /// Whether the person has pressed Ctrl-C, so a run claimed after that can still be told about it.
     pressed: AtomicBool,
     /// Whether the note that the loop is stopping has been printed, so it is printed once.
@@ -413,7 +422,7 @@ impl Shared<'_> {
                     if presses == 1 {
                         self.raise(Stop::AfterRuns);
                         self.pressed.store(true, Ordering::SeqCst);
-                        if self.live.load(Ordering::SeqCst) > 0 {
+                        if self.has_live_runs() {
                             self.note_stopping();
                         }
                     } else {
@@ -426,7 +435,8 @@ impl Shared<'_> {
         std::future::pending::<()>().await;
     }
 
-    /// Says once for the loop that it stops after the live runs, and how to stop them now.
+    /// Says once for the loop that it stops after the live runs, and how to stop them now, then lists each live run
+    /// with how long it has been going, so the person can tell whether to wait.
     fn note_stopping(&self) {
         if self.stopping_noted.swap(true, Ordering::SeqCst) {
             return;
@@ -436,7 +446,29 @@ impl Shared<'_> {
         } else {
             "Stopping after this run. Ctrl-C again stops it now."
         };
-        self.note(text);
+        let now = self.app.now().as_millisecond();
+        let rows: Vec<Vec<Cell>> = lock(&self.live)
+            .iter()
+            .map(|run| {
+                vec![
+                    Cell::toned(run.key.clone(), Tone::Strong),
+                    Cell::new(shorten(&run.title, TITLE_WIDTH)),
+                    Cell::new(format_duration(now - run.started_at)),
+                ]
+            })
+            .collect();
+        // Nowhere left to say it if stderr is gone.
+        let _ = self.write(|out| {
+            out.note(text)?;
+            for line in out.render_table(&rows) {
+                out.note_table_line("  ", &line)?;
+            }
+            Ok::<_, std::io::Error>(())
+        });
+    }
+
+    fn has_live_runs(&self) -> bool {
+        !lock(&self.live).is_empty()
     }
 
     /// Moves the stop signal forward to `to`, never back.
@@ -480,6 +512,10 @@ impl Shared<'_> {
             }
             self.prune_logs_if_due().await;
             self.sweep_if_due().await;
+            // A sweep can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed are all.
+            if self.is_stopping() {
+                return;
+            }
             let next = match self.work_a_pass().await {
                 Ok(next) => next,
                 Err(err) if after_failure(&err, self.once) == AfterFailure::TryAgain => {
@@ -509,7 +545,7 @@ impl Shared<'_> {
             return;
         }
         self.raise(Stop::AfterRuns);
-        if self.live.load(Ordering::SeqCst) > 0 {
+        if self.has_live_runs() {
             self.note(&format!(
                 "Stopping after the current runs: {err}. Ctrl-C twice stops them now."
             ));
@@ -527,13 +563,19 @@ impl Shared<'_> {
         };
         lock(&self.noted).idle = None;
         // A run claimed after the stop signal is still worked to its end: abandoning it would leave it to lapse.
-        self.live.fetch_add(1, Ordering::SeqCst);
+        let id = run.id;
+        lock(&self.live).push(LiveRun {
+            id,
+            key: run.item.key.clone(),
+            title: run.item.title.clone(),
+            started_at: run.started_at,
+        });
         // A Ctrl-C that came while this was being claimed found nothing live to say it to.
         if self.pressed.load(Ordering::SeqCst) {
             self.note_stopping();
         }
         let result = self.work_claimed(run).await;
-        self.live.fetch_sub(1, Ordering::SeqCst);
+        lock(&self.live).retain(|live| live.id != id);
         result
     }
 
@@ -1150,7 +1192,7 @@ impl Shared<'_> {
     /// that wait for the person changes. With one heap it says how many wait, not where.
     fn note_idle(&self, claim: &ClaimDto) -> std::io::Result<()> {
         // Idle is only news when nothing is going on: another worker's live run is not "nothing to do".
-        if self.live.load(Ordering::SeqCst) > 0 {
+        if self.has_live_runs() {
             return Ok(());
         }
         let waiting = if self.heaps.len() > 1 {
