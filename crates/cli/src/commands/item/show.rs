@@ -2,14 +2,13 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    ItemDto, KindDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto,
-    StepStateDto,
+    ItemDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use api_types::work::ItemRunDto;
 use clap::Args;
 
-use super::common::{locate_item, state_text};
+use super::common::{kind_text, locate_item, state_text, with_agent_text};
 use crate::commands::comment::comment_lines;
 use crate::commands::heap_api::{HeapApi, indented_context};
 use crate::commands::work::end_word;
@@ -397,12 +396,10 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
     if let Some(due) = item.due.as_ref().filter(|_| super::add::is_to_come(item, now)) {
         rows.push(vec![Cell::new("Joins list"), Cell::new(due.date.clone())]);
     }
-    let state = if item.with_agent {
-        format!("{} · with an agent", state_text(item.state))
-    } else {
-        state_text(item.state).to_owned()
-    };
-    rows.push(vec![Cell::new("State"), Cell::new(state)]);
+    rows.push(vec![
+        Cell::new("State"),
+        Cell::new(format!("{}{}", state_text(item.state), with_agent_text(item))),
+    ]);
     rows.push(vec![Cell::new("Need"), Cell::new(need_text(item.need))]);
     if let Some(effort) = item.effort {
         rows.push(vec![Cell::new("Effort"), Cell::new(size_text(effort))]);
@@ -531,15 +528,6 @@ fn with_author(label: &str, by: Option<&api_types::common::UserRefDto>) -> Strin
     match by {
         Some(user) => format!("{label} by {}", user.display_name),
         None => label.to_owned(),
-    }
-}
-
-fn kind_text(kind: KindDto) -> &'static str {
-    match kind {
-        KindDto::Note => "note",
-        KindDto::Task => "task",
-        KindDto::Reminder => "reminder",
-        KindDto::Unknown => "unknown",
     }
 }
 
