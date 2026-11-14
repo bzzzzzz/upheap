@@ -605,8 +605,8 @@ change it makes carries the run it was made in.
    as new. On a closed item an answer can't be changed; the person reopens the item first.
 4. A request closed as "can't be done" goes back to the agent like any answer. The agent finds another way, or
    asks what to do instead; it doesn't ask for the same thing again.
-5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
-   queue is: the item's score times the person's priority for its heap.
+5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered by
+   the item's score times the person's priority for its heap, without the queue's boost for started work.
 
 **Review**
 
