@@ -116,11 +116,21 @@ impl Mailer {
 }
 
 /// An SMTP transport from an `smtps://` or `smtp://` URL, and its description: scheme, host and port only, since a
-/// password with an unencoded `/`, `?` or `#` can end up in any other part. `smtp://` always requires STARTTLS:
+/// password with an unencoded `/`, `?` or `#` can end up in any other part. Such a URL is refused: a password that
+/// starts with digits would otherwise be read as the port, with the user as the host, and both would be logged as
+/// the description. `smtp://` always requires STARTTLS:
 /// lettre's `tls=opportunistic`, or no `tls=` at all, would send the password in cleartext to a server, or a
 /// man in the middle, that doesn't offer it.
 fn build_smtp(url: &str) -> Result<(Transport, String), MailerError> {
     let mut parsed = Url::parse(url).map_err(|error| MailerError::InvalidUrl(error.to_string()))?;
+    if !matches!(parsed.path(), "" | "/")
+        || parsed.fragment().is_some()
+        || parsed.query().is_some_and(|query| query.contains('@'))
+    {
+        return Err(MailerError::InvalidUrl(
+            "has a path or a stray @: percent-encode /, ?, # and @ in the user and password".to_owned(),
+        ));
+    }
     let starttls = parsed.scheme() == "smtp";
     if starttls {
         match parsed
@@ -214,6 +224,18 @@ mod tests {
         expect_that!(
             Mailer::new("smtps://", FROM),
             err(matches_pattern!(MailerError::InvalidUrl(_)))
+        );
+        expect_that!(
+            Mailer::new("smtp://apikey:4821/xyz@smtp.example.com", FROM),
+            err(matches_pattern!(MailerError::InvalidUrl(contains_substring(
+                "percent-encode"
+            ))))
+        );
+        expect_that!(
+            Mailer::new("smtps://apikey:4821?x@smtp.example.com", FROM),
+            err(matches_pattern!(MailerError::InvalidUrl(contains_substring(
+                "percent-encode"
+            ))))
         );
         expect_that!(
             Mailer::new("smtp://u:p@smtp.example.com?tls=opportunistic", FROM),
