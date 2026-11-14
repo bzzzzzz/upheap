@@ -561,13 +561,15 @@ async fn the_history_and_activity_name_the_weights_that_changed() -> Result<()> 
     expect_that!(latest["action"], eq(&json!("heap_updated")));
     expect_that!(
         latest["changes"],
-        eq(&json!([{ "field": "need_weight", "label": "Need weight", "before": "10", "after": "30" }]))
+        eq(
+            &json!([{ "field": "need_weight", "label": "Need weight", "before": "10", "after": "30", "text_diff": null }])
+        )
     );
     let latest = &parameter_history.body["entries"][0];
     expect_that!(latest["action"], eq(&json!("parameter_updated")));
     expect_that!(
         latest["changes"],
-        eq(&json!([{ "field": "weight", "label": "Weight", "before": "10", "after": "40" }]))
+        eq(&json!([{ "field": "weight", "label": "Weight", "before": "10", "after": "40", "text_diff": null }]))
     );
     // The heap's activity holds the parameter's entry too; the team's holds the heap's own.
     let in_heap: Vec<&str> = actions(&heap_activity.body);

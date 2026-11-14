@@ -70,20 +70,24 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
     expect_that!(
         edit["changes"],
         eq(&json!([
-            { "field": "title", "label": "Title", "before": "Rotate keys", "after": "Rotate all keys" },
-            { "field": "state", "label": "State", "before": "Open", "after": "In progress" },
-            { "field": "need", "label": "Need", "before": "Expected", "after": "Critical" },
-            { "field": "tags", "label": "Tags", "before": null, "after": "ops" },
+            { "field": "title", "label": "Title", "before": "Rotate keys", "after": "Rotate all keys", "text_diff": [
+                { "kind": "same", "text": "Rotate " },
+                { "kind": "added", "text": "all " },
+                { "kind": "same", "text": "keys" },
+            ] },
+            { "field": "state", "label": "State", "before": "Open", "after": "In progress", "text_diff": null },
+            { "field": "need", "label": "Need", "before": "Expected", "after": "Critical", "text_diff": null },
+            { "field": "tags", "label": "Tags", "before": null, "after": "ops", "text_diff": null },
         ]))
     );
     expect_that!(edit["diff"]["tags"]["after"], eq(&json!([ops])));
     expect_that!(
         history.body["entries"][1]["changes"],
         eq(&json!([
-            { "field": "title", "label": "Title", "before": null, "after": "Rotate keys" },
-            { "field": "state", "label": "State", "before": null, "after": "Open" },
-            { "field": "need", "label": "Need", "before": null, "after": "Expected" },
-            { "field": "effort", "label": "Effort", "before": null, "after": "M" },
+            { "field": "title", "label": "Title", "before": null, "after": "Rotate keys", "text_diff": null },
+            { "field": "state", "label": "State", "before": null, "after": "Open", "text_diff": null },
+            { "field": "need", "label": "Need", "before": null, "after": "Expected", "text_diff": null },
+            { "field": "effort", "label": "Effort", "before": null, "after": "M", "text_diff": null },
         ]))
     );
     expect_that!(history.body["next_cursor"], eq(&Value::Null));
@@ -154,7 +158,9 @@ async fn members_see_content_changes_and_admins_see_configuration_and_membership
     expect_that!(actions(&member_team.body), elements_are![eq(&"user_updated")]);
     expect_that!(
         member_team.body["entries"][0]["changes"],
-        eq(&json!([{ "field": "display_name", "label": "Display name", "before": "Tester", "after": "Mem" }]))
+        eq(
+            &json!([{ "field": "display_name", "label": "Display name", "before": "Tester", "after": "Mem", "text_diff": null }])
+        )
     );
     Ok(())
 }
@@ -251,7 +257,7 @@ async fn a_teams_log_has_its_heaps_as_wholes_but_not_what_is_in_them() -> Result
     expect_that!(heap_history.body["entries"][0]["entity"]["label"], eq(&json!("Work")));
     expect_that!(
         heap_history.body["entries"][0]["changes"],
-        eq(&json!([{ "field": "name", "label": "Name", "before": "Personal", "after": "Work" }]))
+        eq(&json!([{ "field": "name", "label": "Name", "before": "Personal", "after": "Work", "text_diff": null }]))
     );
     Ok(())
 }
@@ -425,29 +431,31 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
     expect_that!(
         parameter_log["entries"][0]["changes"],
         eq(&json!([
-            { "field": "options", "label": "Options", "before": "Small, Big", "after": "Big" },
-            { "field": "archived_options", "label": "Archived options", "before": null, "after": "Small" },
-            { "field": "items_switched", "label": "Items switched", "before": null, "after": "1 item" },
+            { "field": "options", "label": "Options", "before": "Small, Big", "after": "Big", "text_diff": null },
+            { "field": "archived_options", "label": "Archived options", "before": null, "after": "Small", "text_diff": null },
+            { "field": "items_switched", "label": "Items switched", "before": null, "after": "1 item", "text_diff": null },
         ]))
     );
     expect_that!(
         item_log["entries"][0]["changes"],
-        eq(&json!([{ "field": format!("parameters.{pid}"), "label": "Customer", "before": "Small", "after": "Big" }]))
+        eq(
+            &json!([{ "field": format!("parameters.{pid}"), "label": "Customer", "before": "Small", "after": "Big", "text_diff": null }])
+        )
     );
     expect_that!(
         item_log["entries"][1]["changes"],
         eq(&json!([
-            { "field": "state", "label": "State", "before": "Open", "after": "Blocked" },
-            { "field": "blocked_by", "label": "Blocked by", "before": null, "after": "Blocker" },
+            { "field": "state", "label": "State", "before": "Open", "after": "Blocked", "text_diff": null },
+            { "field": "blocked_by", "label": "Blocked by", "before": null, "after": "Blocker", "text_diff": null },
         ]))
     );
     expect_that!(
         item_log["entries"][2]["changes"],
         eq(&json!([
-            { "field": "title", "label": "Title", "before": null, "after": "Valued" },
-            { "field": "state", "label": "State", "before": null, "after": "Open" },
-            { "field": "need", "label": "Need", "before": null, "after": "Expected" },
-            { "field": format!("parameters.{pid}"), "label": "Customer", "before": null, "after": "Small" },
+            { "field": "title", "label": "Title", "before": null, "after": "Valued", "text_diff": null },
+            { "field": "state", "label": "State", "before": null, "after": "Open", "text_diff": null },
+            { "field": "need", "label": "Need", "before": null, "after": "Expected", "text_diff": null },
+            { "field": format!("parameters.{pid}"), "label": "Customer", "before": null, "after": "Small", "text_diff": null },
         ]))
     );
     Ok(())
@@ -555,7 +563,7 @@ async fn membership_heap_and_view_entries_read_as_sentences() -> Result<()> {
     expect_that!(team_log["entries"][0]["changes"], eq(&json!([])));
     expect_that!(
         team_log["entries"][1]["changes"],
-        eq(&json!([{ "field": "role", "label": "Role", "before": "Member", "after": null }]))
+        eq(&json!([{ "field": "role", "label": "Role", "before": "Member", "after": null, "text_diff": null }]))
     );
     expect_that!(
         sentences(&view_log),
@@ -563,7 +571,7 @@ async fn membership_heap_and_view_entries_read_as_sentences() -> Result<()> {
     );
     expect_that!(
         view_log["entries"][1]["changes"],
-        eq(&json!([{ "field": "name", "label": "Name", "before": null, "after": "Blocked" }]))
+        eq(&json!([{ "field": "name", "label": "Name", "before": null, "after": "Blocked", "text_diff": null }]))
     );
     Ok(())
 }
@@ -647,11 +655,13 @@ async fn an_items_history_names_kind_and_stage_changes_and_leaves_the_defaults_o
     // Assert
     expect_that!(
         history.body["entries"][0]["changes"],
-        eq(&json!([{ "field": "stage", "label": "Stage", "before": "As written", "after": "With context" }]))
+        eq(
+            &json!([{ "field": "stage", "label": "Stage", "before": "As written", "after": "With context", "text_diff": null }])
+        )
     );
     expect_that!(
         history.body["entries"][1]["changes"],
-        eq(&json!([{ "field": "kind", "label": "Kind", "before": "Note", "after": "Task" }]))
+        eq(&json!([{ "field": "kind", "label": "Kind", "before": "Note", "after": "Task", "text_diff": null }]))
     );
     let created: Vec<&str> = history.body["entries"][2]["changes"]
         .as_array()
@@ -710,15 +720,17 @@ async fn an_items_history_names_the_steps_added_and_ticked() -> Result<()> {
     expect_that!(
         ticked["changes"],
         eq(&json!([
-            { "field": "step", "label": "Step", "before": null, "after": "Run in staging" },
-            { "field": "step_state", "label": "Step state", "before": "Open", "after": "Ticked" },
+            { "field": "step", "label": "Step", "before": null, "after": "Run in staging", "text_diff": null },
+            { "field": "step_state", "label": "Step state", "before": "Open", "after": "Ticked", "text_diff": null },
         ]))
     );
     let added = &history.body["entries"][1];
     expect_that!(added["phrase"], eq(&json!("added a step to")));
     expect_that!(
         added["changes"],
-        eq(&json!([{ "field": "step", "label": "Step", "before": null, "after": "Run in staging" }]))
+        eq(
+            &json!([{ "field": "step", "label": "Step", "before": null, "after": "Run in staging", "text_diff": null }])
+        )
     );
     Ok(())
 }
@@ -774,11 +786,15 @@ async fn a_context_change_is_visible_to_members_and_described_as_context() -> Re
     expect_that!(entry["phrase"], eq(&json!("changed the context of heap")));
     expect_that!(
         entry["changes"],
-        eq(&json!([{ "field": "context", "label": "Context", "before": null, "after": "Docs in the wiki" }]))
+        eq(
+            &json!([{ "field": "context", "label": "Context", "before": null, "after": "Docs in the wiki", "text_diff": null }])
+        )
     );
     expect_that!(
         item_log.body["entries"][0]["changes"],
-        eq(&json!([{ "field": "description", "label": "Context", "before": null, "after": "Why it matters" }]))
+        eq(
+            &json!([{ "field": "description", "label": "Context", "before": null, "after": "Why it matters", "text_diff": null }])
+        )
     );
     Ok(())
 }
