@@ -38,7 +38,8 @@ async function addNewTag(page: Page, name: string) {
   if (phone) await addDialog(page).getByRole("button", { name: "+ Tag" }).click();
   const scope = phone ? page.getByRole("dialog", { name: "Tags", exact: true }) : addDialog(page);
   await scope.getByLabel("Add a tag").fill(name);
-  await scope.getByRole("option", { name: `Create tag “${name}”` }).click();
+  // On a wider screen the matches float in a popover outside the dialog.
+  await (phone ? scope : page).getByRole("option", { name: `Create tag “${name}”` }).click();
   if (phone) await scope.getByRole("button", { name: "Close", exact: true }).click();
   await expect(addDialog(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
 }
@@ -377,18 +378,21 @@ test("the tag suggestions show in full over the dialog's footer, and keep their 
     await expect(dialog.getByRole("button", { name: /^Remove tag / })).toHaveCount(left - 1);
   }
 
-  // Tags is near the dialog's foot: the five matches and Create tag all show, none under Cancel and Add.
+  // Tags is near the dialog's foot: the five matches and Create tag all show, and the footer covers none of them.
   await input.fill("chore");
   const options = page.getByRole("listbox", { name: "Tags" }).getByRole("option");
   await expect(options).toHaveCount(6);
-  const footer = await dialog.getByRole("button", { name: "Cancel" }).boundingBox();
   for (const option of await options.all()) {
     await expect(option).toBeInViewport({ ratio: 1 });
-    const box = await option.boundingBox();
-    const top = Math.round(box?.y ?? 0);
-    const bottom = Math.round((box?.y ?? 0) + (box?.height ?? 0));
-    const clear = bottom <= Math.round(footer?.y ?? 0) || top >= Math.round((footer?.y ?? 0) + (footer?.height ?? 0));
-    expect(clear).toBe(true);
+    // Nothing covers it: what's drawn at its middle is the option itself.
+    await expect
+      .poll(() =>
+        option.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+        }),
+      )
+      .toBe(true);
   }
 
   // The keys work as they did: arrows move, Enter picks, Escape clears the text and leaves the dialog open.

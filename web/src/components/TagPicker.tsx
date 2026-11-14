@@ -41,9 +41,12 @@ export function TagPicker({
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
-  // The floating matches close when focus leaves the input or a scroll moves the field, and come back on typing or
-  // focus. The inline ones stay in the flow and need none of that.
+  // The floating matches close when focus leaves the input, and come back on typing or focus. The inline ones stay
+  // in the flow and need none of that.
   const [dismissed, setDismissed] = useState(false);
+  // React Aria closes a non-modal popover when a panel around its field scrolls, since it doesn't follow the field.
+  // A new one is placed instead, so the matches stay by the field, as when typing scrolls it into view.
+  const [placing, setPlacing] = useState(0);
   const fieldRef = useRef<HTMLDivElement>(null);
 
   const canCreate = tags.data?.allowed_actions.includes("create") ?? false;
@@ -203,13 +206,14 @@ export function TagPicker({
         ) : (
           // Non-modal: it takes no focus and leaves the dialog around it in charge of Escape and outside clicks.
           <Popover
+            key={placing}
             triggerRef={fieldRef}
             isOpen
             isNonModal
             placement="bottom start"
             offset={4}
             onOpenChange={(isOpen) => {
-              if (!isOpen) setDismissed(true);
+              if (!isOpen) setPlacing((n) => n + 1);
             }}
             // React Aria sets its max height to the room on that side; the list scrolls only if even that is short.
             className="w-(--trigger-width) overflow-y-auto rounded-lg border border-line bg-surface shadow-md outline-none"
