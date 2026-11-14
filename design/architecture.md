@@ -171,7 +171,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   failure, and withdraws the open questions asked in a run of it; the person's own stay open. A turn also ends as
   reached, with no run, when its item's stage is at the turn's goal (`Turn::goal_met_by`; never for done): at the
   person's edit that sets the stage (`how: stage_set`), or, as a safety net for any other way an item got there, when
-  a claim finds it (`already_met`) before choosing, so a met turn never costs a run; `next` skips such turns without
+  a claim finds it (`already_met`) before choosing, so a met turn never costs a run, or when a run's became
+  defines a task split from its note (`became`, below); `next` skips such turns without
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in

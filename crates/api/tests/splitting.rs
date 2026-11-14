@@ -367,7 +367,7 @@ async fn a_note_sent_all_the_way_passes_its_turn_to_the_tasks_split_from_it() ->
 
 #[gtest]
 #[tokio::test]
-async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> {
+async fn became_ends_the_turn_the_person_sent_on_a_split_task_and_passes_none_on() -> Result<()> {
     // Arrange: a note sent all the way; its run makes task A, and the person sends A on, one state, before it became.
     let w = world().await?;
     let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
@@ -398,7 +398,8 @@ async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> 
 #[gtest]
 #[tokio::test]
 async fn a_split_task_s_turn_to_done_stays_open_through_became() -> Result<()> {
-    // Arrange: a note sent all the way; its run makes task A, which the person defines and sends on, to done.
+    // Arrange: a note sent all the way; its run makes task A, which the person defines and sends on, to done, then
+    // sets back to with context, so became defines it again.
     let w = world().await?;
     let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
     let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
@@ -406,6 +407,8 @@ async fn a_split_task_s_turn_to_done_stays_open_through_became() -> Result<()> {
     let defined = w.edit(key_of(&a.body), json!({ "stage": "defined" })).await?;
     anyhow::ensure!(defined.status == StatusCode::OK, "stage failed: {}", defined.body);
     w.send_turn(key_of(&a.body)).await?;
+    let lowered = w.edit(key_of(&a.body), json!({ "stage": "with_context" })).await?;
+    anyhow::ensure!(lowered.status == StatusCode::OK, "stage failed: {}", lowered.body);
 
     // Act
     let became = w.became_in_run(&run, key_of(&note)).await?;
@@ -1034,5 +1037,64 @@ async fn became_ends_the_prepare_turn_of_a_task_the_person_split_and_passes_the_
     let turn = &w.get(key_of(&task.body)).await?["turn"];
     expect_that!(turn["reach"], eq(&json!("all_the_way")));
     expect_that!(turn["goal"], eq(&json!("done")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn became_ends_the_prepare_turn_of_a_task_the_person_split_from_a_note_sent_one_state() -> Result<()> {
+    // Arrange: as above, with the note sent one state.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("critical").await?;
+    set_prepare(&w).await?;
+    let task = w
+        .split(
+            &note,
+            "Rotate staging",
+            json!({ "description": "Done when: it works." }),
+        )
+        .await?;
+    anyhow::ensure!(task.status == StatusCode::CREATED, "split failed: {}", task.body);
+    w.add_step_in_run(&run, key_of(&task.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: the prepare turn ended as reached, and no turn is left on the task.
+    expect_that!(became.status, eq(StatusCode::OK));
+    let entries = w.app.audit_entries(task.body["id"].as_str().context("id")?).await?;
+    expect_that!(
+        entries
+            .iter()
+            .any(|(action, diff)| action == "turn_reached" && diff["how"] == json!("became")),
+        eq(true)
+    );
+    expect_that!(w.get(key_of(&task.body)).await?["turn"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_split_task_the_person_sent_all_the_way_goes_on_with_its_own_turn() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, and the person sends A all the way too.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    w.send_turn_reaching(key_of(&a.body), "all_the_way").await?;
+    let sent = w.get(key_of(&a.body)).await?["turn"].clone();
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: A's turn to defined ended as reached and its own follow-on goes to done; the note passes none on.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(sent["goal"], eq(&json!("defined")));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"]["goal"], eq(&json!("done")));
+    let entries = w.app.audit_entries(a.body["id"].as_str().context("id")?).await?;
+    expect_that!(
+        entries.iter().filter(|(action, _)| action == "turn_opened").count(),
+        eq(2)
+    );
     Ok(())
 }
