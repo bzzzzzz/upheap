@@ -1136,3 +1136,63 @@ test("the list keeps its place while items open, switch, walk and close over it"
   await expect(itemPane(page)).toHaveCount(0);
   await expect.poll(scrollY).toBe(reloaded);
 });
+
+test("a link in the item to another in its heap brings that row into view, selected; another heap's starts at the top", async ({
+  page,
+  heapPath,
+}) => {
+  const post = async (path: string, data: object, headers: Record<string, string> = {}) => {
+    const response = await page.request.post(`/api/v1${path}`, {
+      headers: { "x-csrf-protection": "1", ...headers },
+      data,
+    });
+    expect(response.ok()).toBe(true);
+    return (await response.json()) as { id: string; key: string; slug: string; version: number };
+  };
+  for (let i = 1; i <= 40; i++) {
+    await post(`${heapPath}/items`, { title: `Item ${String(i).padStart(2, "0")}`, need: "expected" });
+  }
+  // A note at the bottom of the list, and a task made from it at the top.
+  const note = await post(`${heapPath}/items`, { title: "The note far down", kind: "note", need: "idea" });
+  const task = await post(`${heapPath}/items`, {
+    title: "Made from the note",
+    kind: "task",
+    need: "critical",
+    origin: { item_id: note.id, age: "new" },
+  });
+  await page.goto(heapPath);
+  const rowLink = (title: string) => row(page, title).locator("[data-row-link]");
+  const scrollY = () => page.evaluate(() => window.scrollY);
+
+  await openItem(page, "Made from the note");
+  await expect(rowLink("The note far down")).not.toBeInViewport();
+
+  // From: opens the note over the list, its row brought into view and selected.
+  await itemPane(page)
+    .getByRole("link", { name: /The note far down/ })
+    .click();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("The note far down");
+  await expect(rowLink("The note far down")).toHaveAttribute("aria-current", "page");
+  await expect(rowLink("The note far down")).toBeInViewport();
+  expect(await scrollY()).toBeGreaterThan(200);
+
+  // Became: back to the task, at the top of the list.
+  await itemPane(page).getByRole("link", { name: "Made from the note" }).click();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Made from the note");
+  await expect(rowLink("Made from the note")).toHaveAttribute("aria-current", "page");
+  await expect(rowLink("Made from the note")).toBeInViewport();
+  await expect(rowLink("The note far down")).not.toHaveAttribute("aria-current");
+
+  // Moved to another heap, the task's link leads to that heap's list, which starts at the top.
+  const team = heapPath.split("/")[2];
+  const other = await post(`/teams/${team}/heaps`, { name: "Elsewhere" });
+  await post(`${heapPath}/items/${task.key}/move`, { heap_id: other.id }, { "if-match": `"${task.version}"` });
+  await page.goto(`${heapPath}/items/${note.key}`);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("The note far down");
+  await rowLink("The note far down").evaluate((link) => link.scrollIntoView({ block: "center" }));
+  expect(await scrollY()).toBeGreaterThan(200);
+  await itemPane(page).getByRole("link", { name: "Made from the note" }).click();
+  await expect(page).toHaveURL(new RegExp(`/heaps/${other.slug}/items/${task.key}`));
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Made from the note");
+  await expect.poll(scrollY).toBe(0);
+});
