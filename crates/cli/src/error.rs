@@ -480,7 +480,7 @@ mod tests {
         let recorded = run_refusal(409, "run_cost_recorded", "The run's cost is already recorded.");
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
         let reminder = run_refusal(403, "run_add_reminder", "A run adds tasks and notes, not reminders.");
-        let no_context = run_refusal(403, "run_add_needs_context", "An item a run adds needs a context.");
+        let no_context = run_refusal(403, "run_add_needs_context", "What a run adds needs a context.");
         let too_high = {
             let mut err = problem(403, "run_need_above_origin");
             if let ClientError::Problem { problem, .. } = &mut err {

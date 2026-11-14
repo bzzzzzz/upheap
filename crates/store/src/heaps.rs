@@ -4,12 +4,14 @@ use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::parameter::Weight;
 use domain::text::{Context, Name};
-use domain::{HeapId, TeamId, Timestamp, Version};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+use domain::{HeapId, ItemId, TeamId, Timestamp, Version};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait,
+};
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db, version_to_db};
-use crate::entities::heaps;
+use crate::codes::{IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
+use crate::entities::{heaps, items};
 
 const TABLE: &str = "heaps";
 
@@ -28,6 +30,7 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
         value_weight: Set(weight_to_db(heap.policy.value_weight)),
         context: Set(heap.context.as_ref().map(|c| c.as_str().to_owned())),
         agents_prepare: Set(heap.agents_prepare),
+        origin_id: Set(heap.origin_id.map(|origin| id_to_db(origin.as_uuid()))),
         created_at: Set(created_at.as_millis()),
         archived_at: Set(heap.archived_at.map(Timestamp::as_millis)),
     };
@@ -120,6 +123,47 @@ pub async fn list_heaps_for_teams(db: &impl ConnectionTrait, team_ids: &[TeamId]
         .collect()
 }
 
+/// The heaps made from any of `origins` (their `origin_id` is one of them), oldest first.
+pub async fn list_heaps_made_from(db: &impl ConnectionTrait, origins: &[ItemId]) -> Result<Vec<Heap>, StoreError> {
+    let ids: Vec<String> = origins.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = heaps::Entity::find()
+            .filter(heaps::Column::OriginId.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push((row.created_at, to_heap(row)?));
+        }
+    }
+    found.sort_by_key(|(created_at, heap)| (*created_at, *heap.id.as_uuid()));
+    Ok(found.into_iter().map(|(_, heap)| heap).collect())
+}
+
+/// The heaps made from an item that is in one of `heap_ids`, oldest first.
+pub async fn list_heaps_made_from_items_in(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<Heap>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let in_heaps = items::Entity::find()
+            .select_only()
+            .column(items::Column::Id)
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)));
+        let rows = heaps::Entity::find()
+            .filter(heaps::Column::OriginId.in_subquery(in_heaps.into_query()))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push((row.created_at, to_heap(row)?));
+        }
+    }
+    found.sort_by_key(|(created_at, heap)| (*created_at, *heap.id.as_uuid()));
+    Ok(found.into_iter().map(|(_, heap)| heap).collect())
+}
+
 fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
     let read = RowReader {
         table: TABLE,
@@ -141,6 +185,11 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
             None => None,
         },
         agents_prepare: row.agents_prepare,
+        origin_id: row
+            .origin_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+            .transpose()?,
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,
     })

@@ -68,6 +68,12 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
         became_steps: view
             .became_steps
             .map(|steps| steps.into_iter().map(to_made_step_dto).collect()),
+        became_heaps: view.became_heaps.map(|heaps| {
+            heaps
+                .into_iter()
+                .map(|made| to_item_heap_dto(&made.heap, &made.team))
+                .collect()
+        }),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
