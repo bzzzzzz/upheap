@@ -2,6 +2,7 @@
 //!
 //! Calls return the server's body as well as the value read from it, so `--json` can print the body unchanged.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use api_types::oauth::{OAuthErrorDto, RevokeRequestForm, TokenRequestForm, TokenResponseDto};
@@ -17,6 +18,41 @@ use crate::config::is_loopback;
 /// doesn't leave loopback out by itself).
 fn uses_proxy(server: &Url) -> bool {
     !is_loopback(server)
+}
+
+/// The connection settings every request goes out with. `proxied` says whether a proxy from the environment is used.
+fn build_http(proxied: bool) -> Result<reqwest::Client, ClientError> {
+    let builder = reqwest::Client::builder()
+        .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
+        .timeout(Duration::from_secs(30))
+        // A redirect could carry a form with a refresh token or a code verifier to another host.
+        .redirect(reqwest::redirect::Policy::none());
+    let builder = if proxied { builder } else { builder.no_proxy() };
+    builder.build().map_err(ClientError::Setup)
+}
+
+/// The connections of one process, built when first asked for and then shared. Building one reads the system's root
+/// certificates, which takes long enough that a loop asking the server every few seconds, or a heartbeat, must not
+/// do it for every request. Two at most: one that uses the environment's proxy and one that doesn't (see
+/// [`uses_proxy`]).
+#[derive(Default)]
+pub struct HttpClients {
+    proxied: OnceLock<reqwest::Client>,
+    direct: OnceLock<reqwest::Client>,
+}
+
+impl HttpClients {
+    /// The connection for requests to `server`.
+    pub fn for_server(&self, server: &Url) -> Result<reqwest::Client, ClientError> {
+        let proxied = uses_proxy(server);
+        let kept = if proxied { &self.proxied } else { &self.direct };
+        if let Some(http) = kept.get() {
+            return Ok(http.clone());
+        }
+        // Two callers that both find none each build one, and the first to finish is the one kept.
+        let built = build_http(proxied)?;
+        Ok(kept.get_or_init(|| built).clone())
+    }
 }
 
 /// The query of a request that has none.
@@ -66,26 +102,16 @@ pub enum ClientError {
 }
 
 impl ApiClient {
-    /// A client of `server` that sends `time_zone`, an IANA name, with every request, so labels and dates come back
-    /// in the machine's timezone. Without one, the server uses UTC.
-    pub fn new(server: Url, time_zone: Option<String>) -> Result<Self, ClientError> {
-        let builder = reqwest::Client::builder()
-            .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(30))
-            // A redirect could carry a form with a refresh token or a code verifier to another host.
-            .redirect(reqwest::redirect::Policy::none());
-        let builder = if uses_proxy(&server) {
-            builder
-        } else {
-            builder.no_proxy()
-        };
-        let http = builder.build().map_err(ClientError::Setup)?;
-        Ok(Self {
+    /// A client of `server` over `http`, which [`HttpClients::for_server`] gave for that server. It sends `time_zone`,
+    /// an IANA name, with every request, so labels and dates come back in the machine's timezone. Without one, the
+    /// server uses UTC.
+    pub fn over(http: reqwest::Client, server: Url, time_zone: Option<String>) -> Self {
+        Self {
             http,
             server,
             time_zone,
             run: None,
-        })
+        }
     }
 
     /// This client writing in `run`, a run ID, when there is one: every request then says so, and the server holds it
@@ -334,6 +360,21 @@ mod tests {
         Ok(())
     }
 
+    #[gtest]
+    fn a_connection_is_built_once_for_each_proxy_setting() -> googletest::Result<()> {
+        let clients = HttpClients::default();
+        let local = Url::parse("http://127.0.0.1:8080")?;
+
+        clients.for_server(&local)?;
+        clients.for_server(&local)?;
+
+        expect_that!(clients.direct.get().is_some(), eq(true));
+        expect_that!(clients.proxied.get().is_none(), eq(true));
+        clients.for_server(&Url::parse("https://upheap.example.test")?)?;
+        expect_that!(clients.proxied.get().is_some(), eq(true));
+        Ok(())
+    }
+
     /// The request as it goes out, read off the wire: the test servers in `tests/` read it through hyper, which
     /// would hide a missing header the front end of a deployed server refuses.
     #[gtest]
@@ -358,7 +399,7 @@ mod tests {
             std::io::Result::Ok(String::from_utf8_lossy(&head).to_lowercase())
         });
 
-        ApiClient::new(server, None)?
+        ApiClient::over(HttpClients::default().for_server(&server)?, server, None)
             .post_empty(&["work", "runs", "r", "heartbeat"], "token")
             .await?;
 

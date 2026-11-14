@@ -29,7 +29,7 @@ pub use crate::agent::{
     Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
 };
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
-use crate::client::{ApiClient, ClientError};
+use crate::client::{ApiClient, ClientError, HttpClients};
 use crate::commands::{SharedArgs, UsageError};
 use crate::config::{ConfigError, ConfigFile, SettingError};
 pub use crate::error::CliError;
@@ -462,6 +462,7 @@ fn load_app(
         stdin: Arc::new(Mutex::new(stdin)),
         config,
         clock,
+        http: HttpClients::default(),
     })
 }
 
@@ -554,6 +555,8 @@ pub(crate) struct App {
     /// The time now, as opposed to `env.now`, when the command started: a loop that lives for hours must see its
     /// access token go stale. The wall clock, not time elapsed, which stands still while the machine sleeps.
     clock: Clock,
+    /// The connections every client this process makes shares.
+    http: HttpClients,
 }
 
 impl App {
@@ -595,7 +598,8 @@ impl App {
     }
 
     pub fn client(&self, server: Url) -> Result<ApiClient, ClientError> {
-        ApiClient::new(server, self.env.time_zone.clone()).map(|client| client.in_run(self.env.run.clone()))
+        let http = self.http.for_server(&server)?;
+        Ok(ApiClient::over(http, server, self.env.time_zone.clone()).in_run(self.env.run.clone()))
     }
 
     /// An access token for `client`'s server, refreshed when the stored one is stale.
