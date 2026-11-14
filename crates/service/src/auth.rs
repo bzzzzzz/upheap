@@ -255,7 +255,7 @@ impl Services {
 
     /// Counts a sign-in attempt for the address with this key, and refuses it when the address has used up its
     /// attempts for now. Also forgets a few addresses whose windows have ended.
-    async fn count_sign_in_attempt(&self, key: &str) -> Result<(), ServiceError> {
+    pub(crate) async fn count_sign_in_attempt(&self, key: &str) -> Result<(), ServiceError> {
         let now = self.now();
         let limit = self.settings.sign_in_limit;
         let window_end = limit

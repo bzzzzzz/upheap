@@ -7,6 +7,7 @@
 mod audit;
 mod auth;
 mod comments;
+mod data;
 mod dto;
 mod due_choices;
 mod error;
@@ -32,6 +33,7 @@ mod work;
 
 use std::time::Duration;
 
+use api_types::data::DataDaysDto;
 use api_types::list_view::{BlockedLayoutDto, SortDto, StateModeDto};
 use axum::Router;
 use axum::extract::{MatchedPath, Request};
@@ -70,7 +72,7 @@ pub struct CookieSettings {
     info(title = "Upheap API", description = "A todo list that ranks itself."),
     modifiers(&SessionCookieScheme),
     // Only used in query parameters, which don't register their schemas.
-    components(schemas(StateModeDto, BlockedLayoutDto, SortDto)),
+    components(schemas(StateModeDto, BlockedLayoutDto, SortDto, DataDaysDto)),
     tags(
         (name = "auth", description = "Registration and sign-in"),
         (name = "oauth", description = "Signing in non-web clients, such as the CLI: OAuth 2.0 with PKCE"),
@@ -83,6 +85,7 @@ pub struct CookieSettings {
         (name = "views", description = "A heap's saved views"),
         (name = "parameters", description = "A heap's custom parameters and their options"),
         (name = "audit", description = "The history of a heap or a team"),
+        (name = "data", description = "What agents cost and how items and runs came and went, for a team or one heap"),
         (name = "work", description = "The agent's queue and its runs. An agent writes inside a run by sending the run's ID in an `Upheap-Run` header: it may then set an item's context, make it a task, start it, change its steps, ask questions and add comments, on the run's own item only. Every other write is refused, with a code that starts with `run_`."),
     )
 )]
@@ -169,6 +172,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(views::routes())
         .merge(parameters::routes())
         .merge(audit::routes())
+        .merge(data::routes())
         .fallback(error::not_found)
         .layer(middleware::from_fn(extract::require_csrf_header));
     // After the CSRF layer: a client's token requests carry no cookie, so a forged one would have nothing to borrow,

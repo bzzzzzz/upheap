@@ -47,6 +47,34 @@ pub fn cli_authorization() -> Value {
     })
 }
 
+/// The address links in the mail of [`TestApp::with_mail`] start with.
+pub const MAIL_BASE_URL: &str = "https://upheap.example.test";
+
+/// Waits until `dir` holds `count` mails written by a mailer of file transport, and returns their text, oldest
+/// first, with the file transport's quoted-printable encoding undone far enough to read a link. A mail is sent in a task of its own, so it may arrive after the request answered. Fails after a few
+/// seconds.
+pub async fn wait_for_mails(dir: &std::path::Path, count: usize) -> Result<Vec<String>> {
+    for _ in 0..100 {
+        let mut files: Vec<_> = std::fs::read_dir(dir)?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "eml"))
+            .collect();
+        if files.len() >= count {
+            files.sort_by_key(|entry| entry.metadata().and_then(|meta| meta.modified()).ok());
+            return files
+                .iter()
+                .map(|entry| {
+                    let text = std::fs::read_to_string(entry.path()).context("read mail")?;
+                    // Soft line breaks, and the one escaped character a link can hold.
+                    Ok(text.replace("=\r\n", "").replace("=\n", "").replace("=3D", "="))
+                })
+                .collect();
+        }
+        tokio::time::sleep(StdDuration::from_millis(50)).await;
+    }
+    anyhow::bail!("fewer than {count} mails in {}", dir.display())
+}
+
 /// 2027-01-01T12:00:00Z.
 pub const START: i64 = 1_798_804_800_000;
 
@@ -133,6 +161,23 @@ impl TestApp {
         self.with_settings(Settings {
             oidc: Some(oidc),
             ..test_settings(false)
+        })
+    }
+
+    /// The same server, with mail set up: a second router over the same database and clock, whose mail is written
+    /// as files to `dir` (see [`wait_for_mails`]).
+    pub fn with_mail(&self, dir: &std::path::Path) -> Result<TestApp> {
+        let mailer = mail::Mailer::new(&format!("file://{}", dir.display()), "Upheap <upheap@example.com>")?;
+        let services = Services::new(self.db.clone(), self.clock.clone(), test_settings(true))
+            .with_mail(Arc::new(mailer), MAIL_BASE_URL.to_owned());
+        Ok(TestApp {
+            router: api::router(AppState {
+                services: services.clone(),
+                cookies: test_cookies(),
+            }),
+            services,
+            clock: self.clock.clone(),
+            db: self.db.clone(),
         })
     }
 

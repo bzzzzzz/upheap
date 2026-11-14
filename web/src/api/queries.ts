@@ -20,6 +20,7 @@ import {
   type AuthorizationRequest,
   type ClientSignIn,
   type NewComment,
+  type DataDays,
   type Heap,
   type HeapRef,
   type Item,
@@ -846,6 +847,22 @@ export function useOidcProvider() {
   });
 }
 
+/** Whether the server mails password reset links. Read once: the operator sets mail up with the server's configuration. */
+export function usePasswordResetOptions() {
+  return useQuery({
+    queryKey: ["password-reset-options"],
+    queryFn: async () => unwrap(await api.GET("/api/v1/password-resets")),
+    staleTime: Infinity,
+  });
+}
+
+/** Asks for a password reset link to be mailed to an address. The answer is the same whether an account has it. */
+export function useRequestPasswordReset() {
+  return useMutation({
+    mutationFn: async (body: { email: string }) => ensureOk(await api.POST("/api/v1/password-resets", { body })),
+  });
+}
+
 /** Who the provider vouched for, for the username step. A `404` is the step having ended, which stays so. */
 export function useOidcPending() {
   return useQuery({
@@ -1000,6 +1017,23 @@ export function useTeam(team: string) {
   return useQuery({
     queryKey: teamKey(team),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}", { params: { path: { team } } })),
+  });
+}
+
+/**
+ * What happened in the team's heaps over the last `days` days, or in its heap `heap` alone (ux.md, Data). Fetched on
+ * open, on focus and on each change of choice, not polled; the figures stay on screen while another choice loads.
+ */
+export function useTeamData(team: string, choice: { heap: string | undefined; days: DataDays }) {
+  return useQuery({
+    queryKey: [...teamKey(team), "data", choice.heap ?? null, choice.days] as const,
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/v1/teams/{team}/data", {
+          params: { path: { team }, query: { heap: choice.heap, days: choice.days } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
   });
 }
 

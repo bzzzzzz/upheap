@@ -101,15 +101,15 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Tablet, 640–1023 px  | An 80 px rail: Waiting, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: Waiting for me and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
-**More** on a phone holds Settings, Activity, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
+**More** on a phone holds Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
 the Add button beside the heap name shows only from a tablet up.
 
-The sidebar and the rail list the heap's views (Open, Closed, Activity, Settings) and, below them at the bottom,
+The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Settings) and, below them at the bottom,
 the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's title names its team too ("Product ·
 Acme"), on the phone's top bar as well, except for a heap in the personal team.
 
-A phone's tabs have room for four: Waiting sits left of the + and Closed right of it, and Settings and Activity go
+A phone's tabs have room for four: Waiting sits left of the + and Closed right of it, and Settings, Activity and Data go
 into More with the account pages.
 
 **Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
@@ -192,7 +192,7 @@ beside them. Phone: one column, the preview under the cards, the save bar fixed 
 A tablet gets its own layout rather than a stretched phone or a squeezed wide screen:
 
 1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
-   list as a popover; below it are the heap's views (Open, Closed, Activity, Settings) as icons with short labels;
+   list as a popover; below it are the heap's views (Open, Closed, Activity, Data, Settings) as icons with short labels;
    the account sits at the bottom.
 2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows at
    touch sizes (44 px targets).
@@ -641,6 +641,37 @@ by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items"
 be reopened the row shows nothing more, with no per-row dates or "closed for good" labels. Load more pages. A
 closed item opens over the Open list, and closing it returns to Closed.
 
+## Data
+
+What agents cost and how work flows, for a team or one of its heaps. The address is `/teams/{team}/data?heap={slug}&days=7|30|90`:
+no `heap` means all the team's heaps, archived ones included; no `days` means 30. Every choice is in the address, and
+changing one is a step of the history. It is reached from the heap's views (Data, after Activity, in the sidebar, the
+rail and the phone's More), which opens it on that heap, and from the Team page's ⋯ (Data, after Activity), which opens
+it on all heaps. Any member of the team sees it. On the page the shell keeps the heap opened last, as on Waiting for me.
+
+Under the title ("Data", and "<team> · what happened, by day.", by week for 90 days) come a heap filter and a period
+switch (7, 30, 90 days). The heap filter lists All heaps, the active heaps by name, then Archived under its own
+heading; it is a popover on a tablet or wide screen and a sheet on a phone, with a check on the current one. Then four
+totals (Agents' spend, Items added, Items closed, Agent runs: four in a row, two by two on a phone), and four charts
+(Agents' spend, Items added, Items closed, Agent runs: two by two, one column on a phone). Closed and runs are stacked
+bars: done, won't do, became; reached, asked, failed, other. Under the spend total, "N runs reported no cost" when runs
+that ended reported none.
+
+The days are the person's own, from their time zone: one bar per day for 7 and 30 days, the last being today, and one
+per week, from Monday, for 90 days (13 weeks, so the first reaches back 85 to 91 days). The last bar is the day or week
+so far, and says so in its tooltip ("14 Nov · so far"). Days without anything keep their place with no bar. When
+nothing happened in the whole period each chart says "Nothing in these 30 days." ("13 weeks" for 90 days).
+
+What each figure counts: spend is the cost of the runs that started in the bucket (a run with no cost adds nothing);
+added is items created in it; closed is items whose latest close is in it, by how they closed (a reopened item stops
+counting until it closes again); runs are by how they ended, "other" being taken back, handed back and still running.
+An item counts in the heap it is in now, for all its past.
+
+Hovering or focusing a bar (arrow keys move between bars) shows its values, zeros included. On a phone a tap on a bar
+puts its values in a line under the chart's title instead. Each chart has its title as its name and its numbers in a
+table for screen readers. While another choice loads, the figures stay, dimmed; the first load shows the frames with
+"Loading…", and a failed first load shows the problem with Try again.
+
 ## Teams and Team
 
 Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Only you · 1 heap" for the personal team) with Open,
@@ -653,7 +684,7 @@ stored as, so it has no Rename. The label is the web app's: the stored name is u
 follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
-Activity) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
+Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
 Archive or Unarchive, History), then Members with a search whose results are a listbox under it (arrows move, Enter
 adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
@@ -677,9 +708,14 @@ or username". Create account takes name, username, email and password; the usern
 link, so its hint says so. A problem about an input shows under it, with focus on it; any other (wrong password, too
 many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
 to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
-password?** button (`aria-expanded`) shows one line under it, "Whoever runs this Upheap server can send you a reset
-link.", and hides it again: no form and no request, since the server sends no email. Create account has none. The
-invite page's Sign in side has it too.
+password?** button (`aria-expanded`) opens a disclosure and closes it again. When the server has mail set up, it holds
+an **Email** field (empty, no focus move on open) and a **Send me a link** button, disabled while the request is
+pending. Enter in the field sends the reset and never the sign-in. After the server accepts it, a line under the
+button says "If an account uses that address, a link is on its way. It works for an hour." and stays until the next
+send; the field and button stay, so the user can send again. An address problem shows under the field; any other
+problem (too many requests, a network error) shows above the line, under the button. Without mail, or while the page
+doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap server can send you a reset link.", and no
+form. Create account has none. The invite page's Sign in side has it too.
 
 When the server has an identity provider, the card starts with a bordered button, **Sign in with Acme SSO**, the width
 of the card (52 px on a phone, 44 px beyond), and under it an "or" rule, above the switch; the dark Sign in button
@@ -736,7 +772,8 @@ history entry as it is shown, so a reload doesn't repeat it.
 
 `/reset/{token}` is where a password reset link leads, outside the app's shell like sign-in and in the same card, the
 same way at every width, and needs no sign-in: holding the link is the permission, so a signed-in visitor sees the
-same page. The operator makes the link with the server's command (README, Resetting a password). The server decides
+same page. The link comes from the operator, who makes it with the server's command (README, Resetting a password), or
+by mail, when the user asked for it on the sign-in page. The two are the same kind of link. The server decides
 the state, and the page only shows it:
 
 - **Checking the link…** while it loads.
@@ -786,7 +823,7 @@ would be says "You sign in through Acme SSO." ("an identity provider" if the ser
 At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
 member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest
 first, each a sentence from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by
-whoever runs the server." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
+whoever runs the server.", "Reset link sent by mail, as asked on the sign-in page." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
 user's own account, and holds nothing else of the account (not sign-ups or profile changes). Empty, it says "No
 password changes or resets yet."; an error shows the server's message; **Load more** fetches the next page. A password
 change adds its entry to an open History at once, and to a closed one by the time it is opened.

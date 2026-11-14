@@ -1,6 +1,9 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
 import type { ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
 
+/** US dollars, as "$0.31". */
+export const usd = (amount: number) => `$${amount.toFixed(2)}`;
+
 export const SIZES: readonly Size[] = ["s", "m", "l", "xl"];
 
 export const SIZE_LABELS: Record<Size, string> = { s: "S", m: "M", l: "L", xl: "XL" };

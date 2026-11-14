@@ -6,9 +6,12 @@
 
 use domain::audit::{AuditAction, EntityType};
 use domain::password_reset::{ResetLink, ResetLinkError, ResetLinkState, ResetToken};
-use domain::user::{User, validate_new_password};
+use domain::user::{Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
 use domain::{Timestamp, UserId};
+use mail::Mail;
+use std::sync::Arc;
+
 use serde_json::json;
 use store::{StoreError, TransactionTrait};
 
@@ -45,8 +48,54 @@ impl Services {
     pub async fn create_password_reset_link(&self, login: &str) -> Result<ResetLinkMade, ServiceError> {
         let login = Login::parse(login.trim()).ok_or(ServiceError::NotFound)?;
         let user = self.find_user_by_login(&login).await?.ok_or(ServiceError::NotFound)?;
-        let personal_team = self.load_personal_team(&user).await?;
+        self.make_reset_link(user, "operator").await
+    }
 
+    /// Asks for a reset link by mail, with the email address of the account. Answers the same whether an account
+    /// has the address or not, so it reveals nothing about accounts.
+    ///
+    /// Fails with [`ServiceError::NotFound`] when the server has no mail set up, before anything else. An `email`
+    /// that isn't an address fails with a [`ValidationError`] and counts nothing. Then the request is counted per
+    /// address, under a key of its own so it never uses up sign-in attempts (the sign-in limit): one past the limit
+    /// fails with [`ServiceError::TooManyResetRequests`]. The count is counted for known and unknown addresses
+    /// alike, and runs out with its window.
+    ///
+    /// For an address an account has, the link is made as the operator's is, and the mail is sent after the
+    /// transaction commits, in a task of its own: the answer never waits for the provider. Nothing is written or
+    /// sent for an address no account has.
+    pub async fn request_password_reset(&self, email: &str) -> Result<(), ServiceError> {
+        let Some(mail) = &self.mail else {
+            return Err(ServiceError::NotFound);
+        };
+        let email = Email::parse(email)?;
+        self.count_sign_in_attempt(&sha256_hex(&format!("reset:{}", email.as_str())))
+            .await
+            .map_err(|error| match error {
+                ServiceError::TooManySignInAttempts { retry_after } => {
+                    ServiceError::TooManyResetRequests { retry_after }
+                }
+                other => other,
+            })?;
+        let Some(user) = store::users::find_user_by_email(&self.db, &email).await? else {
+            return Ok(());
+        };
+        let made = self.make_reset_link(user, "mail").await?;
+        let mail_to_send = reset_mail(&made.user, &mail.base_url, &made.token);
+        let mailer = Arc::clone(&mail.mailer);
+        let user_id = made.user.id;
+        tokio::spawn(async move {
+            match mailer.send(mail_to_send).await {
+                Ok(()) => tracing::info!(%user_id, "reset mail sent"),
+                Err(error) => tracing::warn!(%user_id, ?error, "can't send reset mail"),
+            }
+        });
+        Ok(())
+    }
+
+    /// Makes a reset link for `user` that works for an hour, cancels their earlier working one, and records who
+    /// made it (`made_by`, `"operator"` or `"mail"`), in one transaction.
+    async fn make_reset_link(&self, user: User, made_by: &'static str) -> Result<ResetLinkMade, ServiceError> {
+        let personal_team = self.load_personal_team(&user).await?;
         let now = self.now();
         let expires_at = ResetLink::end_from(now).ok_or(ValidationError::TimestampOutOfRange)?;
         let token = ResetToken::new(random_token());
@@ -70,13 +119,13 @@ impl Services {
             AuditAction::PasswordResetLinkMade,
             EntityType::User,
             *user.id.as_uuid(),
-            json!({ "made_by": "operator" }),
+            json!({ "made_by": made_by }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(user_id = %user.id, cancelled_earlier = cancelled > 0, "password reset link made");
+        tracing::info!(user_id = %user.id, cancelled_earlier = cancelled > 0, made_by, "password reset link made");
         Ok(ResetLinkMade {
             token,
             user,
@@ -194,4 +243,18 @@ impl Services {
 
 fn corrupt_link(user_id: UserId, problem: &'static str) -> StoreError {
     StoreError::corrupt("password_reset_links", &user_id.to_string(), problem)
+}
+
+/// The mail with a reset link in it. `base_url` has no trailing slash.
+fn reset_mail(user: &User, base_url: &str, token: &ResetToken) -> Mail {
+    let host = base_url.split_once("://").map_or(base_url, |(_, rest)| rest);
+    Mail {
+        to: user.email.as_str().to_owned(),
+        subject: "Reset your Upheap password".to_owned(),
+        body: format!(
+            "Someone asked to reset the password for @{username} on {host}.\n\nOpen this link to set a new one. It works once, for an hour:\n{base_url}/reset/{token}\n\nIf it wasn't you, ignore this mail. Your password stays as it is.\n",
+            username = user.username,
+            token = token.expose(),
+        ),
+    }
 }

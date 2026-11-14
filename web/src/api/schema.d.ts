@@ -520,6 +520,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/password-resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is
+         *     needed, and a session cookie or bearer token is ignored.
+         */
+        get: operations["password_reset_options"];
+        put?: never;
+        /**
+         * Asks for a reset link by email address, to be mailed. Answers `202` with no body whether or not an account has
+         *     the address, so it reveals nothing about accounts; the mail is sent after the answer. A newer link cancels an
+         *     earlier one, an operator's included.
+         * @description Requests are counted per address, five in 15 minutes, apart from sign-in attempts: asking never uses up the
+         *     address's sign-in attempts, and the reverse. The count is never cleared; it runs out with its window. No sign-in
+         *     is needed, and a session cookie or bearer token is ignored.
+         */
+        post: operations["request_password_reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/password-resets/{token}": {
         parameters: {
             query?: never;
@@ -599,6 +627,26 @@ export interface paths {
          *     its heaps being created, renamed and archived. Membership and heap changes are shown to admins only.
          */
         get: operations["list_team_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What agents spent, how many items were added and closed, and how agent runs ended, by day (by week for 90 days),
+         *     for all of a team's heaps or one of them. Any member of the team may read it.
+         */
+        get: operations["get_team_data"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2007,6 +2055,63 @@ export interface components {
             /** @description 1 to 50 characters, unique in the heap ignoring case. */
             name: string;
         };
+        /** @description One day, or one week for `90`. */
+        DataBucket: components["schemas"]["DataFigures"] & {
+            /** @description Ready to show: "14 Nov" for a day, "Week of 10 Nov" for a week. */
+            label: string;
+            /** @description Whether the bucket is still going: today, or this week so far. Only the last is. */
+            partial: boolean;
+        };
+        /** @description How many items closed each way. */
+        DataClosed: {
+            /** Format: int32 */
+            became: number;
+            /** Format: int32 */
+            done: number;
+            /** Format: int32 */
+            wont_do: number;
+        };
+        /**
+         * @description How far back to look.
+         * @enum {string}
+         */
+        DataDays: "7" | "30" | "90";
+        /** @description What happened in a bucket, or in the whole period. */
+        DataFigures: {
+            /**
+             * Format: int32
+             * @description Items created.
+             */
+            added: number;
+            /** @description Items closed, on their latest close. */
+            closed: components["schemas"]["DataClosed"];
+            /** @description Runs started, by how they ended. */
+            runs: components["schemas"]["DataRuns"];
+            /**
+             * Format: int32
+             * @description Runs that ended and reported no cost.
+             */
+            runs_without_cost: number;
+            /**
+             * Format: double
+             * @description What the runs that started cost, in US dollars. A run with no cost adds nothing.
+             */
+            spend_usd: number;
+        };
+        /** @description How many runs ended each way. */
+        DataRuns: {
+            /** Format: int32 */
+            asked: number;
+            /** Format: int32 */
+            failed: number;
+            /**
+             * Format: int32
+             * @description Taken back, handed back, or not ended yet.
+             */
+            other: number;
+            /** Format: int32 */
+            reached: number;
+        };
         /** @description A due time, ready to show. */
         Due: {
             /**
@@ -3009,6 +3114,11 @@ export interface components {
             display_name: string;
             username: string;
         };
+        /** @description Whether this server mails password reset links. */
+        PasswordResetOptions: {
+            /** @description `true` when the server has mail set up, so a signed-out user can ask for a link by email. */
+            by_mail: boolean;
+        };
         /**
          * @description Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.
          * @enum {string}
@@ -3337,6 +3447,11 @@ export interface components {
          * @enum {string}
          */
         RemindersMode: "hidden" | "shown";
+        /** @description The address a signed-out user asks a reset link for. */
+        RequestPasswordReset: {
+            /** @description The email address of the account. Any case. */
+            email: string;
+        };
         /** @description What a review asks about. */
         Review: {
             /** @description The address of the work to look at: an absolute `http` or `https` link. */
@@ -3604,6 +3719,13 @@ export interface components {
          * @enum {string}
          */
         TeamAction: "rename" | "change_slug" | "add_member" | "manage_invite_links" | "create_heap" | "leave";
+        /** @description What agents cost and how items and runs came and went, over the period. */
+        TeamData: {
+            /** @description Every day or week of the period, oldest first, zeros included. */
+            buckets: components["schemas"]["DataBucket"][];
+            /** @description The figures of the whole period. */
+            totals: components["schemas"]["DataFigures"];
+        };
         TeamMember: {
             allowed_actions: components["schemas"]["MemberAction"][];
             display_name: string;
@@ -5009,6 +5131,84 @@ export interface operations {
             };
         };
     };
+    password_reset_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether reset links are mailed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetOptions"];
+                };
+            };
+        };
+    };
+    request_password_reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestPasswordReset"];
+            };
+        };
+        responses: {
+            /** @description Accepted; if an account has the address, a link is on its way */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found`: the server has no mail set up */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `email_invalid` (`field` `email`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_attempts`, with a `Retry-After` header in seconds */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     open_password_reset: {
         parameters: {
             query?: never;
@@ -5296,6 +5496,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_team_data: {
+        parameters: {
+            query?: {
+                /** @description Only this heap of the team, by its slug, archived or not. Omit for all the team's heaps. */
+                heap?: string;
+                /** @description How far back to look. Defaults to `30`. */
+                days?: components["schemas"]["DataDays"];
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamData"];
                 };
             };
             404: {

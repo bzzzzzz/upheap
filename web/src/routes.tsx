@@ -24,6 +24,7 @@ import { AppLayout } from "./pages/AppLayout";
 import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { ClosedPage } from "./pages/ClosedPage";
+import { DataPage, type DataSearch } from "./pages/DataPage";
 import { HeapPage } from "./pages/HeapPage";
 import { HeapContextSettings, HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { InvitePage } from "./pages/InvitePage";
@@ -445,6 +446,24 @@ const teamActivityRoute = createRoute({
   },
 });
 
+/** What happened in a team's heaps, or one of them, over 7, 30 or 90 days (ux.md, Data). */
+const dataRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/teams/$team/data",
+  // Anything else is dropped, which reads as the default: all heaps, 30 days.
+  validateSearch: (search: Record<string, unknown>): DataSearch => ({
+    ...(typeof search.heap === "string" && search.heap !== "" && { heap: search.heap }),
+    ...((search.days === 7 || search.days === 30 || search.days === 90) && { days: search.days }),
+  }),
+  component: function DataRoute() {
+    const { team } = dataRoute.useParams();
+    const search = dataRoute.useSearch();
+    const navigate = dataRoute.useNavigate();
+    // Each choice is a step of the history, so Back goes through them.
+    return <DataPage key={team} team={team} search={search} onChange={(next) => void navigate({ search: next })} />;
+  },
+});
+
 // Short links (design/architecture.md, Handles): the handles alone, in fixed positions, swapped for the full path as they open.
 // The router does it, so the server needs no route for them.
 const shortTeamRoute = createRoute({
@@ -529,6 +548,7 @@ const routeTree = rootRoute.addChildren([
     teamsRoute,
     teamRoute,
     teamActivityRoute,
+    dataRoute,
     waitingRoute,
     allRoute,
     accountRoute,

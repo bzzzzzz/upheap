@@ -127,7 +127,10 @@ fn describe_account_event(kind: AccountEventKind, diff: &Value) -> String {
         (AccountEventKind::PasswordReset, Some(1)) => "Password set with a reset link. 1 sign-in ended.".to_owned(),
         (AccountEventKind::PasswordReset, Some(n)) => format!("Password set with a reset link. {n} sign-ins ended."),
         (AccountEventKind::PasswordReset, None) => "Password set with a reset link.".to_owned(),
-        (AccountEventKind::PasswordResetLinkMade, _) => "Reset link made by whoever runs the server.".to_owned(),
+        (AccountEventKind::PasswordResetLinkMade, _) => match diff.get("made_by").and_then(Value::as_str) {
+            Some("mail") => "Reset link sent by mail, as asked on the sign-in page.".to_owned(),
+            _ => "Reset link made by whoever runs the server.".to_owned(),
+        },
     }
 }
 
@@ -182,6 +185,18 @@ mod tests {
                 AccountEventKind::PasswordResetLinkMade,
                 json!({ "made_by": "operator" })
             ),
+            "Reset link made by whoever runs the server."
+        );
+    }
+
+    #[test]
+    fn a_reset_link_sent_by_mail_says_so() {
+        assert_eq!(
+            describe(AccountEventKind::PasswordResetLinkMade, json!({ "made_by": "mail" })),
+            "Reset link sent by mail, as asked on the sign-in page."
+        );
+        assert_eq!(
+            describe(AccountEventKind::PasswordResetLinkMade, json!({})),
             "Reset link made by whoever runs the server."
         );
     }

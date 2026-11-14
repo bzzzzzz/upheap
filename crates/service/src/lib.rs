@@ -12,6 +12,7 @@ pub mod auth;
 mod clock;
 pub mod comments;
 mod error;
+mod figures;
 pub mod handles;
 pub mod heaps;
 pub mod items;
@@ -81,6 +82,14 @@ impl Default for Settings {
     }
 }
 
+/// The mail the server sends: the mailer, and the address links in mail start with.
+#[derive(Debug)]
+struct MailSettings {
+    mailer: Arc<mail::Mailer>,
+    /// `BASE_URL`, without a trailing slash.
+    base_url: String,
+}
+
 /// Entry point to every use case. Cheap to clone.
 #[derive(Clone)]
 pub struct Services {
@@ -89,6 +98,8 @@ pub struct Services {
     /// Randomness for item keys.
     random: Arc<dyn RandomSource>,
     settings: Arc<Settings>,
+    /// Where mail goes, when the server has mail set up.
+    mail: Option<Arc<MailSettings>>,
     /// Counts IDs made in the same millisecond, so they still sort in the order they were made.
     id_context: Arc<Mutex<uuid::ContextV7>>,
 }
@@ -100,6 +111,7 @@ impl Services {
             clock,
             random: Arc::new(SystemRandom),
             settings: Arc::new(settings),
+            mail: None,
             id_context: Arc::new(Mutex::new(uuid::ContextV7::new())),
         }
     }
@@ -109,6 +121,18 @@ impl Services {
     pub fn with_random(mut self, random: Arc<dyn RandomSource>) -> Self {
         self.random = random;
         self
+    }
+
+    /// Sends mail through `mailer`, with links in it starting with `base_url`. Without it mail is off.
+    #[must_use]
+    pub fn with_mail(mut self, mailer: Arc<mail::Mailer>, base_url: String) -> Self {
+        self.mail = Some(Arc::new(MailSettings { mailer, base_url }));
+        self
+    }
+
+    /// Whether this server mails password reset links.
+    pub fn mails_reset_links(&self) -> bool {
+        self.mail.is_some()
     }
 
     /// The current time from the injected clock.

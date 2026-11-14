@@ -9,6 +9,7 @@ mod codes;
 pub mod comments;
 mod entities;
 mod error;
+pub mod figures;
 pub mod heap_priorities;
 pub mod heaps;
 pub mod identities;

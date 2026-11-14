@@ -360,9 +360,5 @@ If it wasn't you, ignore this mail. Your password stays as it is.
 
 Below this design's level; for the pieces' specs.
 
-- Where mailed links live: the existing `password_reset_links` table for resets, and one new table with a purpose
-  column for confirm and change, or one table for all three.
+- Where confirm and change links live: one new table with a purpose column for both, or one each.
 - The address state as an `email_confirmed_at` column, filled for every existing account by the migration.
-- How the web app learns mail is set up: a field on an existing public response.
-- Sending off the request: a spawned task with a timeout; at shutdown, in-flight sends drain with the requests.
-- The Playwright tests read the file transport's directory to find a link.

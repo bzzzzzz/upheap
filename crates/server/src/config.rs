@@ -1,6 +1,7 @@
 //! Configuration, read once from environment variables at startup and validated before anything else runs.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use anyhow::{Context, bail};
 use service::oidc::OidcSettings;
@@ -30,7 +31,7 @@ pub struct Config {
     /// request is made to it at startup.
     pub oidc: Option<OidcSettings>,
     /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
-    pub mail: Option<mail::Mailer>,
+    pub mail: Option<Arc<mail::Mailer>>,
 }
 
 /// The URL schemes of the databases the server can use. sqlx takes both spellings of Postgres's.
@@ -104,7 +105,7 @@ impl Config {
                         .context("MAIL_FROM must be an address such as \"Upheap <upheap@example.com>\""),
                     mail::MailerError::InvalidUrl(_) => anyhow::Error::new(error).context("MAIL_URL"),
                 })?;
-                Some(mailer)
+                Some(Arc::new(mailer))
             }
         };
         Ok(Self {
