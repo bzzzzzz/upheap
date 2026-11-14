@@ -35,7 +35,7 @@ What it is not:
 - **Not a model host.** It runs no models. It drives an agent command-line tool the person already has, on their own
   machine.
 - **Not a wiki.** A heap's context is short and points at where the knowledge lives.
-- **Not a team project tracker.** No assignees, sprints, boards or reports.
+- **Not a team project tracker.** No assignees, sprints or boards. Its one report is the Data page: what agents cost and how items came and went, by day.
 - **Not a chat.** A question belongs to an item and stays with it.
 
 ## Distribution

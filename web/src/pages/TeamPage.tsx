@@ -74,7 +74,7 @@ export function TeamPage({ team: slug }: { team: string }) {
 type TeamEdit = "name" | "slug";
 
 /**
- * "Teams · you're an admin", the name and what a team is. Rename, Link name and Activity are rarer, so they
+ * "Teams · you're an admin", the name and what a team is. Rename, Link name, Activity and Data are rarer, so they
  * sit under the ⋯ by the name; the name and link name are edited in place when chosen.
  */
 function TeamHeader({ team }: { team: Team }) {
@@ -95,6 +95,7 @@ function TeamHeader({ team }: { team: Team }) {
   const act = (key: string | number) => {
     if (key === "rename" || key === "slug") setEditing(key === "rename" ? "name" : "slug");
     if (key === "activity") void navigate({ to: "/teams/$team/activity", params: { team: team.slug } });
+    if (key === "data") void navigate({ to: "/teams/$team/data", params: { team: team.slug } });
   };
 
   return (
@@ -135,6 +136,7 @@ function TeamHeader({ team }: { team: Team }) {
                 {can("rename") && !team.personal ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
                 <MenuEntry id="activity">Activity</MenuEntry>
+                <MenuEntry id="data">Data</MenuEntry>
               </Menu>
             </MenuPopover>
           </MenuTrigger>

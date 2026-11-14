@@ -1952,6 +1952,87 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/data": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "What agents spent, how many items were added and closed, and how agent runs ended, by day (by week for 90 days),\nfor all of a team's heaps or one of them. Any member of the team may read it.",
+        "operationId": "get_team_data",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "query",
+            "description": "Only this heap of the team, by its slug, archived or not. Omit for all the team's heaps.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "How far back to look. Defaults to `30`.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/DataDays"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamData"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps": {
       "post": {
         "tags": [
@@ -8810,6 +8891,137 @@
           }
         }
       },
+      "DataBucket": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataFigures"
+          },
+          {
+            "type": "object",
+            "required": [
+              "label",
+              "partial"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Ready to show: \"14 Nov\" for a day, \"Week of 10 Nov\" for a week."
+              },
+              "partial": {
+                "type": "boolean",
+                "description": "Whether the bucket is still going: today, or this week so far. Only the last is."
+              }
+            }
+          }
+        ],
+        "description": "One day, or one week for `90`."
+      },
+      "DataClosed": {
+        "type": "object",
+        "description": "How many items closed each way.",
+        "required": [
+          "done",
+          "wont_do",
+          "became"
+        ],
+        "properties": {
+          "became": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "done": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "wont_do": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "DataDays": {
+        "type": "string",
+        "description": "How far back to look.",
+        "enum": [
+          "7",
+          "30",
+          "90"
+        ]
+      },
+      "DataFigures": {
+        "type": "object",
+        "description": "What happened in a bucket, or in the whole period.",
+        "required": [
+          "spend_usd",
+          "runs_without_cost",
+          "added",
+          "closed",
+          "runs"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items created.",
+            "minimum": 0
+          },
+          "closed": {
+            "$ref": "#/components/schemas/DataClosed",
+            "description": "Items closed, on their latest close."
+          },
+          "runs": {
+            "$ref": "#/components/schemas/DataRuns",
+            "description": "Runs started, by how they ended."
+          },
+          "runs_without_cost": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Runs that ended and reported no cost.",
+            "minimum": 0
+          },
+          "spend_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "What the runs that started cost, in US dollars. A run with no cost adds nothing."
+          }
+        }
+      },
+      "DataRuns": {
+        "type": "object",
+        "description": "How many runs ended each way.",
+        "required": [
+          "reached",
+          "asked",
+          "failed",
+          "other"
+        ],
+        "properties": {
+          "asked": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "other": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Taken back, handed back, or not ended yet.",
+            "minimum": 0
+          },
+          "reached": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "Due": {
         "type": "object",
         "description": "A due time, ready to show.",
@@ -12524,6 +12736,27 @@
           "leave"
         ]
       },
+      "TeamData": {
+        "type": "object",
+        "description": "What agents cost and how items and runs came and went, over the period.",
+        "required": [
+          "totals",
+          "buckets"
+        ],
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataBucket"
+            },
+            "description": "Every day or week of the period, oldest first, zeros included."
+          },
+          "totals": {
+            "$ref": "#/components/schemas/DataFigures",
+            "description": "The figures of the whole period."
+          }
+        }
+      },
       "TeamMember": {
         "type": "object",
         "required": [
@@ -13208,6 +13441,10 @@
     {
       "name": "audit",
       "description": "The history of a heap or a team"
+    },
+    {
+      "name": "data",
+      "description": "What agents cost and how items and runs came and went, for a team or one heap"
     },
     {
       "name": "work",

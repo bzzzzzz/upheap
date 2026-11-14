@@ -14,6 +14,7 @@ import {
 import {
   Activity,
   Building2,
+  ChartColumn,
   ChevronDown,
   CircleCheck,
   Ellipsis,
@@ -50,7 +51,8 @@ export function AppLayout() {
   // The heap on screen counts as opened once per visit, for the switcher's Recent.
   // Pages with no heap in their address keep the heap opened last, where Waiting for me needs the heap's views.
   const onWaiting = useMatch({ from: "/app/waiting", shouldThrow: false }) !== undefined;
-  const shellHeap = heapRef ?? (onWaiting && me ? keptHeap(me) : undefined);
+  const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
+  const shellHeap = heapRef ?? ((onWaiting || onData) && me ? keptHeap(me) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -202,6 +204,13 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
     },
     closed: { to: "/teams/$team/heaps/$heap/closed", params: heapRef },
     activity: { to: "/teams/$team/heaps/$heap/activity", params: heapRef },
+    // The team's data page, filtered to this heap; active on the page whatever it is filtered to.
+    data: {
+      to: "/teams/$team/data",
+      params: { team: heapRef.team },
+      search: { heap: heapRef.heap },
+      activeOptions: { includeSearch: false },
+    },
     // Active on each of its tabs too.
     settings: { to: "/teams/$team/heaps/$heap/settings", params: heapRef },
   } as const;
@@ -276,6 +285,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
           <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
           <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
           <NavLink {...views.activity} icon={Activity} label="Activity" />
+          <NavLink {...views.data} icon={ChartColumn} label="Data" />
           <NavLink {...views.settings} icon={Settings} label="Settings" />
         </nav>
       )}
@@ -342,7 +352,8 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   // The heap's pages that only More leads to, so More shows as active on them.
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
   const onSettings = useMatch({ from: "/app/teams/$team/heaps/$heap/settings", shouldThrow: false }) !== undefined;
-  const onMorePage = onActivity || onSettings;
+  const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
+  const onMorePage = onActivity || onSettings || onData;
 
   return (
     <nav
@@ -410,6 +421,9 @@ function MoreSheet({
         </Link>
         <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
           {row("Activity")}
+        </Link>
+        <Link {...views.data} onClick={onClose} className={sheetRowClass}>
+          {row("Data")}
         </Link>
         {links.team && (
           <Link

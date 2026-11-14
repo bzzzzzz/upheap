@@ -562,6 +562,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What agents spent, how many items were added and closed, and how agent runs ended, by day (by week for 90 days),
+         *     for all of a team's heaps or one of them. Any member of the team may read it.
+         */
+        get: operations["get_team_data"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps": {
         parameters: {
             query?: never;
@@ -1939,6 +1959,63 @@ export interface components {
             description?: string | null;
             /** @description 1 to 50 characters, unique in the heap ignoring case. */
             name: string;
+        };
+        /** @description One day, or one week for `90`. */
+        DataBucket: components["schemas"]["DataFigures"] & {
+            /** @description Ready to show: "14 Nov" for a day, "Week of 10 Nov" for a week. */
+            label: string;
+            /** @description Whether the bucket is still going: today, or this week so far. Only the last is. */
+            partial: boolean;
+        };
+        /** @description How many items closed each way. */
+        DataClosed: {
+            /** Format: int32 */
+            became: number;
+            /** Format: int32 */
+            done: number;
+            /** Format: int32 */
+            wont_do: number;
+        };
+        /**
+         * @description How far back to look.
+         * @enum {string}
+         */
+        DataDays: "7" | "30" | "90";
+        /** @description What happened in a bucket, or in the whole period. */
+        DataFigures: {
+            /**
+             * Format: int32
+             * @description Items created.
+             */
+            added: number;
+            /** @description Items closed, on their latest close. */
+            closed: components["schemas"]["DataClosed"];
+            /** @description Runs started, by how they ended. */
+            runs: components["schemas"]["DataRuns"];
+            /**
+             * Format: int32
+             * @description Runs that ended and reported no cost.
+             */
+            runs_without_cost: number;
+            /**
+             * Format: double
+             * @description What the runs that started cost, in US dollars. A run with no cost adds nothing.
+             */
+            spend_usd: number;
+        };
+        /** @description How many runs ended each way. */
+        DataRuns: {
+            /** Format: int32 */
+            asked: number;
+            /** Format: int32 */
+            failed: number;
+            /**
+             * Format: int32
+             * @description Taken back, handed back, or not ended yet.
+             */
+            other: number;
+            /** Format: int32 */
+            reached: number;
         };
         /** @description A due time, ready to show. */
         Due: {
@@ -3475,6 +3552,13 @@ export interface components {
          * @enum {string}
          */
         TeamAction: "rename" | "change_slug" | "add_member" | "manage_invite_links" | "create_heap" | "leave";
+        /** @description What agents cost and how items and runs came and went, over the period. */
+        TeamData: {
+            /** @description Every day or week of the period, oldest first, zeros included. */
+            buckets: components["schemas"]["DataBucket"][];
+            /** @description The figures of the whole period. */
+            totals: components["schemas"]["DataFigures"];
+        };
         TeamMember: {
             allowed_actions: components["schemas"]["MemberAction"][];
             display_name: string;
@@ -5035,6 +5119,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_team_data: {
+        parameters: {
+            query?: {
+                /** @description Only this heap of the team, by its slug, archived or not. Omit for all the team's heaps. */
+                heap?: string;
+                /** @description How far back to look. Defaults to `30`. */
+                days?: components["schemas"]["DataDays"];
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamData"];
                 };
             };
             404: {
