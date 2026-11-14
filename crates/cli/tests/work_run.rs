@@ -1618,6 +1618,63 @@ async fn the_sweep_asks_nothing_about_another_servers_directory_and_removes_it_o
     Ok(())
 }
 
+#[cfg(unix)]
+#[gtest]
+#[tokio::test]
+async fn a_directory_that_fails_to_delete_is_named_where_it_was_left_and_cleared_by_the_next_sweep() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Arrange: a directory of a missing item, with a folder in it that can't be emptied.
+    let (server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+    let parent = tempfile::tempdir()?;
+    let root = parent.path();
+    let dir = kept_directory(&server.url, root, "ada", "personal", "zzzzz", 1)?;
+    let locked = dir.join("locked");
+    std::fs::create_dir(&locked)?;
+    std::fs::write(locked.join("file"), "")?;
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555))?;
+    let root_arg = root.to_string_lossy().into_owned();
+    let leftovers = || -> Result<Vec<std::path::PathBuf>> {
+        Ok(std::fs::read_dir(root)?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".upheap-removing-"))
+            .map(|entry| entry.path())
+            .collect())
+    };
+
+    // Act: one sweep fails to delete it.
+    let failed = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: the one warning names the leftover and says the next sweep tries again.
+    let left = leftovers()?;
+    for path in &left {
+        std::fs::set_permissions(path.join("locked"), std::fs::Permissions::from_mode(0o755))?;
+    }
+    expect_that!(failed.exited(0), eq(true));
+    expect_that!(dir.exists(), eq(false));
+    expect_that!(left.len(), eq(1));
+    let left = left.first().context("no leftover")?;
+    expect_that!(
+        failed.stderr,
+        contains_substring(format!("What's left is in {}; the next sweep tries again.", left.display()).as_str())
+    );
+    expect_that!(failed.stderr.matches("warning:").count(), eq(1));
+
+    // Act: the next sweep, once the leftover can be deleted.
+    let cleared = cli
+        .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+        .await;
+
+    // Assert: it's gone, and nothing is said about it.
+    expect_that!(cleared.exited(0), eq(true));
+    expect_that!(left.exists(), eq(false));
+    expect_that!(cleared.stderr, not(contains_substring("warning")));
+    expect_that!(cleared.stderr, not(contains_substring(".upheap-removing-")));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn the_sweep_says_nothing_in_quiet_mode_when_it_removes() -> Result<()> {
