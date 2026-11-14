@@ -193,6 +193,7 @@ impl Services {
         );
         Ok(view)
     }
+
     /// Makes the note `item_id` a step of the open task `task_id` in its heap: the step is at the end of the task, with
     /// the note's title and description as its title and context, and it keeps the note as its origin. The note
     /// closes as became. Not declarative: a note that already became is refused, as a repeat would add a second step.

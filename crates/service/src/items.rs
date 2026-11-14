@@ -1264,17 +1264,28 @@ pub(crate) async fn build_item_view(
         .await?
         .remove(&item.id)
         .unwrap_or_default();
-    let became_steps = made_steps_by_origin(db, &store::steps::list_steps_made_from(db, &[item.id], locking).await?)
-        .await?
-        .remove(&item.id)
-        .unwrap_or_default();
+    // Only a note becomes a step.
+    let became_steps = if item.kind == Kind::Note {
+        made_steps_by_origin(db, &store::steps::list_steps_made_from(db, &[item.id], locking).await?)
+            .await?
+            .remove(&item.id)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    // A step's note was in the task's heap when the step was made, and a move stays in the team, so whoever sees the
+    // task sees the note: no check per step.
     let mut step_origins = HashMap::new();
+    let mut heaps = HashMap::new();
     for step in &steps {
-        if let Some(origin_id) = step.origin_id
-            && let Some(origin) = find_viewable_item(db, membership.user_id, origin_id).await?
-        {
-            step_origins.insert(step.number, origin);
-        }
+        let Some(origin_id) = step.origin_id else {
+            continue;
+        };
+        let Some(note) = store::items::find_item(db, origin_id).await? else {
+            continue;
+        };
+        let (heap, team) = heap_with_team(db, &mut heaps, note.heap_id).await?;
+        step_origins.insert(step.number, ItemOrigin { item: note, heap, team });
     }
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();

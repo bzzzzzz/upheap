@@ -11791,7 +11791,7 @@
               },
               {
                 "$ref": "#/components/schemas/ItemOrigin",
-                "description": "The note this step was made from, when the caller may view the note's heap. `null` for a step that wasn't made\nfrom a note, and when the caller can't view the note's heap."
+                "description": "The note this step was made from (`POST …/to-step`), in the task's team. `null` for a step that wasn't made\nfrom a note."
               }
             ]
           },

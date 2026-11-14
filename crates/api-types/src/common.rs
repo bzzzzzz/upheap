@@ -381,8 +381,8 @@ pub struct StepDto {
     /// Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the
     /// item's.
     pub version: u32,
-    /// The note this step was made from, when the caller may view the note's heap. `null` for a step that wasn't made
-    /// from a note, and when the caller can't view the note's heap.
+    /// The note this step was made from (`POST …/to-step`), in the task's team. `null` for a step that wasn't made
+    /// from a note.
     #[serde(default)]
     #[schema(required = true)]
     pub origin: Option<ItemOriginDto>,

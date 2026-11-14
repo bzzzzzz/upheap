@@ -91,7 +91,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
   heap lock like any item write, then reads the item and its steps again with locking reads (see
   [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
-  item are read-only, and come back editable, unchanged, when it is reopened.
+  item are read-only, and come back editable, unchanged, when it is reopened. A step made from a note
+  (`POST …/to-step`) keeps it in `item_steps.origin_id`, set once and never changed; an index on it serves the
+  lookup of the steps a note became, which the note and the closed list show as `became_steps`. The note was in the
+  task's heap then and a move stays in the team, so whoever sees the task sees the note.
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
@@ -184,7 +187,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
   item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
   opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
-  the run's item (`check_run_step_add`), and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  the run's item (`check_run_step_add`), and no other write to it. The one write outside those is `POST …/to-step`:
+  the run's own note becomes a step of any open task in its heap, which ends the run and the turn as reached. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
   shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
   the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
   from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run

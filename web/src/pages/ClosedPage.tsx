@@ -165,10 +165,6 @@ function ClosedRow({
   );
 }
 
-/**
- * The state at a glance on a wide screen: a filled circle with a tick for Done, an outlined one with a dash for Won't
- * do. Hidden from screen readers, since the meta line says the state.
- */
 /** What a note that became says: "Became 3 tasks", or "Became a step of “<task>”" when only a step was made. */
 function becameText(item: Item): string {
   const made = item.became ?? [];
@@ -177,6 +173,10 @@ function becameText(item: Item): string {
   return `Became ${becameWords(made)}`;
 }
 
+/**
+ * The state at a glance on a wide screen: a filled circle with a tick for Done, an outlined one with a dash for Won't
+ * do. Hidden from screen readers, since the meta line says the state.
+ */
 function ClosedMark({ wontDo }: { wontDo: boolean }) {
   return (
     <svg viewBox="0 0 22 22" aria-hidden="true" className="size-[22px] shrink-0 max-sm:hidden">
