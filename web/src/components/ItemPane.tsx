@@ -180,6 +180,8 @@ function WalkLink({
       // In place of this item, so Back still closes the pane rather than walking back up the list.
       replace
       state={(prev) => prev}
+      // The list beside or under the pane keeps its place.
+      resetScroll={false}
       aria-label={label}
       onClick={onWalk}
       className={className}

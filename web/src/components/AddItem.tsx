@@ -265,6 +265,8 @@ export function AddItemDialog({
       params: { ...item.heap, item: item.key },
       // In the list's heap, the item opens over the list as it is by then.
       search: sameHeap(item.heap, heapRef) ? (prev) => prev : {},
+      // Over the list, the page keeps its place; another heap's starts at the top.
+      resetScroll: !sameHeap(item.heap, heapRef),
       state: (prev) => ({ ...prev, closesBack: true }),
     });
 
