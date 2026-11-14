@@ -591,6 +591,11 @@ fn is_result_line(line: &[u8]) -> bool {
 /// Whether `line` is a JSON object whose `type` is `rate_limit_event` with status `rejected` and `isUsingOverage` not
 /// true: the account's usage limit was reached.
 fn is_rejected_line(line: &[u8]) -> bool {
+    // Most lines are messages and tool output, some of them large: only a line that names the event is parsed.
+    const EVENT: &[u8] = b"rate_limit_event";
+    if !line.windows(EVENT.len()).any(|window| window == EVENT) {
+        return false;
+    }
     let Ok(event) = serde_json::from_slice::<Value>(line) else {
         return false;
     };

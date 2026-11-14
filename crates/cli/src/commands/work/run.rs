@@ -257,14 +257,8 @@ enum Next {
     Again,
     /// Wait before claiming again.
     Wait,
-    /// The tool stopped at the account's usage limit: claim nothing until it resets.
+    /// The tool stopped at the account's usage limit, and the hold is set: claim nothing until it ends.
     Hold(UsageLimit),
-}
-
-/// Why and until when the loop claims nothing, because the tool's usage limit was reached.
-struct Hold {
-    /// When claiming may start again.
-    until: jiff::Timestamp,
 }
 
 /// What the loop does when a claim, or the reads that follow it, fail.
@@ -414,8 +408,8 @@ struct Shared<'a> {
     stopping_noted: AtomicBool,
     /// The error that ended the first worker that failed; the command fails with it once every worker has ended.
     first_error: Mutex<Option<CliError>>,
-    /// The hold on claiming, while there is one. One for every worker.
-    hold: Mutex<Option<Hold>>,
+    /// When claiming may start again after the tool's usage limit was reached, while it is held. One for every worker.
+    hold: Mutex<Option<jiff::Timestamp>>,
     stop: watch::Sender<Stop>,
 }
 
@@ -554,7 +548,7 @@ impl Shared<'_> {
             };
             match next {
                 Next::Hold(limit) if self.once => return self.note_limit_once(&limit),
-                Next::Hold(limit) => self.hold_for(&limit),
+                Next::Hold(_) => {}
                 _ if self.once => return,
                 Next::Again => {}
                 Next::Wait => {
@@ -750,19 +744,12 @@ impl Shared<'_> {
         let (request, not_started) = match driven {
             Driven::Ended(Ok(report)) => {
                 tracing::debug!(run_id = %run.id, last_message = ?report.last_message, "the tool ended");
-                // The failure text is for the log only: a limited run keeps none.
-                let failure = match report.limit {
-                    Some(hit) => {
-                        tracing::info!(run_id = %run.id, failure = ?report.failure, limit = ?hit, "the tool hit its usage limit");
-                        limit = Some(hit);
-                        None
-                    }
-                    None => report.failure,
-                };
+                limit = report.limit;
+                // The server keeps no failure text for a limited run.
                 let request = tool_times(FinishRequestDto {
                     cost_usd: report.cost_usd,
                     limited: limit.is_some(),
-                    failure,
+                    failure: report.failure,
                     ..Default::default()
                 });
                 (request, None)
@@ -784,6 +771,10 @@ impl Shared<'_> {
                 (request, None)
             }
         };
+        // Held before the end is sent, so no other worker claims while it is on its way.
+        if let Some(limit) = &limit {
+            self.hold_for(limit);
+        }
         self.finish_and_print(&run, &request, log.as_deref()).await?;
         // Every run would fail the same way, so the worker does not go on.
         if let Some(err) = not_started {
@@ -1297,13 +1288,10 @@ impl Shared<'_> {
         let until = hold_end(limit, now);
         {
             let mut hold = lock(&self.hold);
-            if hold
-                .as_ref()
-                .is_some_and(|held| held.until > now && held.until >= until)
-            {
+            if hold.is_some_and(|held| held > now && held >= until) {
                 return;
             }
-            *hold = Some(Hold { until });
+            *hold = Some(until);
         }
         if self.mode != Mode::Human {
             return;
@@ -1355,7 +1343,7 @@ impl Shared<'_> {
             let now = self.app.now();
             let remaining = {
                 let mut hold = lock(&self.hold);
-                match hold.as_ref().map(|held| held.until) {
+                match *hold {
                     None => return true,
                     Some(until) if until <= now => {
                         *hold = None;
@@ -1399,10 +1387,15 @@ impl Shared<'_> {
     }
 }
 
-/// When claiming may start again after `limit`: a minute past its reset, or half an hour from `now` without one.
+/// When claiming may start again after `limit`: a minute past its reset, or half an hour from `now` without one. Never
+/// less than a minute from `now`: a reset that has passed by this machine's clock (a skewed clock, a stale time) would
+/// otherwise start run after run at the limit, and a limited run never makes its turn stuck.
 fn hold_end(limit: &UsageLimit, now: jiff::Timestamp) -> jiff::Timestamp {
-    let (from, wait) = limit.resets_at.map_or((now, LIMIT_FALLBACK), |at| (at, LIMIT_MARGIN));
-    from.checked_add(wait).unwrap_or(from)
+    let after = |from: jiff::Timestamp, wait: Duration| from.checked_add(wait).unwrap_or(from);
+    match limit.resets_at {
+        Some(at) => after(at.max(now), LIMIT_MARGIN),
+        None => after(now, LIMIT_FALLBACK),
+    }
 }
 
 /// Locks `mutex`. A worker that panicked while writing leaves nothing half-done worth refusing for, so poison is
@@ -1554,6 +1547,20 @@ mod tests {
         expect_that!(local_time(noon, None), eq("12:00"));
         expect_that!(local_time(noon, Some("Europe/Berlin")), eq("13:00"));
         expect_that!(local_time(noon, Some("Not/AZone")), eq("12:00"));
+    }
+
+    #[gtest]
+    fn the_hold_ends_a_minute_past_the_reset_and_never_sooner_than_a_minute_from_now() {
+        let now = jiff::Timestamp::from_second(1_800_000_000).unwrap();
+        let limit = |resets_at| UsageLimit {
+            resets_at,
+            window: None,
+        };
+        let later = |seconds| now.checked_add(jiff::SignedDuration::from_secs(seconds)).unwrap();
+
+        expect_that!(hold_end(&limit(Some(later(3600))), now), eq(later(3660)));
+        expect_that!(hold_end(&limit(Some(later(-3600))), now), eq(later(60)));
+        expect_that!(hold_end(&limit(None), now), eq(later(30 * 60)));
     }
 
     #[gtest]
