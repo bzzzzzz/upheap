@@ -38,6 +38,8 @@ The design docs are indexed in [design/README.md](design/README.md).
 - Signing in non-web clients: OAuth 2.0 with PKCE (`/api/v1/oauth/authorize`, `/token`, `/revoke`) for the
   `upheap` CLI, with rotating refresh tokens and `Authorization: Bearer` on every endpoint. Account lists the CLI's
   sign-ins by machine and ends them.
+- Personal tokens: made, listed and revoked on Account, for a machine with no browser or keychain. A token never
+  rotates, is shown once, and works as a bearer token on every endpoint until it expires or is revoked.
 - One binary serving the API, the web app, `/healthz` and `/readyz`, on SQLite, MySQL or Postgres.
 - The `upheap` CLI: sign in through the browser, list your heaps and pick a default, list a heap's ranked or closed
   items with the web app's filters and saved views, add, show, edit and move items between states, list, add and edit
@@ -176,7 +178,8 @@ tar -xzf "upheap-$arch-unknown-linux-musl.tar.gz" -C ~/.local/bin upheap
 
 `~/.local/bin` must be on your `PATH`; some distributions add it only if it existed when you logged in.
 
-On Linux the sign-in is kept in the Secret Service, so a desktop keyring (GNOME Keyring or KWallet) must be running.
+On Linux the sign-in is kept in the Secret Service, so a desktop keyring (GNOME Keyring or KWallet) must be running, or use a personal token in
+`UPHEAP_TOKEN` (see [Machines without a browser](#machines-without-a-browser)).
 
 Or build it with `cargo build --release -p cli` (the binary is `target/release/upheap`), or run it from source:
 
@@ -207,6 +210,8 @@ cargo run -p cli -- item became k3x9a                            # the note is c
 cargo run -p cli -- item to-step n8c2d --task k3x9a              # the note becomes the last step of the task, and closes as became
 cargo run -p cli -- heap add "Blog move" --from n8c2d --context-file context.md   # the note becomes a heap of its own
 cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
+cargo run -p cli -- item send k3x9a --line "Use the new CA."     # to an agent, to the next stable state; --all-the-way goes on until done
+cargo run -p cli -- item take-back k3x9a                         # the agent's turn ends; what it changed stays
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one
 cargo run -p cli -- step tick k3x9a.1                            # a step is its item's key and its number
 cargo run -p cli -- question ask k3x9a "Which CA?" --choice Internal --choice "Let's Encrypt"  # a question: free text, or --choice to pick; --many, --step, --details-file
@@ -237,7 +242,9 @@ cargo run -p cli -- auth logout
 ```
 
 The server address and default heap are kept in `config.toml` under the platform's config directory, and
-`UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. With `UPHEAP_RUN` set to a run's ID, every
+`UPHEAP_SERVER`, `UPHEAP_HEAP`, `--server` and `--heap` override them. `UPHEAP_TOKEN`, a personal token made on the web
+app's Account page, wins over the keychain sign-in: when it is set, every command uses it and never opens a
+browser, except `auth login` and `auth logout`, which manage the keychain sign-in. With `UPHEAP_RUN` set to a run's ID, every
 request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
 reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
 starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
@@ -259,7 +266,22 @@ comes before the heap's context on how the work is done. The file is read once, 
 rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
 comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth`, though a rule as
 wide as `Bash` lets a run get around that through a shell. Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
-signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything else.
+signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool, or a
+`UPHEAP_TOKEN` the server refuses), 1 anything else.
+
+### Machines without a browser
+
+A cloud session, a container or CI has no browser to sign in with and often no keychain. Make a token for it on the
+web app's Account page, under Command line: **Make a token**, pick how long it lasts, and copy it, since it is shown
+once. Then give the machine the server and the token:
+
+```sh
+UPHEAP_SERVER=https://upheap.example.com UPHEAP_TOKEN=uph_... upheap item add "Rotate the staging certs"
+```
+
+A token can do anything you can, until it expires or you revoke it on the same page. Changing or resetting your
+password revokes all of them. When the server refuses the token, the command exits 6 and says whether it was revoked,
+has expired or isn't one the server knows.
 
 ### Start an agent loop
 
@@ -275,7 +297,7 @@ To have an agent work your items:
 6. Run `upheap work run --tool claude --root ~/agent-runs` and leave it running. Ctrl-C stops it. The flags are
    above, with the other commands.
 7. Add a note (`upheap item add "..." --need expected`), answer what the agent asks (in the web app, or with
-   `upheap question reply`), and send items on from the web app with "Send to an agent".
+   `upheap question reply`), and send items on with `upheap item send` or from the web app with "Send to an agent".
 
 ### From Claude Code
 

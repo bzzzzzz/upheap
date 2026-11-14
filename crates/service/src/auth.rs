@@ -41,7 +41,7 @@ impl SessionToken {
         Self(random_token())
     }
 
-    fn to_hash(&self) -> String {
+    pub(crate) fn to_hash(&self) -> String {
         sha256_hex(&self.0)
     }
 }
@@ -369,6 +369,8 @@ impl Services {
         store::sessions::delete_user_sessions(&txn, user.id).await?;
         let session = self.open_session(&txn, user.clone(), now).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
+        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(&txn, user.id, now).await?;
+        let ended_sign_ins = ended_sign_ins.saturating_add(u32::try_from(revoked_tokens).unwrap_or(u32::MAX));
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
             principal,

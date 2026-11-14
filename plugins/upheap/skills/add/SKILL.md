@@ -34,8 +34,14 @@ descriptions, contexts, steps, questions and your reply. Write all of it this wa
    - It runs but has no `guide` command: stop. The tool is too old; ask them to update it.
 2. Run `upheap heap list`. It needs the sign-in, and prints the heaps you'll choose from.
    - Exit code 4, or a message that no server is set: stop. Tell the person to run `upheap auth login` themselves
-     (with `--server <url>` the first time). It opens their browser, so you can't do it for them.
-   - Exit code 5 (server unreachable) or 6 (the keychain or config is broken): stop and pass on the message.
+     (with `--server <url>` the first time). It opens their browser, so you can't do it for them. If this machine
+     has no browser or keychain (a cloud session, a container), tell them to make a token on the web app's Account
+     page, under Command line, and set `UPHEAP_TOKEN` (and `UPHEAP_SERVER`) in this environment.
+   - Exit code 6 with a message naming `UPHEAP_TOKEN`: the token was revoked or has expired, or the server doesn't
+     know it. Stop and ask the person for a new one, made the same way.
+   - Exit code 5 (server unreachable) or 6 (the keychain or config is broken): stop and pass on the message. When
+     it's the keychain that can't be used, also tell them they can make a token on the Account page, under Command
+     line, and set `UPHEAP_TOKEN` in this environment.
 
 Stopping means saying what's wrong and what the person should do, and keeping what they asked to add in your reply
 so it isn't lost.

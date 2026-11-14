@@ -242,3 +242,66 @@ test("only one sign-in asks to be confirmed at a time, and an account with none 
   await expect(card.getByRole("group", { name: "Confirm sign-out" })).toContainText("Sign out build-box?");
   await expect(card.getByRole("button", { name: "Sign out ada-laptop" })).toBeVisible();
 });
+
+test("Account makes a personal token, shows its secret once, and revokes it after a confirm", async ({
+  page,
+  request,
+}) => {
+  await registerThroughApi(page);
+  await page.goto("account");
+  const card = page.getByRole("region", { name: "Command line" });
+  await expect(card.getByRole("heading", { name: "Tokens" })).toBeVisible();
+  await expect(card).toContainText("No tokens yet.");
+
+  // Escape closes the form and puts focus back on the button.
+  const make = card.getByRole("button", { name: "Make a token" });
+  await make.click();
+  const form = card.getByRole("form", { name: "Make a token" });
+  await expect(form.getByLabel("Name")).toBeFocused();
+  await expect(form.getByLabel("Expires")).toHaveValue("90_days");
+  await form.getByLabel("Name").press("Escape");
+  await expect(form).toHaveCount(0);
+  await expect(make).toBeFocused();
+
+  await make.click();
+  await form.getByLabel("Name").fill("ci");
+  await form.getByLabel("Expires").selectOption("never");
+  await form.getByLabel("Name").press("Enter");
+
+  // The secret is shown once, with how to use it.
+  const panel = card.getByRole("group", { name: "New token" });
+  await expect(panel).toContainText("ci is made. Copy it now: it won't be shown again.");
+  await expect(panel.getByRole("button", { name: "Copy" })).toBeFocused();
+  const secret = await panel.getByLabel("Token").inputValue();
+  expect(secret).toMatch(/^uph_/);
+  await expect(panel).toContainText("UPHEAP_TOKEN=<token> upheap item list");
+  await expect(panel).not.toContainText(secret);
+  await panel.getByRole("button", { name: "Done" }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(make).toBeFocused();
+
+  // The row is there, and the secret is not.
+  await expect(card.getByRole("listitem")).toContainText("ci");
+  await expect(card.getByRole("listitem")).toContainText("Made today · last used never · never expires");
+  await expect(card).not.toContainText(secret);
+  const me = await request.get("/api/v1/me", { headers: { authorization: `Bearer ${secret}` } });
+  expect(me.status()).toBe(200);
+
+  // Cancel closes the confirm; Revoke ends the token.
+  const revoke = card.getByRole("button", { name: "Revoke ci" });
+  await revoke.click();
+  const confirm = card.getByRole("group", { name: "Confirm revoke" });
+  await expect(confirm).toContainText("Revoke ci? Anything using it stops working at once.");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(revoke).toBeFocused();
+  await revoke.click();
+  await confirm.getByRole("button", { name: "Revoke" }).click();
+  await expect(card.getByRole("status")).toHaveText("Revoked ci.");
+  await expect(card.getByRole("heading", { name: "Command line" })).toBeFocused();
+  await expect(card).toContainText("No tokens yet.");
+
+  const refused = await request.get("/api/v1/me", { headers: { authorization: `Bearer ${secret}` } });
+  expect(refused.status()).toBe(401);
+  expect(((await refused.json()) as { code: string }).code).toBe("token_revoked");
+});

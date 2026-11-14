@@ -706,3 +706,11 @@ saying so.
    whose removal deletes the row while the audit log keeps the history ([architecture.md](architecture.md#data-model)).
    Authentication plumbing that isn't domain data, ended sessions, sign-in attempt counts, sign-ins in flight through
    the identity provider, and ended OAuth codes and token families with their tokens, may be deleted.
+
+### Personal tokens
+
+1. **Overrides [API, Authentication](#authentication) §2 and [CLI, Signing in](#signing-in) §1.** For a machine with
+   no browser or keychain, a personal token is the exception: a non-rotating bearer token made in the web app and
+   given to the CLI in `UPHEAP_TOKEN`, which then wins over the keychain sign-in. It is not an OAuth token, and
+   never a refresh token written to a plain file. Why, and what it costs:
+   [decisions.md](decisions.md#39-machines-without-a-browser-sign-in-with-a-personal-token-not-a-device-code).

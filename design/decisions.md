@@ -475,3 +475,21 @@ the one that exists, and a provider user has no password. Changing the configure
 old one new at the new one, and their emails then clash with their own accounts. The identity table keys on the issuer
 string, so it must be kept exactly as the provider names itself ([architecture.md](architecture.md#authentication-and-authorization)
 §3).
+
+## 39. Machines without a browser sign in with a personal token, not a device code
+
+**Context.** The CLI signs in through the browser and keeps rotating OAuth tokens in the keychain. A machine with
+neither, such as a cloud session, a container or CI, can't, and a refresh token can't be copied there: it rotates, and a
+reused one revokes the whole sign-in.
+
+**Decision.** A person makes a personal token in the web app and gives it to the machine in `UPHEAP_TOKEN`. The token
+never rotates, is stored hashed and shown once, and ends when it expires or the person revokes it. The CLI uses it
+before the keychain.
+
+**Instead of.** A device-code flow (RFC 8628), where the machine shows a code and the person approves it in a browser
+elsewhere. Its tokens are still OAuth tokens: they rotate, so the machine needs somewhere to keep the new pair and a
+second process using the same sign-in revokes the first.
+
+**Consequences.** The machine holds a long-lived secret that the person manages: it works until revoked or expired,
+and a password change or reset revokes it. A token has all of its person's permissions, as a command-line sign-in has;
+a narrower one would need scopes first. Making a token is done in the web app only, so a token can't make another.

@@ -23,6 +23,7 @@ pub mod oidc;
 pub mod parameters;
 pub mod password_reset;
 mod personal;
+pub mod personal_tokens;
 pub mod questions;
 mod random;
 pub mod saved_views;

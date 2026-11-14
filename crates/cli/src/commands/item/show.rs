@@ -497,7 +497,7 @@ fn from_text(item: &ItemDto) -> Option<String> {
 
 /// The open turn as one line: where it goes, the reach when it is all the way, the person's line in quotes, and
 /// whether the heap prepared it. `Turn: to defined, all the way. "Use the new CA." Prepared on add.`
-fn turn_text(turn: &TurnDto) -> String {
+pub(super) fn turn_text(turn: &TurnDto) -> String {
     let mut text = format!("Turn: to {}", goal_text(turn.goal));
     if turn.reach == ReachDto::AllTheWay {
         text.push_str(", all the way");
@@ -573,7 +573,11 @@ fn render_history(log: &AuditLogDto, out: &mut Output) -> std::io::Result<()> {
         .map(|entry| {
             vec![
                 Cell::toned(entry.created_label.clone(), Tone::Dim),
-                Cell::new(format!("{} {}", entry.actor.display_name, entry.phrase)),
+                // An agent's change reads as the agent's, not as the person's whose sign-in it used.
+                Cell::new(match entry.run {
+                    Some(_) => format!("{}'s agent {}", entry.actor.display_name, entry.phrase),
+                    None => format!("{} {}", entry.actor.display_name, entry.phrase),
+                }),
             ]
         })
         .collect();
