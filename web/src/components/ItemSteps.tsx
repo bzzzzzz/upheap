@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Check, ChevronRight, CircleMinus, Ellipsis, Minus, Plus, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
@@ -274,6 +275,19 @@ function StepRow({
                 </Button>
               )}
             </>
+          )}
+          {step.origin && (
+            <p className="text-xs text-ink-soft">
+              From:{" "}
+              <Link
+                to="/teams/$team/heaps/$heap/items/$item"
+                params={{ team: step.origin.heap.team_slug, heap: step.origin.heap.slug, item: step.origin.key }}
+                search={true}
+                className="text-accent-ink underline"
+              >
+                “{step.origin.title}”, a {step.origin.kind}
+              </Link>
+            </p>
           )}
         </div>
       )}

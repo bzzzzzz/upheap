@@ -638,6 +638,15 @@ pub struct ItemMoveDto {
     pub heap_id: Uuid,
 }
 
+/// The task to make a note a step of.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemToStepRequest)]
+pub struct ItemToStepDto {
+    /// The open task of the note's heap that gets the step.
+    pub task_id: Uuid,
+}
+
 /// Weights to rank the heap with, without saving them. Leave a weight out to keep its stored value.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

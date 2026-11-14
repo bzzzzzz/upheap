@@ -6,8 +6,8 @@
 use api_types::comments::CommentDto;
 use api_types::common::{
     BlockerGoneDto, ContributorDto, DueDto, HeapSummaryDto, HeldBackDto, ItemActionDto, ItemDto, ItemOptionDto,
-    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, MadeItemDto, QuestionDto, QuestionReplyDto, RankedItemDto,
-    ReviewDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
+    ItemOriginDto, ItemParameterDto, ItemRefDto, ItemTagDto, MadeItemDto, MadeStepDto, MadeStepTaskDto, QuestionDto,
+    QuestionReplyDto, RankedItemDto, ReviewDto, SizeDto, StageDto, StepDto, StepProgressDto, UserRefDto,
 };
 use api_types::turns::{GoalDto, TurnDto};
 use api_types::waiting::ItemHeapDto;
@@ -38,7 +38,7 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 }
 
 /// Renders an item with labels computed for `as_of` in `tz`.
-pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
+pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
     let closed_at = item.state.closed_at();
     // What a turn opened now may go to, the default first: for an open note or task (a reminder has none).
@@ -65,6 +65,9 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         became: view
             .became
             .map(|became| became.into_iter().map(to_made_item_dto).collect()),
+        became_steps: view
+            .became_steps
+            .map(|steps| steps.into_iter().map(to_made_step_dto).collect()),
         need: item.need.into(),
         effort: item.effort.map(SizeDto::from),
         impact: item.impact.map(SizeDto::from),
@@ -93,10 +96,13 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         closed_label: closed_at.map(|at| describe_date(at, as_of, tz)),
         closed_by: view.closed_by.as_ref().map(UserRefDto::from),
         closed_group: closed_at.map(|at| group_closed(at, as_of, tz).into()),
-        steps: view.steps.as_ref().map(|steps| {
+        steps: view.steps.map(|steps| {
             steps
                 .iter()
-                .map(|step| StepDto::new(step, &view.step_actions))
+                .map(|step| {
+                    let origin = view.step_origins.remove(&step.number).map(to_item_origin_dto);
+                    StepDto::new(step, &view.step_actions, origin)
+                })
                 .collect()
         }),
         step_progress: view.step_progress.map(StepProgressDto::from),
@@ -279,6 +285,20 @@ fn to_made_item_dto(made: service::items::MadeItem) -> MadeItemDto {
             name: made.heap.name.as_str().to_owned(),
             team_slug: made.team.slug.to_string(),
             team_name: made.team.name.as_str().to_owned(),
+        },
+    }
+}
+
+fn to_made_step_dto(made: service::items::MadeStep) -> MadeStepDto {
+    MadeStepDto {
+        number: made.number.get(),
+        title: made.title.as_str().to_owned(),
+        state: made.state.into(),
+        task: MadeStepTaskDto {
+            id: *made.task.id.as_uuid(),
+            key: made.task.key.to_string(),
+            title: made.task.title.as_str().to_owned(),
+            heap: to_item_heap_dto(&made.heap, &made.team),
         },
     }
 }

@@ -2,7 +2,7 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    ItemDto, MadeItemDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
+    ItemDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use api_types::work::ItemRunDto;
@@ -126,10 +126,15 @@ fn render_item(item: &ItemDto, now: jiff::Timestamp, out: &mut Output) -> std::i
     if let Some(text) = from_text(item) {
         out.line(&text)?;
     }
-    if let Some(became) = item.became.as_deref().filter(|became| !became.is_empty()) {
+    let became = item.became.as_deref().unwrap_or_default();
+    let became_steps = item.became_steps.as_deref().unwrap_or_default();
+    if !became.is_empty() || !became_steps.is_empty() {
         out.line("Became:")?;
         for made in became {
             out.line(&format!("  {}", made_item_text(made)))?;
+        }
+        for made in became_steps {
+            out.line(&format!("  {}", made_step_text(made)))?;
         }
     }
     if let Some(description) = item.description.as_deref().filter(|text| !text.is_empty()) {
@@ -206,6 +211,20 @@ fn made_item_text(item: &MadeItemDto) -> String {
         item.title,
         kind_text(item.kind),
         state_text(item.state)
+    )
+}
+
+/// A step a note became as one phrase: `step k3x9a.4 "Run in staging" of k3x9a "Rotate the certs" (open)`.
+fn made_step_text(step: &MadeStepDto) -> String {
+    let state = match step.state {
+        StepStateDto::Open => "open",
+        StepStateDto::Ticked => "ticked",
+        StepStateDto::Dropped => "dropped",
+        StepStateDto::Unknown => "unknown",
+    };
+    format!(
+        "step {}.{} \"{}\" of {} \"{}\" ({state})",
+        step.task.key, step.number, step.title, step.task.key, step.task.title
     )
 }
 

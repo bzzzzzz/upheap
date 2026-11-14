@@ -147,7 +147,7 @@ function ClosedRow({
           {item.title}
         </Link>
         <p className="text-xs text-muted max-sm:text-[13px]">
-          {became ? `Became ${becameWords(item.became ?? [])}` : STATE_LABELS[item.state]} · {item.closed_label}
+          {became ? becameText(item) : STATE_LABELS[item.state]} · {item.closed_label}
           {by && ` by ${by}`}
         </p>
       </div>
@@ -163,6 +163,14 @@ function ClosedRow({
       )}
     </li>
   );
+}
+
+/** What a note that became says: "Became 3 tasks", or "Became a step of “<task>”" when only a step was made. */
+function becameText(item: Item): string {
+  const made = item.became ?? [];
+  const step = item.became_steps?.[0];
+  if (made.length === 0 && step) return `Became a step of “${step.task.title}”`;
+  return `Became ${becameWords(made)}`;
 }
 
 /**
