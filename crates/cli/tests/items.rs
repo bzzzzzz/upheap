@@ -24,7 +24,7 @@ async fn item_list_shows_the_ranked_list_in_columns() -> Result<()> {
     expect_that!(
         lines[0],
         starts_with(format!(
-            "1  {}  Rotate the staging certs   open  s/l  ",
+            "1  {}  note  Rotate the staging certs     open    s/l  ",
             key(&items[0])?
         ))
     );
@@ -165,6 +165,77 @@ async fn item_list_gives_a_blocked_items_reason_in_its_state_cell() -> Result<()
         shown.stdout,
         contains_substring("blocked: Waits for the vendor's quote")
     );
+    Ok(())
+}
+
+/// Ada's items, the first a task with two steps, one ticked, and a question open on it, and the second sent to an
+/// agent. Returns the two keys.
+async fn ada_with_marked_items(server: &TestServer) -> Result<(common::TestUser, String, String)> {
+    let (ada, items) = ada_with_items(server).await?;
+    let cli = cli_in_heap(server, &ada).await?;
+    let task = key(&items[0])?.to_owned();
+    let sent = key(&items[1])?.to_owned();
+    server.edit_item(&ada, HEAP, &task, json!({ "kind": "task" })).await?;
+    for title in ["One", "Two"] {
+        cli.run(&["step", "add", &task, title]).await;
+    }
+    cli.run(&["step", "tick", &format!("{task}.1")]).await;
+    cli.run(&["question", "ask", &task, "Which CA?"]).await;
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{sent}/turn"),
+            Some(json!({ "reach": "all_the_way" })),
+        )
+        .await?;
+    Ok((ada, task, sent))
+}
+
+/// Where `needle` starts in the line that has `key`.
+fn column_of(text: &str, key: &str, needle: &str) -> Option<usize> {
+    text.lines().find(|line| line.contains(key))?.find(needle)
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_rows_show_the_kind_the_steps_and_who_the_item_waits_for() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, task, sent) = ada_with_marked_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list"]).await;
+    let across = cli.run(&["item", "list", "--all-heaps"]).await;
+
+    // Assert
+    for (form, out) in [("one heap", &listed), ("all heaps", &across)] {
+        expect_that!(out.exited(0), eq(true), "{form}");
+        let task_line = common::lines_with(&out.stdout, &task).join("");
+        let sent_line = common::lines_with(&out.stdout, &sent).join("");
+        expect_that!(
+            task_line,
+            contains_regex(format!(
+                "{task}  .*task  Rotate the staging certs +1/2  open +waits for you  s/l"
+            )),
+            "{form}"
+        );
+        expect_that!(
+            sent_line,
+            contains_regex(format!(
+                "{sent}  .*note  Write the migration guide +open · with an agent +l/m"
+            )),
+            "{form}"
+        );
+        expect_that!(sent_line, not(contains_substring("waits for you")), "{form}");
+        // The state cell starts at the same column on every row, whatever the cells before it hold.
+        expect_that!(
+            column_of(&out.stdout, &task, "open"),
+            eq(column_of(&out.stdout, &sent, "open")),
+            "{form}"
+        );
+    }
     Ok(())
 }
 

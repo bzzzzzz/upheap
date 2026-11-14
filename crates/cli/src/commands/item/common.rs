@@ -2,7 +2,7 @@
 //! and the words and cells that show an item.
 
 use api_types::common::DueInputDto;
-use api_types::common::{ItemDto, SizeDto, StateDto};
+use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::parameters::ParameterListDto;
 use serde::Serialize;
@@ -304,6 +304,24 @@ pub(super) fn state_text(state: StateDto) -> &'static str {
         StateDto::WontDo => "won't do",
         StateDto::Became => "became",
         StateDto::Unknown => "unknown",
+    }
+}
+
+/// The item's state, with ` · with an agent` when an agent has it: `open · with an agent`.
+pub(super) fn state_with_agent_text(item: &ItemDto) -> String {
+    if item.with_agent {
+        format!("{} · with an agent", state_text(item.state))
+    } else {
+        state_text(item.state).to_owned()
+    }
+}
+
+pub(super) fn kind_text(kind: KindDto) -> &'static str {
+    match kind {
+        KindDto::Note => "note",
+        KindDto::Task => "task",
+        KindDto::Reminder => "reminder",
+        KindDto::Unknown => "unknown",
     }
 }
 
