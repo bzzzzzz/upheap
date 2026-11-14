@@ -24,6 +24,8 @@ pub struct Config {
     pub session_ttl_days: u16,
     /// `LOG_FORMAT`: `json` (default) or `pretty`.
     pub log_format: LogFormat,
+    /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
+    pub mail: Option<mail::Mailer>,
 }
 
 /// The URL schemes of the databases the server can use. sqlx takes both spellings of Postgres's.
@@ -84,6 +86,21 @@ impl Config {
             Some("pretty") => LogFormat::Pretty,
             Some(other) => bail!("LOG_FORMAT must be json or pretty, not {other:?}"),
         };
+        let mail = match lookup("MAIL_URL").filter(|v| !v.trim().is_empty()) {
+            None => None,
+            Some(url) => {
+                let from = lookup("MAIL_FROM")
+                    .filter(|v| !v.trim().is_empty())
+                    .context("MAIL_FROM is required when MAIL_URL is set")?;
+                // The errors don't repeat the URL, so none of them holds the SMTP password.
+                let mailer = mail::Mailer::new(url.trim(), from.trim()).map_err(|error| match error {
+                    mail::MailerError::InvalidSender(_) => anyhow::Error::new(error)
+                        .context("MAIL_FROM must be an address such as \"Upheap <upheap@example.com>\""),
+                    mail::MailerError::InvalidUrl(_) => anyhow::Error::new(error).context("MAIL_URL"),
+                })?;
+                Some(mailer)
+            }
+        };
         Ok(Self {
             database_url,
             database_max_connections,
@@ -92,6 +109,7 @@ impl Config {
             allow_registration,
             session_ttl_days,
             log_format,
+            mail,
         })
     }
 
@@ -145,6 +163,39 @@ mod tests {
         let config = config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "20")])?;
         assert_eq!(config.database_max_connections, 20);
         Ok(())
+    }
+
+    #[test]
+    fn mail_is_off_without_settings_and_on_with_both() -> anyhow::Result<()> {
+        let base = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
+        assert!(config(&base)?.mail.is_none());
+        assert!(
+            config(&[base[0], base[1], ("MAIL_FROM", "u@example.com")])?
+                .mail
+                .is_none()
+        );
+        let on = config(&[
+            base[0],
+            base[1],
+            ("MAIL_URL", "log:"),
+            ("MAIL_FROM", "Upheap <u@example.com>"),
+        ])?;
+        assert_eq!(on.mail.map(|m| m.describe().to_owned()).as_deref(), Some("log:"));
+        Ok(())
+    }
+
+    #[test]
+    fn mail_url_needs_a_sender_and_a_bad_one_doesnt_leak_the_password() {
+        let base = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
+        assert!(config(&[base[0], base[1], ("MAIL_URL", "log:")]).is_err());
+        let error = config(&[
+            base[0],
+            base[1],
+            ("MAIL_URL", "ftp://u:s3cret@smtp.example.com"),
+            ("MAIL_FROM", "u@example.com"),
+        ])
+        .expect_err("an unknown scheme is rejected");
+        assert!(!format!("{error:#}").contains("s3cret"));
     }
 
     #[test]
