@@ -20,7 +20,7 @@ use domain::team::Team;
 use domain::turn::goal_choices;
 use jiff::tz::TimeZone;
 use service::items::{
-    CommentView, GoneBlocker, ItemRunView, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView,
+    CommentView, GoneBlocker, ItemOrigin, ItemRunView, ItemView, ParameterValue, QuestionView, RankedEntry, TurnView,
 };
 use utoipa::IntoParams;
 
@@ -121,16 +121,20 @@ pub(crate) fn to_item_dto(view: ItemView, as_of: Timestamp, tz: &TimeZone) -> It
         next_goal,
         goal_choices,
         with_agent: view.with_agent,
-        origin: view.origin.map(|origin| ItemOriginDto {
-            id: *origin.item.id.as_uuid(),
-            key: origin.item.key.to_string(),
-            title: origin.item.title.as_str().to_owned(),
-            kind: origin.item.kind.into(),
-            heap: to_item_heap_dto(&origin.heap, &origin.team),
-        }),
+        origin: view.origin.map(to_item_origin_dto),
         added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+    }
+}
+
+pub(crate) fn to_item_origin_dto(origin: ItemOrigin) -> ItemOriginDto {
+    ItemOriginDto {
+        id: *origin.item.id.as_uuid(),
+        key: origin.item.key.to_string(),
+        title: origin.item.title.as_str().to_owned(),
+        kind: origin.item.kind.into(),
+        heap: to_item_heap_dto(&origin.heap, &origin.team),
     }
 }
 

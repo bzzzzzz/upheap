@@ -1,3 +1,6 @@
+import { useLocation } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+
 import type { Item, ItemRun, RunEnd } from "../api/client";
 import { Disclosure } from "./AuditHistory";
 import { GOAL_LABELS, STAGE_LABELS } from "./labels";
@@ -30,14 +33,33 @@ const startTitle = (run: ItemRun) =>
  */
 export function ItemRuns({ item }: { item: Item }) {
   const runs = item.runs ?? [];
+  // A link to `#run-<id>` (from an agent's change in a history) opens Runs at that run and tints it for 2 seconds. A
+  // hash that names no run listed here does nothing.
+  const hash = useLocation({ select: (location) => location.hash });
+  // Each click on such a link is a new location, told apart by `runLinkedAt`; the hash alone may not change.
+  const clickedAt = useLocation({ select: (location) => location.state.runLinkedAt });
+  const visit = `${hash}@${clickedAt}`;
+  const linked = runs.find((run) => hash === `run-${run.id}`)?.id;
+  // The visit whose tint has run out.
+  const [faded, setFaded] = useState<string>();
+  useEffect(() => {
+    if (!linked) return;
+    document.getElementById(`run-${linked}`)?.scrollIntoView({ block: "center" });
+    const timer = setTimeout(() => setFaded(visit), 2000);
+    return () => clearTimeout(timer);
+  }, [linked, visit]);
   if (runs.length === 0) return null;
   const label = `Runs ${runs.length}${item.runs_cost_usd == null ? "" : ` · ${usd(item.runs_cost_usd)}`}`;
   return (
     <section aria-label="Runs" className="border-t border-line pt-1">
-      <Disclosure label={label} className="">
+      <Disclosure key={visit} label={label} className="" defaultOpen={linked != null}>
         <ul className="flex flex-col divide-y divide-line">
           {runs.map((run) => (
-            <li key={run.id} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
+            <li
+              key={run.id}
+              id={`run-${run.id}`}
+              className={`flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 ${linked === run.id && faded !== visit ? "bg-accent-soft" : ""}`}
+            >
               <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
                 <span title={startTitle(run)} className="font-medium">
                   {run.started_label}

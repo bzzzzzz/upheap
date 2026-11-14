@@ -1,15 +1,16 @@
 //! Reading the audit log: a heap's history and a team's history, or one entity's within them.
 
-use api_types::audit::{AuditChangeDto, AuditEntityDto, AuditEntryDto, AuditLogDto, AuditQueryDto};
+use api_types::audit::{AuditChangeDto, AuditEntityDto, AuditEntryDto, AuditLogDto, AuditQueryDto, AuditRunDto};
 use api_types::common::UserRefDto;
 use axum::Json;
 use axum::extract::State;
 use domain::Timestamp;
-use service::audit_log::{AuditChange, AuditCursor, AuditEntryView, AuditPage, AuditRequest};
+use service::audit_log::{AuditChange, AuditCursor, AuditEntryView, AuditPage, AuditRequest, AuditRun};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
+use crate::dto::to_item_origin_dto;
 use crate::error::Problem;
 use crate::extract::{ApiQuery, ClientTimeZone, TimeZoneHeader};
 use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
@@ -57,6 +58,14 @@ fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
         },
         changes: view.changes.into_iter().map(to_audit_change_dto).collect(),
         diff: view.diff,
+        run: view.run.map(to_audit_run_dto),
+    }
+}
+
+fn to_audit_run_dto(run: AuditRun) -> AuditRunDto {
+    AuditRunDto {
+        id: *run.id.as_uuid(),
+        item: run.item.map(to_item_origin_dto),
     }
 }
 

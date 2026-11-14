@@ -547,6 +547,96 @@ async fn the_audit_entry_of_an_item_a_run_added_carries_the_run() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn the_heap_audit_names_the_run_and_item_of_an_agents_change_and_not_of_a_persons() -> Result<()> {
+    // Arrange
+    let s = scene().await?;
+    let path = s.path_of(&s.heap, &s.held).await?;
+
+    // Act: the run sets the context, then the person edits the title.
+    let by_run = s
+        .patch_in_run(&path, json!({ "description": "Context from the run" }))
+        .await?;
+    let current = s.app.send(Method::GET, &path, Some(&s.session), None).await?;
+    let by_person = s
+        .app
+        .patch(
+            &s.session,
+            &path,
+            &current.body["version"],
+            json!({ "title": "Renamed" }),
+        )
+        .await?;
+    let audit = s
+        .app
+        .send(
+            Method::GET,
+            &format!(
+                "{}/audit?entity_id={}",
+                s.app.heap_url(&s.heap).await?,
+                current.body["id"].as_str().context("id")?
+            ),
+            Some(&s.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(by_run.status, eq(StatusCode::OK));
+    expect_that!(by_person.status, eq(StatusCode::OK));
+    let entries = audit.body["entries"].as_array().context("entries")?;
+    let runs: Vec<&Value> = entries.iter().map(|entry| &entry["run"]).collect();
+    // Newest first: the person's edit, the run's edit, the creation.
+    expect_that!(runs[0], eq(&Value::Null));
+    expect_that!(runs[1]["id"], eq(&json!(s.run)));
+    expect_that!(runs[1]["item"]["key"], eq(&json!(s.held)));
+    expect_that!(runs[1]["item"]["heap"]["id"], eq(&json!(s.heap)));
+    expect_that!(runs[1]["item"]["heap"]["slug"].is_string(), eq(true));
+    expect_that!(runs[1]["item"]["heap"]["team_slug"].is_string(), eq(true));
+    expect_that!(runs[2], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_runs_item_in_a_team_the_reader_is_not_in_is_left_out_of_the_audit_entry() -> Result<()> {
+    // Arrange: Ada's run adds a task to a shared team's heap, which Bob belongs to; Bob is not in Ada's personal team.
+    let s = scene().await?;
+    let (bob, _) = s.app.register_as("bob@example.test", "Bob").await?;
+    let (team_id, shared_heap) = s.app.shared_heap(&s.session).await?;
+    let me = s.app.send(Method::GET, "/api/v1/me", Some(&bob), None).await?;
+    let bob_id = me.body["user"]["id"].as_str().context("id")?;
+    s.app.add_member(&team_id, bob_id, Role::Member).await?;
+    let added = s
+        .add_to(&shared_heap, json!({ "title": "Follow up", "description": "Context" }))
+        .await?;
+    anyhow::ensure!(added.status == StatusCode::CREATED, "add failed: {}", added.body);
+
+    // Act
+    let audit = s
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/audit", s.app.heap_url(&shared_heap).await?),
+            Some(&bob),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(audit.status, eq(StatusCode::OK));
+    let entry = audit.body["entries"]
+        .as_array()
+        .context("entries")?
+        .iter()
+        .find(|entry| entry["action"] == "item_created")
+        .context("no item_created entry")?;
+    expect_that!(entry["run"]["id"], eq(&json!(s.run)));
+    expect_that!(entry["run"]["item"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn someone_who_cannot_see_the_origin_sees_that_an_agent_added_the_item() -> Result<()> {
     // Arrange: Bob's team has a heap; Ada belongs to it and her run adds there. Bob isn't in Ada's team.
     let s = scene().await?;

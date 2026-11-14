@@ -1155,7 +1155,16 @@ async fn find_origin(
     let Some(origin_id) = item.origin_id else {
         return Ok(None);
     };
-    let Some(origin) = store::items::find_item(db, origin_id).await? else {
+    find_viewable_item(db, viewer, origin_id).await
+}
+
+/// The item `item_id` with its heap and team, when it exists and `viewer` may view that heap; none otherwise.
+pub(crate) async fn find_viewable_item(
+    db: &impl ConnectionTrait,
+    viewer: UserId,
+    item_id: ItemId,
+) -> Result<Option<ItemOrigin>, ServiceError> {
+    let Some(origin) = store::items::find_item(db, item_id).await? else {
         return Ok(None);
     };
     let Some(heap) = store::heaps::find_heap(db, origin.heap_id).await? else {

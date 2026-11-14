@@ -14,14 +14,16 @@ use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
 use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
-use domain::{HeapId, ItemId, SavedViewId, TeamId, Timestamp, UserId};
+use domain::{HeapId, ItemId, RunId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
 use serde_json::{Map, Value};
+use store::StoreError;
 pub use store::audit::AuditCursor;
 use store::audit::{AuditEntry, AuditQuery, AuditScope};
 use uuid::Uuid;
 
 use crate::access::{authorize_heap, authorize_team};
+use crate::items::{ItemOrigin, find_viewable_item};
 use crate::{Principal, ServiceError, Services};
 
 /// The largest page of audit entries.
@@ -59,6 +61,16 @@ pub struct AuditEntryView {
     pub changes: Vec<AuditChange>,
     /// The change as recorded, with IDs rather than names (see `audit.rs`).
     pub diff: Value,
+    /// The run an agent made the change in; `None` for a person's own change.
+    pub run: Option<AuditRun>,
+}
+
+/// The run an audit entry was made in.
+#[derive(Clone, Debug)]
+pub struct AuditRun {
+    pub id: RunId,
+    /// The item the run worked on and where it is now; `None` when the caller can't view its heap.
+    pub item: Option<ItemOrigin>,
 }
 
 /// One changed field of an audit entry.
@@ -144,7 +156,39 @@ impl Services {
             names.insert(*view.id.as_uuid(), view.name.as_str());
         }
         self.insert_user_names(&mut names, &entries).await?;
-        Ok(present_page(entries, next, &names, tz))
+        let runs = self.find_audit_runs(principal.user_id, &entries).await?;
+        Ok(present_page(entries, next, &names, &runs, tz))
+    }
+
+    /// The runs `entries` were made in, with the item each worked on where `viewer` may view its heap.
+    /// Size assumption: a page of up to 200 entries names a handful of runs and items, so each is read on its own. If
+    /// pages ever name many, batch the item and heap lookups.
+    async fn find_audit_runs(
+        &self,
+        viewer: UserId,
+        entries: &[AuditEntry],
+    ) -> Result<HashMap<RunId, AuditRun>, ServiceError> {
+        let mut runs = HashMap::new();
+        let mut items: HashMap<ItemId, Option<ItemOrigin>> = HashMap::new();
+        for run_id in entries.iter().filter_map(|entry| entry.run_id) {
+            if runs.contains_key(&run_id) {
+                continue;
+            }
+            // The foreign key from the entry to its run rules out a missing one.
+            let Some(run) = store::runs::find_run(&self.db, run_id).await? else {
+                return Err(StoreError::corrupt("runs", &run_id.to_string(), "an audit entry's run is missing").into());
+            };
+            let item = match items.get(&run.item_id) {
+                Some(item) => item.clone(),
+                None => {
+                    let item = find_viewable_item(&self.db, viewer, run.item_id).await?;
+                    items.insert(run.item_id, item.clone());
+                    item
+                }
+            };
+            runs.insert(run_id, AuditRun { id: run_id, item });
+        }
+        Ok(runs)
     }
 
     /// Adds the names of the tags, parameters and options of `heap_id`.
@@ -187,7 +231,8 @@ impl Services {
         }
         self.insert_user_names(&mut names, &entries).await?;
         self.insert_invite_link_names(&mut names, team_id, &entries).await?;
-        Ok(present_page(entries, next, &names, tz))
+        let runs = self.find_audit_runs(principal.user_id, &entries).await?;
+        Ok(present_page(entries, next, &names, &runs, tz))
     }
 
     /// Names the invite links `entries` are about after their makers' display names now: "Ana's invite link".
@@ -310,7 +355,13 @@ fn collect_referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
     collect_entity_ids(entries, EntityType::Item).chain(blockers).collect()
 }
 
-fn present_page(entries: Vec<AuditEntry>, next: Option<AuditCursor>, names: &Names, tz: &TimeZone) -> AuditPage {
+fn present_page(
+    entries: Vec<AuditEntry>,
+    next: Option<AuditCursor>,
+    names: &Names,
+    runs: &HashMap<RunId, AuditRun>,
+    tz: &TimeZone,
+) -> AuditPage {
     let entries = entries
         .into_iter()
         .map(|entry| {
@@ -330,6 +381,7 @@ fn present_page(entries: Vec<AuditEntry>, next: Option<AuditCursor>, names: &Nam
                 entity_label: names.get(entry.entity_id).unwrap_or("Unknown").to_owned(),
                 changes: describe_changes(&entry, names, tz),
                 diff: entry.diff,
+                run: entry.run_id.and_then(|id| runs.get(&id).cloned()),
             }
         })
         .collect();
