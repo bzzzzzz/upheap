@@ -89,12 +89,6 @@ pub async fn cli_in_heap(server: &TestServer, user: &TestUser) -> Result<TestCli
     Ok(cli)
 }
 
-/// The key of the item a run works on, read from the brief's item heading line (`k3x9a  Rotate the certs`).
-pub fn item_key_of(start: &ToolStart) -> String {
-    let (_, after) = start.brief.split_once("# The item\n\n").unwrap_or_default();
-    after.split_whitespace().next().unwrap_or_default().to_owned()
-}
-
 pub fn lines_with<'a>(text: &'a str, needle: &str) -> Vec<&'a str> {
     text.lines().filter(|line| line.contains(needle)).collect()
 }

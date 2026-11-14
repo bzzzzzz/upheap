@@ -10,8 +10,8 @@ use std::time::Duration as StdDuration;
 use anyhow::{Context, Result};
 use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart};
 use common::{
-    Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, item_key_of, key,
-    lines_with, wait_until,
+    Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key, lines_with,
+    wait_until,
 };
 use domain::Duration;
 use googletest::prelude::*;
@@ -54,6 +54,12 @@ async fn reply(server: &TestServer, ada: &TestUser, item: &str, number: u32, rep
             &[("if-match", "1")],
         )
         .await
+}
+
+/// The key of the item a run works on, read from the brief's item heading line (`k3x9a  Rotate the certs`).
+fn item_key_of(start: &ToolStart) -> String {
+    let (_, after) = start.brief.split_once("# The item\n\n").unwrap_or_default();
+    after.split_whitespace().next().unwrap_or_default().to_owned()
 }
 
 /// An agent that does nothing and ends normally, with a cost of `cost`.

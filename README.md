@@ -213,7 +213,7 @@ To have an agent work your items:
 4. Write its context: where the repository is, and how work is done and reviewed there. `upheap heap edit
    --context-file context.md`.
 5. In the web app, open the heap's settings and turn on "Agents prepare new notes", so each note you add goes to an
-   agent. The CLI has no flag for it yet.
+   agent. The CLI has no flag for it.
 6. Run `upheap work run --tool claude --root ~/agent-runs` and leave it running. Ctrl-C stops it. The flags are
    above, with the other commands.
 7. Add a note (`upheap item add "..." --need expected`), answer what the agent asks (in the web app, or with

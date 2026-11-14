@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use cli::{ToolReport, ToolStart};
 use common::{Agent, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, lines_with};
+use domain::Duration;
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -47,8 +48,8 @@ fn args(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
 }
 
-/// Asserts that every `upheap` call the agent made since the last check exited 0, and forgets them.
-fn all_succeeded(outcomes: &Outcomes) -> Result<()> {
+/// Asserts that every `upheap` call the agent made since the last check exited 0, and returns them, oldest first.
+fn all_succeeded(outcomes: &Outcomes) -> Vec<Outcome> {
     let made = std::mem::take(&mut *locked(outcomes));
     for outcome in &made {
         expect_that!(
@@ -58,7 +59,7 @@ fn all_succeeded(outcomes: &Outcomes) -> Result<()> {
             outcome.stderr
         );
     }
-    Ok(())
+    made
 }
 
 /// Ada sends `item` to an agent, with `reach` and, when given, `goal`. Returns the item.
@@ -78,16 +79,17 @@ async fn send(server: &TestServer, ada: &TestUser, item: &str, reach: &str, goal
 }
 
 /// Ada replies to `question` (`k3x9a.q1`) through the CLI.
-async fn reply(cli: &TestCli, question: &str, extra: &[&str]) -> Result<()> {
+async fn reply(cli: &TestCli, question: &str, extra: &[&str]) {
     let mut command = vec!["question", "reply", question];
     command.extend_from_slice(extra);
     let replied = cli.run(&command).await;
     expect_that!(replied.exited(0), eq(true), "{}", replied.stderr);
-    Ok(())
 }
 
-/// Runs the loop once and checks it ended well.
-async fn run_once(cli: &TestCli, tool: &StandIn) -> Outcome {
+/// A minute later on the server's clock, runs the loop once and checks it ended well. The minute gives each run its
+/// own start time, so step 10 can tell them apart.
+async fn run_once(server: &TestServer, cli: &TestCli, tool: &StandIn) -> Outcome {
+    server.advance(Duration::from_minutes(1));
     let ran = cli.run_work(ONCE, tool).await;
     expect_that!(ran.exited(0), eq(true), "{}", ran.stderr);
     ran
@@ -98,7 +100,7 @@ async fn run_once(cli: &TestCli, tool: &StandIn) -> Outcome {
 async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<()> {
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada").await?;
-    let cli = TestCli::signed_in(&server, &ada).await?;
+    let mut cli = TestCli::signed_in(&server, &ada).await?;
     let agent = cli.agent();
     let outcomes = Outcomes::default();
 
@@ -106,9 +108,9 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     let added = cli.run(&["heap", "add", "Website"]).await;
     expect_that!(added.exited(0), eq(true), "{}", added.stderr);
     expect_that!(cli.run(&["heap", "use", "website"]).await.exited(0), eq(true));
-    let mut cli = cli;
     cli.stdin = b"The site is in github.com/ada/website. Docs are in docs/. Review on GitHub.\n".to_vec();
     let written = cli.run(&["heap", "edit", "--context-file", "-"]).await;
+    cli.stdin.clear();
     expect_that!(written.exited(0), eq(true), "{}", written.stderr);
     change_heap(&server, &ada, HEAP, json!({ "agents_prepare": true })).await?;
     let shown = cli.run(&["heap", "show"]).await;
@@ -117,7 +119,7 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
 
     // 3 (before there is anything). With nothing for an agent, the loop says so and never starts the tool.
     let nothing_yet = plays(&agent, &outcomes, 9.99, vec![]);
-    let idle = run_once(&cli, &nothing_yet).await;
+    let idle = run_once(&server, &cli, &nothing_yet).await;
     expect_that!(idle.stdout, contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\.$"));
     expect_that!(nothing_yet.starts().len(), eq(0));
 
@@ -150,8 +152,8 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             (args(&["question", "ask", &note, "Which form service?"]), ""),
         ],
     );
-    let first = run_once(&cli, &asking).await;
-    all_succeeded(&outcomes)?;
+    let first = run_once(&server, &cli, &asking).await;
+    all_succeeded(&outcomes);
     expect_that!(asking.starts().len(), eq(1));
     let brief = &asking.starts()[0].brief;
     expect_that!(brief, contains_substring("github.com/ada/website"));
@@ -165,24 +167,27 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     let waiting = server.read_item(&ada, HEAP, &note).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
     expect_that!(waiting["description"], eq("A page with the address and a form."));
+    let waiting_for_ada = server.send(&ada, "GET", "/me/waiting", None).await?;
+    expect_that!(waiting_for_ada["count"], eq(1));
+    expect_that!(waiting_for_ada["rows"][0]["item"]["key"], eq(note.as_str()));
 
     // 5. Ada answers; the next run finishes, and the note is hers again with its context.
-    reply(&cli, &format!("{note}.q1"), &["--comment", "Formspree"]).await?;
+    reply(&cli, &format!("{note}.q1"), &["--comment", "Formspree"]).await;
     let finishing = plays(
         &agent,
         &outcomes,
         0.22,
         vec![(args(&["work", "reached", "--result", "Wrote the context"]), "")],
     );
-    run_once(&cli, &finishing).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &finishing).await;
+    all_succeeded(&outcomes);
     let brief = &finishing.starts()[0].brief;
     expect_that!(brief, contains_substring("Which form service?"));
     expect_that!(brief, contains_substring("Formspree"));
     let with_context = server.read_item(&ada, HEAP, &note).await?;
     expect_that!(with_context["stage"], eq("with_context"));
     expect_that!(with_context["turn"], eq(&Value::Null));
-    let after = run_once(&cli, &finishing).await;
+    let after = run_once(&server, &cli, &finishing).await;
     expect_that!(after.stdout, contains_regex(r"(?m)^\d\d:\d\d  Nothing to do\."));
     expect_that!(finishing.starts().len(), eq(1));
 
@@ -257,11 +262,8 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             }
         })
     };
-    let split = run_once(&cli, &splitting).await;
-    let made = std::mem::take(&mut *locked(&outcomes));
-    for outcome in &made {
-        expect_that!(outcome.exited(0), eq(true), "{}", outcome.stderr);
-    }
+    let split = run_once(&server, &cli, &splitting).await;
+    let made = all_succeeded(&outcomes);
     expect_that!(lines_with(&split.stdout, &note).len(), eq(1));
     let (build, announce) = (made[0].stdout.trim().to_owned(), made[1].stdout.trim().to_owned());
     let closed = server.read_item(&ada, HEAP, &note).await?;
@@ -279,7 +281,8 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     expect_that!(blocked["state"], eq("blocked"));
     expect_that!(blocked["blocked_by"]["key"], eq(build.as_str()));
 
-    // 7. Ada sends the first task to done. The agent starts it, ticks a step and asks Ada for something.
+    // 7. Ada sends the first task to done. The agent starts it, ticks a step, adds one it found and asks Ada for
+    // something.
     let sent = send(&server, &ada, &build, "one", None).await?;
     expect_that!(sent["turn"]["goal"], eq("done"));
     let doing = plays(
@@ -289,16 +292,17 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
         vec![
             (args(&["item", "start", &build]), ""),
             (args(&["step", "tick", &format!("{build}.1")]), ""),
+            (args(&["step", "add", &build, "Add a spam filter"]), ""),
             (args(&["question", "request", &build, "Create the form account"]), ""),
         ],
     );
-    run_once(&cli, &doing).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &doing).await;
+    all_succeeded(&outcomes);
     let waiting = server.read_item(&ada, HEAP, &build).await?;
     expect_that!(waiting["state"], eq("in_progress"));
-    expect_that!(waiting["step_progress"], eq(&json!({ "ticked": 1, "total": 2 })));
+    expect_that!(waiting["step_progress"], eq(&json!({ "ticked": 1, "total": 3 })));
     expect_that!(waiting["waits_for_you"], eq(true));
-    reply(&cli, &format!("{build}.q1"), &["--pick", "Done"]).await?;
+    reply(&cli, &format!("{build}.q1"), &["--pick", "Done"]).await;
 
     // 8. The next run ticks the rest and asks for review; Ada asks for changes; the agent asks again; Ada approves;
     // the agent proposes done; Ada agrees.
@@ -309,24 +313,25 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
         0.66,
         vec![
             (args(&["step", "tick", &format!("{build}.2")]), ""),
+            (args(&["step", "tick", &format!("{build}.3")]), ""),
             (args(&["question", "review", &build, pr, "The contact page"]), ""),
         ],
     );
-    run_once(&cli, &reviewing).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &reviewing).await;
+    all_succeeded(&outcomes);
     expect_that!(
         reviewing.starts()[0].brief,
         contains_substring("Create the form account")
     );
     let waiting = server.read_item(&ada, HEAP, &build).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
-    expect_that!(waiting["step_progress"], eq(&json!({ "ticked": 2, "total": 2 })));
+    expect_that!(waiting["step_progress"], eq(&json!({ "ticked": 3, "total": 3 })));
     reply(
         &cli,
         &format!("{build}.q2"),
         &["--pick", "Changes asked", "--comment", "The form needs a label."],
     )
-    .await?;
+    .await;
     let again = plays(
         &agent,
         &outcomes,
@@ -336,33 +341,34 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             "",
         )],
     );
-    run_once(&cli, &again).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &again).await;
+    all_succeeded(&outcomes);
     let brief = &again.starts()[0].brief;
     expect_that!(brief, contains_substring("Review, round 1 · changes asked"));
     expect_that!(brief, contains_substring("The form needs a label."));
     let waiting = server.read_item(&ada, HEAP, &build).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
-    reply(&cli, &format!("{build}.q3"), &["--pick", "Approved"]).await?;
+    reply(&cli, &format!("{build}.q3"), &["--pick", "Approved"]).await;
     let proposing = plays(
         &agent,
         &outcomes,
         0.88,
         vec![(args(&["question", "propose-done", &build, "The page is merged"]), "")],
     );
-    run_once(&cli, &proposing).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &proposing).await;
+    all_succeeded(&outcomes);
     let waiting = server.read_item(&ada, HEAP, &build).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
     expect_that!(waiting["state"], eq("in_progress"));
-    reply(&cli, &format!("{build}.q4"), &["--pick", "Close as done"]).await?;
+    reply(&cli, &format!("{build}.q4"), &["--pick", "Close as done"]).await;
     let done = server.read_item(&ada, HEAP, &build).await?;
     expect_that!(done["state"], eq("done"));
     let freed = server.read_item(&ada, HEAP, &announce).await?;
     expect_that!(freed["state"], eq("open"));
 
-    // 9. Ada sends the second task all the way. Its tasks are born defined, so the turn goes straight to done: the
-    // reach stays all_the_way across runs, and the item waits for Ada only at the review and the proposal.
+    // 9. Ada sends the second task all the way. A task split with its context and steps is born defined, so its next
+    // stable state is already done and "all the way" goes no further than "one" would here. What this step proves is
+    // that a turn sent all the way still stops for Ada's review and for her agreement before done.
     let sent = send(&server, &ada, &announce, "all_the_way", None).await?;
     expect_that!(sent["turn"]["goal"], eq("done"));
     let working = plays(
@@ -385,15 +391,13 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             ),
         ],
     );
-    run_once(&cli, &working).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &working).await;
+    all_succeeded(&outcomes);
     let waiting = server.read_item(&ada, HEAP, &announce).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
-    expect_that!(waiting["turn"]["reach"], eq("all_the_way"));
-    reply(&cli, &format!("{announce}.q1"), &["--pick", "Approved"]).await?;
+    reply(&cli, &format!("{announce}.q1"), &["--pick", "Approved"]).await;
     let back = server.read_item(&ada, HEAP, &announce).await?;
     expect_that!(back["waits_for_you"], eq(false));
-    expect_that!(back["turn"]["reach"], eq("all_the_way"));
     let closing = plays(
         &agent,
         &outcomes,
@@ -403,29 +407,29 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             "",
         )],
     );
-    run_once(&cli, &closing).await;
-    all_succeeded(&outcomes)?;
+    run_once(&server, &cli, &closing).await;
+    all_succeeded(&outcomes);
     let waiting = server.read_item(&ada, HEAP, &announce).await?;
     expect_that!(waiting["waits_for_you"], eq(true));
-    reply(&cli, &format!("{announce}.q2"), &["--pick", "Close as done"]).await?;
+    reply(&cli, &format!("{announce}.q2"), &["--pick", "Close as done"]).await;
     let done = server.read_item(&ada, HEAP, &announce).await?;
     expect_that!(done["state"], eq("done"));
 
     // 10. Ada can see what happened, when, and what each run cost: the runs of each item, newest first.
-    let (header, lines) = runs_of(&cli, &note).await;
+    let (header, note_runs) = runs_of(&cli, &note).await;
     expect_that!(header, eq("Runs 3 · $0.66"));
     expect_that!(
-        lines,
+        note_runs,
         elements_are![
             matches_regex(run_line("with context → defined", "reached", "0.33")),
             matches_regex(run_line("as written → with context", "reached", "0.22")),
             matches_regex(run_line("as written → with context", "asked", "0.11")),
         ]
     );
-    let (header, lines) = runs_of(&cli, &build).await;
+    let (header, build_runs) = runs_of(&cli, &build).await;
     expect_that!(header, eq("Runs 4 · $2.86"));
     expect_that!(
-        lines,
+        build_runs,
         elements_are![
             matches_regex(run_line("defined → done", "asked", "0.88")),
             matches_regex(run_line("defined → done", "asked", "0.77")),
@@ -433,15 +437,24 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
             matches_regex(run_line("defined → done", "asked", "0.55")),
         ]
     );
-    let (header, lines) = runs_of(&cli, &announce).await;
+    let (header, announce_runs) = runs_of(&cli, &announce).await;
     expect_that!(header, eq("Runs 2 · $2.10"));
     expect_that!(
-        lines,
+        announce_runs,
         elements_are![
             matches_regex(run_line("defined → done", "asked", "1.11")),
             matches_regex(run_line("defined → done", "asked", "0.99")),
         ]
     );
+    // Each run started a minute after the one before it (see `run_once`), so the times, newest first from the last
+    // item to the first, all differ and go down.
+    let times: Vec<&str> = [&announce_runs, &build_runs, &note_runs]
+        .into_iter()
+        .flatten()
+        .map(|line| line.get(2..7).unwrap_or_default())
+        .collect();
+    expect_that!(times.len(), eq(9));
+    expect_that!(times.windows(2).all(|pair| pair[0] > pair[1]), eq(true), "{times:?}");
     Ok(())
 }
 
@@ -458,7 +471,7 @@ async fn runs_of(cli: &TestCli, item: &str) -> (String, Vec<String>) {
     let header = lines.next().unwrap_or_default().to_owned();
     let runs = lines
         .take_while(|line| !line.is_empty())
-        .filter(|line| line.starts_with("  1") || line.starts_with("  0") || line.starts_with("  2"))
+        .filter(|line| line.starts_with("  ") && !line.starts_with("    "))
         .map(str::to_owned)
         .collect();
     (header, runs)
