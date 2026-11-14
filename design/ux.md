@@ -351,7 +351,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
    changes, Won't do, Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked
-   item, and the Stage choices. A reader's item, with none of them, has no ⋯.
+   item, and the Stage choices. With none of them, as for a reader's item, an archived heap's or a closed item, there
+   is no ⋯.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
    go back to a note (or to a reminder). A reminder has an exact Date in place of Due (point 16), which can be moved,

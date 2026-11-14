@@ -139,7 +139,8 @@ export function ItemPane({
               ))}
             </div>
           )}
-          <CopyKey heapRef={heapRef} itemKey={itemKey} />
+          {/* Keyed, so walking to the next item doesn't carry the check over. */}
+          <CopyKey key={itemKey} heapRef={heapRef} itemKey={itemKey} />
           <button
             type="button"
             onClick={onClose}

@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -40,7 +40,7 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Add reason… or Change reason…, and
+ * other states, Won't do, Make it a task…, Change blocker…, Add reason… or Change reason…, and
  * the Stage choices; with none of them, as for a reader, there is no ⋯.
  */
 function actionsOf(item: Item) {
@@ -70,17 +70,13 @@ function actionsOf(item: Item) {
     changeBlocker: item.state === "blocked" && canChange,
     reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
+    more:
+      others.length > 0 ||
+      (canChange && !isClosed(state)) ||
+      (allowed.includes("make_task") && !arrivedReminder) ||
+      (item.state === "blocked" && canChange) ||
+      item.stage_choices.length > 0,
   };
-}
-
-function hasMore(actions: ReturnType<typeof actionsOf>): boolean {
-  return (
-    actions.others.length > 0 ||
-    actions.wontDo ||
-    actions.makeTask ||
-    actions.changeBlocker ||
-    actions.stages.length > 0
-  );
 }
 
 /**
@@ -116,6 +112,13 @@ export function ItemActions({
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const actions = actionsOf(item);
   const bar = variant === "bar";
+  // Done or Won't do picked from ⋯ closes the item, and a closed item has no ⋯: focus, given back to ⋯ as its menu
+  // closed, goes to the main button (Reopen) instead of falling to the page.
+  const hadMore = useRef(actions.more);
+  useEffect(() => {
+    if (hadMore.current && !actions.more && document.activeElement === document.body) mainRef.current?.focus();
+    hadMore.current = actions.more;
+  }, [actions.more]);
 
   const closeConfirm = () => {
     setConfirming(false);
@@ -164,7 +167,7 @@ export function ItemActions({
     </button>
   );
 
-  const more = !hasMore(actions) ? null : bar ? (
+  const more = !actions.more ? null : bar ? (
     <MoreSheet
       item={item}
       actions={actions}

@@ -248,9 +248,12 @@ test("the item has one main state button, and ⋯ holds the rest", async ({ page
   }
   // The item's link is copied from its key in the header, not from ⋯.
   await expect(moreEntry(page, more, "Copy link")).toHaveCount(0);
-  // Done from ⋯ closes the item; the pane offers to reopen it.
+  // Done from ⋯ closes the item; the pane offers to reopen it, and focus goes there, as ⋯ has gone.
   await moreEntry(page, more, "Done").click();
-  await expect(state.getByRole("button", { name: "Reopen", exact: true })).toBeVisible();
+  const reopen = state.getByRole("button", { name: "Reopen", exact: true });
+  await expect(reopen).toBeVisible();
+  await expect(reopen).toBeFocused();
+  await expect(state.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
 });
 
 test("a reader's item has values to read, no Edit, no ⋯, and its link to copy", async ({ page, context, heapPath }) => {
