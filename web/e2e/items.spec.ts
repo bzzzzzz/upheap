@@ -1174,7 +1174,7 @@ test("a link in the item to another in its heap brings that row into view, selec
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("The note far down");
   await expect(rowLink("The note far down")).toHaveAttribute("aria-current", "page");
   await expect(rowLink("The note far down")).toBeInViewport();
-  expect(await scrollY()).toBeGreaterThan(200);
+  await expect.poll(scrollY).toBeGreaterThan(200);
 
   // Became: back to the task, at the top of the list.
   await itemPane(page).getByRole("link", { name: "Made from the note" }).click();
@@ -1183,14 +1183,33 @@ test("a link in the item to another in its heap brings that row into view, selec
   await expect(rowLink("Made from the note")).toBeInViewport();
   await expect(rowLink("The note far down")).not.toHaveAttribute("aria-current");
 
+  // A target that isn't a row on screen, as the note once closed, leaves the list where it is.
+  const current = await page.request.get(`/api/v1${heapPath}/items/${note.key}`);
+  const { version } = (await current.json()) as { version: number };
+  const closed = await page.request.patch(`/api/v1${heapPath}/items/${note.key}`, {
+    headers: { "x-csrf-protection": "1", "if-match": `"${version}"` },
+    data: { state: "done" },
+  });
+  expect(closed.ok()).toBe(true);
+  await page.goto(`${heapPath}/items/${task.key}`);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Made from the note");
+  await rowLink("Item 30").evaluate((link) => link.scrollIntoView({ block: "center" }));
+  await expect.poll(scrollY).toBeGreaterThan(200);
+  const kept = await scrollY();
+  await itemPane(page)
+    .getByRole("link", { name: /The note far down/ })
+    .click();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("The note far down");
+  await expect.poll(scrollY).toBe(kept);
+
   // Moved to another heap, the task's link leads to that heap's list, which starts at the top.
   const team = heapPath.split("/")[2];
   const other = await post(`/teams/${team}/heaps`, { name: "Elsewhere" });
   await post(`${heapPath}/items/${task.key}/move`, { heap_id: other.id }, { "if-match": `"${task.version}"` });
   await page.goto(`${heapPath}/items/${note.key}`);
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("The note far down");
-  await rowLink("The note far down").evaluate((link) => link.scrollIntoView({ block: "center" }));
-  expect(await scrollY()).toBeGreaterThan(200);
+  await rowLink("Item 30").evaluate((link) => link.scrollIntoView({ block: "center" }));
+  await expect.poll(scrollY).toBeGreaterThan(200);
   await itemPane(page).getByRole("link", { name: "Made from the note" }).click();
   await expect(page).toHaveURL(new RegExp(`/heaps/${other.slug}/items/${task.key}`));
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Made from the note");
