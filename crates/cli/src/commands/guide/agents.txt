@@ -54,9 +54,11 @@ The usual order of work
    and chain them with `--blocked-by <task>`. Then close the note with `upheap item became k3x9a`.
    `upheap item show` lists what a note became, and where a task came from.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
-   open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead,
-   and `upheap work hand-back --reason "<why>"` gives the turn back when there is nothing to do and the goal
-   needn't be reached, such as work done elsewhere. An item that already has what the goal needs is reached.
+   open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead;
+   in a turn to with context, a note that comes out defined enough may be made a defined task and reported with
+   `upheap work reached --stage defined`. `upheap work hand-back --reason "<why>"` gives the turn back when there
+   is nothing to do and the goal needn't be reached, such as work done elsewhere. An item that already has what
+   the goal needs is reached.
    `upheap parameter list` shows the heap's parameters and their options; give an item one with
    `--parameter NAME=OPTION` on `upheap item add` or `upheap item edit`. An admin sets a heap's parameters up with
    `upheap parameter add` and `upheap parameter edit`, and their options with `upheap parameter option add`, `edit`

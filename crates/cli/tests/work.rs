@@ -176,6 +176,44 @@ async fn reached_says_so_when_a_turn_sent_all_the_way_goes_on() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn reached_with_a_stage_says_what_it_skipped() -> Result<()> {
+    // Arrange: a run on a note, which it makes a task with a context and a step.
+    let (_server, _ada, mut cli, note) = with_prepared_note().await?;
+    let claim = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claim.stdout.trim().to_owned());
+    let edited = cli
+        .run(&[
+            "item",
+            "edit",
+            &note,
+            "--description",
+            "The certs expire on Friday. Done when: they are rotated.",
+            "-q",
+        ])
+        .await;
+    let task = cli.run(&["item", "to-task", &note, "-q"]).await;
+    let step = cli.run(&["step", "add", &note, "Order the certs", "-q"]).await;
+
+    // Act
+    let reached = cli
+        .run(&["work", "reached", "--result", "Went straight on", "--stage", "defined"])
+        .await;
+
+    // Assert
+    expect_that!(edited.exited(0), eq(true));
+    expect_that!(task.exited(0), eq(true));
+    expect_that!(step.exited(0), eq(true));
+    expect_that!(
+        reached.stdout,
+        eq(&format!(
+            "Reached: defined (skipped with context). {note} is yours again.\n"
+        ))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn claim_prints_the_run_and_how_to_use_it() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, note) = with_prepared_note().await?;

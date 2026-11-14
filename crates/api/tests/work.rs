@@ -182,6 +182,15 @@ impl World {
             .await
     }
 
+    async fn reached_at(&self, run: &str, stage: &str) -> Result<TestResponse> {
+        self.run_call(
+            run,
+            "reached",
+            Some(json!({ "result": "Went straight on", "stage": stage })),
+        )
+        .await
+    }
+
     async fn finish(&self, run: &str, body: Value) -> Result<TestResponse> {
         self.run_call(run, "finish", Some(body)).await
     }
@@ -927,6 +936,119 @@ async fn defined_needs_a_task_with_context_and_a_step() -> Result<()> {
     expect_that!(reached.status, eq(StatusCode::OK));
     expect_that!(item["stage"], eq(&json!("defined")));
     expect_that!(item["kind"], eq(&json!("task")));
+    Ok(())
+}
+
+/// A note with a context whose turn goes to with context, claimed by a run. Returns the key and the run.
+async fn note_in_a_turn_to_with_context(w: &World) -> Result<(String, String)> {
+    let key = w
+        .add("Rotate the certs", json!({ "description": "Why and how" }))
+        .await?;
+    w.send_turn(&key).await?;
+    let run = w.claimed().await?;
+    Ok((key, run))
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_to_with_context_may_report_defined_for_a_task_with_a_step() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (key, run) = note_in_a_turn_to_with_context(&w).await?;
+    let path = w.item_path(&key).await?;
+    let made_task = w
+        .in_run(
+            &run,
+            Method::PATCH,
+            &path,
+            Some(&w.get(&key).await?["version"]),
+            Some(json!({ "kind": "task" })),
+        )
+        .await?;
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{path}/steps"),
+            None,
+            Some(json!({ "title": "Order the certs" })),
+        )
+        .await?;
+
+    // Act
+    let reached = w.reached_at(&run, "defined").await?;
+    let item = w.get(&key).await?;
+    let diff = w
+        .app
+        .audit_entries(item["id"].as_str().context("id")?)
+        .await?
+        .into_iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?
+        .1;
+
+    // Assert
+    expect_that!(made_task.status, eq(StatusCode::OK));
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    expect_that!(reached.status, eq(StatusCode::OK));
+    expect_that!(reached.body["end"], eq(&json!("reached")));
+    expect_that!(item["stage"], eq(&json!("defined")));
+    expect_that!(item["turn"], eq(&Value::Null));
+    expect_that!(diff["goal"], eq(&json!("with_context")));
+    expect_that!(diff["stage"]["before"], eq(&json!("as_written")));
+    expect_that!(diff["stage"]["after"], eq(&json!("defined")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_reported_defined_is_checked_against_defined_and_the_run_stays_live() -> Result<()> {
+    // Arrange: a note in a turn to with context.
+    let w = world().await?;
+    let (key, run) = note_in_a_turn_to_with_context(&w).await?;
+
+    // Act
+    let missed = w.reached_at(&run, "defined").await?;
+    let item = w.get(&key).await?;
+    let plain = w.reached(&run).await?;
+
+    // Assert
+    expect_that!(missed.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&missed), some(eq("not_reached")));
+    expect_that!(
+        missed.body["title"],
+        eq(&json!("The item is a note; a defined item is a task."))
+    );
+    expect_that!(item["stage"], eq(&json!("as_written")));
+    expect_that!(plain.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_stage_below_the_goal_is_refused_and_the_run_stays_live() -> Result<()> {
+    // Arrange: a note with a context whose turn goes to defined.
+    let w = world().await?;
+    let key = w
+        .add("Rotate the certs", json!({ "description": "Why and how" }))
+        .await?;
+    w.edit(&key, json!({ "stage": "with_context" })).await?;
+    w.send_turn(&key).await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let refused = w.reached_at(&run, "with_context").await?;
+    let item = w.get(&key).await?;
+    let plain = w.reached(&run).await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&refused), some(eq("field_not_allowed")));
+    expect_that!(item["stage"], eq(&json!("with_context")));
+    expect_that!(
+        plain.body["title"],
+        eq(&json!("The item is a note; a defined item is a task."))
+    );
     Ok(())
 }
 
