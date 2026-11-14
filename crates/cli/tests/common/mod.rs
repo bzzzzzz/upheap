@@ -89,6 +89,27 @@ pub async fn cli_in_heap(server: &TestServer, user: &TestUser) -> Result<TestCli
     Ok(cli)
 }
 
+pub fn lines_with<'a>(text: &'a str, needle: &str) -> Vec<&'a str> {
+    text.lines().filter(|line| line.contains(needle)).collect()
+}
+
+/// Patches the heap at `heap` (`team/slug`) as `user`, at its current version.
+pub async fn change_heap(server: &TestServer, user: &TestUser, heap: &str, patch: Value) -> Result<()> {
+    let (team, slug) = heap.split_once('/').context("a heap is team/slug")?;
+    let path = format!("/teams/{team}/heaps/{slug}");
+    let current = server.send(user, "GET", &path, None).await?;
+    server
+        .send_with(
+            user,
+            "PATCH",
+            &path,
+            Some(patch),
+            &[("if-match", &current["version"].to_string())],
+        )
+        .await?;
+    Ok(())
+}
+
 /// The server, listening on a free localhost port until the test ends.
 pub struct TestServer {
     /// `http://127.0.0.1:<port>`.

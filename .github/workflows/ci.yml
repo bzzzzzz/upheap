@@ -52,6 +52,23 @@ jobs:
             exit 1
           }
 
+  # The golden path of Work with agents, end to end through the CLI and the API, with a stand-in for the agent tool
+  # (crates/cli/tests/golden_path.rs). Its own job so branch protection can require it by name.
+  golden-path:
+    name: Golden path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Golden path
+        run: cargo test -p cli --locked --test golden_path
+
   # The store and API suites again, on MySQL. Each test creates its own database on this server
   # (crates/store/src/testing.rs), so SQLite-only assumptions in migrations and queries fail here.
   mysql:

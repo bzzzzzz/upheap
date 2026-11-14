@@ -203,6 +203,22 @@ comma or a space, or one starting with `-`, is refused. Every run is still denie
 wide as `Bash` lets a run get around that through a shell. Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
 signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, or no agent tool), 1 anything else.
 
+### Start an agent loop
+
+To have an agent work your items:
+
+1. Install `upheap` (above) and Claude Code (`claude`), signed in.
+2. Sign in to your server: `upheap auth login --server https://<your server>`.
+3. Make or pick a heap: `upheap heap add "Website"`, then `upheap heap use website`.
+4. Write its context: where the repository is, and how work is done and reviewed there. `upheap heap edit
+   --context-file context.md`.
+5. In the web app, open the heap's settings and turn on "Agents prepare new notes", so each note you add goes to an
+   agent. The CLI has no flag for it.
+6. Run `upheap work run --tool claude --root ~/agent-runs` and leave it running. Ctrl-C stops it. The flags are
+   above, with the other commands.
+7. Add a note (`upheap item add "..." --need expected`), answer what the agent asks (in the web app, or with
+   `upheap question reply`), and send items on from the web app with "Send to an agent".
+
 ### From Claude Code
 
 This repository is also a Claude Code plugin marketplace with one plugin, `upheap`. Its skills work through the
