@@ -45,6 +45,9 @@
   --param-ink: #4c1d95;
   --overdue-soft: #fee2e2;
   --overdue-ink: #991b1b;
+  /* Text an edit added, in a history's diff; what it removed uses the overdue pair, struck through. */
+  --added-soft: #ccfbf1;
+  --added-ink: #115e59;
   /* An agent has the item: the list row's robot mark. Blue, so it reads apart from in progress (the accent). */
   --agent: #2563eb;
   --agent-soft: #dbeafe;
@@ -78,6 +81,8 @@
     --param-ink: #ddd6fe;
     --overdue-soft: #450a0a;
     --overdue-ink: #fca5a5;
+    --added-soft: #134e4a;
+    --added-ink: #99f6e4;
     --agent: #60a5fa;
     --agent-soft: #172554;
     --avatar-1: #78350f;
@@ -111,6 +116,8 @@
   --color-param-ink: var(--param-ink);
   --color-overdue-soft: var(--overdue-soft);
   --color-overdue-ink: var(--overdue-ink);
+  --color-added-soft: var(--added-soft);
+  --color-added-ink: var(--added-ink);
   --color-agent: var(--agent);
   --color-agent-soft: var(--agent-soft);
   --color-avatar-1: var(--avatar-1);

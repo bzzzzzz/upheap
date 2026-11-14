@@ -5,8 +5,9 @@ import { Link, useParams } from "@tanstack/react-router";
 import { Bot, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import type { AuditEntry } from "../api/client";
+import type { AuditChange, AuditEntry } from "../api/client";
 import { useAuditLog, useMe, type AuditScope } from "../api/queries";
+import { TextDiff } from "./TextDiff";
 
 /**
  * The history of `scope`, or of one entity in it, newest first, a page at a time. With `showEntity` each entry
@@ -147,7 +148,11 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
   );
 }
 
-function ChangeValues({ before, after }: { before?: string | null; after?: string | null }) {
+/** A change's values: as a word diff when the server sent one, else the old value struck through and the new one. */
+function ChangeValues({ before, after, text_diff }: AuditChange) {
+  if (text_diff) {
+    return <TextDiff pieces={text_diff} />;
+  }
   if (before == null && after == null) {
     return <span>changed</span>;
   }
