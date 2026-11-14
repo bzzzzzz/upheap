@@ -22,7 +22,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 ///
 /// The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so
 /// the browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so
-/// does every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`
+/// does every sign-in by a client such as the command line, and every personal token: they stop working at once. `ended_sign_ins`
 /// counts the other ones that were still live. The new password may equal the current one, which ends the others
 /// without picking a new password.
 ///

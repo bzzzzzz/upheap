@@ -66,6 +66,8 @@ pub struct Environment {
     pub heap: Option<String>,
     /// `UPHEAP_RUN`: the run an agent writes in. Sent as `Upheap-Run` with every request.
     pub run: Option<String>,
+    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command then uses instead of the keychain sign-in.
+    pub token: Option<String>,
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
     pub stdout_is_terminal: bool,
@@ -103,6 +105,9 @@ impl Environment {
             server: var("UPHEAP_SERVER"),
             heap: var("UPHEAP_HEAP"),
             run: var("UPHEAP_RUN"),
+            token: var("UPHEAP_TOKEN")
+                .map(|token| token.trim().to_owned())
+                .filter(|token| !token.is_empty()),
             no_color: var("NO_COLOR").is_some(),
             stdout_is_terminal: std::io::stdout().is_terminal(),
             stderr_is_terminal: std::io::stderr().is_terminal(),
@@ -135,7 +140,13 @@ impl Deps {
 #[command(
     name = "upheap",
     version,
-    about = "Upheap from the terminal: a heap's items and tags, heaps, and signing in."
+    about = "Upheap from the terminal: a heap's items and tags, heaps, and signing in.",
+    after_help = "Environment:\n  \
+        UPHEAP_SERVER  The server's address\n  \
+        UPHEAP_HEAP    The heap to work in\n  \
+        UPHEAP_RUN     The run an agent writes in\n  \
+        UPHEAP_TOKEN   A personal token made on the web app's Account page; when set, every command uses it\n                 \
+        instead of the keychain sign-in, and never opens a browser"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -401,6 +412,7 @@ where
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
     let in_run = env.run.is_some();
+    let has_env_token = env.token.is_some();
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(err) => {
@@ -440,6 +452,7 @@ where
         // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
         Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
+            let err = if has_env_token { err.refused_env_token() } else { err };
             report(&err, &mut out, in_run);
             ExitCode::from(err.exit_code())
         }
@@ -614,7 +627,12 @@ impl App {
     }
 
     /// An access token for `client`'s server, refreshed when the stored one is stale.
+    ///
+    /// With `UPHEAP_TOKEN` set, that token at once: it never rotates, so there is no keychain, lock or refresh.
     pub async fn access_token(&self, client: &ApiClient) -> Result<String, CliError> {
+        if let Some(token) = &self.env.token {
+            return Ok(token.clone());
+        }
         let server = config::server_key(client.server());
         let token = auth::access_token(
             &self.tokens,

@@ -72,7 +72,7 @@ async fn open_password_reset(
 /// the operator made it, and once: it is used up by this call.
 ///
 /// Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its
-/// clients such as the command line, whose tokens stop working at once. Then this browser gets a new session, in the
+/// clients such as the command line and its personal tokens, which stop working at once. Then this browser gets a new session, in the
 /// cookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal
 /// the old one. The account's sign-in attempts start over.
 ///

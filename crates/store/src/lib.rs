@@ -19,6 +19,7 @@ pub mod oauth;
 pub mod oidc_sign_ins;
 pub mod parameters;
 pub mod password_resets;
+pub mod personal_tokens;
 pub mod questions;
 pub mod runs;
 pub mod saved_views;

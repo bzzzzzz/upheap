@@ -1,5 +1,6 @@
 //! The signed-in user, their teams and heaps.
 
+use domain::personal_token::TokenExpiry;
 use domain::user::User;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -175,6 +176,83 @@ pub struct ClientSignInDto {
 #[schema(as = ClientSignInList)]
 pub struct ClientSignInListDto {
     pub sign_ins: Vec<ClientSignInDto>,
+}
+
+/// One live personal token. The secret is never shown again after it is made.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PersonalToken)]
+pub struct PersonalTokenDto {
+    /// Names the token in `DELETE /me/personal-tokens/{id}`.
+    pub id: Uuid,
+    /// What the person called it.
+    pub name: String,
+    /// UTC milliseconds.
+    pub created_at: i64,
+    /// The day it was made, in the request's timezone: "today", "yesterday", "3 Nov", or "3 Nov 2025".
+    pub created_label: String,
+    /// UTC milliseconds. `null` for a token that never expires.
+    pub expires_at: Option<i64>,
+    /// The day it stops working, worded like `created_label`. `null` for a token that never expires.
+    pub expires_label: Option<String>,
+    /// UTC milliseconds, precise to a minute. `null` until it is first used.
+    pub last_used_at: Option<i64>,
+    /// How long ago it was last used, in calendar days in the request's timezone: "today", "2 days ago". `null`
+    /// until it is first used.
+    pub last_used_label: Option<String>,
+}
+
+/// How long a new personal token lasts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = PersonalTokenExpiry)]
+pub enum PersonalTokenExpiryDto {
+    #[serde(rename = "30_days")]
+    Days30,
+    #[default]
+    #[serde(rename = "90_days")]
+    Days90,
+    /// 365 days.
+    #[serde(rename = "1_year")]
+    Year1,
+    #[serde(rename = "never")]
+    Never,
+}
+
+impl From<PersonalTokenExpiryDto> for TokenExpiry {
+    fn from(expiry: PersonalTokenExpiryDto) -> Self {
+        match expiry {
+            PersonalTokenExpiryDto::Days30 => Self::Days30,
+            PersonalTokenExpiryDto::Days90 => Self::Days90,
+            PersonalTokenExpiryDto::Year1 => Self::Year1,
+            PersonalTokenExpiryDto::Never => Self::Never,
+        }
+    }
+}
+
+/// What the signed-in user gives to make a personal token.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PersonalTokenMake)]
+pub struct PersonalTokenMakeDto {
+    /// What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters.
+    pub name: String,
+    /// How long it lasts. Defaults to `90_days`.
+    #[serde(default)]
+    pub expires_in: PersonalTokenExpiryDto,
+}
+
+/// A personal token just made.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PersonalTokenMade)]
+pub struct PersonalTokenMadeDto {
+    pub token: PersonalTokenDto,
+    /// The secret, `uph_` and a random value, to give as `Authorization: Bearer`. Shown in this response only.
+    pub secret: String,
+}
+
+/// The caller's live personal tokens, newest first.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PersonalTokenList)]
+pub struct PersonalTokenListDto {
+    pub tokens: Vec<PersonalTokenDto>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

@@ -96,6 +96,8 @@ enum Target {
     Me,
     /// A sign-in of the CLI as the caller, in `{id}`.
     SignIn,
+    /// A personal token of the caller, in `{id}`.
+    PersonalToken,
     /// A lookup text in the query string.
     UserQuery,
     /// The CLI's authorization request in the query string.
@@ -121,6 +123,8 @@ enum RequestBody {
     Empty,
     Registration,
     SignIn,
+    /// A personal token's name.
+    NewPersonalToken,
     /// The username step of a sign-in through the provider.
     OidcUsername,
     NewItem,
@@ -376,6 +380,30 @@ fn endpoints() -> Vec<Endpoint> {
             "/me/sign-ins/{id}",
             SignedIn,
             Target::SignIn,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::GET,
+            "/me/personal-tokens",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/me/personal-tokens",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::NewPersonalToken,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::DELETE,
+            "/me/personal-tokens/{id}",
+            SignedIn,
+            Target::PersonalToken,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
         ),
@@ -1506,6 +1534,7 @@ impl World {
                 Some(json!({ "email": email, "username": username, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
+            RequestBody::NewPersonalToken => Some(json!({ "name": "ci" })),
             RequestBody::OidcUsername => Some(json!({ "username": self.unique_name("oidc") })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
@@ -1632,6 +1661,18 @@ impl World {
                     id = listed.body["sign_ins"][0]["id"]
                         .as_str()
                         .context("no sign-in listed")?
+                        .to_owned();
+                }
+                path = path.replace("{id}", &id);
+            }
+            Target::PersonalToken => {
+                // Anonymous callers get a token's shape and no token, and are refused before it matters.
+                let mut id = "7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40".to_owned();
+                if let Some(session) = &session {
+                    let made = self.app.make_personal_token(session, "ci", None).await?;
+                    id = made.body["token"]["id"]
+                        .as_str()
+                        .context("no personal token made")?
                         .to_owned();
                 }
                 path = path.replace("{id}", &id);

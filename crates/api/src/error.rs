@@ -161,6 +161,14 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::NotFound => simple(StatusCode::NOT_FOUND, "not_found", Category::Permission),
         ServiceError::Forbidden(_) => simple(StatusCode::FORBIDDEN, "forbidden", Category::Permission),
         ServiceError::Unauthenticated => simple(StatusCode::UNAUTHORIZED, "unauthenticated", Category::Permission),
+        ServiceError::TokenRevoked => Classified {
+            title: "The token was revoked".to_owned(),
+            ..simple(StatusCode::UNAUTHORIZED, "token_revoked", Category::Permission)
+        },
+        ServiceError::TokenExpired => Classified {
+            title: "The token has expired".to_owned(),
+            ..simple(StatusCode::UNAUTHORIZED, "token_expired", Category::Permission)
+        },
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
         }
@@ -568,7 +576,10 @@ impl IntoResponse for ApiError {
             Json(body),
         )
             .into_response();
-        if matches!(self, ApiError::BearerRejected) {
+        if matches!(
+            self,
+            ApiError::BearerRejected | ApiError::Service(ServiceError::TokenRevoked | ServiceError::TokenExpired)
+        ) {
             // RFC 6750 §3: says how to authenticate, and why this token didn't.
             response.headers_mut().insert(
                 header::WWW_AUTHENTICATE,

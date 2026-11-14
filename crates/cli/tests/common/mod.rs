@@ -516,6 +516,7 @@ impl TestCli {
                 server: Some(server.url.clone()),
                 heap: None,
                 run: None,
+                token: None,
                 no_color: false,
                 stdout_is_terminal: false,
                 stderr_is_terminal: false,

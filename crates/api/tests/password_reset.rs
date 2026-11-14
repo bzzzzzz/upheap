@@ -421,3 +421,24 @@ async fn an_unknown_login_has_no_link() -> Result<()> {
     expect_that!(unknown.is_err(), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn setting_a_password_revokes_personal_tokens() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+    let made = app.make_personal_token(&session, "ci", None).await?;
+    let secret = made.body["secret"].as_str().context("no secret")?.to_owned();
+    let token = app.make_reset_link("ada").await?;
+
+    // Act
+    let done = reset(&app, &token, NEW_PASSWORD).await?;
+    let used = app.send_bearer(Method::GET, "/api/v1/me", &secret, None).await?;
+
+    // Assert
+    expect_that!(done.status, eq(StatusCode::OK));
+    expect_that!(used.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(problem_code(&used), eq("token_revoked"));
+    Ok(())
+}

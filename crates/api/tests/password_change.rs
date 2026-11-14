@@ -421,3 +421,24 @@ async fn me_offers_changing_the_password() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_change_revokes_personal_tokens_and_counts_them() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+    let made = app.make_personal_token(&session, "ci", None).await?;
+    let secret = made.body["secret"].as_str().context("no secret")?.to_owned();
+
+    // Act
+    let changed = change(&app, &session, PASSWORD, NEW_PASSWORD).await?;
+    let used = app.send_bearer(Method::GET, "/api/v1/me", &secret, None).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::OK));
+    expect_that!(changed.body, eq(&json!({ "ended_sign_ins": 1 })));
+    expect_that!(used.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(problem_code(&used), eq("token_revoked"));
+    Ok(())
+}

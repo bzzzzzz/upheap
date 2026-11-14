@@ -9,6 +9,10 @@ Naming
   `upheap item list --all-heaps` lists every heap's items in one ranked list, each with its heap, and needs no heap
   set.
 
+Signing in
+- UPHEAP_TOKEN holds a personal token made on the web app's Account page. When it is set, every command uses it
+  instead of the keychain sign-in, and never opens a browser. UPHEAP_SERVER says which server it belongs to.
+
 Output
 - Results go to stdout, errors to stderr. Without a flag the output is text for people.
 - --json prints the server's response body unchanged, and a refusal's problem body on stderr.
@@ -23,8 +27,10 @@ Exit codes
   3  the server refused the request, or a name on the command line matched nothing
   4  not signed in, not allowed, or not found
   5  the server couldn't be reached
-  6  the setup on this machine is broken: the config file or the keychain
+  6  the setup on this machine is broken: the config file or the keychain, or a UPHEAP_TOKEN the server refuses
 - On 4 with a message about signing in, stop and tell the person: `upheap auth login` needs their browser.
+- On 6 with a message naming UPHEAP_TOKEN, stop and tell the person: the token was revoked or has expired, or isn't
+  one this server knows, and they make a new one.
 - On 3 with a conflict, someone changed the item since you read it: read it again before writing.
 
 Long text
