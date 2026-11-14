@@ -493,6 +493,8 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** Set on the way into an item from a page of the app, so closing the item goes back there. */
     closesBack?: boolean;
+    /** Set on each click of an agent's mark in a history, so a second click on the same run is a new location. */
+    runLinkedAt?: number;
     /**
      * Set on the way to where the user lands after the invite or reset page, holding the line the shell shows once:
      * "You joined Acme." or "Password changed. You're signed in."

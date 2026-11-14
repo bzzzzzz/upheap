@@ -7711,7 +7711,8 @@
           "names_entity",
           "entity",
           "changes",
-          "diff"
+          "diff",
+          "run"
         ],
         "properties": {
           "action": {
@@ -7754,6 +7755,17 @@
           "phrase": {
             "type": "string",
             "description": "What was done, to show after the actor's name: \"edited item\", \"joined the team\"."
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditRun",
+                "description": "The run an agent made the change in; null for a person's own change."
+              }
+            ]
           }
         }
       },
@@ -7776,6 +7788,30 @@
               "null"
             ],
             "description": "Pass as `cursor` for the next page; `null` on the last page."
+          }
+        }
+      },
+      "AuditRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "item"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemOrigin",
+                "description": "The item the run worked on, with the heap it is in now; null when the caller can't view that heap."
+              }
+            ]
           }
         }
       },

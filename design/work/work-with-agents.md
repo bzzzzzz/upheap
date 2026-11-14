@@ -239,7 +239,7 @@ is resolved or turned into a task.
 ### Out
 
 How a pushed reminder or a critical case reaches the person, how the person says what is critical, more than one
-kind of agent, and who in a team answers a question. Each is an idea in Upheap.
+kind of agent, and who in a team answers a question. None is designed here.
 
 ## 3. Workflows
 
@@ -672,7 +672,8 @@ change it makes carries the run it was made in.
 
 **Pushing**
 
-1. No rule here pushes anything. A reminder's push and the person's critical cases wait for a channel, an idea in Upheap.
+1. No rule here pushes anything. A reminder's push and the person's critical cases wait for a channel, which this design
+   leaves out.
 
 ### Scenarios
 
@@ -1226,5 +1227,4 @@ Each is exit 3 with the server's message and code, and a hint saying what to do 
 
 ## 6. Stages
 
-Agreed. Each piece is a task in Upheap, with when it's done and what it waits for, and the later stage's pieces
-are notes there until they're defined. Ideas and thoughts parked for a later step are notes there too.
+Agreed. The pieces and their order aren't kept in this doc.

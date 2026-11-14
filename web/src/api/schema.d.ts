@@ -1577,12 +1577,18 @@ export interface components {
             names_entity: boolean;
             /** @description What was done, to show after the actor's name: "edited item", "joined the team". */
             phrase: string;
+            run: null | components["schemas"]["AuditRun"];
         };
         AuditLog: {
             /** @description Newest first. */
             entries: components["schemas"]["AuditEntry"][];
             /** @description Pass as `cursor` for the next page; `null` on the last page. */
             next_cursor?: string | null;
+        };
+        AuditRun: {
+            /** Format: uuid */
+            id: string;
+            item: null | components["schemas"]["ItemOrigin"];
         };
         /**
          * @description Where shown blocked items go.

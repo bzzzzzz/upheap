@@ -461,7 +461,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     a row for each run, newest first: when it started (the time today, else the date as the server words it), "from →
     to" (the stage it started at and the goal), how it ended ("reached", "asked", "failed", "taken back", "handed
     back", or "running"), and its cost on the right, blank when unknown. Under it the result or the failure, and the
-    links. It only reads, for every role, so it has no controls.
+    links. It only reads, for every role, so it has no controls. Each run can be linked to (point 21).
+21. **History** marks a change an agent made in a run: a robot and "Your agent" (or "Ana's agent") in place of the
+    name, linking to the run: the item opens with Runs unfolded at that run, tinted for 2 seconds. Without access to
+    the run's item, the mark shows with no link. A person's change shows as before. The heap's Activity marks an
+    agent's change the same way.
 
 ## Adding an item
 
@@ -602,7 +606,7 @@ Every link has a **History** (made, revoked, each person who joined through it),
 a phone row's sheet. Links that ended or were revoked are under a collapsed **Past links (N)**, each saying who made
 it, when it ended or who revoked it and when, and how many joined; on a phone their History is a button on the row.
 The team's Activity, shown to admins like other membership lines, says "Ana made an invite link", "Ben revoked Ana's
-invite link" and "Sam joined through Ana's invite link".
+invite link" and "Sam joined through Ana's invite link". It marks an agent's change like the heap's Activity does.
 
 ## Sign in and create account
 
