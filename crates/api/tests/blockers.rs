@@ -363,6 +363,7 @@ async fn closing_a_blocker_as_wont_do_makes_what_it_blocks_wait_for_the_person()
             "kind": "blocker_gone",
             "item": waiting["rows"][0]["item"].clone(),
             "heap": waiting["rows"][0]["heap"].clone(),
+            "heap_priority": 1,
             "question": null,
             "stuck": null,
             "blocker": {

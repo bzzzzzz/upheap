@@ -62,6 +62,7 @@ async fn a_new_heap_is_listed_for_every_member_of_its_team() -> Result<()> {
             "edit_context",
             "edit_weights",
             "set_agents_prepare",
+            "set_priority",
             "view_history"
         ]))
     );
@@ -112,7 +113,7 @@ async fn an_archived_heap_is_read_only_until_unarchived() -> Result<()> {
     expect_that!(archived.body["archived_at"], eq(&json!(common::START)));
     expect_that!(
         archived.body["allowed_actions"],
-        eq(&json!(["unarchive", "view_history"]))
+        eq(&json!(["unarchive", "set_priority", "view_history"]))
     );
     expect_that!(again.body["version"], eq(&archived.body["version"]));
     expect_that!(write.body["code"], eq(&json!("heap_archived")));
@@ -246,7 +247,7 @@ async fn a_member_sets_and_clears_the_heaps_context() -> Result<()> {
     );
     expect_that!(cleared.body["context"], eq(&json!(null)));
     expect_that!(blanked.body["context"], eq(&json!(null)));
-    expect_that!(set.body["allowed_actions"], eq(&json!(["edit_context"])));
+    expect_that!(set.body["allowed_actions"], eq(&json!(["edit_context", "set_priority"])));
     Ok(())
 }
 
@@ -388,6 +389,7 @@ async fn an_admin_saves_the_name_and_context_in_one_version_with_two_entries() -
             "edit_context",
             "edit_weights",
             "set_agents_prepare",
+            "set_priority",
             "view_history"
         ]))
     );
@@ -455,7 +457,7 @@ async fn the_context_is_refused_on_an_archived_heap_too_long_or_stale() -> Resul
     expect_that!(stale.body["code"], eq(&json!("version_conflict")));
     expect_that!(on_archived_member.body["code"], eq(&json!("heap_archived")));
     expect_that!(on_archived_admin.body["code"], eq(&json!("heap_archived")));
-    expect_that!(archived_current["allowed_actions"], eq(&json!([])));
+    expect_that!(archived_current["allowed_actions"], eq(&json!(["set_priority"])));
     Ok(())
 }
 
@@ -497,7 +499,7 @@ async fn the_context_is_on_the_heap_and_in_the_teams_heap_list_and_outsiders_get
     // Assert
     expect_that!(fetched["context"], eq(&json!("About it")));
     expect_that!(team.body["heaps"][0]["context"], eq(&json!("About it")));
-    expect_that!(team.body["heaps"][0]["allowed_actions"], eq(&json!(["edit_context"])));
+    expect_that!(team.body["heaps"][0]["allowed_actions"], eq(&json!(["edit_context", "set_priority"])));
     expect_that!(hidden.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

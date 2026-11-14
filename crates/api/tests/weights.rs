@@ -175,11 +175,12 @@ async fn a_heap_shows_its_weights_and_only_admins_may_edit_them() -> Result<()> 
             "edit_context",
             "edit_weights",
             "set_agents_prepare",
+            "set_priority",
             "view_history"
         ]))
     );
     expect_that!(member.body["weights"], eq(&tens));
-    expect_that!(member.body["allowed_actions"], eq(&json!(["edit_context"])));
+    expect_that!(member.body["allowed_actions"], eq(&json!(["edit_context", "set_priority"])));
     Ok(())
 }
 
