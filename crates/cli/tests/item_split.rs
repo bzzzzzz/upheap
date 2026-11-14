@@ -303,3 +303,70 @@ async fn in_a_run_the_note_to_step_reaches_the_turn() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_note_becomes_a_heap_with_its_items_and_item_show_lists_it() -> Result<()> {
+    // Arrange
+    let (_server, _ada, mut cli, note) = with_a_note().await?;
+    let note_path = format!("{HEAP}/{note}");
+
+    // Act
+    cli.stdin = b"A move of the blog.\n".to_vec();
+    let made = cli
+        .run(&["heap", "add", "Blog move", "--from", &note, "--context-file", "-"])
+        .await;
+    cli.stdin.clear();
+    let task = cli
+        .run(&[
+            "item",
+            "add",
+            "Move posts",
+            "--task",
+            "--heap",
+            "ada/blog-move",
+            "--from",
+            &note_path,
+            "--need",
+            "expected",
+            "--age",
+            "keep",
+            "--quiet",
+        ])
+        .await;
+    let became = cli.run(&["item", "became", &note]).await;
+    let shown = cli.run(&["item", "show", &note]).await;
+    let heap = cli.run(&["heap", "show", "ada/blog-move"]).await;
+
+    // Assert
+    expect_that!(made.exited(0), eq(true));
+    expect_that!(
+        made.stdout,
+        eq(&format!("Added heap ada/blog-move, made from {note}.\n"))
+    );
+    expect_that!(task.exited(0), eq(true));
+    expect_that!(became.exited(0), eq(true));
+    expect_that!(
+        shown.stdout,
+        contains_substring("\"Move posts\" (task, open)\n  heap ada/blog-move")
+    );
+    expect_that!(shown.stdout, contains_substring("  heap ada/blog-move \"Blog move\"\n"));
+    expect_that!(heap.stdout, contains_substring("A move of the blog."));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn from_and_team_conflict_on_heap_add_before_any_request() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, note) = with_a_note().await?;
+
+    // Act
+    let refused = cli
+        .run(&["heap", "add", "Blog move", "--from", &note, "--team", "ada"])
+        .await;
+
+    // Assert
+    expect_that!(refused.exited(2), eq(true));
+    Ok(())
+}

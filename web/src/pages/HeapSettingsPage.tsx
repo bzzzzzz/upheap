@@ -248,6 +248,19 @@ export function HeapContextSettings({ heap: heapRef }: { heap: HeapRef }) {
   const data = heap.data;
   return (
     <div className="flex max-w-[640px] flex-col gap-4 sm:gap-6">
+      {data.origin && (
+        <p className="text-sm text-ink-soft">
+          From:{" "}
+          <Link
+            to="/teams/$team/heaps/$heap/items/$item"
+            params={{ team: data.origin.heap.team_slug, heap: data.origin.heap.slug, item: data.origin.key }}
+            search={true}
+            className="text-accent-ink underline"
+          >
+            “{data.origin.title}”, a note in {data.origin.heap.name}
+          </Link>
+        </p>
+      )}
       <HeapContextCard team={heapRef.team} heap={data} canEdit={data.allowed_actions.includes("edit_context")} />
     </div>
   );

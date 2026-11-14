@@ -471,7 +471,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Adds a heap to the team. Admins only. */
+        /**
+         * Adds a heap to the team. Admins only. With `origin_id` the heap is made from that open note of the team, which stays
+         *     open until `became`; a heap made from a note is in the queue of whoever works the note's heap. Inside a run the
+         *     heap must be made from the run's item, with a `context`, and the run goes on.
+         */
         post: operations["create_heap"];
         delete?: never;
         options?: never;
@@ -1759,6 +1763,24 @@ export interface components {
              */
             share_percent: number;
         };
+        /** @description A new heap, optionally made from a note. */
+        CreateHeapRequest: {
+            /** @description What the project is, in Markdown, as `PATCH …/heaps/{heap}` takes it; blank is none. Required in a run. */
+            context?: string | null;
+            /** @description 1 to 100 characters. */
+            name: string;
+            /**
+             * Format: uuid
+             * @description The open note of this team the heap is made from. The note stays as it is; it closes with `became`. Required
+             *     in a run, where it must be the run's item.
+             */
+            origin_id?: string | null;
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have
+             *     one made from the name: "My Heap" gets `my-heap`, or `my-heap-2` if that is taken.
+             */
+            slug?: string | null;
+        };
         CreateItemRequest: {
             /**
              * Format: uuid
@@ -1918,6 +1940,7 @@ export interface components {
              *     `unfiltered_count` with the default view.
              */
             open_count: number;
+            origin: null | components["schemas"]["ItemOrigin"];
             /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
             slug: string;
             /** Format: uuid */
@@ -2151,6 +2174,11 @@ export interface components {
              *     on one item and in the closed list it is a list, empty when nothing was made from it.
              */
             became: components["schemas"]["MadeItem"][] | null;
+            /**
+             * @description The heaps made from this note, oldest first (`heap add --from`). `null` in the ranked list and other lists; on
+             *     one item and in the closed list it is a list, empty when no heap was made from it.
+             */
+            became_heaps: components["schemas"]["ItemHeap"][] | null;
             /**
              * @description The steps of other tasks made from this note, oldest first (`item to-step`), in any task state and heap. `null`
              *     in the ranked list and other lists; on one item and in the closed list it is a list, empty when no step was
@@ -4712,7 +4740,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateNamedRequest"];
+                "application/json": components["schemas"]["CreateHeapRequest"];
             };
         };
         responses: {
@@ -4724,6 +4752,7 @@ export interface operations {
                     "application/json": components["schemas"]["Heap"];
                 };
             };
+            /** @description A member, or from inside a run: `run_forbidden` (no `origin_id`), `run_add_needs_context` (no `context`) or `run_wrong_item` (`origin_id` is not the run's item, named in `item_key`) */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4740,7 +4769,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `handle_taken` (`field` `slug`) */
+            /** @description `handle_taken` (`field` `slug`), `origin_not_a_note` or `origin_closed` (`origin_id`), or from inside a run `run_over` */
             409: {
                 headers: {
                     [name: string]: unknown;

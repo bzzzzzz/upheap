@@ -1716,7 +1716,7 @@
         "tags": [
           "heaps"
         ],
-        "summary": "Adds a heap to the team. Admins only.",
+        "summary": "Adds a heap to the team. Admins only. With `origin_id` the heap is made from that open note of the team, which stays\nopen until `became`; a heap made from a note is in the queue of whoever works the note's heap. Inside a run the\nheap must be made from the run's item, with a `context`, and the run goes on.",
         "operationId": "create_heap",
         "parameters": [
           {
@@ -1734,7 +1734,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateNamedRequest"
+                "$ref": "#/components/schemas/CreateHeapRequest"
               }
             }
           },
@@ -1752,7 +1752,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "A member, or from inside a run: `run_forbidden` (no `origin_id`), `run_add_needs_context` (no `context`) or `run_wrong_item` (`origin_id` is not the run's item, named in `item_key`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1772,7 +1772,7 @@
             }
           },
           "409": {
-            "description": "`handle_taken` (`field` `slug`)",
+            "description": "`handle_taken` (`field` `slug`), `origin_not_a_note` or `origin_closed` (`origin_id`), or from inside a run `run_over`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8280,6 +8280,41 @@
           }
         }
       },
+      "CreateHeapRequest": {
+        "type": "object",
+        "description": "A new heap, optionally made from a note.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the project is, in Markdown, as `PATCH …/heaps/{heap}` takes it; blank is none. Required in a run."
+          },
+          "name": {
+            "type": "string",
+            "description": "1 to 100 characters."
+          },
+          "origin_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The open note of this team the heap is made from. The note stays as it is; it closes with `became`. Required\nin a run, where it must be the run's item."
+          },
+          "slug": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have\none made from the name: \"My Heap\" gets `my-heap`, or `my-heap-2` if that is taken."
+          }
+        }
+      },
       "CreateItemRequest": {
         "type": "object",
         "required": [
@@ -8648,6 +8683,7 @@
           "open_count",
           "weights",
           "version",
+          "origin",
           "allowed_actions"
         ],
         "properties": {
@@ -8688,6 +8724,17 @@
             "format": "int32",
             "description": "Items the heap's list shows by default, before filters: open and in progress ones, as the list's\n`unfiltered_count` with the default view.",
             "minimum": 0
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemOrigin",
+                "description": "The note this heap was made from (`POST /teams/{team}/heaps` with `origin_id`), in the heap's team. `null` for a\nheap that wasn't made from a note, and in lists, which don't look it up: one heap's own read does."
+              }
+            ]
           },
           "slug": {
             "type": "string",
@@ -9176,6 +9223,7 @@
           "blocker_gone",
           "became",
           "became_steps",
+          "became_heaps",
           "need",
           "tags",
           "parameters",
@@ -9221,6 +9269,16 @@
               "$ref": "#/components/schemas/MadeItem"
             },
             "description": "The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;\non one item and in the closed list it is a list, empty when nothing was made from it."
+          },
+          "became_heaps": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ItemHeap"
+            },
+            "description": "The heaps made from this note, oldest first (`heap add --from`). `null` in the ranked list and other lists; on\none item and in the closed list it is a list, empty when no heap was made from it."
           },
           "became_steps": {
             "type": [

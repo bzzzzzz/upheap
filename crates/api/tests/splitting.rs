@@ -1367,3 +1367,453 @@ async fn a_run_with_an_open_question_on_its_note_does_not_make_it_a_step() -> Re
     expect_that!(note_now["turn"].is_object(), eq(true));
     Ok(())
 }
+
+impl World {
+    async fn team_slug(&self) -> Result<String> {
+        Ok(self.heap_ref().await?.split('/').next().unwrap_or_default().to_owned())
+    }
+
+    /// `/api/v1/teams/{team}/heaps`, the team's heaps.
+    async fn heaps_path(&self) -> Result<String> {
+        Ok(format!("/api/v1/teams/{}/heaps", self.team_slug().await?))
+    }
+
+    /// The path of the made `heap`, a heap body as the API returns it.
+    async fn made_path(&self, heap: &Value) -> Result<String> {
+        Ok(format!(
+            "{}/{}",
+            self.heaps_path().await?,
+            heap["slug"].as_str().unwrap_or_default()
+        ))
+    }
+
+    /// Makes a heap named `name` from `note` as the person, with a context, whatever the outcome.
+    async fn make_heap_named(&self, note: &Value, name: &str) -> Result<TestResponse> {
+        self.app
+            .send(
+                Method::POST,
+                &self.heaps_path().await?,
+                Some(&self.session),
+                Some(json!({ "name": name, "context": "A move.", "origin_id": id(note) })),
+            )
+            .await
+    }
+
+    async fn make_heap(&self, note: &Value) -> Result<TestResponse> {
+        self.make_heap_named(note, "Blog move").await
+    }
+
+    /// Makes a heap from `note` as the person, and returns it.
+    async fn made_heap(&self, note: &Value, name: &str) -> Result<Value> {
+        let made = self.make_heap_named(note, name).await?;
+        anyhow::ensure!(made.status == StatusCode::CREATED, "make heap failed: {}", made.body);
+        Ok(made.body)
+    }
+
+    /// Adds an item to the made `heap`, in `run` when there is one, made from `note` with a need and an age unless
+    /// `body` says otherwise.
+    async fn add_to_heap(
+        &self,
+        heap: &Value,
+        run: Option<&str>,
+        note: &Value,
+        mut body: Value,
+    ) -> Result<TestResponse> {
+        if let Value::Object(fields) = &mut body {
+            fields
+                .entry("origin")
+                .or_insert_with(|| json!({ "item_id": id(note), "age": "keep" }));
+            fields.entry("need").or_insert(json!("expected"));
+        }
+        let path = format!("{}/items", self.made_path(heap).await?);
+        match run {
+            Some(run) => self.in_run(run, Method::POST, &path, Some(body)).await,
+            None => {
+                self.app
+                    .send(Method::POST, &path, Some(&self.session), Some(body))
+                    .await
+            }
+        }
+    }
+
+    async fn get_heap(&self, heap: &Value) -> Result<Value> {
+        let read = self
+            .app
+            .send(Method::GET, &self.made_path(heap).await?, Some(&self.session), None)
+            .await?;
+        Ok(read.body)
+    }
+
+    async fn get_in(&self, heap: &Value, key: &str) -> Result<Value> {
+        let path = format!("{}/items/{key}", self.made_path(heap).await?);
+        Ok(self.app.send(Method::GET, &path, Some(&self.session), None).await?.body)
+    }
+
+    /// Makes a heap in `run` from `origin` (none when null) with the fields of `body`.
+    async fn make_heap_in_run(&self, run: &str, origin: &Value, mut body: Value) -> Result<TestResponse> {
+        if let Value::Object(fields) = &mut body {
+            fields.entry("name").or_insert(json!("Blog move"));
+            if !origin.is_null() {
+                fields.entry("origin_id").or_insert(id(origin));
+            }
+        }
+        self.in_run(run, Method::POST, &self.heaps_path().await?, Some(body))
+            .await
+    }
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_person_makes_a_heap_from_a_note() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Move the blog", "expected").await?;
+
+    // Act
+    let made = w.make_heap(&note).await?;
+
+    // Assert: the heap is in the note's team, with its context, prepare off and the note as its origin.
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    expect_that!(made.body["slug"], eq(&json!("blog-move")));
+    expect_that!(made.body["context"], eq(&json!("A move.")));
+    expect_that!(made.body["agents_prepare"], eq(&json!(false)));
+    expect_that!(made.body["origin"]["key"], eq(&note["key"]));
+    expect_that!(made.body["origin"]["heap"]["id"], eq(&json!(w.heap.as_str())));
+    // The heap's own read says it too, and the note is as it was.
+    let read = w.get_heap(&made.body).await?;
+    expect_that!(read["origin"]["title"], eq(&json!("Move the blog")));
+    let note_now = w.get(key_of(&note)).await?;
+    expect_that!(note_now["state"], eq(&json!("open")));
+    expect_that!(note_now["version"], eq(&note["version"]));
+    expect_that!(note_now["became_heaps"][0]["slug"], eq(&json!("blog-move")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_is_made_only_from_an_open_note() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let task = w.task("Rotate the certs").await?;
+    let closed = w.add_note("Closed", "expected").await?;
+    w.edit(key_of(&closed), json!({ "state": "wont_do" })).await?;
+    let missing = json!({ "id": "018f0000-0000-7000-8000-000000000000" });
+
+    // Act
+    let from_task = w.make_heap(&task).await?;
+    let from_closed = w.make_heap(&closed).await?;
+    let from_nothing = w.make_heap(&missing).await?;
+
+    // Assert
+    expect_that!(from_task.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&from_task), some(eq("origin_not_a_note")));
+    expect_that!(from_closed.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&from_closed), some(eq("origin_closed")));
+    expect_that!(from_nothing.status, eq(StatusCode::NOT_FOUND));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn items_are_added_from_the_note_to_its_heap_and_to_no_other() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Move the blog", "expected").await?;
+    let heap = w.made_heap(&note, "Blog move").await?;
+    let other_note = w.add_note("Another", "expected").await?;
+    let other_heap = w.made_heap(&other_note, "Other").await?;
+    let (_, unrelated) = w.app.shared_heap(&w.session).await?;
+
+    // Act
+    let added = w
+        .add_to_heap(&heap, None, &note, json!({ "title": "Move posts", "kind": "task" }))
+        .await?;
+    let into_another_notes_heap = w
+        .add_to_heap(&other_heap, None, &note, json!({ "title": "Wrong heap" }))
+        .await?;
+    let into_unrelated = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/items", w.app.heap_url(&unrelated).await?),
+            Some(&w.session),
+            Some(json!({
+                "title": "Elsewhere",
+                "need": "expected",
+                "origin": { "item_id": id(&note), "age": "keep" },
+            })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(added.status, eq(StatusCode::CREATED));
+    expect_that!(added.body["origin"]["key"], eq(&note["key"]));
+    expect_that!(into_another_notes_heap.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&into_another_notes_heap), some(eq("origin_not_in_heap")));
+    expect_that!(into_unrelated.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&into_unrelated), some(eq("origin_not_in_heap")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_person_closes_the_note_as_became_once_its_heap_has_items() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Move the blog", "expected").await?;
+    let heap = w.made_heap(&note, "Blog move").await?;
+    let empty = w.became(key_of(&note)).await?;
+    w.add_to_heap(&heap, None, &note, json!({ "title": "Move posts", "kind": "task" }))
+        .await?;
+
+    // Act
+    let became = w.became(key_of(&note)).await?;
+    let closed = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/closed", w.items_path().await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert: a heap with no items made nothing, then it counts.
+    expect_that!(empty.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&empty), some(eq("nothing_made")));
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(became.body["state"], eq(&json!("became")));
+    expect_that!(became.body["became_heaps"][0]["slug"], eq(&heap["slug"]));
+    expect_that!(
+        became.body["became_heaps"][0]["team_slug"],
+        eq(&json!(w.team_slug().await?))
+    );
+    expect_that!(
+        closed.body["items"][0]["became_heaps"][0]["name"],
+        eq(&json!("Blog move"))
+    );
+    // A list row doesn't carry them.
+    let ranked = w
+        .app
+        .send(Method::GET, &w.items_path().await?, Some(&w.session), None)
+        .await?;
+    expect_that!(ranked.body["items"][0]["became_heaps"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_makes_a_heap_from_its_note_with_a_context_and_only_that() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("expected").await?;
+    let other = w.add_note("Another note", "expected").await?;
+    let own_heap = w.app.heap_url(&w.heap).await?;
+
+    // Act
+    let made = w.make_heap_in_run(&run, &note, json!({ "context": "A move." })).await?;
+    let another = w
+        .make_heap_in_run(&run, &other, json!({ "name": "Other", "context": "A move." }))
+        .await?;
+    let no_origin = w
+        .make_heap_in_run(&run, &Value::Null, json!({ "name": "Free", "context": "A move." }))
+        .await?;
+    let no_context = w.make_heap_in_run(&run, &note, json!({ "name": "Bare" })).await?;
+    let patched = w
+        .in_run(&run, Method::PATCH, &own_heap, Some(json!({ "context": "Changed" })))
+        .await?;
+
+    // Assert
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    expect_that!(made.body["origin"]["key"], eq(&note["key"]));
+    expect_that!(made.body["context"], eq(&json!("A move.")));
+    expect_that!(another.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&another), some(eq("run_wrong_item")));
+    expect_that!(no_origin.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&no_origin), some(eq("run_forbidden")));
+    expect_that!(no_context.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&no_context), some(eq("run_add_needs_context")));
+    expect_that!(patched.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&patched), some(eq("run_forbidden")));
+    // The run goes on: the note is still open, with its turn.
+    let note_now = w.get(key_of(&note)).await?;
+    expect_that!(note_now["state"], eq(&json!("open")));
+    expect_that!(note_now["turn"].is_object(), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_runs_became_checks_the_heap_made_from_its_note_and_defines_its_tasks() -> Result<()> {
+    // Arrange: a heap with no context, made by the person from a note sent all the way, and a run on the note. The
+    // run splits a task into the note's own heap, so something was made.
+    let w = world().await?;
+    let note = w.add_note("Move the blog", "expected").await?;
+    let made = w
+        .app
+        .send(
+            Method::POST,
+            &w.heaps_path().await?,
+            Some(&w.session),
+            Some(json!({ "name": "Blog move", "origin_id": id(&note) })),
+        )
+        .await?;
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    let heap = made.body;
+    w.send_turn_reaching(key_of(&note), "all_the_way").await?;
+    let run = w.claimed().await?;
+    let own = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&own.body)).await?;
+    let message = |refused: &TestResponse| refused.body["title"].clone();
+
+    // Act and assert: the heap has no context.
+    let no_context = w.became_in_run(&run, key_of(&note)).await?;
+    expect_that!(no_context.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&no_context), some(eq("not_reached")));
+    expect_that!(
+        message(&no_context),
+        eq(&json!("Heap blog-move, made from this item, needs a context."))
+    );
+
+    // Act and assert: it has one now, and nothing made from the note is in it.
+    let patched = w
+        .app
+        .patch(
+            &w.session,
+            &w.made_path(&heap).await?,
+            &heap["version"],
+            json!({ "context": "A move." }),
+        )
+        .await?;
+    expect_that!(patched.status, eq(StatusCode::OK));
+    let empty = w.became_in_run(&run, key_of(&note)).await?;
+    expect_that!(code(&empty), some(eq("not_reached")));
+    expect_that!(
+        message(&empty),
+        eq(&json!("Heap blog-move, made from this item, needs a task or a note."))
+    );
+
+    // Act and assert: a note without a context is in it.
+    let bare = w
+        .add_to_heap(&heap, None, &note, json!({ "title": "Old posts", "kind": "note" }))
+        .await?;
+    expect_that!(bare.status, eq(StatusCode::CREATED));
+    let note_without_context = w.became_in_run(&run, key_of(&note)).await?;
+    expect_that!(code(&note_without_context), some(eq("not_reached")));
+    expect_that!(
+        message(&note_without_context),
+        eq(&json!(format!(
+            "Note {}, made from this item, needs a context.",
+            key_of(&bare.body)
+        )))
+    );
+    let described = w
+        .app
+        .patch(
+            &w.session,
+            &format!("{}/items/{}", w.made_path(&heap).await?, key_of(&bare.body)),
+            &bare.body["version"],
+            json!({ "description": "Old ones too." }),
+        )
+        .await?;
+    expect_that!(described.status, eq(StatusCode::OK));
+
+    // Act and assert: a task in the heap needs its steps, like any made from the note.
+    let task = w
+        .add_to_heap(
+            &heap,
+            Some(&run),
+            &note,
+            json!({ "title": "Move posts", "kind": "task", "description": "Done when: moved." }),
+        )
+        .await?;
+    expect_that!(task.status, eq(StatusCode::CREATED));
+    let no_step = w.became_in_run(&run, key_of(&note)).await?;
+    expect_that!(code(&no_step), some(eq("not_reached")));
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/items/{}/steps", w.made_path(&heap).await?, key_of(&task.body)),
+            Some(json!({ "title": "Do it" })),
+        )
+        .await?;
+    expect_that!(step.status, eq(StatusCode::CREATED));
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: reached, the result names the heap and the item left in the note's own heap.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(became.body["state"], eq(&json!("became")));
+    let note_now = w.get(key_of(&note)).await?;
+    expect_that!(note_now["runs"][0]["end"], eq(&json!("reached")));
+    expect_that!(
+        note_now["runs"][0]["result"],
+        eq(&json!(format!(
+            "Became heap {}/blog-move \"Blog move\" (2 items) and 1 item: {} \"Rotate staging\"",
+            w.team_slug().await?,
+            key_of(&own.body)
+        )))
+    );
+    // The heap's task is defined and has no turn, though the note went all the way; the note's own heap's task has.
+    let task_now = w.get_in(&heap, key_of(&task.body)).await?;
+    expect_that!(task_now["stage"], eq(&json!("defined")));
+    expect_that!(task_now["turn"], eq(&Value::Null));
+    let own_now = w.get(key_of(&own.body)).await?;
+    expect_that!(own_now["stage"], eq(&json!("defined")));
+    expect_that!(own_now["turn"].is_object(), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_queue_takes_items_from_a_heap_made_from_a_note_in_a_named_heap() -> Result<()> {
+    // Arrange: a task in the made heap with a go-ahead turn.
+    let w = world().await?;
+    let note = w.add_note("Move the blog", "expected").await?;
+    let heap = w.made_heap(&note, "Blog move").await?;
+    let task = w
+        .add_to_heap(
+            &heap,
+            None,
+            &note,
+            json!({ "title": "Move posts", "kind": "task", "description": "Done when: moved." }),
+        )
+        .await?;
+    let sent = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/items/{}/turn", w.made_path(&heap).await?, key_of(&task.body)),
+            Some(&w.session),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    expect_that!(sent.status, eq(StatusCode::CREATED));
+
+    // Act: only the note's heap is named.
+    let next = w
+        .app
+        .send(
+            Method::GET,
+            &format!("/api/v1/work/next?heaps={}", w.heap_ref().await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+    let claimed = w
+        .app
+        .send(
+            Method::POST,
+            "/api/v1/work/runs",
+            Some(&w.session),
+            Some(json!({ "heaps": [w.heap_ref().await?] })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(next.body["item"]["key"], eq(&task.body["key"]));
+    expect_that!(claimed.status, eq(StatusCode::CREATED));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&task.body["key"]));
+    expect_that!(claimed.body["run"]["item"]["heap"]["slug"], eq(&heap["slug"]));
+    Ok(())
+}

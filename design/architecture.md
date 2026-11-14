@@ -94,7 +94,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   item are read-only, and come back editable, unchanged, when it is reopened. A step made from a note
   (`POST …/to-step`) keeps it in `item_steps.origin_id`, set once and never changed; an index on it serves the
   lookup of the steps a note became, which the note and the closed list show as `became_steps`. The note was in the
-  task's heap then and a move stays in the team, so whoever sees the task sees the note.
+  task's heap then and a move stays in the team, so whoever sees the task sees the note. A heap made from a note
+  (`POST …/heaps` with `origin_id`) keeps it the same way in `heaps.origin_id`, with an index for the lookup of the
+  heaps a note became (`became_heaps`) and of the heaps made from the items of a given heap, which the agent queue
+  follows. The note is in the heap's team, and making the heap leaves it open: it closes on `became`.
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
@@ -150,7 +153,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
   an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
   `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it. Neither
-  changes ranking.
+  changes ranking. The agent queue (`work next`, `work claim`, `work run`) reads the heaps it is given and every
+  active heap made from an item in one of them, and from an item in those in turn (`resolve_queue_heaps`), so a made
+  heap's items are given with the heap that held their note; the limit on how many heaps a request names counts only
+  the named ones.
 - **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
   ended (`reached`, `asked`, `failed`, `taken_back` or `handed_back`), what it said it reached and made (`result`, `links`), why it
@@ -189,7 +195,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
   opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
   the run's item (`check_run_step_add`), and no other write to it. The one write outside those is `POST …/to-step`:
-  the run's own note becomes a step of any open task in its heap, which ends the run and the turn as reached. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  the run's own note becomes a step of any open task in its heap, which ends the run and the turn as reached. The other
+  is `POST …/heaps`: a run makes a heap from its own item, with its context, and goes on (`check_run_make_heap`); it
+  never edits a heap afterwards. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
   shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
   the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
   from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
@@ -198,7 +206,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
   run and turn end as reached with no follow-on on the note. A task's own open turn that defined meets (the heap's
   prepare turn, or one the person sent) ends as reached there too, as a stage edit ends it (`end_met_turn`, how
-  `became`). If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
+  `became`). A heap made from the note counts as made: the same transaction defines the open tasks in it, and the
+  run's `became` first checks that each such heap has a context, an open item made from the note, and a context on
+  each open note made from it (`made_heaps_check`). The tasks in a made heap get no turn from the note's. If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
   one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener, to done), but not one
   whose ended turn the person sent: that task stays as they left it; a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`). The audit API sends an entry's run (`run`, with

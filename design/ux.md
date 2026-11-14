@@ -137,7 +137,8 @@ and the link name, edited in place, a note that a new link name breaks old links
 link: /teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads
 the values.
 
-The **Context** tab holds the Context card. It shows the heap's context as Markdown text (see Toolkit), or a muted
+The **Context** tab holds the Context card. A heap made from a note says "From: “<note title>”, a note in <heap
+name>" above it, linking to the note. It shows the heap's context as Markdown text (see Toolkit), or a muted
 line saying what a context holds when there is none. Anyone who can open Settings sees the tab. A member with
 `edit_context` sees an Edit button (not on an archived heap), which
 turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
@@ -455,8 +456,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 19. **From and Became** sit above Questions, only when they apply, and the items they name open in the pane. An item made
     from another says "From: “<title>”, a note". A note that was split says "Became: 3 tasks" ("items" when the
     kinds are mixed) and lists each, with its state. A note that became a step says "Became: a step" and lists "A step
-    of “<task title>”", with the step's state. A step made from a note says "From: “<title>”, a note" under its
-    context. Each links to the heap that item is in now, and both show read-only too.
+    of “<task title>”", with the step's state. A note that became a heap says "Became: a heap" when that is all it
+    became, and lists "Heap “<name>”", linking to the heap's list. A step made from a note says "From: “<title>”, a
+    note" under its context. Each links to the heap that item is in now, and both show read-only too.
 20. **Runs** is a folded section after Questions and before History, shown only when the item has runs, under the
     heading "Runs 3 · $1.20": the count and the runs' total cost, with no cost part when no run reported one. Opened,
     a row for each run, newest first: when it started (the time today, else the date as the server words it), "from →
@@ -585,7 +587,7 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
 
 Done, won't-do and became items, most recently closed first, under Today, This week and Earlier from each item's
 `closed_group`. One intro line explains the week limit. Each row has the title, which opens the item, "Done · today
-by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items" when the kinds are mixed; "Became a step of “<task title>”" for a note that became a step), and Reopen while the item is inside its week, 44 px on a phone; once it can't
+by you", "Won't do · 3 Nov by Sam" or "Became 3 tasks · today by you" ("items" when the kinds are mixed; "Became a step of “<task title>”" for a note that became a step; "Became heap “<name>”" for one that became a heap), and Reopen while the item is inside its week, 44 px on a phone; once it can't
 be reopened the row shows nothing more, with no per-row dates or "closed for good" labels. Load more pages. A
 closed item opens over the Open list, and closing it returns to Closed.
 
