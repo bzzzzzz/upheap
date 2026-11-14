@@ -116,6 +116,11 @@ impl Output {
         writeln!(self.stdout, "{}{}", defuse(prefix), line.0)
     }
 
+    /// Writes a line of a table from [`Output::render_table`] to stderr, after `prefix`.
+    pub fn note_table_line(&mut self, prefix: &str, line: &TableLine) -> std::io::Result<()> {
+        writeln!(self.stderr, "{}{}", defuse(prefix), line.0)
+    }
+
     /// Writes the server's body to stdout as it came, ending with a newline. On a terminal, with its DEL and C1
     /// characters escaped, which leaves the JSON value the same.
     pub fn json(&mut self, body: &str) -> std::io::Result<()> {
