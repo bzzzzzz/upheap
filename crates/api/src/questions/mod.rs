@@ -48,8 +48,9 @@ async fn ask_question(
 }
 
 /// Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the
-/// question's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is
-/// `question_answered`. Replying to an open question of a closed item is `item_closed`.
+/// question's `version` in `If-Match`; the item's `version` doesn't change. On an answered question the reply is
+/// changed, with the same reply a no-op; if the version is stale, someone else replied or changed it meanwhile and the
+/// refusal is `question_answered`. Replying to a question of a closed item is `item_closed`.
 #[utoipa::path(patch, path = "/teams/{team}/heaps/{heap}/items/{item}/questions/{question}", tag = "items", security(("session" = [])),
     params(QuestionParams, IfMatchHeader, TimeZoneHeader), request_body = QuestionPatchDto,
     responses(

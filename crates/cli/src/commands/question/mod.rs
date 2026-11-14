@@ -42,9 +42,9 @@ impl HeapApi<'_> {
 
 impl HeapApi<'_> {
     /// `PATCH` of `body` to question `number` of the item with `key`, which is at `version`. A `404` is the question
-    /// not being there. A withdrawn question (`item_closed`, `question_withdrawn`) is reported as the server sent it,
-    /// problem body included, with no reopen hint: reopening doesn't bring it back. A stale or answered refusal names
-    /// the item as `team/heap/key`.
+    /// not being there. `question_withdrawn`, and `item_closed` (a question withdrawn when its item closed, or an
+    /// answered one on an item that is closed now), are reported as the server sent them, problem body included, with
+    /// no reopen hint. A stale or answered refusal names the item as `team/heap/key`.
     pub async fn patch_question(
         &self,
         key: &str,

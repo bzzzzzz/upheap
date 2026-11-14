@@ -37,6 +37,8 @@ const MESSAGES: Record<string, string> = {
   // The Password card on Account. An empty new password has its own words in the card.
   "field_empty.current_password": "Enter your current password.",
   wrong_password: "That isn't your current password.",
+  // The Command line card's token form.
+  "invalid_fields.name": "Use at most 64 characters, without line breaks.",
   // Connecting a client such as the CLI (the consent page). The client built the link, so the fix is to run its
   // sign-in again, or to use one this server knows.
   client_unknown: "This app isn't one this server knows, so it can't be connected.",

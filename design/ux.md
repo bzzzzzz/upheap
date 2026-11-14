@@ -409,7 +409,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     questions, which read in the fold as "Withdrawn".
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
     withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone); a review also shows its link and piece under the text, and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
-    and all are withdrawn. It only reads; changing a reply is later.
+    and all are withdrawn. On an open item each answered question has **Change reply** under its reply (none for a
+    viewer, in an archived heap or on a withdrawn question). It opens the reply controls of an open question, filled
+    with the current reply, with **Cancel**; sending shows the new reply, and Cancel drops the draft. After either,
+    focus returns to Change reply, or to the row when the change closed the item (Not yet to Close as done); after a change a polite live region says Changed the reply to “<text>”. If it fails the
+    controls stay with the draft and the reason shows under them.
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
@@ -887,6 +891,18 @@ sign-out is pending, the other rows' buttons are disabled. After a sign-out the 
 moves to its heading, since the row it was on is gone. With none signed in, the card says so and shows the command to
 start with, with this server's address. The card is there when the server's `manage_sign_ins` action is. Ending a sign-in never touches the browser's own
 session.
+
+Below the sign-ins the card has a **Tokens** part for machines with no browser or keychain: a line saying so, and the
+user's personal tokens, one row each with a key icon, the name, "Made 3 Nov · last used never · expires 3 Feb" (or
+"never expires"), and a **Revoke** button named for the token. Revoke turns the row into an inline confirm, "Revoke ci?
+Anything using it stops working at once", and shares the one open confirm with the sign-ins. After a revoke the card
+says so in its status line and focus moves to its heading. With none, the part says "No tokens yet." **Make a token**
+opens a form in place of the button, with a name, an expiry (90 days by default) and Make token; Enter submits, and
+Cancel or Escape closes it and gives focus back to the button. A refusal shows in the form, which keeps what was typed.
+A made token replaces the form with a panel that says it is shown once, the secret in a read-only field that selects
+itself on focus, a Copy button that has focus (the field is selected for copying by hand when the clipboard isn't
+there), and the command to use it with the secret left as `<token>`. Done closes the panel and gives focus back to
+Make a token. The secret lives only in the page's state, so leaving the page drops it.
 
 ## Conflicts and errors
 

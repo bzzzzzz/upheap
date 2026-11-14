@@ -100,7 +100,7 @@ async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<
 
 #[gtest]
 #[tokio::test]
-async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_none() -> Result<()> {
+async fn item_show_lists_the_runs_and_marks_the_agents_changes_in_history() -> Result<()> {
     // Arrange: a note an agent reached the goal of, with a link and a cost, and a note nobody worked.
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;
@@ -138,7 +138,7 @@ async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_no
     cli.env.run = None;
 
     // Act
-    let shown = cli.run(&["item", "show", &worked]).await;
+    let shown = cli.run(&["item", "show", &worked, "--history"]).await;
     let without = cli.run(&["item", "show", &idle]).await;
 
     // Assert
@@ -159,6 +159,10 @@ async fn item_show_lists_the_runs_with_their_total_and_nothing_when_there_are_no
     expect_that!(lines.next(), some(eq("    Wrote the context")));
     expect_that!(lines.next(), some(eq("    https://example.test/pull/12")));
     expect_that!(without.stdout, not(contains_substring("Runs")));
+    // The agent's edit reads as the agent's; Ada's own send reads as hers.
+    let (_, history) = shown.stdout.split_once("\nHistory\n").context("a History section")?;
+    expect_that!(history, contains_substring("Ada's agent edited item"));
+    expect_that!(history, contains_regex("(?m)  Ada opened a turn on"));
     Ok(())
 }
 
@@ -372,5 +376,54 @@ async fn item_show_names_the_blocker() -> Result<()> {
         value_of(&shown.stdout, "Blocked by"),
         some(eq(&format!("{}  Rotate the staging certs (open)", key(&items[0])?)))
     );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_show_marks_a_reply_changed_since_the_last_run() -> Result<()> {
+    // Arrange: a note an agent asked a question on in a run that ended, which the person answered and then changed.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    let worked = key(&items[0])?.to_owned();
+    let path = format!("/teams/ada/heaps/personal/items/{worked}");
+    server
+        .send(&ada, "POST", &format!("{path}/turn"), Some(json!({ "reach": "one" })))
+        .await?;
+    let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claimed.stdout.trim().to_owned());
+    cli.run(&["question", "ask", &worked, "Why?", "-q"]).await;
+    server.advance(domain::Duration::from_millis(5));
+    for (version, comment) in [("1", "First"), ("2", "Second")] {
+        server
+            .send_with(
+                &ada,
+                "PATCH",
+                &format!("{path}/questions/1"),
+                Some(json!({ "reply": { "comment": comment } })),
+                &[("if-match", version)],
+            )
+            .await?;
+        server.advance(domain::Duration::from_millis(5));
+    }
+    let during = cli.run(&["item", "show", &worked]).await;
+    cli.run(&["work", "finish"]).await;
+    cli.env.run = None;
+
+    // Act
+    let shown = cli.run(&["item", "show", &worked]).await;
+    let json = cli.run(&["item", "show", &worked, "--json"]).await;
+
+    // Assert
+    expect_that!(during.stdout, not(contains_substring("changed since your last run")));
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!(
+            "{worked}.q1  Question · answered · changed since your last run"
+        ))
+    );
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["questions"][0]["changed_since_last_run"], eq(true));
     Ok(())
 }

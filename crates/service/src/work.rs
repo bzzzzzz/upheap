@@ -14,7 +14,7 @@ use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{
-    LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached, RunResult,
+    LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached, RunResult, STARTED_BOOST,
     default_failure, reached_check, reported_goal,
 };
 use domain::step::StepState;
@@ -759,7 +759,8 @@ impl Services {
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
     /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
-    /// with the highest score times the caller's priority for its heap, then by heap, then by position.
+    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when its turn already
+    /// had a run, then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
@@ -810,8 +811,15 @@ impl Services {
             }
         }
 
-        // (score times the person's heap priority, heap index, position) of the best candidate so far, and the
-        // candidate.
+        // Runs so far on each candidate's turn: a turn with any is started work, and gets the boost.
+        let candidate_turns: Vec<TurnId> = by_heap
+            .values()
+            .flat_map(|turns| turns.values().map(|turn| turn.id))
+            .collect();
+        let runs_by_turn = store::runs::count_runs_for_turns(db, &candidate_turns).await?;
+
+        // (score times the person's heap priority, boosted when started, heap index, position) of the best candidate
+        // so far, and the candidate.
         let mut met = Vec::new();
         let mut best: Option<((f64, usize, u32), Item, Turn)> = None;
         for (heap_index, queue) in heaps.iter().enumerate() {
@@ -832,7 +840,12 @@ impl Services {
                     met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
-                let key = (ranked.score * priority.as_factor(), heap_index, ranked.position);
+                let boost = if runs_by_turn.contains_key(&turn.id) {
+                    STARTED_BOOST
+                } else {
+                    1.0
+                };
+                let key = (ranked.score * priority.as_factor() * boost, heap_index, ranked.position);
                 let better = best.as_ref().is_none_or(|(held, _, _)| {
                     key.0
                         .total_cmp(&held.0)
@@ -850,11 +863,7 @@ impl Services {
         let first = match best {
             Some(((_, heap_index, _), item, turn)) => {
                 let queue = &heaps[heap_index];
-                let runs = store::runs::count_runs_for_turns(db, &[turn.id])
-                    .await?
-                    .get(&turn.id)
-                    .copied()
-                    .unwrap_or(0);
+                let runs = runs_by_turn.get(&turn.id).copied().unwrap_or(0);
                 Some(WorkItem {
                     item,
                     heap: queue.heap.clone(),

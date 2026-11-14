@@ -384,7 +384,7 @@ async fn a_question_without_choices_is_replied_to_with_a_comment() -> Result<()>
     expect_that!(question["reply"]["replied_by"]["display_name"], eq(&json!("Tester")));
     expect_that!(question["reply"]["replied_label"], eq(&json!("today")));
     expect_that!(question["version"], eq(&json!(2)));
-    expect_that!(question["allowed_actions"], eq(&json!([])));
+    expect_that!(question["allowed_actions"], eq(&json!(["reply"])));
     expect_that!(answered.body["version"], eq(&before.body["version"]));
     Ok(())
 }
@@ -585,7 +585,7 @@ async fn a_body_without_a_reply_is_refused() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_second_reply_is_refused_and_so_is_a_stale_version() -> Result<()> {
+async fn a_stale_version_is_refused_and_so_is_a_reply_after_someone_elses() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = note().await?;
     ask(
@@ -597,12 +597,12 @@ async fn a_second_reply_is_refused_and_so_is_a_stale_version() -> Result<()> {
     )
     .await?;
     let body = json!({ "reply": { "comment": "Because" } });
+    let other = json!({ "reply": { "comment": "Since" } });
 
     // Act
     let stale = reply(&app, &session, &heap, &key, "1", &json!(7), body.clone()).await?;
     let first = reply(&app, &session, &heap, &key, "1", &json!(1), body.clone()).await?;
-    let again = reply(&app, &session, &heap, &key, "1", &json!(2), body.clone()).await?;
-    let late = reply(&app, &session, &heap, &key, "1", &json!(1), body).await?;
+    let late = reply(&app, &session, &heap, &key, "1", &json!(1), other).await?;
     let missing = reply(
         &app,
         &session,
@@ -628,12 +628,199 @@ async fn a_second_reply_is_refused_and_so_is_a_stale_version() -> Result<()> {
     expect_that!(stale.status, eq(StatusCode::CONFLICT));
     expect_that!(stale.body["code"], eq(&json!("version_conflict")));
     expect_that!(first.status, eq(StatusCode::OK));
-    expect_that!(again.status, eq(StatusCode::CONFLICT));
-    expect_that!(again.body["code"], eq(&json!("question_answered")));
+    expect_that!(late.status, eq(StatusCode::CONFLICT));
     expect_that!(late.body["code"], eq(&json!("question_answered")));
     expect_that!(missing.status, eq(StatusCode::NOT_FOUND));
     expect_that!(missing.body["code"], eq(&json!("not_found")));
     expect_that!(nonsense.status, eq(StatusCode::NOT_FOUND));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_answered_question_is_changed_with_its_version_and_the_history_keeps_both_replies() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let id = get(&app, &session, &heap, &key).await?["id"]
+        .as_str()
+        .context("no id")?
+        .to_owned();
+    ask(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "kind": "question", "text": "Which CA?", "choices": ["Internal", "Let's Encrypt"] }),
+    )
+    .await?;
+    let first = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &json!(1),
+        json!({ "reply": { "picked": [0], "comment": "Cheaper" } }),
+    )
+    .await?;
+    app.clock.advance(domain::Duration::from_millis(5));
+
+    // Act
+    let changed = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &first.body["questions"][0]["version"],
+        json!({ "reply": { "picked": [1], "comment": "Cheaper" } }),
+    )
+    .await?;
+    let item = get(&app, &session, &heap, &key).await?;
+    let history = app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={id}", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+    let entries = app.audit_entries(&id).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::OK));
+    let question = &changed.body["questions"][0];
+    expect_that!(question["reply"]["picked"], eq(&json!([1])));
+    expect_that!(question["version"], eq(&json!(3)));
+    expect_that!(question["allowed_actions"], eq(&json!(["reply"])));
+    expect_that!(changed.body["version"], eq(&first.body["version"]));
+    expect_that!(item["questions"][0]["reply"]["picked"], eq(&json!([1])));
+    let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"item_created"),
+            eq(&"question_asked"),
+            eq(&"question_answered"),
+            eq(&"reply_changed")
+        ]
+    );
+    expect_that!(
+        entries[3].1,
+        eq(&json!({
+            "question": 1,
+            "question_text": "Which CA?",
+            "reply": { "before": "Internal", "after": "Let's Encrypt" },
+        }))
+    );
+    expect_that!(
+        history.body["entries"][0]["phrase"],
+        eq(&json!("changed the reply to a question on"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_same_reply_changes_nothing_and_writes_no_history() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    let id = get(&app, &session, &heap, &key).await?["id"]
+        .as_str()
+        .context("no id")?
+        .to_owned();
+    ask(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "kind": "question", "text": "Which?", "choices": ["A", "B", "C"], "many": true }),
+    )
+    .await?;
+    reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &json!(1),
+        json!({ "reply": { "picked": [2, 0], "comment": "Both" } }),
+    )
+    .await?;
+
+    // Act
+    let same = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &json!(2),
+        json!({ "reply": { "picked": [0, 2], "comment": "  Both " } }),
+    )
+    .await?;
+    let entries = app.audit_entries(&id).await?;
+
+    // Assert
+    expect_that!(same.status, eq(StatusCode::OK));
+    expect_that!(same.body["questions"][0]["version"], eq(&json!(2)));
+    expect_that!(entries.len(), eq(3));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_reply_is_not_changed_on_a_closed_item_and_the_change_must_fit_the_question() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+    ask(
+        &app,
+        &session,
+        &heap,
+        &key,
+        json!({ "kind": "question", "text": "Which?", "choices": ["A", "B"] }),
+    )
+    .await?;
+    let answered = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &json!(1),
+        json!({ "reply": { "picked": [0] } }),
+    )
+    .await?;
+    let version = answered.body["questions"][0]["version"].clone();
+
+    // Act
+    let invalid = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &version,
+        json!({ "reply": { "picked": [5] } }),
+    )
+    .await?;
+    let closed = close(&app, &session, &heap, &key, &answered.body["version"]).await?;
+    let on_closed = reply(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "1",
+        &closed.body["questions"][0]["version"],
+        json!({ "reply": { "picked": [1] } }),
+    )
+    .await?;
+
+    // Assert
+    expect_that!(invalid.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(on_closed.status, eq(StatusCode::CONFLICT));
+    expect_that!(on_closed.body["code"], eq(&json!("item_closed")));
+    expect_that!(closed.body["questions"][0]["allowed_actions"], eq(&json!([])));
     Ok(())
 }
 

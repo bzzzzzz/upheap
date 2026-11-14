@@ -20,7 +20,7 @@ use domain::sign_in::SignInLimit;
 use domain::team::{Membership, Role};
 use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
-use serde_json::Value;
+use serde_json::{Value, json};
 use service::{Clock, ManualClock, RandomSource, Services, Settings, SystemRandom};
 use store::{ConnectionTrait, DatabaseConnection, Statement};
 use tower::ServiceExt;
@@ -508,6 +508,21 @@ impl TestApp {
         let access = tokens.body["access_token"].as_str().context("no access token")?;
         let refresh = tokens.body["refresh_token"].as_str().context("no refresh token")?;
         Ok((access.to_owned(), refresh.to_owned()))
+    }
+
+    /// Makes a personal token as the user of `session`, with `expires_in` when given.
+    pub async fn make_personal_token(
+        &self,
+        session: &str,
+        name: &str,
+        expires_in: Option<&str>,
+    ) -> Result<TestResponse> {
+        let mut body = json!({ "name": name });
+        if let Some(expires_in) = expires_in {
+            body["expires_in"] = json!(expires_in);
+        }
+        self.send(Method::POST, "/api/v1/me/personal-tokens", Some(session), Some(body))
+            .await
     }
 
     /// Sends a request authenticated by `token` alone, as the CLI does: no cookie and no CSRF header.

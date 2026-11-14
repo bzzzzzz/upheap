@@ -19,6 +19,7 @@ pub mod oidc;
 pub mod parameter;
 pub mod password_reset;
 pub mod permission;
+pub mod personal_token;
 pub mod question;
 pub mod ranking;
 pub mod run;
@@ -35,8 +36,8 @@ pub mod user;
 pub mod validation;
 
 pub use ids::{
-    CommentId, HeapId, InviteLinkId, ItemId, OptionId, ParameterId, QuestionId, RunId, SavedViewId, StepId, TagId,
-    TeamId, TokenFamilyId, TurnId, UserId,
+    CommentId, HeapId, InviteLinkId, ItemId, OptionId, ParameterId, PersonalTokenId, QuestionId, RunId, SavedViewId,
+    StepId, TagId, TeamId, TokenFamilyId, TurnId, UserId,
 };
 pub use time::{Duration, Timestamp};
 pub use validation::ValidationError;

@@ -29,8 +29,8 @@ use crate::{App, CliError};
 #[derive(Args, Clone, Debug)]
 pub struct HeapsArgs {
     /// A heap to look for work in: team/heap, or a heap slug only one of your teams has. Repeat for more: one
-    /// queue, by each item's score times your priority for its heap (`upheap heap priority`). Left out, the default
-    /// heap (UPHEAP_HEAP, or `upheap heap use`)
+    /// queue, by each item's score times your priority for its heap (`upheap heap priority`), times 3 for an item an
+    /// agent already had a run on in its current turn. Left out, the default heap (UPHEAP_HEAP, or `upheap heap use`)
     #[arg(long = "heap", value_name = "HEAP")]
     pub names: Vec<String>,
 }

@@ -32,7 +32,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | API contract | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift |
 | Data access | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres |
 | Migrations | sea-orm-migration, embedded in the binary and run at startup |
-| Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts |
+| Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients, and personal tokens for machines with no browser. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts |
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
@@ -101,7 +101,8 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
-  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), and one withdrawn when its
+  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), which the person may change
+  while the item is open (`reply_changed` marks it, and `replied_by`/`replied_at` are then the change's), and one withdrawn when its
   item was closed stays, withdrawn (`withdrawn_at`, `withdrawn_by`). An item has at most 100,
   so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
   the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
@@ -170,7 +171,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   ended as reached by such a run and that are still at that stage, not started and not closed.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
-  item's score in its own heap (`rank_open_items`, once per heap), then heap name, then position. A claim takes the
+  item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
+  `STARTED_BOOST` (3) when the open turn already had a run, however it ended, then heap name, then position. The
+  boost lets half-done work go on before new work of about the same importance while something much more important
+  still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the plain score. A claim takes the
   locks of every given heap in ID order, as the item writes do, so two claims at once get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
@@ -350,7 +354,7 @@ the default view's ranked group with each item's position under both. It stores 
 item is ranked and grouped under the request's view by the same code as its own list, so a row is what that list
 would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap
 times the caller's **heap priority** for that heap, highest first, then heap name, then the item's position in its
-heap, the same rule `GET /me/waiting` and the agents' queue order by. A heap priority is one person's own number
+heap, the same rule `GET /me/waiting` and the agents' queue order by (the queue also boosts started work, as above). A heap priority is one person's own number
 for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
 heap each order it their own way. Since a heap's group is already in score order and the priority is the same
 positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the
@@ -499,6 +503,8 @@ a fixed time.
      query or fragment, so adding `?code=…` always gives the URI that was approved.
    - Codes and tokens are random 256-bit values stored as SHA-256 hashes, like session tokens. Codes work once and
      briefly; access tokens are short-lived and refresh tokens rotate ([Non-web client tokens](#non-web-client-tokens)).
+   - A bearer token may also be a personal token ([Personal tokens](#personal-tokens)), told apart by its `uph_`
+     prefix. A revoked or expired one is refused with the code `token_revoked` or `token_expired`, so the CLI can say why.
    - `Authorization: Bearer` resolves to the same `Principal` a cookie does, on every endpoint. A request with a
      bearer token is authenticated by it alone, with no fallback to the cookie, and needs no CSRF header: a
      cross-site page can't set that header either, and CSRF is a cookie problem. Other `Authorization` schemes, such
@@ -661,6 +667,29 @@ the remaining admins.
    unexpired. The day keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh
    tokens of a live family stay, since they detect reuse.
 
+### Personal tokens
+
+A machine with no browser and no keychain, such as a cloud session, a container or CI, can't run the sign-in of
+[Non-web client tokens](#non-web-client-tokens), and an OAuth refresh token can't be copied there: it rotates, and a
+reused one revokes the whole sign-in. So a person makes a personal token in the web app and gives it to the machine.
+
+1. The secret is `uph_` and a random 256-bit value, made as session tokens are, and only its SHA-256 is stored. The
+   prefix tells it from an OAuth token, so the bearer check looks in one table, and lets secret scanners find a leaked
+   one. It is shown once, in the answer to making it.
+2. It never rotates, which is the point: the copy on the machine stays good until it expires or is revoked. The person
+   picks the expiry when making it, and "never" is allowed.
+3. A token is live when it isn't revoked and hasn't expired. The rows of revoked and expired ones are kept, so a request
+   that presents one can be told which it was. They are tiny, and only the holder of the secret can ask.
+4. The endpoints that make, list and revoke tokens take the session cookie only, so a token can't make another, and a
+   copy that leaks can't be used to keep access after it is revoked.
+5. Using a token records `last_used_at`, with a minute's precision: one conditional update, so a burst of requests
+   writes once a minute at most.
+6. A token has all the permissions of its person, as a command-line sign-in has. A scope that narrowed it would be
+   added the way [Non-web client tokens](#non-web-client-tokens) point 1 says.
+7. A password change or reset revokes every live personal token, in the same transaction and counted in the sign-ins it
+   ends, as it ends the web sessions and the command-line sign-ins. Someone who resets a compromised account must cut
+   off a token that was made with the stolen session.
+
 ## Audit log
 
 1. Each use case runs in one database transaction, performs the change and inserts the audit entry before
@@ -689,7 +718,8 @@ the remaining admins.
    recorded the same way (`CommentAdded`, "commented on"), with its number and its whole text, so History shows what
    was said. A question's are
    recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
-   question's number and text and, once answered, the labels picked and the comment. So are a question withdrawn
+   question's number and text and, once answered, the labels picked and the comment; changing a reply is
+   `ReplyChanged`, with the picks and comment before and after. So are a question withdrawn
    by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
    (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
    back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and
@@ -772,6 +802,10 @@ section is how it maps onto this API.
    itself was closed to its next build: a dialog after every upgrade and every rebuild, which a command run by a
    script or an agent waits on for ever. An entry `security` made stays open to `security`. The cost: any program
    running as the user can read it the same way, without a dialog.
+   `UPHEAP_TOKEN`, when set, wins over all of it: the CLI sends that personal token and reads no keychain, takes no
+   lock and needs no config directory, and a token never needs refreshing. A `401` while it is set means the
+   environment holds a token the server refuses, which `auth login` can't fix, so it is exit 6, not 4, and the message
+   says whether the token was revoked, has expired or isn't known.
 7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
@@ -858,6 +892,7 @@ section is how it maps onto this API.
 6. **CLI:** `crates/cli/tests` runs each command against the real API router on in-memory SQLite, served on a
    localhost port, and checks stdout, stderr and the exit code. The tests sign in through the real OAuth endpoints,
    most by seeding the token store with tokens from a code they approved and exchanged, the login tests by running
-   `upheap auth login` with a browser that answers the consent page.
+   `upheap auth login` with a browser that answers the consent page. The `UPHEAP_TOKEN` tests make a personal token
+   through the API and run with an empty keychain and no config directory.
 
 The commands are in [README.md](../README.md#develop).

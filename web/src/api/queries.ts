@@ -29,6 +29,8 @@ import {
   type NewItem,
   type NewParameter,
   type NewStep,
+  type PersonalToken,
+  type PersonalTokenExpiry,
   type NewTag,
   type Parameter,
   type ParameterList,
@@ -442,16 +444,25 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
  * Replies to a question of the item `itemId` (its key). Not optimistic: the item the server returns, with the question
  * answered, is written into the cache. A failure fetches the item again, so a question someone else answered meanwhile
  * shows as answered. Each question has its own version, which only a reply moves, so replies to different questions
- * don't wait for each other.
+ * don't wait for each other. Changing a reply passes `version`, the one its form opened on, so a change someone else made
+ * meanwhile is refused rather than overwritten.
  */
 export function useReplyToQuestion(heap: HeapRef, itemId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ question, reply }: { question: Question; reply: QuestionReply }) => {
+    mutationFn: async ({
+      question,
+      reply,
+      version: opened,
+    }: {
+      question: Question;
+      reply: QuestionReply;
+      version?: number;
+    }) => {
       const cached = queryClient
         .getQueryData<Item>(itemKey(heap, itemId))
         ?.questions?.find((candidate) => candidate.number === question.number);
-      const version = Math.max(question.version, cached?.version ?? 0);
+      const version = opened ?? Math.max(question.version, cached?.version ?? 0);
       return unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions/{question}", {
           params: {
@@ -469,7 +480,8 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
         waitingKey,
         (waiting) =>
           waiting && {
-            count: Math.max(0, waiting.count - 1),
+            // An answered question has no row there: changing its reply leaves the count alone.
+            count: question.state === "open" ? Math.max(0, waiting.count - 1) : waiting.count,
             rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question?.number === question.number)),
           },
       );
@@ -958,16 +970,62 @@ export function useEndSignIn() {
   });
 }
 
+const personalTokensKey = ["personal-tokens"] as const;
+
+/** The signed-in user's live personal tokens, newest first. Only the Command line card asks. */
+export function usePersonalTokens() {
+  return useQuery({
+    queryKey: personalTokensKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/personal-tokens")).tokens,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Makes a personal token. The answer holds the secret, which is shown once: it is kept in the caller's state and the
+ * mutation is dropped as soon as nothing watches it (`gcTime: 0`), so it isn't kept in the cache. The list is read
+ * again for the new row.
+ */
+export function useMakePersonalToken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { name: string; expires_in: PersonalTokenExpiry }) =>
+      unwrap(await api.POST("/api/v1/me/personal-tokens", { body })),
+    gcTime: 0,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: personalTokensKey }),
+  });
+}
+
+/** Revokes a personal token on the server. Revoking one that's gone already succeeds, so it's fine to repeat. */
+export function useRevokePersonalToken() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (token: PersonalToken) =>
+      ensureOk(await api.DELETE("/api/v1/me/personal-tokens/{id}", { params: { path: { id: token.id } } })),
+    onSuccess: (_, token) =>
+      queryClient.setQueryData<PersonalToken[]>(personalTokensKey, (list) =>
+        list?.filter((other) => other.id !== token.id),
+      ),
+    // A 404 means the list is out of date, so it is read again either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: personalTokensKey }),
+  });
+}
+
 /**
  * Changes the signed-in user's password. The browser is given a new session cookie, so it stays signed in and the
- * cached data stays valid; only the Command line card's list changes, as the change ends every client sign-in.
+ * cached data stays valid; only the Command line card's lists change, as the change ends every client sign-in and
+ * every personal token.
  */
 export function useChangePassword() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: { current_password: string; password: string }) =>
       unwrap(await api.POST("/api/v1/me/password", { body })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: signInsKey }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: signInsKey }),
+        queryClient.invalidateQueries({ queryKey: personalTokensKey }),
+      ]),
   });
 }
 

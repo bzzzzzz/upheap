@@ -66,6 +66,9 @@ pub struct Environment {
     pub heap: Option<String>,
     /// `UPHEAP_RUN`: the run an agent writes in. Sent as `Upheap-Run` with every request.
     pub run: Option<String>,
+    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command but `auth login` and `auth logout` then uses
+    /// instead of the keychain sign-in.
+    pub token: Option<String>,
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
     pub stdout_is_terminal: bool,
@@ -103,6 +106,9 @@ impl Environment {
             server: var("UPHEAP_SERVER"),
             heap: var("UPHEAP_HEAP"),
             run: var("UPHEAP_RUN"),
+            token: var("UPHEAP_TOKEN")
+                .map(|token| token.trim().to_owned())
+                .filter(|token| !token.is_empty()),
             no_color: var("NO_COLOR").is_some(),
             stdout_is_terminal: std::io::stdout().is_terminal(),
             stderr_is_terminal: std::io::stderr().is_terminal(),
@@ -135,7 +141,13 @@ impl Deps {
 #[command(
     name = "upheap",
     version,
-    about = "Upheap from the terminal: a heap's items and tags, heaps, and signing in."
+    about = "Upheap from the terminal: a heap's items and tags, heaps, and signing in.",
+    after_help = "Environment:\n  \
+        UPHEAP_SERVER  The server's address\n  \
+        UPHEAP_HEAP    The heap to work in\n  \
+        UPHEAP_RUN     The run an agent writes in\n  \
+        UPHEAP_TOKEN   A personal token made on the web app's Account page; when set, every command but\n                 \
+        `auth login` and `auth logout` uses it instead of the keychain sign-in, and never opens a browser"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -204,6 +216,10 @@ enum ItemCommand {
     ToStep(commands::item::to_step::ToStepArgs),
     /// Move an item to another heap of its team, with its context, steps, questions and history
     Move(commands::item::move_item::MoveArgs),
+    /// Send an item to an agent: to its next stable state, or on until done with --all-the-way
+    Send(commands::item::turn::SendArgs),
+    /// Take an item back from the agent that has it; what the agent changed stays
+    TakeBack(commands::item::state::StateArgs),
 }
 
 #[derive(Subcommand)]
@@ -229,7 +245,7 @@ enum QuestionCommand {
     Review(commands::question::ask::ReviewArgs),
     /// Propose closing a task as done, as an agent doing it; the person replies Close as done or Not yet
     ProposeDone(commands::question::ask::ProposeDoneArgs),
-    /// Reply to a question, a request, a review or a done proposal on an item
+    /// Reply to a question, a request, a review or a done proposal on an item, or change the reply of an answered one
     Reply(commands::question::reply::ReplyArgs),
 }
 
@@ -342,6 +358,8 @@ impl Command {
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
             Self::Item(ItemCommand::ToStep(args)) => &args.state.shared,
             Self::Item(ItemCommand::Move(args)) => &args.shared,
+            Self::Item(ItemCommand::Send(args)) => &args.shared,
+            Self::Item(ItemCommand::TakeBack(args)) => &args.shared,
             Self::Step(StepCommand::Add(args)) => &args.shared,
             Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
@@ -401,6 +419,7 @@ where
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
     let in_run = env.run.is_some();
+    let has_env_token = env.token.is_some();
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(err) => {
@@ -420,6 +439,9 @@ where
         Some(shared) if shared.quiet => Mode::Quiet,
         _ => Mode::Human,
     };
+    // `auth login` and `auth logout` manage the keychain sign-in and never use the token, so a `401` they hit isn't
+    // the token's.
+    let env_token_used = has_env_token && !matches!(cli.command, Command::Auth(_));
     let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
     let result = match cli.command {
         // Before the config file is read, so the guide can be read on a machine where nothing is set up yet.
@@ -440,6 +462,7 @@ where
         // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
         Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
+            let err = if env_token_used { err.refused_env_token() } else { err };
             report(&err, &mut out, in_run);
             ExitCode::from(err.exit_code())
         }
@@ -494,6 +517,8 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Item(ItemCommand::Became(args)) => commands::item::became::run(args, app, out).await,
         Command::Item(ItemCommand::ToStep(args)) => commands::item::to_step::run(args, app, out).await,
         Command::Item(ItemCommand::Move(args)) => commands::item::move_item::run(args, app, out).await,
+        Command::Item(ItemCommand::Send(args)) => commands::item::turn::run_send(args, app, out).await,
+        Command::Item(ItemCommand::TakeBack(args)) => commands::item::turn::run_take_back(args, app, out).await,
         Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
@@ -614,7 +639,12 @@ impl App {
     }
 
     /// An access token for `client`'s server, refreshed when the stored one is stale.
+    ///
+    /// With `UPHEAP_TOKEN` set, that token at once: it never rotates, so there is no keychain, lock or refresh.
     pub async fn access_token(&self, client: &ApiClient) -> Result<String, CliError> {
+        if let Some(token) = &self.env.token {
+            return Ok(token.clone());
+        }
         let server = config::server_key(client.server());
         let token = auth::access_token(
             &self.tokens,

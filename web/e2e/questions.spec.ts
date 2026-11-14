@@ -155,6 +155,53 @@ test("a choice question is answered by one pick, a many-choice one by any number
   expect([second.reply.picked, second.reply.comment]).toEqual([[0, 2], null]);
 });
 
+test("an answered question's reply is changed from the fold, and Cancel drops the draft", async ({
+  page,
+  heapPath,
+}) => {
+  const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
+    { kind: "question", text: "Which CA?", choices: ["Internal", "Let's Encrypt"] },
+  ]);
+  const one = waits(page).getByRole("listitem");
+  await one.getByRole("radiogroup", { name: "Which CA?" }).locator("label").filter({ hasText: "Internal" }).click();
+  await one.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(waits(page)).toHaveCount(0);
+
+  const folded = answered(page);
+  await folded.locator("summary").click();
+  await expect(folded).toContainText("→ Internal");
+  const change = folded.getByRole("button", { name: "Change reply", exact: true });
+
+  // Cancel closes the controls and drops the draft, and focus returns to Change reply.
+  await change.click();
+  const radios = folded.getByRole("radiogroup", { name: "Which CA?" });
+  await expect(radios.getByRole("radio", { name: "Internal" })).toBeChecked();
+  await expect(radios.getByRole("radio").first()).toBeFocused();
+  await radios.locator("label").filter({ hasText: "Let's Encrypt" }).click();
+  await folded.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(change).toBeFocused();
+  await expect(folded).toContainText("→ Internal");
+  expect((await questionsOf(page, item))[0].reply.picked).toEqual([0]);
+
+  // Sending shows the new reply, says so, and returns focus to Change reply.
+  await change.click();
+  await folded
+    .getByRole("radiogroup", { name: "Which CA?" })
+    .locator("label")
+    .filter({ hasText: "Let's Encrypt" })
+    .click();
+  await folded.getByLabel("Comment, optional").fill("Free and automatic");
+  await folded.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(itemPane(page).getByRole("status").filter({ hasText: "Changed the reply to" })).toHaveText(
+    "Changed the reply to “Which CA?”.",
+  );
+  await expect(folded).toContainText("→ Let's Encrypt");
+  await expect(folded).toContainText("Free and automatic");
+  await expect(change).toBeFocused();
+  const [question] = await questionsOf(page, item);
+  expect([question.reply.picked, question.reply.comment]).toEqual([[1], "Free and automatic"]);
+});
+
 test("web addresses and Markdown links in the text and choices are links, and the rest stays as written", async ({
   page,
   heapPath,

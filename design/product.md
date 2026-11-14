@@ -57,12 +57,13 @@ What it is not:
    provider have no password in Upheap.
 4. Non-web clients such as the CLI sign in through the browser: the client opens the app's sign-in page, the user
    signs in there, and the backend hands a token back to the client (OAuth authorization code flow with PKCE). The
-   client never handles the user's password.
+   client never handles the user's password. A machine with no browser can instead use a personal token the user makes
+   in the web app, and revokes there. It has all the user's permissions.
 5. A signed-in user can change their password by giving the current one. That ends every other sign-in of theirs,
-   in browsers and in command-line clients.
+   in browsers, in command-line clients and by personal token.
 6. A forgotten password is reset through a link the operator makes with a command on the server, or, when the server
    sends mail, one the user asks for by mail (Email §3). It works once and for one hour, and setting the new password
-   ends all the user's sign-ins.
+   ends all the user's sign-ins, personal tokens included.
 7. A password change and a reset are in the audit log, without the password, and only the user sees them.
 
 ## Email

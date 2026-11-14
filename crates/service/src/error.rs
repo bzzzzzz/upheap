@@ -26,6 +26,12 @@ pub enum ServiceError {
     Forbidden(Permission),
     #[error("not signed in")]
     Unauthenticated,
+    /// A personal token that was revoked.
+    #[error("the token was revoked")]
+    TokenRevoked,
+    /// A personal token whose time passed.
+    #[error("the token has expired")]
+    TokenExpired,
     #[error("email or password is wrong")]
     InvalidCredentials,
     /// The current password given to change the password is not the user's.

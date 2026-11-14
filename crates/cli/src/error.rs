@@ -8,7 +8,7 @@
 //! | 3 | The request was refused: bad input or a rule, or the CLI's own lookups |
 //! | 4 | Not signed in, not allowed, or not found |
 //! | 5 | The server couldn't be reached or is unavailable |
-//! | 6 | The local setup is broken: unreadable config, no keychain, no agent tool |
+//! | 6 | The local setup is broken: unreadable config, no keychain, no agent tool, a token in `UPHEAP_TOKEN` the server refuses |
 
 use std::error::Error as _;
 
@@ -71,6 +71,12 @@ pub enum CliError {
         #[source]
         source: std::io::Error,
     },
+    /// The server answered `401` to the personal token in `UPHEAP_TOKEN`. The setup is what's wrong, not the sign-in
+    /// from `upheap auth login`, so it isn't exit 4 with that hint. Made by [`CliError::refused_env_token`], once,
+    /// where a run's failure is reported. `refused` isn't called `source`, so the message doesn't repeat the problem's
+    /// title.
+    #[error("the server refused the token in UPHEAP_TOKEN: {}", refusal_reason(refused))]
+    EnvTokenRefused { refused: ClientError },
     #[error(transparent)]
     Login(#[from] LoginError),
     #[error(transparent)]
@@ -91,7 +97,7 @@ pub enum CliError {
 pub enum QuestionRefusal {
     /// It was taken back unanswered: its item closed, or its agent's turn was taken back. Nothing brings it back.
     Withdrawn,
-    /// It has another reply, and a reply can't be changed here.
+    /// It has another reply, and the command didn't say `--change`.
     AnsweredDifferently,
 }
 
@@ -102,7 +108,7 @@ impl QuestionRefusal {
                 format!("{name} was withdrawn, so there is nothing to reply to")
             }
             Self::AnsweredDifferently => {
-                format!("{name} is answered already with another reply, which can't be changed here")
+                format!("{name} is answered already with another reply; add --change to replace it")
             }
         }
     }
@@ -112,7 +118,11 @@ impl CliError {
     /// The exit code for the failure's category.
     pub fn exit_code(&self) -> u8 {
         match self {
-            Self::Config(_) | Self::TokenStore(_) | Self::Tool(_) | Self::NoInstructions { .. } => 6,
+            Self::Config(_)
+            | Self::TokenStore(_)
+            | Self::Tool(_)
+            | Self::NoInstructions { .. }
+            | Self::EnvTokenRefused { .. } => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
             Self::NoSuchStep { .. } | Self::NoSuchQuestion { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
             Self::Lookup(
@@ -150,6 +160,18 @@ impl CliError {
         }
     }
 
+    /// This failure as the refusal of the token in `UPHEAP_TOKEN` when it is a `401` from the server, else as it is.
+    /// `auth login` and `auth logout` manage the keychain sign-in, so what they hit stays theirs.
+    pub(crate) fn refused_env_token(self) -> Self {
+        if self.problem_status() != Some(401) {
+            return self;
+        }
+        match self {
+            Self::Client(refused) => Self::EnvTokenRefused { refused },
+            other => other,
+        }
+    }
+
     /// What to tell the user: the message, the error's causes, and a hint at the next step when there's an obvious one.
     pub fn to_message(&self) -> Vec<String> {
         self.to_message_in(false)
@@ -175,6 +197,9 @@ impl CliError {
     pub fn problem_body(&self) -> Option<&str> {
         match self {
             Self::Client(ClientError::Problem { body, .. })
+            | Self::EnvTokenRefused {
+                refused: ClientError::Problem { body, .. },
+            }
             | Self::NoSuchItem {
                 source: ClientError::Problem { body, .. },
                 ..
@@ -199,6 +224,9 @@ impl CliError {
     fn problem(&self) -> Option<&api_types::problem::Problem> {
         match self {
             Self::Client(ClientError::Problem { problem, .. })
+            | Self::EnvTokenRefused {
+                refused: ClientError::Problem { problem, .. },
+            }
             | Self::NoSuchItem {
                 source: ClientError::Problem { problem, .. },
                 ..
@@ -221,6 +249,11 @@ impl CliError {
             return Some(hint);
         }
         match (self, status) {
+            (Self::EnvTokenRefused { .. }, _) => Some(
+                "make a new token on the web app's Account page, under Command line, and set UPHEAP_TOKEN to it; or \
+                 unset UPHEAP_TOKEN to use the sign-in from upheap auth login"
+                    .to_owned(),
+            ),
             (
                 Self::TokenStore(TokenStoreError::Corrupt { .. })
                 | Self::Auth(AuthError::Store(TokenStoreError::Corrupt { .. })),
@@ -290,6 +323,15 @@ impl CliError {
             cause = err.source();
         }
         text
+    }
+}
+
+/// Why the server refused the personal token, from the code of its `401`.
+fn refusal_reason(refused: &ClientError) -> &'static str {
+    match refused {
+        ClientError::Problem { problem, .. } if problem.code == "token_revoked" => "it was revoked",
+        ClientError::Problem { problem, .. } if problem.code == "token_expired" => "it has expired",
+        _ => "it isn't a token this server knows",
     }
 }
 

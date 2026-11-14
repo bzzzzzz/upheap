@@ -375,6 +375,7 @@ impl Services {
                             allowed_actions: allowed_question_actions(&candidate.item, heap, role, question.state()),
                             asked_by: question.asked_by.and_then(|id| users.get(&id).cloned()),
                             replied_by: None,
+                            changed_since_last_run: false,
                             // An open question isn't withdrawn.
                             withdrawn_by: None,
                             question,

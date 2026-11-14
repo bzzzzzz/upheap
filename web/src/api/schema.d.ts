@@ -349,7 +349,7 @@ export interface paths {
          *     in their browser, and a client holding a token must not be able to lock the person out of the rest.
          * @description The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so
          *     the browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so
-         *     does every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`
+         *     does every sign-in by a client such as the command line, and every personal token: they stop working at once. `ended_sign_ins`
          *     counts the other ones that were still live. The new password may equal the current one, which ends the others
          *     without picking a new password.
          *
@@ -359,6 +359,51 @@ export interface paths {
          */
         post: operations["change_password"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/personal-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's live personal tokens, newest first: not revoked, and not expired. Takes the session cookie only; a
+         *     request with a bearer token is refused with `401`.
+         */
+        get: operations["list_personal_tokens"];
+        put?: never;
+        /**
+         * Makes a personal token: a bearer token that never rotates, for a machine with no browser or keychain. It has all
+         *     of the caller's permissions, like a command-line sign-in. The `secret` is in this response only. Takes the
+         *     session cookie only, so a token can't make another.
+         */
+        post: operations["make_personal_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/personal-tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revokes a personal token: it stops working at once. Succeeds when it was revoked or expired already. Takes the
+         *     session cookie only.
+         */
+        delete: operations["revoke_personal_token"];
         options?: never;
         head?: never;
         patch?: never;
@@ -566,7 +611,7 @@ export interface paths {
          * Sets a new password for the link's account, and signs this browser in as it. The link works for 60 minutes after
          *     the operator made it, and once: it is used up by this call.
          * @description Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its
-         *     clients such as the command line, whose tokens stop working at once. Then this browser gets a new session, in the
+         *     clients such as the command line and its personal tokens, which stop working at once. Then this browser gets a new session, in the
          *     cookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal
          *     the old one. The account's sign-in attempts start over.
          *
@@ -896,8 +941,9 @@ export interface paths {
         head?: never;
         /**
          * Replies to a question of an item and answers with the whole item. `{question}` is the question's number. Send the
-         *     question's `version` in `If-Match`; the item's `version` doesn't change. A question takes one reply: a second is
-         *     `question_answered`. Replying to an open question of a closed item is `item_closed`.
+         *     question's `version` in `If-Match`; the item's `version` doesn't change. On an answered question the reply is
+         *     changed, with the same reply a no-op; if the version is stale, someone else replied or changed it meanwhile and the
+         *     refusal is `question_answered`. Replying to a question of a closed item is `item_closed`.
          */
         patch: operations["reply_to_question"];
         trace?: never;
@@ -1469,8 +1515,9 @@ export interface paths {
          * The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is
          *     claimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't
          *     stuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your
-         *     priority for that heap, highest first, then by heap name and the item's position. Any member who may edit items
-         *     in every given heap may ask.
+         *     priority for that heap, times 3 when the item's open turn already had a run (started work goes on first),
+         *     highest first, then by heap name and the item's position. Any member who may edit items in every given heap may
+         *     ask.
          */
         get: operations["next_item"];
         put?: never;
@@ -1778,7 +1825,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -3129,8 +3176,8 @@ export interface components {
         PasswordChanged: {
             /**
              * Format: int32
-             * @description How many other sign-ins the change ended that were still live: other browsers, and clients such as the
-             *     command line. The browser it was made from stays signed in on a new session, and isn't counted.
+             * @description How many other sign-ins the change ended that were still live: other browsers, clients such as the
+             *     command line, and personal tokens. The browser it was made from stays signed in on a new session, and isn't counted.
              */
             ended_sign_ins: number;
         };
@@ -3154,6 +3201,62 @@ export interface components {
          * @enum {string}
          */
         PasswordResetState: "working" | "used" | "cancelled" | "ended";
+        /** @description One live personal token. The secret is never shown again after it is made. */
+        PersonalToken: {
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            created_at: number;
+            /** @description The day it was made, in the request's timezone: "today", "yesterday", "3 Nov", or "3 Nov 2025". */
+            created_label: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds. `null` for a token that never expires.
+             */
+            expires_at?: number | null;
+            /** @description The day it stops working, worded like `created_label`. `null` for a token that never expires. */
+            expires_label?: string | null;
+            /**
+             * Format: uuid
+             * @description Names the token in `DELETE /me/personal-tokens/{id}`.
+             */
+            id: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds, precise to a minute. `null` until it is first used.
+             */
+            last_used_at?: number | null;
+            /**
+             * @description How long ago it was last used, in calendar days in the request's timezone: "today", "2 days ago". `null`
+             *     until it is first used.
+             */
+            last_used_label?: string | null;
+            /** @description What the person called it. */
+            name: string;
+        };
+        /**
+         * @description How long a new personal token lasts.
+         * @enum {string}
+         */
+        PersonalTokenExpiry: "30_days" | "90_days" | "1_year" | "never";
+        /** @description The caller's live personal tokens, newest first. */
+        PersonalTokenList: {
+            tokens: components["schemas"]["PersonalToken"][];
+        };
+        /** @description A personal token just made. */
+        PersonalTokenMade: {
+            /** @description The secret, `uph_` and a random value, to give as `Authorization: Bearer`. Shown in this response only. */
+            secret: string;
+            token: components["schemas"]["PersonalToken"];
+        };
+        /** @description What the signed-in user gives to make a personal token. */
+        PersonalTokenMake: {
+            /** @description How long it lasts. Defaults to `90_days`. */
+            expires_in?: components["schemas"]["PersonalTokenExpiry"];
+            /** @description What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters. */
+            name: string;
+        };
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
             /** @description Stable machine-readable error code, for example `version_conflict`. */
@@ -3190,6 +3293,12 @@ export interface components {
             asked_by?: null | components["schemas"]["UserRef"];
             /** @description When it was asked, ready to show: "today", "2 days ago". */
             asked_label: string;
+            /**
+             * @description Whether the person changed the reply after the start of the item's latest ended run, so an agent that read the
+             *     old reply should act on the new one. `false` for a reply never changed, for an item with no ended run, for a
+             *     question that isn't answered, and where the item's runs aren't read (Waiting for me).
+             */
+            changed_since_last_run: boolean;
             /**
              * @description The labels to pick from, in order; empty when the reply is free text. A request always has `Done` and
              *     `Can't be done`, a review `Approved` and `Changes asked`, a done proposal `Close as done` and `Not yet`.
@@ -4786,6 +4895,138 @@ export interface operations {
                 headers: {
                     /** @description Seconds until the session may try again */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_personal_tokens: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenList"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    make_personal_token: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalTokenMake"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalTokenMade"];
+                };
+            };
+            /** @description `unauthenticated`: no session cookie, or the request carried a bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty` or `invalid_fields` (`field` `name`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_personal_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The token's `id`, from the list. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked, or it was revoked or expired already */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such token, or it isn't the caller's */
+            404: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

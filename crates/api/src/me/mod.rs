@@ -2,6 +2,7 @@
 
 pub(crate) mod history;
 pub(crate) mod password;
+pub(crate) mod personal_tokens;
 pub(crate) mod sign_ins;
 
 use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery, RunLinkDto};
