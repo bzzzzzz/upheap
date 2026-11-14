@@ -56,6 +56,7 @@ async fn world() -> Result<World> {
         policy: HeapPolicy::default(),
         context: None,
         agents_prepare: false,
+        origin_id: None,
         archived_at: None,
         version: Version::INITIAL,
     };
@@ -187,6 +188,7 @@ async fn the_prepare_setting_round_trips_through_insert_and_update() -> Result<(
     let world = world().await?;
     let on = Heap {
         agents_prepare: true,
+        origin_id: None,
         ..world.heap.clone()
     };
 

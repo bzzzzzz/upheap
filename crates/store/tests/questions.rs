@@ -51,6 +51,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId, UserId)> 
         policy: HeapPolicy::default(),
         context: None,
         agents_prepare: false,
+        origin_id: None,
         archived_at: None,
         version: Version::INITIAL,
     };

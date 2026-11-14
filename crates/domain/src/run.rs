@@ -6,7 +6,8 @@
 
 use std::fmt;
 
-use crate::handle::ItemKey;
+use crate::handle::{Handle, ItemKey};
+use crate::heap::Heap;
 use crate::item::{Item, Kind, Need, Stage};
 use crate::text::parse_required;
 use crate::turn::Goal;
@@ -256,7 +257,7 @@ impl fmt::Display for RunForbidden {
                 "An agent never closes a task. When nothing is left, propose closing with `upheap question propose-done`.",
             ),
             Self::AddReminder => f.write_str("A run adds tasks and notes, not reminders."),
-            Self::AddNeedsContext => f.write_str("An item a run adds needs a context."),
+            Self::AddNeedsContext => f.write_str("What a run adds needs a context."),
             Self::NeedAboveOrigin { highest } => write!(
                 f,
                 "An agent never gives a need above the note's, which is {}.",
@@ -268,8 +269,17 @@ impl fmt::Display for RunForbidden {
 }
 
 /// The first condition of a goal that an item does not meet, as `work reached` reports it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum NotReached {
+    /// A heap made from the note has no context.
+    #[error("Heap {slug}, made from this item, needs a context.")]
+    MadeHeapNeedsContext { slug: Handle },
+    /// A heap made from the note has no open item made from the note.
+    #[error("Heap {slug}, made from this item, needs a task or a note.")]
+    MadeHeapEmpty { slug: Handle },
+    /// An open note made from the note, in a heap made from it, has no context.
+    #[error("Note {key}, made from this item, needs a context.")]
+    MadeNoteNeedsContext { key: ItemKey },
     /// An open task made from the note, in a split, has no context or no step.
     #[error("Task {key}, made from this item, needs a context and a step.")]
     MadeTaskNotDefined { key: ItemKey },
@@ -347,6 +357,29 @@ pub fn split_reached_check(open_questions: usize, made: &[(Item, usize)]) -> Res
     }
 }
 
+/// Checks the heaps made from a note, each with the items made from the note that are in it: a heap has a context and
+/// at least one open item of those, and each open note of those has a context. The first condition missed is reported,
+/// heap by heap in the order given. Closed items count for nothing.
+pub fn made_heaps_check(heaps: &[(Heap, Vec<Item>)]) -> Result<(), NotReached> {
+    for (heap, made) in heaps {
+        if heap.context.is_none() {
+            return Err(NotReached::MadeHeapNeedsContext {
+                slug: heap.slug.clone(),
+            });
+        }
+        let mut open = made.iter().filter(|item| !item.is_closed()).peekable();
+        if open.peek().is_none() {
+            return Err(NotReached::MadeHeapEmpty {
+                slug: heap.slug.clone(),
+            });
+        }
+        if let Some(note) = open.find(|item| item.kind == Kind::Note && item.description.is_none()) {
+            return Err(NotReached::MadeNoteNeedsContext { key: note.key });
+        }
+    }
+    Ok(())
+}
+
 /// The failure text of a run that ended without saying it reached `goal` or asking a question.
 pub fn default_failure(goal: Goal) -> String {
     format!(
@@ -399,8 +432,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::HeapId;
+    use crate::heap::HeapPolicy;
     use crate::item::{Description, ItemState, Need, NewItem, Title};
+    use crate::text::{Context, Name};
+    use crate::{HeapId, TeamId, Version};
 
     fn at(minutes: i64) -> Timestamp {
         Timestamp::from_millis(Duration::from_minutes(minutes).as_millis()).expect("in range")
@@ -481,30 +516,36 @@ mod tests {
         let note = item();
         expect_that!(
             reached_check(&note, Goal::WithContext, 0, 0),
-            err(eq(NotReached::NoContext))
+            err(eq(&NotReached::NoContext))
         );
         let note = with_context(note);
         expect_that!(reached_check(&note, Goal::WithContext, 0, 0), ok(()));
         expect_that!(
             reached_check(&note, Goal::WithContext, 1, 0),
-            err(eq(NotReached::OpenQuestion))
+            err(eq(&NotReached::OpenQuestion))
         );
     }
 
     #[gtest]
     fn a_task_reaches_defined_with_a_description_a_live_step_and_no_open_question() {
         let note = with_context(item());
-        expect_that!(reached_check(&note, Goal::Defined, 0, 1), err(eq(NotReached::NotATask)));
+        expect_that!(
+            reached_check(&note, Goal::Defined, 0, 1),
+            err(eq(&NotReached::NotATask))
+        );
         let bare = task(item());
         expect_that!(
             reached_check(&bare, Goal::Defined, 0, 1),
-            err(eq(NotReached::NoContext))
+            err(eq(&NotReached::NoContext))
         );
         let ready = with_context(task(item()));
-        expect_that!(reached_check(&ready, Goal::Defined, 0, 0), err(eq(NotReached::NoSteps)));
+        expect_that!(
+            reached_check(&ready, Goal::Defined, 0, 0),
+            err(eq(&NotReached::NoSteps))
+        );
         expect_that!(
             reached_check(&ready, Goal::Defined, 1, 2),
-            err(eq(NotReached::OpenQuestion))
+            err(eq(&NotReached::OpenQuestion))
         );
         expect_that!(reached_check(&ready, Goal::Defined, 0, 2), ok(()));
     }
@@ -514,7 +555,7 @@ mod tests {
         let ready = with_context(task(item()));
         expect_that!(
             reached_check(&ready, Goal::Done, 0, 3),
-            err(eq(NotReached::DoneByProposal))
+            err(eq(&NotReached::DoneByProposal))
         );
         let mut closed = with_context(item());
         closed.state = ItemState::Done {
@@ -523,7 +564,7 @@ mod tests {
         };
         expect_that!(
             reached_check(&closed, Goal::WithContext, 0, 0),
-            err(eq(NotReached::Closed))
+            err(eq(&NotReached::Closed))
         );
     }
 
@@ -663,7 +704,10 @@ mod tests {
     fn a_split_is_not_reached_with_an_open_question() {
         let ready = made(Kind::Task, Some("Done when: certs rotate."), "a1a1a");
 
-        expect_that!(split_reached_check(1, &[(ready, 1)]), err(eq(NotReached::OpenQuestion)));
+        expect_that!(
+            split_reached_check(1, &[(ready, 1)]),
+            err(eq(&NotReached::OpenQuestion))
+        );
     }
 
     #[gtest]
@@ -674,7 +718,7 @@ mod tests {
 
         expect_that!(
             split_reached_check(0, &[(ready.clone(), 1), (no_step.clone(), 0), (no_context, 1)]),
-            err(eq(NotReached::MadeTaskNotDefined { key: no_step.key }))
+            err(eq(&NotReached::MadeTaskNotDefined { key: no_step.key }))
         );
     }
 
@@ -688,5 +732,71 @@ mod tests {
         };
 
         expect_that!(split_reached_check(0, &[(note, 0), (closed, 0)]), ok(()));
+    }
+
+    fn made_heap(slug: &str, context: Option<&str>) -> Heap {
+        Heap {
+            id: HeapId::from_uuid(Uuid::from_u128(5)),
+            team_id: TeamId::from_uuid(Uuid::from_u128(1)),
+            slug: Handle::parse(slug, Field::Slug).expect("valid"),
+            name: Name::parse("Blog move").expect("valid"),
+            policy: HeapPolicy::default(),
+            context: context.map(|text| Context::parse(text).expect("valid").expect("some")),
+            agents_prepare: false,
+            origin_id: Some(ItemId::from_uuid(Uuid::from_u128(3))),
+            archived_at: None,
+            version: Version::INITIAL,
+        }
+    }
+
+    #[gtest]
+    fn a_made_heap_with_a_context_and_an_item_is_reached() {
+        let task = made(Kind::Task, None, "a1a1a");
+        let note = made(Kind::Note, Some("What this is."), "b2b2b");
+
+        expect_that!(
+            made_heaps_check(&[(made_heap("blog-move", Some("A project.")), vec![task, note])]),
+            ok(())
+        );
+        expect_that!(made_heaps_check(&[]), ok(()));
+    }
+
+    #[gtest]
+    fn a_made_heap_without_a_context_is_not_reached() {
+        let task = made(Kind::Task, None, "a1a1a");
+
+        expect_that!(
+            made_heaps_check(&[(made_heap("blog-move", None), vec![task])]),
+            err(eq(&NotReached::MadeHeapNeedsContext {
+                slug: Handle::parse("blog-move", Field::Slug).expect("valid")
+            }))
+        );
+    }
+
+    #[gtest]
+    fn a_made_heap_needs_an_open_item() {
+        let mut closed = made(Kind::Task, None, "a1a1a");
+        closed.state = ItemState::WontDo {
+            closed_at: Timestamp::from_millis(1).expect("in range"),
+            closed_by: None,
+        };
+        let heap = made_heap("blog-move", Some("A project."));
+        let empty = NotReached::MadeHeapEmpty {
+            slug: heap.slug.clone(),
+        };
+
+        expect_that!(made_heaps_check(&[(heap.clone(), vec![])]), err(eq(&empty.clone())));
+        expect_that!(made_heaps_check(&[(heap, vec![closed])]), err(eq(&empty)));
+    }
+
+    #[gtest]
+    fn a_made_note_in_a_made_heap_needs_a_context() {
+        let task = made(Kind::Task, None, "a1a1a");
+        let note = made(Kind::Note, None, "b2b2b");
+
+        expect_that!(
+            made_heaps_check(&[(made_heap("blog-move", Some("A project.")), vec![task, note.clone()])]),
+            err(eq(&NotReached::MadeNoteNeedsContext { key: note.key }))
+        );
     }
 }

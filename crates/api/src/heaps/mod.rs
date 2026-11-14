@@ -18,7 +18,7 @@ use service::teams::HeapView;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::dto::IfMatchHeader;
+use crate::dto::{IfMatchHeader, to_item_origin_dto};
 use crate::error::Problem;
 use crate::extract::{ApiJson, IfMatch};
 use crate::parameters::to_parameter_dto;
@@ -46,6 +46,7 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
         version: heap.version.get(),
+        origin: view.origin.map(to_item_origin_dto),
         allowed_actions: view.allowed_actions.into_iter().map(HeapActionDto::from).collect(),
     }
 }

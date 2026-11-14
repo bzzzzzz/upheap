@@ -165,9 +165,14 @@ function ClosedRow({
   );
 }
 
-/** What a note that became says: "Became 3 tasks", or "Became a step of “<task>”" when only a step was made. */
+/**
+ * What a note that became says: "Became 3 tasks", "Became heap “<name>”" when a heap was made, or "Became a step of
+ * “<task>”" when only a step was made.
+ */
 function becameText(item: Item): string {
   const made = item.became ?? [];
+  const heap = item.became_heaps?.[0];
+  if (heap) return `Became heap “${heap.name}”`;
   const step = item.became_steps?.[0];
   if (made.length === 0 && step) return `Became a step of “${step.task.title}”`;
   return `Became ${becameWords(made)}`;

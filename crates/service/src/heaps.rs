@@ -6,12 +6,13 @@
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
+use domain::item::{Item, Kind};
 use domain::parameter::{ParameterPatch, Weight};
 use domain::permission::{Permission, allowed_heap_actions};
 use domain::text::{Context, Name};
 use domain::turn::TakeBackWhy;
 use domain::validation::Field;
-use domain::{HeapId, ParameterId, TeamId, Timestamp, ValidationError, Version};
+use domain::{HeapId, ItemId, ParameterId, TeamId, Timestamp, ValidationError, Version};
 use serde_json::json;
 use std::collections::BTreeSet;
 use store::audit::NewAuditEntry;
@@ -22,7 +23,7 @@ use crate::audit::{diff_parameters, diff_policies};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
 use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
-use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view};
+use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view, with_origin};
 use crate::{Principal, ServiceError, Services};
 
 /// A change to a heap's name, slug, context and prepare setting. `None` leaves a field as it is; `Some(None)` clears
@@ -60,18 +61,29 @@ pub struct HeapWeightsView {
 }
 
 impl Services {
-    /// Adds an active heap with the default ranking policy to the team. Without a `slug`, one is made from the name.
-    /// Fails with [`ServiceError::HandleTaken`] when another heap of the team has the slug.
+    /// Adds an active heap with the default ranking policy to the team, with the `context` when there is one. Without
+    /// a `slug`, one is made from the name. Fails with [`ServiceError::HandleTaken`] when another heap of the team
+    /// has the slug.
+    ///
+    /// With an `origin`, the heap is made from that note, which stays as it is: it closes only on `became`. The note
+    /// must be an item of a heap of this team ([`ServiceError::NotFound`] otherwise), a note
+    /// ([`ServiceError::OriginNotANote`]) and open ([`ServiceError::OriginClosed`]).
+    ///
+    /// In a run the heap must be made from the run's item, with a context, and the run must be live; it goes on
+    /// afterwards. Without an origin that is [`RunForbidden::Person`], without a context
+    /// [`RunForbidden::AddNeedsContext`], from another item [`RunError::WrongItem`].
     pub async fn create_heap(
         &self,
         principal: Principal,
         team_id: TeamId,
         name: Name,
         slug: Option<Handle>,
+        context: Option<Context>,
+        origin: Option<ItemId>,
     ) -> Result<HeapView, ServiceError> {
         let derived = slug.is_none();
         retry_derived_slug(derived, || {
-            self.try_create_heap(principal, team_id, name.clone(), slug.clone())
+            self.try_create_heap(principal, team_id, name.clone(), slug.clone(), context.clone(), origin)
         })
         .await
     }
@@ -82,22 +94,31 @@ impl Services {
         team_id: TeamId,
         name: Name,
         slug: Option<Handle>,
+        context: Option<Context>,
+        origin: Option<ItemId>,
     ) -> Result<HeapView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let membership = authorize_team(&txn, principal, team_id, Permission::ManageHeaps).await?;
+        let now = self.now();
+        self.check_run_make_heap(&txn, principal, origin, context.is_some(), now)
+            .await?;
+        let origin_item = match origin {
+            Some(item_id) => Some(find_note_in_team(&txn, team_id, item_id).await?),
+            None => None,
+        };
         let slug = match slug {
             Some(slug) => slug,
             None => free_heap_slug(&txn, team_id, &name).await?,
         };
-        let now = self.now();
         let heap = Heap {
             id: HeapId::from_uuid(self.new_id(now)),
             team_id,
             slug,
             name,
             policy: HeapPolicy::default(),
-            context: None,
+            context,
             agents_prepare: false,
+            origin_id: origin_item.as_ref().map(|note| note.id),
             archived_at: None,
             version: Version::INITIAL,
         };
@@ -112,15 +133,28 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        let view = with_origin(
+            &txn,
+            HeapView {
+                allowed_actions: allowed_heap_actions(&heap, membership.role),
+                heap,
+                // A new heap has no items.
+                open_count: 0,
+                origin: None,
+            },
+        )
+        .await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%team_id, heap_id = %heap.id, user_id = %principal.user_id, "heap created");
-        Ok(HeapView {
-            allowed_actions: allowed_heap_actions(&heap, membership.role),
-            heap,
-            // A new heap has no items.
-            open_count: 0,
-        })
+        tracing::info!(
+            %team_id,
+            heap_id = %view.heap.id,
+            user_id = %principal.user_id,
+            origin = ?view.heap.origin_id,
+            in_run = principal.run.is_some(),
+            "heap created"
+        );
+        Ok(view)
     }
 
     /// The heap with what the caller may do with it. Non-members get [`ServiceError::NotFound`].
@@ -246,7 +280,7 @@ impl Services {
         }
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
-        Ok(to_heap_view(saved, role, open_count))
+        with_origin(&self.db, to_heap_view(saved, role, open_count)).await
     }
 
     /// Sets the heap's own weights and its parameters' weights in one transaction, if the heap is still at version
@@ -328,14 +362,12 @@ impl Services {
 
         let open_count = count_heap_open_items(&txn, heap_id, self.now()).await?;
         let parameters = list_parameters_in_use(&txn, &heap, role).await?;
+        let heap = with_origin(&txn, to_heap_view(heap, role, open_count)).await?;
         if heap_changed || parameters_changed > 0 {
             txn.commit().await.map_err(StoreError::from)?;
             tracing::info!(%heap_id, user_id = %principal.user_id, heap_changed, parameters_changed, "weights updated");
         }
-        Ok(HeapWeightsView {
-            heap: to_heap_view(heap, role, open_count),
-            parameters,
-        })
+        Ok(HeapWeightsView { heap, parameters })
     }
 
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
@@ -396,7 +428,7 @@ impl Services {
             .save_heap(txn, principal, &changed, current.version, action, diff, now)
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, archived, turns_taken_back, "heap archive state changed");
-        Ok(to_heap_view(saved, role, open_count))
+        with_origin(&self.db, to_heap_view(saved, role, open_count)).await
     }
 
     /// [`Self::write_heap`], then commits.
@@ -463,6 +495,30 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// The open note `item_id`, which must be an item of a heap of `team_id`: another team's note is not found.
+async fn find_note_in_team(
+    txn: &store::DatabaseTransaction,
+    team_id: TeamId,
+    item_id: ItemId,
+) -> Result<Item, ServiceError> {
+    let note = store::items::find_item(txn, item_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    let in_team = store::heaps::find_heap(txn, note.heap_id)
+        .await?
+        .is_some_and(|heap| heap.team_id == team_id);
+    if !in_team {
+        return Err(ServiceError::NotFound);
+    }
+    if note.kind != Kind::Note {
+        return Err(ServiceError::OriginNotANote { item_id });
+    }
+    if note.is_closed() {
+        return Err(ServiceError::OriginClosed { item_id });
+    }
+    Ok(note)
 }
 
 /// The heap as read under its row lock.
