@@ -58,9 +58,23 @@ What it is not:
    client never handles the user's password.
 5. A signed-in user can change their password by giving the current one. That ends every other sign-in of theirs,
    in browsers and in command-line clients.
-6. A forgotten password is reset through a link the operator makes with a command on the server. It works once and
-   for one hour, and setting the new password ends all the user's sign-ins. The server sends no email.
+6. A forgotten password is reset through a link the operator makes with a command on the server, or, when the server
+   sends mail, one the user asks for by mail (Email §3). It works once and for one hour, and setting the new password
+   ends all the user's sign-ins.
 7. A password change and a reset are in the audit log, without the password, and only the user sees them.
+
+## Email
+
+1. Mail is optional. On a server without it, the operator makes reset links by hand, and accounts sign in without
+   confirming their address.
+2. The server mails only about the account itself: links the user asked for, and notices of changes to their
+   account. Never about items, questions, reviews or agents' work.
+3. With mail set up, a user who forgot their password gets a reset link by mail, asked for on the sign-in page.
+   Asking answers the same whether an account uses the address or not.
+4. With mail set up, a new account confirms its address by a link mailed to it before it can sign in, an account
+   made through an invite link included.
+5. A user can change their address by giving their password. The change takes effect once a link mailed to the new
+   address is opened, and the old address is told.
 
 ## Teams
 
