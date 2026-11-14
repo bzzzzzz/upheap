@@ -1,6 +1,6 @@
-// The reset page and the forgot-password line on sign-in (design/ux.md, Reset page and Sign in and create account):
-// the golden path of a person who forgot their password, on a server whose operator makes the link with the server's
-// own command, and a small test for each state of the page.
+// The reset page and the forgot-password disclosure on sign-in (design/ux.md, Reset page and Sign in and create account):
+// the golden paths of a person who forgot their password, on a server whose operator makes the link with the server's
+// own command and one with mail set up, where they ask for it, and a small test for each state of the page.
 import type { Browser, TestInfo } from "@playwright/test";
 
 import { test as closed, type ClosedServer } from "./closedServer";
@@ -103,6 +103,37 @@ closed(
       await page.goto(link);
       await expect(page.getByRole("heading", { name: "This reset link was already used." })).toBeVisible();
       await expect(page.getByText("Ask whoever runs this server for a new one.")).toBeVisible();
+    } finally {
+      await context.close();
+      // The account goes back to the password the other tests know.
+      expect(await setPasswordThrough(await resetLink(forgetful.username), PASSWORD)).toBe(200);
+    }
+  },
+);
+
+closed(
+  "someone who forgot their password asks for a link by mail, sets a new one and is signed in",
+  async ({ browser, closedServer }, testInfo) => {
+    const { forgetful, resetLink, mailedResetLink } = closedServer;
+    const context = await visitor(browser, testInfo, closedServer);
+    try {
+      const page = await context.newPage();
+      await page.goto("/login");
+      await page.getByRole("button", { name: "Forgot your password?" }).click();
+      await expect(page.getByText("Whoever runs this Upheap server can send you a reset link.")).toHaveCount(0);
+      const asked = new Date();
+      await page.getByLabel("Email", { exact: true }).fill(forgetful.email);
+      await page.getByRole("button", { name: "Send me a link" }).click();
+      await expect(page.getByRole("status")).toHaveText(
+        "If an account uses that address, a link is on its way. It works for an hour.",
+      );
+      await expectFitsWidth(page, "Sign in with the reset form open");
+
+      const link = await mailedResetLink(forgetful.email, asked);
+      await page.goto(link);
+      await page.getByLabel("New password").fill(NEW_PASSWORD);
+      await page.getByRole("button", { name: "Set password and sign in" }).click();
+      await expect(page).toHaveURL(HEAP_URL);
     } finally {
       await context.close();
       // The account goes back to the password the other tests know.

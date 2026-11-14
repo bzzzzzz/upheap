@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import { useOidcProvider, useRegister, useSignIn } from "../api/queries";
+import {
+  useOidcProvider,
+  usePasswordResetOptions,
+  useRegister,
+  useRequestPasswordReset,
+  useSignIn,
+} from "../api/queries";
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
@@ -289,6 +295,9 @@ function AuthForm({
   // A problem about one of this form's inputs shows under it; any other, above the button.
   const errorField = error instanceof ApiProblem ? FIELDS[mode].find((name) => name === error.field) : undefined;
   const formRef = useRef<HTMLFormElement>(null);
+  // Asking for a reset link is its own request, with its own form (`ResetRequestForm`) beside this one.
+  const resetRequest = useRequestPasswordReset();
+  const [resetEmail, setResetEmail] = useState("");
 
   // After a failed submit, focus goes to the input the problem is about, once it shows the error.
   useEffect(() => {
@@ -320,84 +329,121 @@ function AuthForm({
   });
 
   return (
-    // The server checks every input and says which one is wrong, so the browser's own bubbles stay out of the way.
-    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
-      {mode === "register" && (
-        <Field label="Name" {...field("display_name")} autoComplete="name" autoCapitalize="words" required />
-      )}
-      {mode === "register" && (
+    <>
+      {/* The server checks every input and says which one is wrong, so the browser's own bubbles stay out of the way. */}
+      <form ref={formRef} onSubmit={submit} noValidate className="flex flex-col gap-4">
+        {mode === "register" && (
+          <Field label="Name" {...field("display_name")} autoComplete="name" autoCapitalize="words" required />
+        )}
+        {mode === "register" && (
+          <Field
+            label="Username"
+            {...field("username")}
+            hint={USERNAME_HINT}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={39}
+            required
+          />
+        )}
+        {mode === "sign_in" ? (
+          <Field
+            label="Email or username"
+            {...field("login")}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+          />
+        ) : (
+          <Field
+            label="Email"
+            {...field("email")}
+            type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+          />
+        )}
+        {mode === "register" &&
+          errorField === "email" &&
+          error instanceof ApiProblem &&
+          error.code === "email_taken" && (
+            <button
+              type="button"
+              onClick={onSignInInstead}
+              className="-mt-2 self-start rounded-lg px-1 py-1.5 text-sm font-semibold text-accent-ink underline pointer-coarse:min-h-11"
+            >
+              Sign in instead
+            </button>
+          )}
         <Field
-          label="Username"
-          {...field("username")}
-          hint={USERNAME_HINT}
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={39}
+          label="Password"
+          {...field("password")}
+          hint={mode === "register" ? "At least 10 characters" : undefined}
+          type="password"
+          autoComplete={mode === "register" ? "new-password" : "current-password"}
+          enterKeyHint="go"
           required
         />
-      )}
-      {mode === "sign_in" ? (
-        <Field
-          label="Email or username"
-          {...field("login")}
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          required
-        />
-      ) : (
-        <Field
-          label="Email"
-          {...field("email")}
-          type="email"
-          autoComplete="email"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          required
-        />
-      )}
-      {mode === "register" && errorField === "email" && error instanceof ApiProblem && error.code === "email_taken" && (
-        <button
-          type="button"
-          onClick={onSignInInstead}
-          className="-mt-2 self-start rounded-lg px-1 py-1.5 text-sm font-semibold text-accent-ink underline pointer-coarse:min-h-11"
-        >
-          Sign in instead
+        {mode === "sign_in" && (
+          <ForgotPassword request={resetRequest} email={resetEmail} onEmailChange={setResetEmail} />
+        )}
+        {error && !errorField && (
+          <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+            {problemMessage(error)}
+          </p>
+        )}
+        <button type="submit" disabled={mutation.isPending} className={authButtonClass}>
+          {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
         </button>
-      )}
-      <Field
-        label="Password"
-        {...field("password")}
-        hint={mode === "register" ? "At least 10 characters" : undefined}
-        type="password"
-        autoComplete={mode === "register" ? "new-password" : "current-password"}
-        enterKeyHint="go"
-        required
+        {mode === "register" && note && <p className="text-center text-xs text-muted">{note}</p>}
+      </form>
+      {/* Forms can't nest, so the reset's form sits here, and its field and button name it in their `form`. */}
+      <form
+        id={RESET_FORM_ID}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          resetRequest.mutate({ email: resetEmail });
+        }}
       />
-      {mode === "sign_in" && <ForgotPassword />}
-      {error && !errorField && (
-        <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-          {problemMessage(error)}
-        </p>
-      )}
-      <button type="submit" disabled={mutation.isPending} className={authButtonClass}>
-        {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
-      </button>
-      {mode === "register" && note && <p className="text-center text-xs text-muted">{note}</p>}
-    </form>
+    </>
   );
 }
 
+const RESET_FORM_ID = "reset-request";
+
 /**
- * "Forgot your password?" under Sign in's password (ux.md, Sign in and create account): a disclosure that says how a
- * reset is done. There is no form and no request, since the server sends no email; whoever runs it makes the link.
+ * "Forgot your password?" under Sign in's password (ux.md, Sign in and create account): a disclosure. When the server
+ * mails reset links it holds an Email field and a button to send one; otherwise it says that whoever runs the server
+ * can. The field and button belong to the form `AuthForm` renders beside the sign-in form, so Enter in the field
+ * sends the reset and never the sign-in.
  */
-function ForgotPassword() {
+function ForgotPassword({
+  request,
+  email,
+  onEmailChange,
+}: {
+  request: {
+    mutate: (body: { email: string }) => void;
+    error: Error | null;
+    isPending: boolean;
+    isSuccess: boolean;
+    reset: () => void;
+  };
+  email: string;
+  onEmailChange: (value: string) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const byMail = usePasswordResetOptions().data?.by_mail === true;
+  const { error } = request;
+  const emailProblem = error instanceof ApiProblem && error.field === "email" ? error : undefined;
   return (
     <div className="-mt-2 flex flex-col items-start gap-1">
       <button
@@ -408,7 +454,48 @@ function ForgotPassword() {
       >
         Forgot your password?
       </button>
-      {open && <p className="text-sm text-ink-soft">Whoever runs this Upheap server can send you a reset link.</p>}
+      {open && !byMail && (
+        <p className="text-sm text-ink-soft">Whoever runs this Upheap server can send you a reset link.</p>
+      )}
+      {open && byMail && (
+        <div className="flex w-full flex-col gap-2">
+          <Field
+            label="Email"
+            form={RESET_FORM_ID}
+            name="reset_email"
+            value={email}
+            error={emailProblem ? problemMessage(emailProblem) : undefined}
+            onChange={(value) => {
+              onEmailChange(value);
+              if (emailProblem) request.reset();
+            }}
+            type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+          />
+          <button
+            type="submit"
+            form={RESET_FORM_ID}
+            disabled={request.isPending}
+            className="h-11 self-start rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink disabled:opacity-40 pointer-coarse:min-h-11"
+          >
+            Send me a link
+          </button>
+          {error && !emailProblem && (
+            <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+              {problemMessage(error)}
+            </p>
+          )}
+          {request.isSuccess && (
+            <p role="status" className="text-sm text-ink-soft">
+              If an account uses that address, a link is on its way. It works for an hour.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

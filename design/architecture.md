@@ -41,7 +41,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 ## Workspace
 
 Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` and
-`server → mail` beside it. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
+`server → mail` beside it, and `service → mail` for the mail it sends. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
 property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
 linking the server. The crates and their roles are listed in [README.md](../README.md#layout); each crate's root
@@ -561,6 +561,14 @@ a fixed time.
      the caller whoever they were, and clears the user's sign-in attempts, since the holder of the link has shown who
      they are. Not rate limited, because a 256-bit token can't be guessed. Making a link is audited with the user as
      its actor, since an entry needs an account and the operator has none; its diff says `made_by: operator`.
+   - With mail set up, a user asks for a link themselves: `POST /password-resets` with an email address (and
+     `GET /password-resets` tells the web app whether the server does). A mailed link is the same kind, made in the
+     same transaction (`made_by: mail`), so each cancels the other. The request is counted per address in
+     `sign_in_attempts` under a `reset:` key of its own, before the account is looked up, so asking never uses up the
+     address's sign-in attempts and the reverse; the count is never cleared and runs out with its window. A known and
+     an unknown address get the same `202`, and the mail is sent after commit in a spawned task, so the answer
+     doesn't wait for the provider. A send that fails is logged once and not retried; in-flight sends aren't drained
+     at shutdown, and the user asks again. Without mail the endpoint is `404`.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
      go: a password change, a reset link made for them (actor: the user, for the reason above) and a password set
      with one. `GET /me/history` reads exactly those three actions for the caller, with no way to name another user or
@@ -709,7 +717,8 @@ the remaining admins.
    needs authentication, and neither reveals versions or configuration.
 6. **Mail** is optional. The `mail` crate builds the mailer at startup from `MAIL_URL` and `MAIL_FROM` (lettre with
    rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
-   transports, and the only places a mail's text is recorded. A failed send isn't retried.
+   transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
+   it needs through that mailer (the reset mail, see Authentication).
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
 

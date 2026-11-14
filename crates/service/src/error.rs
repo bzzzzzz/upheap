@@ -34,6 +34,9 @@ pub enum ServiceError {
     /// The email address used up its sign-in attempts for now.
     #[error("too many sign-in attempts; try again in {}", in_minutes(*retry_after))]
     TooManySignInAttempts { retry_after: Duration },
+    /// The email address used up its password reset requests for now.
+    #[error("too many reset requests for this address; try again in {}", in_minutes(*retry_after))]
+    TooManyResetRequests { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
     /// Another user or team has the username or team slug, or another heap of the team has the heap slug.

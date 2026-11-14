@@ -445,7 +445,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
         (AuditAction::HeapPriorityChanged, _) => ("changed their priority for a heap", false),
         (AuditAction::PasswordChanged, _) => ("changed their password", false),
-        (AuditAction::PasswordResetLinkMade, _) => ("got a reset link from whoever runs the server", false),
+        (AuditAction::PasswordResetLinkMade, _) => ("got a reset link", false),
         (AuditAction::PasswordReset, _) => ("set a new password with a reset link", false),
     }
 }
