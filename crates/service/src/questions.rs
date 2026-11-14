@@ -177,7 +177,8 @@ impl Services {
                 expected,
                 current: expected.next(),
             })?;
-        let (action, diff) = if current.reply.is_some() {
+        let changed = current.reply.is_some();
+        let (action, diff) = if changed {
             (AuditAction::ReplyChanged, describe_reply_change(current, &saved))
         } else {
             (AuditAction::QuestionAnswered, describe_reply(&saved))
@@ -202,7 +203,8 @@ impl Services {
             question = number.get(),
             user_id = %principal.user_id,
             version = saved.version.get(),
-            "question answered"
+            "{}",
+            if changed { "reply changed" } else { "question answered" }
         );
         Ok(view)
     }

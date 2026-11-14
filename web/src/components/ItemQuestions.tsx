@@ -673,7 +673,8 @@ function AnsweredRow({
   };
   const close = () => {
     setChanging(null);
-    focusAfterRender(() => row.current?.querySelector<HTMLElement>("[data-change-reply]"));
+    // A change that closed the item (Not yet to Close as done) takes Change reply away: focus stays on the row.
+    focusAfterRender(() => row.current?.querySelector<HTMLElement>("[data-change-reply]") ?? row.current);
   };
   const send = (body: QuestionReply) =>
     reply.mutateAsync({ question, reply: body, version: changing ?? question.version }).then(
@@ -685,7 +686,7 @@ function AnsweredRow({
     );
 
   return (
-    <li ref={row} className="flex flex-col gap-1 py-3 first:pt-1 last:pb-1">
+    <li ref={row} tabIndex={-1} className="flex flex-col gap-1 py-3 outline-none first:pt-1 last:pb-1">
       <QuestionHead
         itemId={item.id}
         line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}

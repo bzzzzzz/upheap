@@ -575,7 +575,14 @@ async fn question_reply_to_an_answered_question_changes_the_reply() -> Result<()
 
     // Act
     let run = cli
-        .run(&["question", "reply", &format!("{task}.q1"), "--comment", "Second"])
+        .run(&[
+            "question",
+            "reply",
+            &format!("{task}.q1"),
+            "--comment",
+            "Second",
+            "--change",
+        ])
         .await;
 
     // Assert
@@ -637,7 +644,7 @@ async fn question_reply_on_a_closed_item_or_after_reopening_says_the_question_wa
 
 #[gtest]
 #[tokio::test]
-async fn repeating_a_reply_is_safe_and_another_reply_is_refused() -> Result<()> {
+async fn repeating_a_reply_is_safe_and_another_reply_needs_change() -> Result<()> {
     // Arrange
     let (server, ada, _, task) = with_task().await?;
     let cli = cli_in_heap(&server, &ada).await?;
@@ -699,6 +706,8 @@ async fn repeating_a_reply_is_safe_and_another_reply_is_refused() -> Result<()> 
         ])
         .await;
     let other = cli.run(&["question", "reply", &name, "--pick", "b"]).await;
+    let kept = server.read_item(&ada, HEAP, &task).await?;
+    let changed = cli.run(&["question", "reply", &name, "--pick", "b", "--change"]).await;
 
     // Assert
     expect_that!(same.stdout, eq(&format!("{name} is already answered with that.\n")));
@@ -707,8 +716,11 @@ async fn repeating_a_reply_is_safe_and_another_reply_is_refused() -> Result<()> 
     expect_that!(quiet.exited(0), eq(true));
     let body: Value = serde_json::from_str(&json.stdout)?;
     expect_that!(body["questions"][0]["state"], eq("answered"));
-    expect_that!(other.exited(0), eq(true));
-    expect_that!(other.stdout, contains_substring("Changed the reply to"));
+    expect_that!(other.exited(3), eq(true));
+    expect_that!(other.stderr, contains_substring("add --change to replace it"));
+    expect_that!(kept["questions"][0]["reply"]["comment"], eq("Both."));
+    expect_that!(changed.exited(0), eq(true));
+    expect_that!(changed.stdout, contains_substring("Changed the reply to"));
     Ok(())
 }
 

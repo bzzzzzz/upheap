@@ -3,9 +3,10 @@
 //! The CLI reads the item first, for the question's version and its choices, which it needs to turn what was typed
 //! into the indices the API takes. The server owns every other rule: how many picks, whether a comment is needed,
 //! a question not withdrawn, on an open item. Repeating a command is safe: a question answered already with this very reply
-//! is said to be, and makes no write. Another reply to an answered question changes it, sent with the question's
-//! version, so a change made meanwhile by someone else is refused rather than overwritten. A withdrawn question is
-//! refused.
+//! is said to be, and makes no write. Another reply to an answered question is refused unless the command says
+//! `--change`, so a repeated or mistyped command never replaces someone's answer. A change is sent with the
+//! question's version, so a change made meanwhile by someone else is refused rather than overwritten. A withdrawn
+//! question is refused.
 
 use api_types::common::{QuestionDto, QuestionStateDto};
 use api_types::questions::{QuestionPatchDto, ReplyDto};
@@ -34,6 +35,10 @@ pub struct ReplyArgs {
     /// The comment, read from this file, or from stdin for `-`
     #[arg(long, value_name = "FILE")]
     pub comment_file: Option<String>,
+    /// Replace the reply of a question answered already. Without it, a different reply to an answered question is
+    /// refused
+    #[arg(long)]
+    pub change: bool,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -83,6 +88,12 @@ pub async fn run_reply(args: ReplyArgs, app: &App, out: &mut Output) -> Result<(
             Mode::Human => out.line(&format!("{full_name} is already answered with that."))?,
         }
         return Ok(());
+    }
+    if question.state == QuestionStateDto::Answered && !args.change {
+        return Err(CliError::QuestionRefused {
+            name: full_name,
+            refusal: QuestionRefusal::AnsweredDifferently,
+        });
     }
     let patch = QuestionPatchDto {
         reply: Some(ReplyDto { picked, comment }),
