@@ -66,7 +66,8 @@ pub struct Environment {
     pub heap: Option<String>,
     /// `UPHEAP_RUN`: the run an agent writes in. Sent as `Upheap-Run` with every request.
     pub run: Option<String>,
-    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command but `auth login` and `auth logout` then uses instead of the keychain sign-in.
+    /// `UPHEAP_TOKEN`, trimmed: a personal token, which every command but `auth login` and `auth logout` then uses
+    /// instead of the keychain sign-in.
     pub token: Option<String>,
     /// Whether `NO_COLOR` is set to something.
     pub no_color: bool,
