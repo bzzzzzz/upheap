@@ -23,6 +23,7 @@ import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
+import { AgentsPage } from "./pages/AgentsPage";
 import { ClosedPage } from "./pages/ClosedPage";
 import { DataPage, type DataSearch } from "./pages/DataPage";
 import { HeapPage } from "./pages/HeapPage";
@@ -490,6 +491,13 @@ const shortItemRoute = createRoute({
   },
 });
 
+/** What agents finished, across the heaps (ux.md, Agents). */
+const agentsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/agents",
+  component: AgentsPage,
+});
+
 /** Every open question across the heaps (ux.md, Waiting for me). */
 const waitingRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -550,6 +558,7 @@ const routeTree = rootRoute.addChildren([
     teamActivityRoute,
     dataRoute,
     waitingRoute,
+    agentsRoute,
     allRoute,
     accountRoute,
   ]),

@@ -412,7 +412,7 @@ test("the count follows questions asked elsewhere every 30 s, on a list and on a
   await expect(entry(page)).toHaveAccessibleName(/ 2$/);
 });
 
-test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in More", async ({ page }) => {
+test("the phone's tabs are Open, Waiting, Add, Agents and More, with Closed and Settings in More", async ({ page }) => {
   test.skip(!isPhone(page), "Tabs are the phone's.");
   const tabs = page.getByRole("navigation", { name: "Heap views" });
   const names = await tabs
@@ -420,14 +420,15 @@ test("the phone's tabs are Open, Waiting, Add, Closed and More, with Settings in
     .evaluateAll((all) =>
       all.map((element) => element.getAttribute("aria-label") ?? (element as HTMLElement).innerText.trim()),
     );
-  expect(names).toEqual(["Open", "Waiting", "Add item", "Closed", "More"]);
+  expect(names).toEqual(["Open", "Waiting", "Add item", "Agents", "More"]);
   await expect(tabs.getByRole("link", { name: "Settings" })).toHaveCount(0);
 
   await tabs.getByRole("button", { name: "More" }).click();
   const more = page.getByRole("navigation", { name: "More" });
   const links = await more.getByRole("link").allTextContents();
-  expect(links[0]).toBe("Settings");
-  expect(links[1]).toBe("Activity");
+  expect(links[0]).toBe("Closed");
+  expect(links[1]).toBe("Settings");
+  expect(links[2]).toBe("Activity");
   await more.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings/);
   // More shows as the page's tab.
@@ -448,7 +449,7 @@ test("on the Waiting page the shell keeps the heap opened last, and marks no vie
   const open = views.getByRole("link", { name: "Open", exact: true });
   await expect(open).toHaveAttribute("href", new RegExp(`${other}$`));
   await expect(open).not.toHaveAttribute("aria-current", "page");
-  await expect(views.getByRole("link", { name: "Closed", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: /^Agents/ })).not.toHaveAttribute("aria-current", "page");
   await expect(entry(page)).toHaveAttribute("aria-current", "page");
 
   // On a phone Add adds to that heap.
