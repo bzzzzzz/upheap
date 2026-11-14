@@ -319,4 +319,10 @@ test("History marks an agent's change with its run, and the link opens Runs at t
   const runs = itemPane(page).getByRole("region", { name: "Runs", exact: true });
   await expect(runs.locator("details")).toHaveAttribute("open");
   await expect(runs.locator(`#run-${run.id}`)).toBeVisible();
+
+  // Folded, another click on the same run opens it again.
+  await runs.getByText(/^Runs/).click();
+  await expect(runs.locator("details")).not.toHaveAttribute("open");
+  await agent.click();
+  await expect(runs.locator("details")).toHaveAttribute("open");
 });

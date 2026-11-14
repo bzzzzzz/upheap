@@ -1,8 +1,6 @@
 //! Reading the audit log: a heap's history and a team's history, or one entity's within them.
 
-use api_types::audit::{
-    AuditChangeDto, AuditEntityDto, AuditEntryDto, AuditLogDto, AuditQueryDto, AuditRunDto, AuditRunItemDto,
-};
+use api_types::audit::{AuditChangeDto, AuditEntityDto, AuditEntryDto, AuditLogDto, AuditQueryDto, AuditRunDto};
 use api_types::common::UserRefDto;
 use axum::Json;
 use axum::extract::State;
@@ -12,7 +10,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
-use crate::dto::to_item_heap_dto;
+use crate::dto::to_item_origin_dto;
 use crate::error::Problem;
 use crate::extract::{ApiQuery, ClientTimeZone, TimeZoneHeader};
 use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
@@ -67,10 +65,7 @@ fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
 fn to_audit_run_dto(run: AuditRun) -> AuditRunDto {
     AuditRunDto {
         id: *run.id.as_uuid(),
-        item: run.item.map(|item| AuditRunItemDto {
-            key: item.item.key.to_string(),
-            heap: to_item_heap_dto(&item.heap, &item.team),
-        }),
+        item: run.item.map(to_item_origin_dto),
     }
 }
 

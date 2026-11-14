@@ -7808,26 +7808,10 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/AuditRunItem",
+                "$ref": "#/components/schemas/ItemOrigin",
                 "description": "The item the run worked on, with the heap it is in now; null when the caller can't view that heap."
               }
             ]
-          }
-        }
-      },
-      "AuditRunItem": {
-        "type": "object",
-        "required": [
-          "key",
-          "heap"
-        ],
-        "properties": {
-          "heap": {
-            "$ref": "#/components/schemas/ItemHeap"
-          },
-          "key": {
-            "type": "string",
-            "description": "Unique within the heap; the item's path is `…/items/{key}`."
           }
         }
       },

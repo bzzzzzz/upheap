@@ -211,15 +211,7 @@ pub struct AuditRunDto {
     /// The item the run worked on, with the heap it is in now; null when the caller can't view that heap.
     #[serde(default)]
     #[schema(required = true)]
-    pub item: Option<AuditRunItemDto>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-#[schema(as = AuditRunItem)]
-pub struct AuditRunItemDto {
-    /// Unique within the heap; the item's path is `…/items/{key}`.
-    pub key: String,
-    pub heap: crate::waiting::ItemHeapDto,
+    pub item: Option<crate::common::ItemOriginDto>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

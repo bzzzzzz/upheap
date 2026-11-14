@@ -1588,12 +1588,7 @@ export interface components {
         AuditRun: {
             /** Format: uuid */
             id: string;
-            item: null | components["schemas"]["AuditRunItem"];
-        };
-        AuditRunItem: {
-            heap: components["schemas"]["ItemHeap"];
-            /** @description Unique within the heap; the item's path is `…/items/{key}`. */
-            key: string;
+            item: null | components["schemas"]["ItemOrigin"];
         };
         /**
          * @description Where shown blocked items go.

@@ -1,7 +1,7 @@
 // A history from the audit log, as the server describes it. Entries and their changes come ready to show; this only
 // lays them out.
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { Bot, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -109,7 +109,7 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
 }
 
 /**
- * An agent's change reads as the agent's, not the person's whose sign-in it used (work-with-agents, W21): a robot and
+ * An agent's change reads as the agent's, not the person's whose sign-in it used (ux.md, The item, point 21): a robot and
  * whose agent it is, linking to the run in its item when the caller may view that item.
  */
 function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: string }) {
@@ -119,15 +119,26 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
       {who}
     </>
   );
+  const open = useParams({ strict: false });
   if (!run.item) {
     return <span className="font-medium">{words}</span>;
   }
+  const { team_slug: team, slug: heap } = run.item.heap;
+  // The item is already open: the link goes in place of it, so Back and Close still lead where they did.
+  const itemOpen = open.team === team && open.heap === heap && open.item === run.item.key;
   return (
     <Link
       to="/teams/$team/heaps/$heap/items/$item"
-      params={{ team: run.item.heap.team_slug, heap: run.item.heap.slug, item: run.item.key }}
+      params={{ team, heap, item: run.item.key }}
       hash={`run-${run.id}`}
       search={true}
+      replace={itemOpen}
+      // A fresh value on each click makes each one a new location, which the item's Runs section acts on.
+      state={(prev) => ({
+        ...prev,
+        closesBack: itemOpen ? prev.closesBack : true,
+        runLinkedAt: Date.now(),
+      })}
       aria-label={`${who}, see the run`}
       className="font-medium text-accent-ink outline-none hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
     >

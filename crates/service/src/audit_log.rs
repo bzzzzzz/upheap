@@ -17,6 +17,7 @@ use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, RunId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
 use serde_json::{Map, Value};
+use store::StoreError;
 pub use store::audit::AuditCursor;
 use store::audit::{AuditEntry, AuditQuery, AuditScope};
 use uuid::Uuid;
@@ -173,8 +174,9 @@ impl Services {
             if runs.contains_key(&run_id) {
                 continue;
             }
+            // The foreign key from the entry to its run rules out a missing one.
             let Some(run) = store::runs::find_run(&self.db, run_id).await? else {
-                continue;
+                return Err(StoreError::corrupt("runs", &run_id.to_string(), "an audit entry's run is missing").into());
             };
             let item = match items.get(&run.item_id) {
                 Some(item) => item.clone(),
