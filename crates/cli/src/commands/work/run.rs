@@ -771,11 +771,15 @@ impl Shared<'_> {
                 (request, None)
             }
         };
-        // Held before the end is sent, so no other worker claims while it is on its way.
-        if let Some(limit) = &limit {
-            self.hold_for(limit);
-        }
+        // Held before the end is sent, so no other worker claims while it is on its way, and said after the run's line.
+        let held = limit.as_ref().and_then(|limit| self.hold_for(limit));
         self.finish_and_print(&run, &request, log.as_deref()).await?;
+        // With `--once` the loop doesn't wait: it says when to run again instead.
+        if let (Some(limit), Some(until)) = (&limit, held)
+            && !self.once
+        {
+            self.note_hold(limit, until);
+        }
         // Every run would fail the same way, so the worker does not go on.
         if let Some(err) = not_started {
             return Err(err.into());
@@ -1281,21 +1285,25 @@ impl Shared<'_> {
     }
 
     /// Starts the hold for `limit`, or moves its end later: until the limit resets and [`LIMIT_MARGIN`] more, or
-    /// [`LIMIT_FALLBACK`] from now without a time. Never moves an end earlier. Says so, in human mode, when the hold
-    /// starts or its end moves.
-    fn hold_for(&self, limit: &UsageLimit) {
+    /// [`LIMIT_FALLBACK`] from now without a time. Never moves an end earlier. Returns the new end when the hold
+    /// started or its end moved, for [`Self::note_hold`]; `None` when an existing hold already lasts as long.
+    fn hold_for(&self, limit: &UsageLimit) -> Option<jiff::Timestamp> {
         let now = self.app.now();
         let until = hold_end(limit, now);
-        {
-            let mut hold = lock(&self.hold);
-            if hold.is_some_and(|held| held > now && held >= until) {
-                return;
-            }
-            *hold = Some(until);
+        let mut hold = lock(&self.hold);
+        if hold.is_some_and(|held| held > now && held >= until) {
+            return None;
         }
+        *hold = Some(until);
+        Some(until)
+    }
+
+    /// `12:07  Claude limit reached (five_hour), waiting until 12:21.`, in human mode.
+    fn note_hold(&self, limit: &UsageLimit, until: jiff::Timestamp) {
         if self.mode != Mode::Human {
             return;
         }
+        let now = self.app.now();
         let window = limit
             .window
             .as_ref()

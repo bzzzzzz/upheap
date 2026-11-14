@@ -2706,6 +2706,17 @@ async fn a_run_at_the_limit_is_limited_and_the_loop_holds_then_claims_the_same_i
         lines_with(&outcome.stdout, "Claude limit reached")[0],
         matches_regex(r"^\d\d:\d\d  Claude limit reached \(five_hour\), waiting until (\w{3} \d+ )?\d\d:\d\d\.$")
     );
+    // The hold line comes after the run's line it explains.
+    let order: Vec<&str> = outcome
+        .stdout
+        .lines()
+        .filter(|line| line.contains("hit the limit") || line.contains("Claude limit reached"))
+        .take(2)
+        .collect();
+    expect_that!(
+        order.first().is_some_and(|line| line.contains("hit the limit")),
+        eq(true)
+    );
     expect_that!(item_key_of(&tool.starts()[1]), eq(&note));
     Ok(())
 }
@@ -2725,6 +2736,7 @@ async fn with_once_a_run_at_the_limit_says_when_to_run_again_and_exits_at_once()
     expect_that!(outcome.exited(0), eq(true));
     expect_that!(tool.starts().len(), eq(1));
     expect_that!(lines_with(&outcome.stdout, "hit the limit").len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "waiting until"), is_empty());
     expect_that!(
         lines_with(&outcome.stderr, "Claude limit reached")[0],
         matches_regex(
