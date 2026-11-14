@@ -1076,6 +1076,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets your own priority for the heap, 1 to 10 (1 until you set one): where several heaps are ordered together, its
+         *     items' scores are multiplied by it. Any role that may view the heap may set it, on an active or an archived heap;
+         *     nobody else sees it. It says what the priority should end up as, so no `If-Match`, and repeating it succeeds.
+         */
+        put: operations["set_heap_priority"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/ranking/preview": {
         parameters: {
             query?: never;
@@ -1516,6 +1537,11 @@ export interface components {
             heap: components["schemas"]["ItemHeap"];
             /**
              * Format: int32
+             * @description Your priority for the item's heap, 1 to 10.
+             */
+            heap_priority: number;
+            /**
+             * Format: int32
              * @description 1-based position within its group across all heaps.
              */
             position: number;
@@ -1546,8 +1572,8 @@ export interface components {
             in_progress_count: number;
             /**
              * @description Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in
-             *     its own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same
-             *     for now.
+             *     its own heap times your priority for that heap, highest first; ties by heap name, then the item's position in
+             *     its heap.
              */
             pinned: components["schemas"]["AcrossHeapsItem"][];
             /** @description Items in shown states, including blocked items when they're mixed in. */
@@ -1655,7 +1681,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2018,6 +2044,12 @@ export interface components {
              *     `unfiltered_count` with the default view.
              */
             open_count: number;
+            /**
+             * Format: int32
+             * @description Your priority for this heap, 1 to 10: how its items compare with your other heaps' in the lists across heaps.
+             *     Each person has their own; nobody else sees it. Set with `PUT …/priority`.
+             */
+            priority: number;
             /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
             slug: string;
             /** Format: uuid */
@@ -2034,7 +2066,7 @@ export interface components {
          * @description An action the caller can take on a heap.
          * @enum {string}
          */
-        HeapAction: "rename" | "archive" | "unarchive" | "edit_context" | "edit_weights" | "set_agents_prepare" | "view_history";
+        HeapAction: "rename" | "archive" | "unarchive" | "edit_context" | "edit_weights" | "set_agents_prepare" | "set_priority" | "view_history";
         /** @description A heap of one of the caller's teams, with how many items it has open. */
         HeapOverview: components["schemas"]["HeapSummary"] & {
             /**
@@ -2060,6 +2092,14 @@ export interface components {
              *     slug stop working.
              */
             slug?: string | null;
+        };
+        /** @description Your priority for a heap. */
+        HeapPriorityRequest: {
+            /**
+             * Format: int64
+             * @description 1 to 10.
+             */
+            priority: number;
         };
         HeapSummary: {
             archived: boolean;
@@ -3566,8 +3606,9 @@ export interface components {
              */
             count: number;
             /**
-             * @description Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
-             *     its heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.
+             * @description Ordered by the item's score in its own heap times your priority for that heap, highest first; ties by heap
+             *     name, then the item's position in its heap, a stuck or blocker row before the item's questions, then the
+             *     question's number.
              *     Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
              */
             rows: components["schemas"]["WaitingRow"][];
@@ -3614,6 +3655,11 @@ export interface components {
         WaitingRow: {
             blocker: null | components["schemas"]["WaitingBlocker"];
             heap: components["schemas"]["ItemHeap"];
+            /**
+             * Format: int32
+             * @description Your priority for the row's heap, 1 to 10.
+             */
+            heap_priority: number;
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
             question: null | components["schemas"]["Question"];
@@ -7164,6 +7210,57 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    set_heap_priority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeapPriorityRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Heap"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields, or `priority_out_of_range` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

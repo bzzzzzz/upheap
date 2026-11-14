@@ -247,7 +247,10 @@ async fn a_member_sets_and_clears_the_heaps_context() -> Result<()> {
     );
     expect_that!(cleared.body["context"], eq(&json!(null)));
     expect_that!(blanked.body["context"], eq(&json!(null)));
-    expect_that!(set.body["allowed_actions"], eq(&json!(["edit_context", "set_priority"])));
+    expect_that!(
+        set.body["allowed_actions"],
+        eq(&json!(["edit_context", "set_priority"]))
+    );
     Ok(())
 }
 
@@ -499,7 +502,10 @@ async fn the_context_is_on_the_heap_and_in_the_teams_heap_list_and_outsiders_get
     // Assert
     expect_that!(fetched["context"], eq(&json!("About it")));
     expect_that!(team.body["heaps"][0]["context"], eq(&json!("About it")));
-    expect_that!(team.body["heaps"][0]["allowed_actions"], eq(&json!(["edit_context", "set_priority"])));
+    expect_that!(
+        team.body["heaps"][0]["allowed_actions"],
+        eq(&json!(["edit_context", "set_priority"]))
+    );
     expect_that!(hidden.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

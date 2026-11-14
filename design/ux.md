@@ -152,6 +152,13 @@ to you." It saves as it is turned, and can't be turned again until the save ends
 switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
 "off".
 
+The **Your priority** card, on General after Agents, is the person's own priority for the heap, apart from the
+Ranking tab's factor weights: a row of numbers 1 to 10 (five a row on a phone), the current one filled, with the
+line "How this heap ranks against your other heaps in Waiting for me and the agents' queue: its items' scores are
+multiplied by this. 1 to 10. Only you see it." Pressing a number saves it at once, as the Agents switch does, and
+another can't be saved until that save ends. Everyone who can open Settings may set theirs (`set_priority`),
+archived heaps too; an error shows under the card.
+
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
 (or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
