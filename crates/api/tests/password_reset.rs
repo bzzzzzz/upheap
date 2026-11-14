@@ -373,10 +373,7 @@ async fn making_and_using_a_link_are_recorded_in_the_personal_team_without_secre
         .unwrap_or_default();
     expect_that!(
         phrases,
-        superset_of([
-            &"got a reset link from whoever runs the server",
-            &"set a new password with a reset link"
-        ])
+        superset_of([&"got a reset link", &"set a new password with a reset link"])
     );
     Ok(())
 }
@@ -419,5 +416,178 @@ async fn an_unknown_login_has_no_link() -> Result<()> {
 
     // Assert
     expect_that!(unknown.is_err(), eq(true));
+    Ok(())
+}
+
+/// Asks for a reset link by mail for `email`.
+async fn request(app: &TestApp, email: &str) -> Result<TestResponse> {
+    app.send(
+        Method::POST,
+        "/api/v1/password-resets",
+        None,
+        Some(json!({ "email": email })),
+    )
+    .await
+}
+
+/// The reset token in a mail's text.
+fn token_in(mail: &str) -> Result<String> {
+    let (_, after) = mail.split_once("/reset/").context("no link in the mail")?;
+    Ok(after
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_mailed_link_sets_a_password_and_unknown_addresses_get_the_same_answer() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?;
+    app.register(EMAIL).await?;
+    let app = app.with_mail(dir.path())?;
+
+    // Act
+    let options = app.send(Method::GET, "/api/v1/password-resets", None, None).await?;
+    let unknown = request(&app, "nobody@example.test").await?;
+    let known = request(&app, "  Ada@Example.test ").await?;
+    let mails = common::wait_for_mails(dir.path(), 1).await?;
+    let token = token_in(&mails[0])?;
+    let done = reset(&app, &token, NEW_PASSWORD).await?;
+    let signed_in = sign_in(&app, EMAIL, NEW_PASSWORD).await?;
+
+    // Assert
+    expect_that!(options.status, eq(StatusCode::OK));
+    expect_that!(options.body, eq(&json!({ "by_mail": true })));
+    expect_that!(unknown.status, eq(StatusCode::ACCEPTED));
+    expect_that!(unknown.body, eq(&Value::Null));
+    expect_that!(known.status, eq(StatusCode::ACCEPTED));
+    expect_that!(known.body, eq(&Value::Null));
+    // Only the known address got a mail: the one mail is the known one's, and no second one comes.
+    expect_that!(mails.len(), eq(1));
+    expect_that!(mails[0], contains_substring("To: ada@example.test"));
+    expect_that!(mails[0], contains_substring("Subject: Reset your Upheap password"));
+    expect_that!(
+        mails[0],
+        contains_substring("reset the password for @ada on upheap.example.test.")
+    );
+    expect_that!(mails[0], contains_substring("https://upheap.example.test/reset/"));
+    expect_that!(done.status, eq(StatusCode::OK));
+    expect_that!(signed_in.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_unknown_address_sends_nothing() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?;
+    app.register(EMAIL).await?;
+    let app = app.with_mail(dir.path())?;
+
+    // Act
+    let unknown = request(&app, "nobody@example.test").await?;
+    let known = request(&app, EMAIL).await?;
+    let mails = common::wait_for_mails(dir.path(), 1).await?;
+
+    // Assert
+    expect_that!(unknown.status, eq(StatusCode::ACCEPTED));
+    expect_that!(known.status, eq(StatusCode::ACCEPTED));
+    expect_that!(mails.len(), eq(1));
+    expect_that!(mails[0], contains_substring("To: ada@example.test"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_malformed_address_fails_and_counts_nothing() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+
+    // Act
+    let mut statuses = Vec::new();
+    for email in ["", "not an address", "a@b@c"] {
+        statuses.push(request(&app, email).await?);
+    }
+    let valid = request(&app, EMAIL).await?;
+
+    // Assert
+    for response in &statuses {
+        expect_that!(response.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+        expect_that!(problem_code(response), eq("email_invalid"));
+        expect_that!(response.body["field"].as_str(), some(eq("email")));
+    }
+    expect_that!(valid.status, eq(StatusCode::ACCEPTED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_sixth_request_in_a_window_is_refused_and_sign_in_is_not_affected() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?;
+    app.register(EMAIL).await?;
+    let app = app.with_mail(dir.path())?;
+
+    // Act
+    for address in [EMAIL, "nobody@example.test"] {
+        for _ in 0..5 {
+            assert_eq!(request(&app, address).await?.status, StatusCode::ACCEPTED);
+        }
+        let sixth = request(&app, address).await?;
+
+        // Assert
+        expect_that!(sixth.status, eq(StatusCode::TOO_MANY_REQUESTS));
+        expect_that!(problem_code(&sixth), eq("too_many_attempts"));
+        expect_that!(sixth.retry_after.is_some(), eq(true));
+        expect_that!(
+            sixth.body["title"].as_str().unwrap_or_default(),
+            starts_with("too many reset requests for this address; try again in ")
+        );
+    }
+    expect_that!(sign_in(&app, EMAIL, PASSWORD).await?.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_mailed_link_cancels_an_operators_link() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?;
+    app.register(EMAIL).await?;
+    let app = app.with_mail(dir.path())?;
+    let operators = app.make_reset_link("ada").await?;
+
+    // Act
+    request(&app, EMAIL).await?;
+    let mails = common::wait_for_mails(dir.path(), 1).await?;
+    let old = open(&app, &operators).await?;
+    let new = open(&app, &token_in(&mails[0])?).await?;
+
+    // Assert
+    expect_that!(state(&old), eq("cancelled"));
+    expect_that!(state(&new), eq("working"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn without_mail_the_request_is_not_found() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+
+    // Act
+    let options = app.send(Method::GET, "/api/v1/password-resets", None, None).await?;
+    let asked = request(&app, EMAIL).await?;
+
+    // Assert
+    expect_that!(options.body, eq(&json!({ "by_mail": false })));
+    expect_that!(asked.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(problem_code(&asked), eq("not_found"));
     Ok(())
 }

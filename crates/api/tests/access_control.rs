@@ -27,6 +27,9 @@ enum Access {
     /// Anyone, but only on a server with an OpenID Connect provider. This one has none, so every caller gets
     /// `not_found`; `oidc.rs` tests the sign-in itself.
     Provider,
+    /// Anyone, but only on a server with mail set up. This one has none, so every caller gets `not_found`;
+    /// `password_reset.rs` tests the request itself.
+    Mail,
     /// Any signed-in user; nothing is scoped to a team.
     SignedIn,
     /// Members of the heap's team holding `permission`. Writes are refused while the heap is archived.
@@ -185,6 +188,8 @@ enum RequestBody {
     ChangePassword,
     /// The new password for the account of [`Target::ResetLink`].
     NewPassword,
+    /// The address to mail a reset link to.
+    ResetRequest,
     /// The CLI's authorization request.
     Authorization,
     /// A form exchanging the code from [`Target::AuthorizationCode`], as the CLI sends it, without cookie or CSRF
@@ -206,7 +211,7 @@ struct Endpoint {
 }
 
 fn endpoints() -> Vec<Endpoint> {
-    use Access::{Heap, Provider, Public, SharedTeam, SignedIn, Team};
+    use Access::{Heap, Mail, Provider, Public, SharedTeam, SignedIn, Team};
     use Permission::{ConfigureHeap, EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
@@ -394,6 +399,22 @@ fn endpoints() -> Vec<Endpoint> {
             Target::OwnAccount,
             RequestBody::Empty,
             StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/password-resets",
+            Public,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/password-resets",
+            Mail,
+            Target::Nothing,
+            RequestBody::ResetRequest,
+            StatusCode::ACCEPTED,
         ),
         row(
             Method::GET,
@@ -994,7 +1015,7 @@ impl Outcome {
 fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outcome {
     let (permission, writes) = match endpoint.access {
         Access::Public => return Outcome::success(endpoint.success),
-        Access::Provider => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
+        Access::Provider | Access::Mail => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
         Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. } | Access::OwnRun
             if matches!(caller, Caller::Anonymous) =>
         {
@@ -1550,6 +1571,7 @@ impl World {
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
             RequestBody::NewPassword => Some(json!({ "password": PASSWORD })),
+            RequestBody::ResetRequest => Some(json!({ "email": "ada@example.test" })),
             RequestBody::ChangePassword => Some(json!({ "current_password": PASSWORD, "password": PASSWORD })),
             RequestBody::Authorization => Some(common::cli_authorization()),
             // Sent as forms by `call`.

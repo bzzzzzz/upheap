@@ -844,6 +844,22 @@ export function useOidcProvider() {
   });
 }
 
+/** Whether the server mails password reset links. Read once: the operator sets mail up with the server's configuration. */
+export function usePasswordResetOptions() {
+  return useQuery({
+    queryKey: ["password-reset-options"],
+    queryFn: async () => unwrap(await api.GET("/api/v1/password-resets")),
+    staleTime: Infinity,
+  });
+}
+
+/** Asks for a password reset link to be mailed to an address. The answer is the same whether an account has it. */
+export function useRequestPasswordReset() {
+  return useMutation({
+    mutationFn: async (body: { email: string }) => ensureOk(await api.POST("/api/v1/password-resets", { body })),
+  });
+}
+
 /** Who the provider vouched for, for the username step. A `404` is the step having ended, which stays so. */
 export function useOidcPending() {
   return useQuery({

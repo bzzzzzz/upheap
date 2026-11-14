@@ -168,7 +168,7 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some(Field::CurrentPassword.as_str()),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "wrong_password", Category::Caller)
         },
-        ServiceError::TooManySignInAttempts { .. } => {
+        ServiceError::TooManySignInAttempts { .. } | ServiceError::TooManyResetRequests { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
         ServiceError::EmailTaken => Classified {
@@ -575,7 +575,10 @@ impl IntoResponse for ApiError {
                 axum::http::HeaderValue::from_static("Bearer error=\"invalid_token\""),
             );
         }
-        if let ApiError::Service(ServiceError::TooManySignInAttempts { retry_after }) = &self {
+        if let ApiError::Service(
+            ServiceError::TooManySignInAttempts { retry_after } | ServiceError::TooManyResetRequests { retry_after },
+        ) = &self
+        {
             response
                 .headers_mut()
                 .insert(header::RETRY_AFTER, retry_after.as_seconds_ceil().max(1).into());

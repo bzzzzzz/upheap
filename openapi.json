@@ -1508,6 +1508,90 @@
         }
       }
     },
+    "/api/v1/password-resets": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is\nneeded, and a session cookie or bearer token is ignored.",
+        "operationId": "password_reset_options",
+        "responses": {
+          "200": {
+            "description": "Whether reset links are mailed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetOptions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Asks for a reset link by email address, to be mailed. Answers `202` with no body whether or not an account has\nthe address, so it reveals nothing about accounts; the mail is sent after the answer. A newer link cancels an\nearlier one, an operator's included.",
+        "description": "Requests are counted per address, five in 15 minutes, apart from sign-in attempts: asking never uses up the\naddress's sign-in attempts, and the reverse. The count is never cleared; it runs out with its window. No sign-in\nis needed, and a session cookie or bearer token is ignored.",
+        "operationId": "request_password_reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordReset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; if an account has the address, a link is on its way"
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the server has no mail set up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`email_invalid` (`field` `email`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_attempts`, with a `Retry-After` header in seconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/password-resets/{token}": {
       "get": {
         "tags": [
@@ -11326,6 +11410,19 @@
           }
         }
       },
+      "PasswordResetOptions": {
+        "type": "object",
+        "description": "Whether this server mails password reset links.",
+        "required": [
+          "by_mail"
+        ],
+        "properties": {
+          "by_mail": {
+            "type": "boolean",
+            "description": "`true` when the server has mail set up, so a signed-out user can ask for a link by email."
+          }
+        }
+      },
       "PasswordResetState": {
         "type": "string",
         "description": "Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.",
@@ -11948,6 +12045,20 @@
           "hidden",
           "shown"
         ]
+      },
+      "RequestPasswordReset": {
+        "type": "object",
+        "description": "The address a signed-out user asks a reset link for.",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The email address of the account. Any case."
+          }
+        },
+        "additionalProperties": false
       },
       "Review": {
         "type": "object",
