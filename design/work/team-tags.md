@@ -1,7 +1,7 @@
 # Team tags: design
 
 Tags made once for a team and usable in every heap of it, beside each heap's own. In progress, by the steps of the
-maintainer's design method. Step agreed: 4. Step 5 is drafted, for review.
+maintainer's design method. Step agreed: 5. Step 6 is drafted, for review.
 
 ## Constraints
 
@@ -643,6 +643,63 @@ At the level of what each group offers; paths, shapes and how a reach is confirm
   Goals 4), and the line names the reach the person saw.
 
 ## 6. Stages
+
+### Stage 1: the golden path, end to end
+
+Every step of the path works in the web app, the CLI and the API, on SQLite, MySQL and Postgres, and ships in a
+release as any change does. Six pieces, one pull request each, in this order. Piece 2 and piece 4 wait for piece 1,
+piece 3 for piece 2, piece 5 for pieces 2 and 4, and piece 6 for the rest.
+
+1. **Team tags in a heap (server and API).** A team has tags, and a heap's tags are its own and its team's
+   together. The team's tags can be listed, made, renamed and described (A1). A heap's tags list says each tag's
+   kind, and an item's tags, the list's filter, saved views and parameter links take a team tag in any heap of its
+   team (A2). A heap tag can't take a team tag's name, and the refusal names it (rule 3). A move keeps team tags
+   (rule 16). Making, renaming and describing a team tag are recorded in its history (concept "the team tag's
+   history"); reading it is stage 2. In the agent loop, a rename or description reaching a heap the agent wasn't
+   given is refused (rule 19). Done when an API test makes a team tag, puts it on items in two heaps, renames it once, and reads the new name
+   from both, and the migration passes on all three databases. Covers commitments 1 to 6, 8, 10 and 11 in part.
+2. **Merges (server and API).** Making, promoting or renaming a team tag into a name heap tags have merges them,
+   in every heap, archived ones and closed items included, with saved views and parameter links following (rules 6
+   to 9, 11, 15). The write is refused with its reach until the request confirms that reach, and refused again if
+   it changed. The merge is in the team tag's history and in each item's (rule 21, W9). Done when scenarios 1, 3,
+   4, 5, 6 and 8 pass as tests. Covers commitment 7.
+3. **CLI.** `tag list` with both kinds, `--tag` naming a team tag, `tag add --team`, `tag edit` on a team tag,
+   `tag promote`, the merge refused with its reach and the line that confirms it, and the agent-loop refusal (C1
+   to C5). Done when the CLI's golden-path test runs steps 1 to 7 of the path, and scenario 7 passes.
+4. **Web: using team tags.** The tag picker and the list's filter offer the team's tags with their mark (W1, W2),
+   the Team page has its Tags section to make, rename and describe them (W4, W6), and a heap's Tags tab shows the
+   team's card, editable in place (W3). A heap tag refused for a team tag's name says so under the field (W8).
+   Done when an end-to-end test makes a team tag on the Team page, picks it on items in two heaps, filters by it,
+   renames it once, and sees the new name in both. Covers golden path steps 1 to 5.
+5. **Web: merges.** The merge confirm (W5), opened from the Team page's Add, a heap tag's Make a team tag, and a
+   team tag's rename into a taken name, with the changed-reach state. Done when an end-to-end test promotes a heap
+   tag that two heaps have and sees both heaps' items carry the team tag. Covers golden path step 7.
+6. **The whole path, and the permanent docs.** One end-to-end test walks the golden path, steps 1 to 7, with a
+   move between heaps carrying a team tag and a heap tag. The core commitments go into product.md (Heaps, Manage
+   tags, the roles table, Custom parameters), the mechanisms into architecture.md (tag ownership, names, locking,
+   how the API and CLI name a team tag), the decision entry into decisions.md, and this doc goes (CLAUDE.md, docs
+   rule 3). Done when that test passes in CI and the docs merge.
+
+Piece 4 and piece 5 start from a mockup of their screens, approved before they're built (CLAUDE.md, Interface
+changes).
+
+### Stage 2: the rest of the first set
+
+- **A team tag's history, read.** The API's history of a team tag (A4) and its collapsed history under the tag's
+  row in the heap's Tags tab and on the Team page (W7). The entries are recorded from piece 1 on, so nothing is
+  lost before it ships.
+
+### Choices
+
+- **Server pieces come before any client,** rather than one feature slice through every layer at once. Every
+  client names tags through the API (A2), and a slice per client would change the API three times.
+- **Merges are a piece of their own,** rather than inside piece 1. They carry the hardest rules (7 to 9) and the
+  scenarios, and piece 1 already proves the "Done when" line without them.
+- **Reading a team tag's history waits for stage 2** (W7, A4 are Enablers), while recording it starts in piece 1.
+  Flow E′ works in stage 1 without it: a rename is undone by renaming back, and the history is there to read once
+  stage 2 ships.
+- **The agent-loop refusal is in stage 1** (pieces 1 and 3), not later. Once an agent can rename a team tag, the
+  agent loop's promise (product.md, The agent loop §4) must hold.
 
 ## Parked
 
