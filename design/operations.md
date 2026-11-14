@@ -97,7 +97,7 @@ gh variable set BASE_URL --body https://upheap-$PROJECT_NUMBER.us-west1.run.app
 
 ## Resetting a password
 
-The server sends no email, so a user who forgot their password needs a reset link from whoever runs the server
+Unless the server has mail set up, a user who forgot their password needs a reset link from whoever runs the server
 ([README](../README.md#resetting-a-password)). Cloud Run has no shell, so run the image locally with the two
 variables the command needs, the secret's value and the production address:
 

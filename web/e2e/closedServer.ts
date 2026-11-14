@@ -3,10 +3,10 @@
 // password; it can make reset links the way the operator does, with the server's own command (design/ux.md, Reset
 // page). The suite's main server (playwright.config.ts) has
 // registration open, and a golden path that must prove an invite link is the only way in needs one that doesn't.
-import { test as base } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -32,6 +32,11 @@ export type ClosedServer = {
    * command against its database, and returns the link. Fails unless the command exits 0.
    */
   resetLink: (login: string) => Promise<string>;
+  /**
+   * Waits for the newest mail to `email` that holds a reset link in the server's mail directory (its mail goes to
+   * files there), and returns the link. `after` is the time the person asked, so an earlier mail isn't taken.
+   */
+  mailedResetLink: (email: string, after: Date) => Promise<string>;
 };
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
@@ -51,7 +56,7 @@ function findFreePort(): Promise<number> {
   });
 }
 
-function serverEnv(baseURL: string, databaseUrl: string, allowRegistration: boolean) {
+function serverEnv(baseURL: string, databaseUrl: string, allowRegistration: boolean, mailDirectory?: string) {
   const url = new URL(baseURL);
   return {
     ...process.env,
@@ -61,13 +66,14 @@ function serverEnv(baseURL: string, databaseUrl: string, allowRegistration: bool
     BASE_URL: baseURL,
     LOG_FORMAT: "pretty",
     RUST_LOG: "warn",
+    ...(mailDirectory && { MAIL_URL: `file://${mailDirectory}`, MAIL_FROM: "Upheap <upheap@example.com>" }),
   };
 }
 
-function start(baseURL: string, databaseUrl: string, allowRegistration: boolean): ChildProcess {
+function start(baseURL: string, databaseUrl: string, allowRegistration: boolean, mailDirectory?: string): ChildProcess {
   return spawn(BINARY, [], {
     stdio: ["ignore", "ignore", "inherit"],
-    env: serverEnv(baseURL, databaseUrl, allowRegistration),
+    env: serverEnv(baseURL, databaseUrl, allowRegistration, mailDirectory),
   });
 }
 
@@ -77,6 +83,23 @@ async function makeResetLink(baseURL: string, databaseUrl: string, login: string
     env: serverEnv(baseURL, databaseUrl, false),
   });
   return stdout.trim();
+}
+
+/**
+ * The reset link in the newest mail to `email` written after `after`, or `undefined` while there is none. The file
+ * transport writes quoted-printable: soft line breaks and `=3D` are undone far enough to read a link.
+ */
+async function findMailedResetLink(mailDirectory: string, email: string, after: Date): Promise<string | undefined> {
+  const mails: { text: string; written: number }[] = [];
+  for (const name of await readdir(mailDirectory)) {
+    const path = join(mailDirectory, name);
+    const written = (await stat(path)).mtimeMs;
+    if (written < after.getTime()) continue;
+    const text = (await readFile(path, "utf8")).replace(/=\r?\n/g, "").replace(/=3D/g, "=");
+    if (text.includes(`To: ${email}`)) mails.push({ text, written });
+  }
+  const newest = mails.sort((a, b) => b.written - a.written)[0];
+  return newest?.text.match(/https?:\/\/\S+\/reset\/[A-Za-z0-9_-]+/)?.[0];
 }
 
 async function waitUntilReady(baseURL: string, server: ChildProcess) {
@@ -117,9 +140,9 @@ async function register(baseURL: string, display_name: string): Promise<SeededUs
 
 /**
  * `closedServer`, one per worker, started the first time a test asks for it: the real binary on a free port the
- * OS picked and a SQLite file in the OS temp directory, deleted at the end. It starts with
+ * OS picked and a SQLite file and a mail directory in the OS temp directory, deleted at the end. It starts with
  * registration open, registers Ana Ruiz, Sam Ortiz and Mia Chen, stops, and starts again on the same file with
- * registration closed, as a production server got there.
+ * registration closed and its mail written to files, as a production server got there, with mail.
  *
  * The binary is the one the suite's web server built (`npm run e2e` builds the web app and embeds it, then builds the
  * server, before any worker starts); without it the fixture fails and says so. Tests on it go to absolute URLs, with a
@@ -135,6 +158,9 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
       }
       const baseURL = `http://127.0.0.1:${await findFreePort()}`;
       const directory = await mkdtemp(join(tmpdir(), "upheap-e2e-"));
+      // Mail goes to files here, and is removed with the database.
+      const mailDirectory = join(directory, "mail");
+      await mkdir(mailDirectory);
       const databaseUrl = `sqlite://${join(directory, "heap.db")}?mode=rwc`;
       let server: ChildProcess | undefined;
       try {
@@ -145,7 +171,7 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
         const forgetful = await register(baseURL, "Mia Chen");
         await stop(server);
 
-        server = start(baseURL, databaseUrl, false);
+        server = start(baseURL, databaseUrl, false, mailDirectory);
         await waitUntilReady(baseURL, server);
         await use({
           baseURL,
@@ -153,6 +179,10 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
           member,
           forgetful,
           resetLink: (login) => makeResetLink(baseURL, databaseUrl, login),
+          mailedResetLink: async (email, after) => {
+            await expect.poll(() => findMailedResetLink(mailDirectory, email, after)).toBeDefined();
+            return (await findMailedResetLink(mailDirectory, email, after)) ?? "";
+          },
         });
       } finally {
         if (server) await stop(server);

@@ -708,9 +708,14 @@ or username". Create account takes name, username, email and password; the usern
 link, so its hint says so. A problem about an input shows under it, with focus on it; any other (wrong password, too
 many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
 to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
-password?** button (`aria-expanded`) shows one line under it, "Whoever runs this Upheap server can send you a reset
-link.", and hides it again: no form and no request, since the server sends no email. Create account has none. The
-invite page's Sign in side has it too.
+password?** button (`aria-expanded`) opens a disclosure and closes it again. When the server has mail set up, it holds
+an **Email** field (empty, no focus move on open) and a **Send me a link** button, disabled while the request is
+pending. Enter in the field sends the reset and never the sign-in. After the server accepts it, a line under the
+button says "If an account uses that address, a link is on its way. It works for an hour." and stays until the next
+send; the field and button stay, so the user can send again. An address problem shows under the field; any other
+problem (too many requests, a network error) shows above the line, under the button. Without mail, or while the page
+doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap server can send you a reset link.", and no
+form. Create account has none. The invite page's Sign in side has it too.
 
 When the server has an identity provider, the card starts with a bordered button, **Sign in with Acme SSO**, the width
 of the card (52 px on a phone, 44 px beyond), and under it an "or" rule, above the switch; the dark Sign in button
@@ -767,7 +772,8 @@ history entry as it is shown, so a reload doesn't repeat it.
 
 `/reset/{token}` is where a password reset link leads, outside the app's shell like sign-in and in the same card, the
 same way at every width, and needs no sign-in: holding the link is the permission, so a signed-in visitor sees the
-same page. The operator makes the link with the server's command (README, Resetting a password). The server decides
+same page. The link comes from the operator, who makes it with the server's command (README, Resetting a password), or
+by mail, when the user asked for it on the sign-in page. The two are the same kind of link. The server decides
 the state, and the page only shows it:
 
 - **Checking the link…** while it loads.
@@ -817,7 +823,7 @@ would be says "You sign in through Acme SSO." ("an identity provider" if the ser
 At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
 member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest
 first, each a sentence from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by
-whoever runs the server." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
+whoever runs the server.", "Reset link sent by mail, as asked on the sign-in page." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
 user's own account, and holds nothing else of the account (not sign-ups or profile changes). Empty, it says "No
 password changes or resets yet."; an error shows the server's message; **Load more** fetches the next page. A password
 change adds its entry to an open History at once, and to a closed one by the time it is opened.

@@ -67,6 +67,23 @@ pub struct PasswordResetAccountDto {
     pub username: String,
 }
 
+/// Whether this server mails password reset links.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = PasswordResetOptions)]
+pub struct PasswordResetOptionsDto {
+    /// `true` when the server has mail set up, so a signed-out user can ask for a link by email.
+    pub by_mail: bool,
+}
+
+/// The address a signed-out user asks a reset link for.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = RequestPasswordReset)]
+pub struct RequestPasswordResetDto {
+    /// The email address of the account. Any case.
+    pub email: String,
+}
+
 /// What whoever holds a working reset link gives to set a new password.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]

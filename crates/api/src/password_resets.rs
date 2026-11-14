@@ -1,7 +1,10 @@
-//! Opening a password reset link and setting a password through it, by the link's token. The operator makes links
-//! with a server command (README, Resetting a password).
+//! Asking for a password reset link by mail, opening a link and setting a password through it, by the link's token.
+//! The operator makes links with a server command (README, Resetting a password).
 
-use api_types::auth::{PasswordResetAccountDto, PasswordResetDto, PasswordResetStateDto, SetPasswordRequestDto};
+use api_types::auth::{
+    PasswordResetAccountDto, PasswordResetDto, PasswordResetOptionsDto, PasswordResetStateDto, RequestPasswordResetDto,
+    SetPasswordRequestDto,
+};
 use api_types::me::UserDto;
 use axum::Json;
 use axum::extract::State;
@@ -22,6 +25,7 @@ use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(password_reset_options, request_password_reset))
         .routes(routes!(open_password_reset))
         .routes(routes!(reset_password))
 }
@@ -48,6 +52,39 @@ fn to_password_reset_dto(view: ResetLinkView) -> PasswordResetDto {
         state: PasswordResetStateDto::from(view.state),
         account,
     }
+}
+
+/// Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is
+/// needed, and a session cookie or bearer token is ignored.
+#[utoipa::path(get, path = "/password-resets", tag = "auth",
+    responses((status = 200, description = "Whether reset links are mailed", body = PasswordResetOptionsDto)))]
+async fn password_reset_options(State(state): State<AppState>) -> Json<PasswordResetOptionsDto> {
+    Json(PasswordResetOptionsDto {
+        by_mail: state.services.mails_reset_links(),
+    })
+}
+
+/// Asks for a reset link by email address, to be mailed. Answers `202` with no body whether or not an account has
+/// the address, so it reveals nothing about accounts; the mail is sent after the answer. A newer link cancels an
+/// earlier one, an operator's included.
+///
+/// Requests are counted per address, five in 15 minutes, apart from sign-in attempts: asking never uses up the
+/// address's sign-in attempts, and the reverse. The count is never cleared; it runs out with its window. No sign-in
+/// is needed, and a session cookie or bearer token is ignored.
+#[utoipa::path(post, path = "/password-resets", tag = "auth", request_body = RequestPasswordResetDto,
+    responses(
+        (status = 202, description = "Accepted; if an account has the address, a link is on its way"),
+        (status = 403, description = "`csrf_header_missing`", body = Problem),
+        (status = 404, description = "`not_found`: the server has no mail set up", body = Problem),
+        (status = 422, description = "`email_invalid` (`field` `email`)", body = Problem),
+        (status = 429, description = "`too_many_attempts`, with a `Retry-After` header in seconds", body = Problem),
+    ))]
+async fn request_password_reset(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<RequestPasswordResetDto>,
+) -> Result<StatusCode, ApiError> {
+    state.services.request_password_reset(&body.email).await?;
+    Ok(StatusCode::ACCEPTED)
 }
 
 /// Opens a reset link: whether it works, was used, was cancelled or has ended, and while it works, whose account it is

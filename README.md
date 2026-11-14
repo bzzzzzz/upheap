@@ -130,9 +130,14 @@ else.
 For development, `MAIL_URL=log:` writes each mail to the server's log, and `MAIL_URL=file:///tmp/upheap-mail` writes
 each as an `.eml` file in that directory, which must exist. Nothing is sent.
 
+With mail set up, users can ask for a password reset link on the sign-in page ([Resetting a
+password](#resetting-a-password)).
+
 ### Resetting a password
 
-Whoever runs the server makes a one-time reset link for a user, who opens it, sets a new password and is signed in.
+With mail set up, a user who forgot their password asks for a reset link on the sign-in page and gets it by mail. Without
+mail, or when the mail doesn't come, whoever runs the server makes a one-time reset link for them with a command; the
+command works with mail too. The user opens the link, sets a new password and is signed in.
 The command takes the same environment variables as the server (at least `DATABASE_URL` and `BASE_URL`):
 
 ```sh

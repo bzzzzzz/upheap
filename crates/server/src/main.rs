@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<ExitCode> {
 
 /// The use cases with the deployment settings from `config`, on `db`.
 fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
-    Services::new(
+    let services = Services::new(
         db,
         Arc::new(SystemClock),
         Settings {
@@ -59,7 +59,11 @@ fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
             sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
             oidc: config.oidc.clone(),
         },
-    )
+    );
+    match &config.mail {
+        Some(mailer) => services.with_mail(Arc::clone(mailer), config.base_url.clone()),
+        None => services,
+    }
 }
 
 async fn run(config: Config) -> anyhow::Result<()> {
@@ -78,7 +82,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind(config.bind_addr)
         .await
         .with_context(|| format!("can't listen on {}", config.bind_addr))?;
-    let mail = config.mail.as_ref().map_or("off", mail::Mailer::describe);
+    let mail = config.mail.as_ref().map_or("off", |mailer| mailer.describe());
     tracing::info!(addr = %config.bind_addr, base_url = %config.base_url, mail, "listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
