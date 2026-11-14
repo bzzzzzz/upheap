@@ -10,10 +10,9 @@ truth.
 
 ## Pieces
 
-Each refactor is a task in Upheap, tagged `refactor`, with when it's done and what it waits for. None changes
-behaviour: `openapi.json`, the stored codes and every test's expectations stay as they are. Once they're built,
-this doc goes: the macro is explained in its module doc, and What stays moves to architecture.md if it's still
-worth saying.
+No refactor changes behaviour: `openapi.json`, the stored codes and every test's expectations stay as they are. Once
+they're built, this doc goes: the macro is explained in its module doc, and What stays moves to architecture.md if it's
+still worth saying.
 
 ## Design
 

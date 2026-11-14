@@ -46,6 +46,13 @@ Rules for the docs:
    the code can't show: not a name, a label, wording, or anything one pull request can undo. The rest belongs in
    a design in `design/work/`, ux.md, architecture.md, a code comment or the pull request's description. When in doubt, leave
    it out, and name every entry added to either doc in the pull request's description.
+5. **The repository reads without Upheap.** Not every reader can open the heap, so nothing committed depends on
+   it. No doc, code comment, test or commit message names an Upheap item by key, title or link, names the heap it
+   is in, or says that something is a task, a note or an idea in Upheap. A design states its stages, what it leaves
+   out and what comes later in its own words, and stops there. The pointer goes one way: an item's context and
+   comments name the doc and the pull request. Only this file and the index say where plans live, once each. A
+   pull request's description may name the items it serves. Upheap as the product a doc describes is something
+   else: "the person replies in Upheap" is the feature, "an idea in Upheap" is our planning.
 
 When asked to write a "doc", write it as a Markdown file in `design/`, or in `design/work/` for unbuilt work, and
 add it to `design/README.md`, not as an external document (Claude Docs,
@@ -55,10 +62,10 @@ When you work on an item in Upheap, record progress, findings, decisions and whe
 item (`upheap comment add`), not by rewriting its context. Rewrite an item's context only when the task's
 definition did change: what the work is, or what done looks like. Then say in a comment what changed and why.
 
-Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `design/work/`.
-Add it to Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command
-is installed and signed in. When it can't, name the follow-up in your reply and in the pull request's description,
-so the owner can add it.
+Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `design/work/`. Add it to
+Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command is
+installed and signed in. Leave no pointer to it in the file (rule 5). When it can't, name the follow-up in your reply
+and in the pull request's description, so the owner can add it.
 
 ## Interface changes
 

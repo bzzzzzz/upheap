@@ -30,7 +30,7 @@ It answers, in a member's words:
 
 What it is not:
 
-- **Not a view across heaps.** Filtering every heap of the team by one tag is m1cg0's question, not this one's. Team
+- **Not a view across heaps.** Filtering every heap of the team by one tag is another question, not this one's. Team
   tags make that view more useful; they don't build it.
 - **Not a taxonomy.** No tag groups, parents or required tags.
 - **Not shared between teams.** A team tag belongs to one team, as a heap does.
@@ -105,8 +105,8 @@ renaming back. It goes under Open for now at step 4.
 
 ### Out
 
-To Ideas, not commitments: archiving tags; a tag filter across heaps (m1cg0); demoting a team tag back to a heap
-tag; merging two tags of different names; team-level custom parameters; tag colours (q3wke).
+To Ideas, not commitments: archiving tags; a tag filter across heaps; demoting a team tag back to a heap
+tag; merging two tags of different names; team-level custom parameters; tag colours.
 
 ## 3. Workflows
 ## 4. Behaviours
@@ -130,7 +130,7 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 Outside the scope. Not commitments.
 
 - Archiving a tag, team or heap, so it's no longer offered but stays on the items that have it.
-- Filtering by a team tag across every heap of the team (m1cg0, a view across heaps).
+- Filtering by a team tag across every heap of the team (a view across heaps).
 - Demoting a team tag to a heap tag.
 - Merging two tags of different names into one.
 - Custom parameters defined once for the team.
