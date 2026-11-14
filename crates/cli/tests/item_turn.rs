@@ -23,7 +23,9 @@ async fn send_opens_a_turn_to_the_next_stable_state_and_says_where_it_goes() -> 
     // Assert
     expect_that!(
         sent.stdout,
-        eq(&format!("Sent {first} to an agent. Turn: to with context.\n"))
+        eq(&format!(
+            "Sent {first}: Rotate the staging certs. Turn: to with context.\n"
+        ))
     );
     expect_that!(sent.exited(0), eq(true));
     let turn = server.read_item(&ada, HEAP, first).await?["turn"].clone();
@@ -52,7 +54,7 @@ async fn send_all_the_way_with_a_line_from_stdin_tells_the_agent() -> Result<()>
     expect_that!(
         sent.stdout,
         eq(&format!(
-            "Sent {key} to an agent. Turn: to with context, all the way. \"Use the new CA.\".\n"
+            "Sent {key}: Rotate the staging certs. Turn: to with context, all the way. \"Use the new CA.\".\n"
         ))
     );
     let turn = server.read_item(&ada, HEAP, key).await?["turn"].clone();
@@ -76,7 +78,7 @@ async fn take_back_ends_the_turn_and_repeating_it_is_no_error() -> Result<()> {
     let again = cli.run(&["item", "take-back", key]).await;
 
     // Assert
-    let line = format!("{key} is back with you: Rotate the staging certs.\n");
+    let line = format!("No agent has {key}: Rotate the staging certs.\n");
     expect_that!(taken.stdout, eq(&line));
     expect_that!(taken.exited(0), eq(true));
     expect_that!(again.stdout, eq(&line));

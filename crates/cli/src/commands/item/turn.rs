@@ -62,8 +62,11 @@ pub async fn run_send(args: SendArgs, app: &App, out: &mut Output) -> Result<(),
         Mode::Json => out.json(&sent.body)?,
         Mode::Quiet => {}
         Mode::Human => {
-            let turn = sent.value.turn.as_ref().map(turn_text).unwrap_or_default();
-            out.line(format!("Sent {} to an agent. {turn}", sent.value.key).trim_end())?;
+            let mut line = format!("Sent {}: {}.", sent.value.key, sent.value.title);
+            if let Some(turn) = &sent.value.turn {
+                line = format!("{line} {}", turn_text(turn));
+            }
+            out.line(&line)?;
         }
     }
     Ok(())
@@ -85,7 +88,7 @@ pub async fn run_take_back(args: StateArgs, app: &App, out: &mut Output) -> Resu
     match out.mode() {
         Mode::Json => out.json(&item.body)?,
         Mode::Quiet => {}
-        Mode::Human => out.line(&format!("{} is back with you: {}.", item.value.key, item.value.title))?,
+        Mode::Human => out.line(&format!("No agent has {}: {}.", item.value.key, item.value.title))?,
     }
     Ok(())
 }
