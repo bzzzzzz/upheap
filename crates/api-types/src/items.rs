@@ -187,8 +187,8 @@ pub struct AcrossHeapsListDto {
     /// How many rows the view lists in all groups, whether or not they all fit under the cap of 500 rows.
     pub count: u32,
     /// Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in
-    /// its own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same
-    /// for now.
+    /// its own heap times your priority for that heap, highest first; ties by heap name, then the item's position in
+    /// its heap.
     pub pinned: Vec<AcrossHeapsItemDto>,
     /// Items in shown states, including blocked items when they're mixed in.
     pub ranked: Vec<AcrossHeapsItemDto>,
@@ -208,6 +208,12 @@ pub struct AcrossHeapsItemDto {
     pub position: u32,
     /// The heap the item is in, and its team.
     pub heap: ItemHeapDto,
+    /// Your priority for the item's heap, 1 to 10.
+    // Decoding tolerates an older server that doesn't send it (as 1); every response of this server does, so the
+    // schema says required.
+    #[serde(default = "crate::heaps::default_heap_priority")]
+    #[schema(required = true)]
+    pub heap_priority: u8,
     /// The item as its own heap's list gives it. Its `position` is within its heap's group, and `held_back_by`
     /// names what holds it back in that heap.
     pub entry: RankedItemDto,

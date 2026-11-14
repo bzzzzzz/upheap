@@ -1,4 +1,4 @@
-//! `upheap heap add`, `list`, `use`, `show`, `edit` and `weights`.
+//! `upheap heap add`, `list`, `use`, `show`, `edit`, `weights` and `priority`.
 
 mod common;
 
@@ -205,24 +205,24 @@ async fn heap_show_prints_the_context_indented_or_how_to_write_one() -> Result<(
     expect_that!(
         written.stdout,
         eq(
-            "ops · Infrastructure · agents prepare new notes: off\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
         )
     );
     expect_that!(
         empty.stdout,
         eq(
-            "backlog · Infrastructure · agents prepare new notes: off\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
+            "backlog · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
         )
     );
     expect_that!(
         default.stdout,
         starts_with(
-            "Personal · Ada · agents prepare new notes: off\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n"
+            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n"
         )
     );
     expect_that!(
         archived.stdout,
-        starts_with("old · Ada · archived · agents prepare new notes: off\n")
+        starts_with("old · Ada · archived · agents prepare new notes: off · your priority: 1\n")
     );
     let heap: serde_json::Value = serde_json::from_str(&json.stdout)?;
     expect_that!(heap["slug"].as_str(), some(eq("old")));
@@ -257,11 +257,11 @@ async fn heap_show_says_whether_agents_prepare_new_notes() -> Result<()> {
     // Assert
     expect_that!(
         on.stdout,
-        starts_with("ops · Infrastructure · agents prepare new notes: on\n")
+        starts_with("ops · Infrastructure · agents prepare new notes: on · your priority: 1\n")
     );
     expect_that!(
         off.stdout,
-        starts_with("backlog · Infrastructure · agents prepare new notes: off\n")
+        starts_with("backlog · Infrastructure · agents prepare new notes: off · your priority: 1\n")
     );
     let heap: serde_json::Value = serde_json::from_str(&json.stdout)?;
     expect_that!(heap["agents_prepare"], eq(&json!(true)));
@@ -299,7 +299,7 @@ async fn heap_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Re
     expect_that!(
         shown.stdout,
         eq(
-            "ops · Infrastructure · agents prepare new notes: off\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
         )
     );
     expect_that!(again.stdout, eq("No change to infra/ops.\n"));
@@ -492,7 +492,7 @@ async fn heap_show_prints_the_weights_with_the_parameters_in_use() -> Result<()>
     expect_that!(
         shown.stdout,
         starts_with(
-            "Personal · Ada · agents prepare new notes: off\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
+            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
         )
     );
     expect_that!(shown.stdout, not(contains_substring("Legacy")));
@@ -689,5 +689,51 @@ async fn heap_weights_by_a_member_is_refused() -> Result<()> {
     expect_that!(refused.exited(4), eq(true));
     expect_that!(refused.stdout, eq(""));
     expect_that!(stored["weights"]["need"], eq(&json!(10)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_priority_sets_yours_and_heap_show_says_so() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let set = cli.run(&["heap", "priority", "3", "infra/ops"]).await;
+    let again = cli.run(&["heap", "priority", "3", "infra/ops"]).await;
+    let show = cli.run(&["heap", "show", "infra/ops"]).await;
+    let json = cli.run(&["heap", "priority", "4", "infra/ops", "--json"]).await;
+    let quiet = cli.run(&["heap", "priority", "5", "infra/ops", "--quiet"]).await;
+    let other = cli.run(&["heap", "show", "infra/backlog"]).await;
+
+    // Assert
+    expect_that!(set.stdout, eq("Your priority for ops: 3.\n"));
+    expect_that!(again.exited(0), eq(true));
+    expect_that!(show.stdout, contains_substring(" · your priority: 3\n"));
+    let body: serde_json::Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["priority"], eq(&json!(4)));
+    expect_that!(quiet.stdout, eq(""));
+    expect_that!(other.stdout, contains_substring(" · your priority: 1\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_priority_refuses_a_number_out_of_range_on_the_command_line() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = ada_with_teams(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let zero = cli.run(&["heap", "priority", "0", "infra/ops"]).await;
+    let eleven = cli.run(&["heap", "priority", "11", "infra/ops"]).await;
+
+    // Assert
+    expect_that!(zero.exited(2), eq(true));
+    expect_that!(eleven.exited(2), eq(true));
+    expect_that!(eleven.stdout, eq(""));
     Ok(())
 }

@@ -876,7 +876,7 @@
         "tags": [
           "me"
         ],
-        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap, highest first (blockers' inheritance included), then by heap name, then the item's position in\nits heap. All heaps weigh the same for now. The view takes no tag, parameter or sort. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
+        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap\nname, then the item's position in its heap. The view takes no tag, parameter or sort. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
         "operationId": "get_items",
         "parameters": [
           {
@@ -1220,7 +1220,7 @@
         "tags": [
           "me"
         ],
-        "summary": "What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is\nstuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved\nto another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's\nranking score in its own heap, highest first (blockers' inheritance included), then by heap name, the item's\nposition, a stuck or blocker row before the item's questions, and the question's number; all heaps weigh the same\nfor now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At\nmost 500 rows come back; `count` is the true total. Read-only, for any member.",
+        "summary": "What waits for the signed-in user: the open questions and requests on open items, the items whose agent turn is\nstuck, and the blocked items whose blocker was closed (as won't do, or as done before it could free them) or moved\nto another heap, in the active heaps of their teams, one row each, most important first. Rows are ordered by the item's\nranking score in its own heap times your priority for that heap, highest first (blockers' inheritance included),\nthen by heap name, the item's position, a stuck or blocker row before the item's questions, and the question's\nnumber.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first. At\nmost 500 rows come back; `count` is the true total. Read-only, for any member.",
         "operationId": "get_waiting",
         "parameters": [
           {
@@ -5539,6 +5539,87 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/priority": {
+      "put": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Sets your own priority for the heap, 1 to 10 (1 until you set one): where several heaps are ordered together, its\nitems' scores are multiplied by it. Any role that may view the heap may set it, on an active or an archived heap;\nnobody else sees it. It says what the priority should end up as, so no `If-Match`, and repeating it succeeds.",
+        "operationId": "set_heap_priority",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeapPriorityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Heap"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, or `priority_out_of_range`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/ranking/preview": {
       "post": {
         "tags": [
@@ -7088,7 +7169,7 @@
         "tags": [
           "work"
         ],
-        "summary": "The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is\nclaimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't\nstuck, has no open question, and has no live run. Items come by their score in their own heap's ranking, highest\nfirst, then by heap name and the item's position; every heap weighs the same for now. Any member who may edit items\nin every given heap may ask.",
+        "summary": "The first item of the queue over some heaps, and how many items wait for the person. Read-only: nothing is\nclaimed. An item is in the queue when it is open and not blocked, in an active heap, has an open turn that isn't\nstuck, has no open question, and has no live run. Items come by their score in their own heap's ranking times your\npriority for that heap, highest first, then by heap name and the item's position. Any member who may edit items\nin every given heap may ask.",
         "operationId": "next_item",
         "parameters": [
           {
@@ -7669,6 +7750,7 @@
         "required": [
           "position",
           "heap",
+          "heap_priority",
           "entry"
         ],
         "properties": {
@@ -7679,6 +7761,12 @@
           "heap": {
             "$ref": "#/components/schemas/ItemHeap",
             "description": "The heap the item is in, and its team."
+          },
+          "heap_priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Your priority for the item's heap, 1 to 10.",
+            "minimum": 0
           },
           "position": {
             "type": "integer",
@@ -7736,7 +7824,7 @@
             "items": {
               "$ref": "#/components/schemas/AcrossHeapsItem"
             },
-            "description": "Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in\nits own heap, highest first; ties by heap name, then the item's position in its heap. Heaps weigh the same\nfor now."
+            "description": "Items in pinned states (in progress by default), above the rest. Each group is ordered by the item's score in\nits own heap times your priority for that heap, highest first; ties by heap name, then the item's position in\nits heap."
           },
           "ranked": {
             "type": "array",
@@ -7967,6 +8055,7 @@
           "heap_context_updated",
           "heap_archived",
           "heap_unarchived",
+          "heap_priority_changed",
           "item_created",
           "item_updated",
           "item_moved",
@@ -8888,6 +8977,7 @@
           "agents_prepare",
           "open_count",
           "weights",
+          "priority",
           "version",
           "allowed_actions"
         ],
@@ -8930,6 +9020,12 @@
             "description": "Items the heap's list shows by default, before filters: open and in progress ones, as the list's\n`unfiltered_count` with the default view.",
             "minimum": 0
           },
+          "priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Your priority for this heap, 1 to 10: how its items compare with your other heaps' in the lists across heaps.\nEach person has their own; nobody else sees it. Set with `PUT …/priority`.",
+            "minimum": 0
+          },
           "slug": {
             "type": "string",
             "description": "Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`."
@@ -8960,6 +9056,7 @@
           "edit_context",
           "edit_weights",
           "set_agents_prepare",
+          "set_priority",
           "view_history"
         ]
       },
@@ -9018,6 +9115,23 @@
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old\nslug stop working."
           }
         }
+      },
+      "HeapPriorityRequest": {
+        "type": "object",
+        "description": "Your priority for a heap.",
+        "required": [
+          "priority"
+        ],
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "format": "int64",
+            "description": "1 to 10.",
+            "maximum": 10,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
       },
       "HeapSummary": {
         "type": "object",
@@ -12714,7 +12828,7 @@
             "items": {
               "$ref": "#/components/schemas/WaitingRow"
             },
-            "description": "Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in\nits heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first."
+            "description": "Ordered by the item's score in its own heap times your priority for that heap, highest first; ties by heap\nname, then the item's position in its heap, a stuck or blocker row before the item's questions, then the\nquestion's number.\nQuestions on reminders to come have no score and come after the rest, by the reminder's date, soonest first."
           }
         }
       },
@@ -12831,6 +12945,7 @@
           "kind",
           "item",
           "heap",
+          "heap_priority",
           "question",
           "stuck",
           "blocker"
@@ -12849,6 +12964,12 @@
           },
           "heap": {
             "$ref": "#/components/schemas/ItemHeap"
+          },
+          "heap_priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Your priority for the row's heap, 1 to 10.",
+            "minimum": 0
           },
           "item": {
             "$ref": "#/components/schemas/WaitingItem"

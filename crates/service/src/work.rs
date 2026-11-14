@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use domain::audit::AuditAction;
 use domain::handle::Handle;
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{
@@ -87,6 +87,8 @@ pub(crate) struct RunScope {
 struct QueueHeap {
     heap: Heap,
     team: Team,
+    /// The caller's priority for the heap, which multiplies its items' scores in the queue.
+    priority: HeapPriority,
 }
 
 /// What the queue holds right now.
@@ -678,16 +680,25 @@ impl Services {
             heaps.push(QueueHeap {
                 heap: access.heap,
                 team,
+                priority: HeapPriority::DEFAULT,
             });
         }
-        // Heaps weigh the same for now, so ties between heaps go by name, then ID, as Waiting for me orders them.
+        let heap_ids: Vec<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
+        let priorities = store::heap_priorities::list_heap_priorities(&self.db, principal.user_id, &heap_ids).await?;
+        for queue in &mut heaps {
+            if let Some(priority) = priorities.get(&queue.heap.id) {
+                queue.priority = *priority;
+            }
+        }
+        // Ties between heaps go by name, then ID, as Waiting for me orders them.
         heaps.sort_by(|a, b| (a.heap.name.as_str(), a.heap.id).cmp(&(b.heap.name.as_str(), b.heap.id)));
         Ok(heaps)
     }
 
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
-    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once.
+    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
+    /// with the highest score times the caller's priority for its heap, then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
@@ -738,13 +749,15 @@ impl Services {
             }
         }
 
-        // (score, heap index, position) of the best candidate so far, and the candidate.
+        // (score times the person's heap priority, heap index, position) of the best candidate so far, and the
+        // candidate.
         let mut met = Vec::new();
         let mut best: Option<((f64, usize, u32), Item, Turn)> = None;
         for (heap_index, queue) in heaps.iter().enumerate() {
             let Some(candidates) = by_heap.remove(&queue.heap.id) else {
                 continue;
             };
+            let priority = queue.priority;
             let OpenRanking { items, ranking, .. } = rank_open_items(db, &queue.heap, now, now).await?;
             let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
             for ranked in &ranking {
@@ -758,7 +771,7 @@ impl Services {
                     met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
-                let key = (ranked.score, heap_index, ranked.position);
+                let key = (ranked.score * priority.as_factor(), heap_index, ranked.position);
                 let better = best.as_ref().is_none_or(|(held, _, _)| {
                     key.0
                         .total_cmp(&held.0)

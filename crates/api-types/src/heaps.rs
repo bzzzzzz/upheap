@@ -24,6 +24,9 @@ pub enum HeapActionDto {
     /// Set whether agents prepare new notes, on `PATCH` with `agents_prepare`. Offered to admins while the heap is
     /// active.
     SetAgentsPrepare,
+    /// Set your priority for the heap, on `PUT …/priority`. Offered to every role that may view the heap, archived
+    /// or not.
+    SetPriority,
     ViewHistory,
 }
 
@@ -36,6 +39,7 @@ impl From<HeapAction> for HeapActionDto {
             HeapAction::EditContext => Self::EditContext,
             HeapAction::EditWeights => Self::EditWeights,
             HeapAction::SetAgentsPrepare => Self::SetAgentsPrepare,
+            HeapAction::SetPriority => Self::SetPriority,
             HeapAction::ViewHistory => Self::ViewHistory,
         }
     }
@@ -92,6 +96,13 @@ pub struct HeapDto {
     pub open_count: u32,
     /// The heap's ranking weights. Read-only here; admins set them with `PATCH …/weights`.
     pub weights: HeapWeightsDto,
+    /// Your priority for this heap, 1 to 10: how its items compare with your other heaps' in the lists across heaps.
+    /// Each person has their own; nobody else sees it. Set with `PUT …/priority`.
+    // Decoding tolerates an older server that doesn't send it (as 1); every response of this server does, so the
+    // schema says required.
+    #[serde(default = "default_heap_priority")]
+    #[schema(required = true)]
+    pub priority: u8,
     /// Send back in `If-Match` when renaming or changing the context or weights.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -166,4 +177,19 @@ pub struct HeapWeightsResultDto {
     /// The heap's parameters in use, by name, with their new versions: what `GET …/parameters` lists as
     /// `parameters`.
     pub parameters: Vec<ParameterDto>,
+}
+
+/// Your priority for a heap.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = HeapPriorityRequest)]
+pub struct HeapPriorityRequestDto {
+    /// 1 to 10.
+    #[schema(minimum = 1, maximum = 10)]
+    pub priority: i64,
+}
+
+/// The heap priority of a heap nobody has set one for, for decoding a response from a server that has none.
+pub fn default_heap_priority() -> u8 {
+    domain::heap::HeapPriority::DEFAULT.get()
 }

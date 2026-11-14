@@ -111,7 +111,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   question, across heaps: one query for them (joined to their items), then one ranking per heap that has any, the
   same inputs and policy the heap's list ranks by (`RankedItem.score`, blocker inheritance included), and the users
   who asked. Rows are ordered by the item's score in its own heap, highest first, then heap name, the item's
-  position and the question number; heap weights, when they come, multiply the score. A question on a reminder to
+  position and the question number, where the score is multiplied by the caller's heap priority (Across heaps). A question on a reminder to
   come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most
   500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
@@ -333,10 +333,13 @@ the default view's ranked group with each item's position under both. It stores 
 
 `GET /me/items` is the ranked list across every active heap the caller may view. Each heap that has any non-closed
 item is ranked and grouped under the request's view by the same code as its own list, so a row is what that list
-would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap,
-highest first, then heap name, then the item's position in its heap, the same rule `GET /me/waiting` orders by.
-Since a heap's group is already in score order, the merge keeps every heap's own order. Heap weights, when they
-come, multiply the score. The view takes no tag, parameter or sort, which belong to one heap. It returns at most
+would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap
+times the caller's **heap priority** for that heap, highest first, then heap name, then the item's position in its
+heap, the same rule `GET /me/waiting` and the agents' queue order by. A heap priority is one person's own number
+for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
+heap each order it their own way. Since a heap's group is already in score order and the priority is the same
+positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the
+person's personal team, not the heap's, because the value is private and the heap's log is read by the team. The view takes no tag, parameter or sort, which belong to one heap. It returns at most
 500 rows, pinned first, with `count` the true total: the size assumption that lets it skip paging.
 
 ### Session-stable order

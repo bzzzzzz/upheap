@@ -210,8 +210,8 @@ pub struct OptionValue {
 #[derive(Debug)]
 pub struct RankedEntry {
     pub view: ItemView,
-    /// The item's ranking score in its own heap, blocker inheritance included. Scores of different heaps compare
-    /// as they are while every heap weighs the same ([`Services::list_ranked_across_heaps`]).
+    /// The item's ranking score in its own heap, blocker inheritance included. Lists across heaps multiply it
+    /// by the caller's priority for the heap ([`Services::list_ranked_across_heaps`]).
     pub score: f64,
     /// 1-based position within its group, in the order the group is listed.
     pub position: u32,

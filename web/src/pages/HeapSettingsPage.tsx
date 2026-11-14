@@ -1,13 +1,14 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Switch } from "react-aria-components";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { Switch, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type Heap, type HeapRef } from "../api/client";
-import { useHeap, useUpdateHeap } from "../api/queries";
+import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries";
 import { BASE } from "../basePath";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
+import { choiceButtonClass } from "../components/ChoiceButtons";
 import { Markdown } from "../components/Markdown";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
@@ -158,6 +159,8 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
 
       <AgentsCard team={heapRef.team} heap={data} canSet={can("set_agents_prepare")} />
 
+      <PriorityCard team={heapRef.team} heap={data} canSet={can("set_priority")} />
+
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>
           <h2 id="heap-archive" className={cardTitleClass}>
@@ -223,6 +226,60 @@ function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: 
         and clear, then comes back to you.
       </p>
       <ProblemText error={update.error} className="mt-2 text-overdue-ink" />
+    </section>
+  );
+}
+
+const PRIORITIES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/**
+ * The caller's own priority for the heap, 1 to 10 (ux.md, Heap settings): a row of numbers that saves as one is
+ * pressed, as the Agents switch does. Five a row on a phone, where ten don't fit. Not the Ranking tab's factor weights.
+ */
+function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: boolean }) {
+  const setPriority = useSetHeapPriority(team);
+  const hintId = useId();
+  // The value being saved shows at once, and the saved one once the save is over.
+  const priority = setPriority.isPending ? setPriority.variables.priority : heap.priority;
+  return (
+    <section aria-labelledby="heap-priority" className={cardClass}>
+      <h2 id="heap-priority" className={cardTitleClass}>
+        Your priority
+      </h2>
+      {canSet ? (
+        <ToggleButtonGroup
+          aria-labelledby="heap-priority"
+          selectionMode="single"
+          disallowEmptySelection
+          selectedKeys={[String(priority)]}
+          onSelectionChange={(keys) => {
+            const [picked] = [...keys];
+            if (picked !== undefined && !setPriority.isPending) {
+              setPriority.mutate({ heap, priority: Number(picked) });
+            }
+          }}
+          className="mt-3 grid grid-cols-5 gap-1 sm:flex sm:flex-wrap"
+        >
+          {PRIORITIES.map((value) => (
+            // On each button: the group passes no `aria-describedby` on, so a screen reader would never hear the hint.
+            <ToggleButton
+              key={value}
+              id={String(value)}
+              aria-describedby={hintId}
+              className={`${choiceButtonClass} rounded-lg sm:w-10`}
+            >
+              {value}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      ) : (
+        <p className="mt-3 text-sm font-medium">Your priority: {priority}</p>
+      )}
+      <p id={hintId} className="mt-2 text-sm/normal text-ink-soft">
+        How this heap ranks against your other heaps in Waiting for me and the agents&apos; queue: its items&apos;
+        scores are multiplied by this. 1 to 10. Only you see it.
+      </p>
+      <ProblemText error={setPriority.error} className="mt-2 text-overdue-ink" />
     </section>
   );
 }

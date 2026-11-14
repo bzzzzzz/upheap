@@ -2662,3 +2662,55 @@ async fn a_run_in_progress_is_listed_with_no_end_and_no_cost() -> Result<()> {
     expect_that!(item["runs_cost_usd"], eq(&Value::Null));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_heaps_priority_multiplies_its_scores_in_the_queue() -> Result<()> {
+    // Arrange: the personal heap's note outscores the garage's.
+    let w = world().await?;
+    let url = w.app.heap_url(&w.heap).await?;
+    let team = url.split("/heaps/").next().context("heap url")?;
+    let created = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{team}/heaps"),
+            Some(&w.session),
+            Some(json!({ "name": "Garage" })),
+        )
+        .await?;
+    let garage = created.body["id"].as_str().context("heap id")?.to_owned();
+    let garage_ref = heap_ref(&w.app, &garage).await?;
+    let in_personal = w.add("In personal", json!({ "need": "critical" })).await?;
+    w.send_turn(&in_personal).await?;
+    let note = w
+        .app
+        .new_item(&w.session, &garage, json!({ "title": "In garage", "need": "expected" }))
+        .await?;
+    let garage_path = format!(
+        "{}/items/{}/turn",
+        w.app.heap_url(&garage).await?,
+        note["key"].as_str().context("key")?
+    );
+    let sent = w
+        .app
+        .send(
+            Method::POST,
+            &garage_path,
+            Some(&w.session),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
+    let both = format!("/api/v1/work/next?heaps={},{garage_ref}", w.heap_ref);
+
+    // Act
+    let before = w.app.send(Method::GET, &both, Some(&w.session), None).await?;
+    w.app.set_priority(&w.session, &garage, 10).await?;
+    let after = w.app.send(Method::GET, &both, Some(&w.session), None).await?;
+
+    // Assert
+    expect_that!(before.body["item"]["title"], eq(&json!("In personal")));
+    expect_that!(after.body["item"]["title"], eq(&json!("In garage")));
+    Ok(())
+}

@@ -1,4 +1,4 @@
-//! `upheap heap show [<heap>]`: a heap's name, its ranking weights and its context.
+//! `upheap heap show [<heap>]`: a heap's name, your priority for it, its ranking weights and its context.
 
 use api_types::heaps::{HeapDto, HeapWeightsDto};
 use api_types::me::MeDto;
@@ -68,7 +68,10 @@ fn render(
     let archived = if heap.archived_at.is_some() { " · archived" } else { "" };
     let prepare = if heap.agents_prepare { "on" } else { "off" };
     out.line_toned(
-        &format!("{} · {team}{archived} · agents prepare new notes: {prepare}", heap.name),
+        &format!(
+            "{} · {team}{archived} · agents prepare new notes: {prepare} · your priority: {}",
+            heap.name, heap.priority
+        ),
         Tone::Strong,
     )?;
     out.line("")?;

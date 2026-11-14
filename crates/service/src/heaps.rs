@@ -5,7 +5,7 @@
 
 use domain::audit::{AuditAction, EntityType};
 use domain::handle::Handle;
-use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
+use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch, HeapPriority};
 use domain::parameter::{ParameterPatch, Weight};
 use domain::permission::{Permission, allowed_heap_actions};
 use domain::text::{Context, Name};
@@ -22,7 +22,7 @@ use crate::audit::{diff_parameters, diff_policies};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
 use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
-use crate::teams::{HeapView, count_heap_open_items, load_heap_view, to_heap_view};
+use crate::teams::{HeapView, count_heap_open_items, load_heap_priority, load_heap_view, to_heap_view};
 use crate::{Principal, ServiceError, Services};
 
 /// A change to a heap's name, slug, context and prepare setting. `None` leaves a field as it is; `Some(None)` clears
@@ -118,15 +118,23 @@ impl Services {
         Ok(HeapView {
             allowed_actions: allowed_heap_actions(&heap, membership.role),
             heap,
-            // A new heap has no items.
+            // A new heap has no items, and nobody has set a priority for it.
             open_count: 0,
+            priority: HeapPriority::DEFAULT,
         })
     }
 
     /// The heap with what the caller may do with it. Non-members get [`ServiceError::NotFound`].
     pub async fn load_heap(&self, principal: Principal, heap_id: HeapId) -> Result<HeapView, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
-        load_heap_view(&self.db, access.heap, access.membership.role, self.now()).await
+        load_heap_view(
+            &self.db,
+            access.heap,
+            access.membership.role,
+            principal.user_id,
+            self.now(),
+        )
+        .await
     }
 
     /// Changes the heap's name, slug, context or prepare setting if it is still at version `expected`. The name and
@@ -171,7 +179,7 @@ impl Services {
             .agents_prepare
             .filter(|prepare| *prepare != current.agents_prepare);
         if name.is_none() && slug.is_none() && context.is_none() && agents_prepare.is_none() {
-            return load_heap_view(&txn, current, role, self.now()).await;
+            return load_heap_view(&txn, current, role, principal.user_id, self.now()).await;
         }
 
         let mut diff = serde_json::Map::new();
@@ -212,7 +220,7 @@ impl Services {
         // The heap's row is written once, with the first entry; a second entry for the context joins it.
         let (saved, context_diff) = if diff.is_empty() {
             let Some(context_diff) = context_diff else {
-                return load_heap_view(&txn, current, role, self.now()).await;
+                return load_heap_view(&txn, current, role, principal.user_id, self.now()).await;
             };
             let saved = self
                 .write_heap(
@@ -244,9 +252,10 @@ impl Services {
             let entry = self.heap_audit_entry(principal, &saved, AuditAction::HeapContextUpdated, context_diff, now);
             store::audit::insert_audit_entry(&txn, &entry).await?;
         }
+        let priority = load_heap_priority(&txn, principal.user_id, heap_id).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(%heap_id, user_id = %principal.user_id, "heap updated");
-        Ok(to_heap_view(saved, role, open_count))
+        Ok(to_heap_view(saved, role, open_count, priority))
     }
 
     /// Sets the heap's own weights and its parameters' weights in one transaction, if the heap is still at version
@@ -328,14 +337,63 @@ impl Services {
 
         let open_count = count_heap_open_items(&txn, heap_id, self.now()).await?;
         let parameters = list_parameters_in_use(&txn, &heap, role).await?;
+        let priority = load_heap_priority(&txn, principal.user_id, heap_id).await?;
         if heap_changed || parameters_changed > 0 {
             txn.commit().await.map_err(StoreError::from)?;
             tracing::info!(%heap_id, user_id = %principal.user_id, heap_changed, parameters_changed, "weights updated");
         }
         Ok(HeapWeightsView {
-            heap: to_heap_view(heap, role, open_count),
+            heap: to_heap_view(heap, role, open_count, priority),
             parameters,
         })
+    }
+
+    /// Sets the caller's own priority for the heap, on an active or an archived heap, whatever their role: it is their
+    /// setting, not the heap's data. Non-members get [`ServiceError::NotFound`]. No `If-Match`: the request says what the
+    /// priority should end up as, so repeating or racing it is safe, and the last write wins. Setting the stored value
+    /// (or the default with no row) succeeds and writes nothing.
+    ///
+    /// A change is recorded in the caller's personal team and not the heap's, since the value is private and a
+    /// team's log would show it to teammates.
+    pub async fn set_heap_priority(
+        &self,
+        principal: Principal,
+        heap_id: HeapId,
+        priority: HeapPriority,
+    ) -> Result<HeapView, ServiceError> {
+        let user = store::users::find_user(&self.db, principal.user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let personal_team = self.load_personal_team(&user).await?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        // The personal team first, as the other writes to it lock it, so they take locks in one order; it also
+        // serialises two sets of the same person, so each audit entry's "before" is the value it replaced.
+        store::teams::lock_team(&txn, personal_team).await?;
+        let access = authorize_heap(&txn, principal, heap_id, Permission::ViewHeap).await?;
+        let role = access.membership.role;
+        let before = load_heap_priority(&txn, principal.user_id, heap_id).await?;
+        if before == priority {
+            return load_heap_view(&txn, access.heap, role, principal.user_id, self.now()).await;
+        }
+        let now = self.now();
+        store::heap_priorities::upsert_heap_priority(&txn, principal.user_id, heap_id, priority, now).await?;
+        let entry = self.team_audit_entry(
+            principal,
+            personal_team,
+            AuditAction::HeapPriorityChanged,
+            EntityType::User,
+            *principal.user_id.as_uuid(),
+            json!({
+                "heap_id": heap_id.to_string(),
+                "priority": { "before": before.get(), "after": priority.get() },
+            }),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let view = load_heap_view(&txn, access.heap, role, principal.user_id, now).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        tracing::info!(%heap_id, user_id = %principal.user_id, priority = priority.get(), "heap priority set");
+        Ok(view)
     }
 
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
@@ -360,7 +418,7 @@ impl Services {
         let current = lock(&txn, heap_id).await?;
         let role = access.membership.role;
         if current.is_archived() == archived {
-            return load_heap_view(&txn, current, role, self.now()).await;
+            return load_heap_view(&txn, current, role, principal.user_id, self.now()).await;
         }
 
         // Counted before the commit, as in `update_heap`. Archiving doesn't change it.
@@ -392,11 +450,12 @@ impl Services {
             "before": current.archived_at.map(Timestamp::as_millis),
             "after": changed.archived_at.map(Timestamp::as_millis),
         } });
+        let priority = load_heap_priority(&txn, principal.user_id, heap_id).await?;
         let saved = self
             .save_heap(txn, principal, &changed, current.version, action, diff, now)
             .await?;
         tracing::info!(%heap_id, user_id = %principal.user_id, archived, turns_taken_back, "heap archive state changed");
-        Ok(to_heap_view(saved, role, open_count))
+        Ok(to_heap_view(saved, role, open_count, priority))
     }
 
     /// [`Self::write_heap`], then commits.

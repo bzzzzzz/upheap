@@ -190,6 +190,19 @@ impl ApiClient {
         self.read_json(response).await
     }
 
+    /// `PUT /api/v1/<path>` with `body` as JSON and no `If-Match`, for an endpoint that says what something should end
+    /// up as, so repeating it is safe.
+    pub async fn put<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        body: &(impl Serialize + ?Sized),
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self.http.put(self.api_url(path)).json(body).bearer_auth(token);
+        let response = self.send(request).await?;
+        self.read_json(response).await
+    }
+
     /// `PUT /api/v1/<path>` with `body` as JSON, for the row at `version`, sent in `If-Match` as
     /// [`ApiClient::patch`] sends it.
     pub async fn put_at_version<T: DeserializeOwned>(

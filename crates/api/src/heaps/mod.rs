@@ -2,12 +2,13 @@
 //! (`POST /teams/{team}/heaps`).
 
 use api_types::heaps::{
-    HeapActionDto, HeapDto, HeapPatchDto, HeapWeightsDto, HeapWeightsPatchDto, HeapWeightsResultDto,
+    HeapActionDto, HeapDto, HeapPatchDto, HeapPriorityRequestDto, HeapWeightsDto, HeapWeightsPatchDto,
+    HeapWeightsResultDto,
 };
 use axum::Json;
 use axum::extract::State;
 use domain::handle::Handle;
-use domain::heap::HeapPolicyPatch;
+use domain::heap::{HeapPolicyPatch, HeapPriority};
 use domain::parameter::Weight;
 use domain::text::{Context, Name};
 use domain::validation::Field;
@@ -29,6 +30,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(get_heap, update_heap))
         .routes(routes!(update_weights))
+        .routes(routes!(set_heap_priority))
         .routes(routes!(archive_heap))
         .routes(routes!(unarchive_heap))
 }
@@ -45,6 +47,7 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
+        priority: view.priority.get(),
         version: heap.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(HeapActionDto::from).collect(),
     }
@@ -157,6 +160,29 @@ async fn update_weights(
         .update_weights(path.principal, path.heap.heap_id, to_weights_change(&body)?, expected)
         .await?;
     Ok(Json(to_weights_dto(view)))
+}
+
+/// Sets your own priority for the heap, 1 to 10 (1 until you set one): where several heaps are ordered together, its
+/// items' scores are multiplied by it. Any role that may view the heap may set it, on an active or an archived heap;
+/// nobody else sees it. It says what the priority should end up as, so no `If-Match`, and repeating it succeeds.
+#[utoipa::path(put, path = "/teams/{team}/heaps/{heap}/priority", tag = "heaps", security(("session" = [])),
+    params(HeapParams), request_body = HeapPriorityRequestDto,
+    responses(
+        (status = 200, body = HeapDto),
+        (status = 404, body = Problem),
+        (status = 422, description = "Invalid fields, or `priority_out_of_range`", body = Problem),
+    ))]
+async fn set_heap_priority(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiJson(body): ApiJson<HeapPriorityRequestDto>,
+) -> Result<Json<HeapDto>, ApiError> {
+    let priority = HeapPriority::parse(body.priority).map_err(ServiceError::from)?;
+    let view = state
+        .services
+        .set_heap_priority(path.principal, path.heap.heap_id, priority)
+        .await?;
+    Ok(Json(to_heap_dto(view)))
 }
 
 /// Archives the heap, making it read-only for everyone. Admins only. Archiving an archived heap succeeds.

@@ -115,6 +115,9 @@ What it is not:
 5. A heap has a context: text that says what the project is, points at where its knowledge lives, such as a
    repository or a wiki, and says where its work is reviewed and what finishing a piece means. Upheap stores the
    pointers and doesn't fetch what they point at.
+6. Each person orders their own heaps: a priority they give each heap, theirs alone, decides how its items compare
+   with their other heaps' wherever several heaps are shown together (all their items, what waits for them, and the
+   agents' queue). Teammates in a shared heap each have their own.
 
 ## Items
 

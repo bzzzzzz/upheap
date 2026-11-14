@@ -444,6 +444,18 @@ impl TestApp {
         Ok((team_id, heap_id))
     }
 
+    /// `PUT …/priority` on the heap with `heap_id`, as the user of `session`.
+    pub async fn set_priority(&self, session: &str, heap_id: &str, priority: i64) -> Result<TestResponse> {
+        let path = format!("{}/priority", self.heap_url(heap_id).await?);
+        self.send(
+            Method::PUT,
+            &path,
+            Some(session),
+            Some(serde_json::json!({ "priority": priority })),
+        )
+        .await
+    }
+
     /// `/api/v1/teams/{team}` for the team with `team_id`, from its slug in the database.
     pub async fn team_url(&self, team_id: impl AsRef<str>) -> Result<String> {
         let id: uuid::Uuid = team_id.as_ref().parse()?;

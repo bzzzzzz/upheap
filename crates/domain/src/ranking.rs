@@ -130,7 +130,7 @@ pub struct RankedItem {
     /// 1-based position, highest priority first.
     pub position: u32,
     /// The score the order is by: the item's own, raised to its blocked items' where it blocks them. Scores of
-    /// different heaps compare as numbers, which is all "Waiting for me" uses them for.
+    /// different heaps compare as numbers, once multiplied by the person's heap priority.
     pub score: f64,
     /// Largest contributors first.
     pub contributors: Vec<Contributor>,
