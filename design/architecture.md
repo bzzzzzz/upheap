@@ -626,7 +626,10 @@ the remaining admins.
    tags and parameters named. The log is per team, so an item can only move within its team.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
-   as text and IDs replaced by current names. The raw `diff` is returned too.
+   as text and IDs replaced by current names. The raw `diff` is returned too. An edited text people write (an
+   item's title and context, a step's, a heap's context) also comes with `text_diff`, a word diff computed when the
+   log is read (`domain::text_diff`), so nothing extra is stored and old entries get it too. It is the server's, not
+   the web app's, so every client shows the same diff, and none when too little stayed the same.
 6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
    read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
    by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A comment is

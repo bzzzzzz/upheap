@@ -284,6 +284,31 @@ test("History opened on one item starts collapsed on the next", async ({ page })
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Fix the gate");
   await expect(itemPane(page).getByRole("region", { name: "History" }).locator("details")).not.toHaveAttribute("open");
 });
+test("History shows an edited context as a diff, its long unchanged start folded", async ({ page }) => {
+  await addItem(page, "Plan the launch");
+  await openItem(page, "Plan the launch");
+  const start = Array.from({ length: 30 }, (_, i) => `step${i + 1}`).join(" ");
+  await (await editContext(page)).fill(`${start} then ship on Friday`);
+  await saveContext(page, "ship on Friday");
+  await (await editContext(page)).fill(`${start} then ship on Monday`);
+  await saveContext(page, "ship on Monday");
+
+  const history = await openHistory(page);
+  const edits = history.getByRole("listitem").filter({ hasText: "You edited item" });
+  const edit = edits.first();
+  await expect(edit.locator("del")).toHaveText("removed Friday");
+  await expect(edit.locator("ins")).toHaveText("added Monday");
+  // 33 unchanged words before the edit keep the last 8; the rest fold behind a button that shows them.
+  await expect(edit).not.toContainText("step1 ");
+  await edit.getByRole("button", { name: "… 25 more words" }).click();
+  await expect(edit).toContainText("step1 step2");
+  // The button goes, so focus moves to the stretch it unfolded.
+  await expect(edit.locator("span[tabindex='-1']")).toBeFocused();
+  // Setting the context from nothing has nothing to diff, so it shows in full.
+  await expect(edits.nth(1)).toContainText(`${start} then ship on Friday`);
+  await expect(edits.nth(1).locator("ins, del")).toHaveCount(0);
+});
+
 test("an item is closed from the list, undone, and reopened from Closed", async ({ page }) => {
   await addItem(page, "Write release notes");
 

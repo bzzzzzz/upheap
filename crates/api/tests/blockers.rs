@@ -314,9 +314,9 @@ async fn closing_a_blocker_as_done_frees_what_it_blocks() -> Result<()> {
     expect_that!(
         log["entries"][0]["changes"],
         eq(&json!([
-            { "field": "blocker_done", "label": "Blocker done", "before": null, "after": "First" },
-            { "field": "state", "label": "State", "before": "Blocked", "after": "Open" },
-            { "field": "blocked_by", "label": "Blocked by", "before": "First", "after": null },
+            { "field": "blocker_done", "label": "Blocker done", "before": null, "after": "First", "text_diff": null },
+            { "field": "state", "label": "State", "before": "Blocked", "after": "Open", "text_diff": null },
+            { "field": "blocked_by", "label": "Blocked by", "before": "First", "after": null, "text_diff": null },
         ]))
     );
     expect_that!(waiting["count"], eq(&json!(0)));
@@ -511,7 +511,7 @@ async fn a_reason_round_trips_and_is_replaced_or_cleared_while_blocked() -> Resu
     expect_that!(
         log["entries"][0]["changes"],
         eq(
-            &json!([{ "field": "blocked_reason", "label": "Blocked because", "before": "Waits for legal", "after": null }])
+            &json!([{ "field": "blocked_reason", "label": "Blocked because", "before": "Waits for legal", "after": null, "text_diff": null }])
         )
     );
     Ok(())
