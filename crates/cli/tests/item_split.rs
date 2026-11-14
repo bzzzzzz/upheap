@@ -1,4 +1,5 @@
-//! Splitting a note: `upheap item add --from`, `upheap item became`, and the From and Became lines of `item show`.
+//! Splitting a note: `upheap item add --from`, `upheap item became`, `upheap item to-step`, and the From and Became
+//! lines of `item show`.
 
 mod common;
 
@@ -225,5 +226,80 @@ async fn in_a_run_the_note_became_ends_the_turn_and_a_need_above_the_notes_is_re
     );
     let task = server.read_item(&ada, HEAP, made.stdout.trim()).await?;
     expect_that!(task["stage"], eq("defined"));
+    Ok(())
+}
+
+/// Adds the task "Rotate the certs" and returns its key.
+async fn add_task(server: &TestServer, ada: &TestUser) -> Result<String> {
+    let task = server
+        .add_item(ada, HEAP, json!({ "title": "Rotate the certs", "kind": "task" }))
+        .await?;
+    Ok(key(&task)?.to_owned())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_becomes_a_step_of_a_task_and_item_show_lists_it() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_a_note().await?;
+    let task = add_task(&server, &ada).await?;
+    let other = server.add_item(&ada, HEAP, json!({ "title": "Another note" })).await?;
+    let other = key(&other)?.to_owned();
+
+    // Act
+    let moved = cli.run(&["item", "to-step", &note, "--task", &task]).await;
+    let quiet = cli.run(&["item", "to-step", &other, "--task", &task, "--quiet"]).await;
+    let shown = cli.run(&["item", "show", &note]).await;
+    let json = cli.run(&["item", "show", &note, "--json"]).await;
+
+    // Assert
+    expect_that!(moved.exited(0), eq(true));
+    expect_that!(
+        moved.stdout,
+        eq(&format!(
+            "{note} \"Certs are a mess\" became step {task}.1 of {task} \"Rotate the certs\".\n"
+        ))
+    );
+    expect_that!(quiet.stdout, eq(&format!("{task}.2\n")));
+    expect_that!(
+        shown.stdout,
+        contains_substring(format!(
+            "Became:\n  step {task}.1 \"Certs are a mess\" of {task} \"Rotate the certs\" (open)\n"
+        ))
+    );
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["became_steps"][0]["task"]["key"], eq(task.as_str()));
+    let step_note = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(step_note["steps"][0]["origin"]["key"], eq(note.as_str()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn in_a_run_the_note_to_step_reaches_the_turn() -> Result<()> {
+    // Arrange
+    let (server, ada, mut cli, note) = with_a_note().await?;
+    let task = add_task(&server, &ada).await?;
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{note}/turn"),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    let claim = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claim.stdout.trim().to_owned());
+
+    // Act
+    let moved = cli.run(&["item", "to-step", &note, "--task", &task]).await;
+
+    // Assert
+    expect_that!(
+        moved.stdout,
+        eq(&format!(
+            "{note} \"Certs are a mess\" became step {task}.1 of {task} \"Rotate the certs\".\nThe turn is reached.\n"
+        ))
+    );
     Ok(())
 }

@@ -4,6 +4,7 @@
 use api_types::common::DueInputDto;
 use api_types::common::{ItemDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
+use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -64,6 +65,29 @@ impl HeapApi<'_> {
                 &serde_json::json!({}),
                 self.token,
             )
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => Err(CliError::NoSuchItem {
+                name: typed.to_owned(),
+                heap: self.heap.to_string(),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// `POST` of `body` to the item with `key`'s `to-step`: make the note a step of the task `body` names, and close it
+    /// as became. It takes no version. A `404` is reported like [`get_item`](Self::get_item)'s.
+    pub async fn to_step_item(
+        &self,
+        typed: &str,
+        key: &str,
+        body: &ItemToStepDto,
+    ) -> Result<Fetched<ItemDto>, CliError> {
+        match self
+            .client
+            .post(&self.path(&["items", key, "to-step"]), body, self.token)
             .await
         {
             Ok(item) => Ok(item),

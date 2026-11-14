@@ -381,13 +381,18 @@ pub struct StepDto {
     /// Send back in `If-Match` when editing the step. A step has its own version; writing it never changes the
     /// item's.
     pub version: u32,
+    /// The note this step was made from (`POST …/to-step`), in the task's team. `null` for a step that wasn't made
+    /// from a note.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub origin: Option<ItemOriginDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<StepActionDto>,
 }
 
 impl StepDto {
-    /// `step` with the `actions` the caller may take on it.
-    pub fn new(step: &Step, actions: &[StepAction]) -> Self {
+    /// `step` with the `actions` the caller may take on it, and the note it was made from when the caller may see it.
+    pub fn new(step: &Step, actions: &[StepAction], origin: Option<ItemOriginDto>) -> Self {
         Self {
             id: *step.id.as_uuid(),
             number: step.number.get(),
@@ -395,6 +400,7 @@ impl StepDto {
             context: step.context.as_ref().map(|context| context.as_str().to_owned()),
             state: step.state.into(),
             version: step.version.get(),
+            origin,
             allowed_actions: actions.iter().copied().map(Into::into).collect(),
         }
     }
@@ -825,6 +831,12 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub became: Option<Vec<MadeItemDto>>,
+    /// The steps of other tasks made from this note, oldest first (`item to-step`), in any task state and heap. `null`
+    /// in the ranked list and other lists; on one item and in the closed list it is a list, empty when no step was
+    /// made from it.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub became_steps: Option<Vec<MadeStepDto>>,
     pub need: NeedDto,
     /// `null` when unset.
     pub effort: Option<SizeDto>,
@@ -932,6 +944,30 @@ pub struct MadeItemDto {
     pub title: String,
     pub kind: KindDto,
     pub state: StateDto,
+    /// The heap it is in now, and its team.
+    pub heap: crate::waiting::ItemHeapDto,
+}
+
+/// A step a note became, as the note's `became_steps` lists it, with the task it is a step of.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = MadeStep)]
+pub struct MadeStepDto {
+    /// The step's number within its task.
+    pub number: u32,
+    pub title: String,
+    pub state: StepStateDto,
+    /// The task the step belongs to.
+    pub task: MadeStepTaskDto,
+}
+
+/// The task a step a note became belongs to.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = MadeStepTask)]
+pub struct MadeStepTaskDto {
+    pub id: Uuid,
+    /// Unique within the heap; the task's path is `…/items/{key}`.
+    pub key: String,
+    pub title: String,
     /// The heap it is in now, and its team.
     pub heap: crate::waiting::ItemHeapDto,
 }

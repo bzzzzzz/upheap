@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use domain::item::Title;
+use domain::item::{ItemSummary, Title};
 use domain::step::{Step, StepNumber, StepProgress, StepState};
 use domain::text::Context;
 use domain::{ItemId, StepId, Version};
@@ -67,6 +67,44 @@ async fn read_steps(db: &impl ConnectionTrait, item_id: ItemId, lock: bool) -> R
         .order_by_asc(item_steps::Column::Number);
     let rows = crate::items::shared_if(query, lock).all(db).await?;
     rows.into_iter().map(to_step).collect()
+}
+
+/// The steps made from any of `origins` (their `origin_id` is one of them) with the task each is a step of, in
+/// whichever heap that task is now, oldest first. With `lock` the steps are read with locking reads, as
+/// [`list_steps_locking`] reads them.
+///
+/// Size assumption: a note becomes a step once, and the callers pass one note or one page of closed items (at most
+/// 200), so the result is small.
+pub async fn list_steps_made_from(
+    db: &impl ConnectionTrait,
+    origins: &[ItemId],
+    lock: bool,
+) -> Result<Vec<(Step, ItemSummary)>, StoreError> {
+    let ids: Vec<String> = origins.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut steps = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let query =
+            item_steps::Entity::find().filter(item_steps::Column::OriginId.is_in(chunk.iter().map(String::as_str)));
+        for row in crate::items::shared_if(query, lock).all(db).await? {
+            steps.push(to_step(row)?);
+        }
+    }
+    steps.sort_by_key(|step| (step.created_at, *step.id.as_uuid()));
+    let tasks: HashMap<ItemId, ItemSummary> = crate::items::list_blockers(db, steps.iter().map(|step| step.item_id))
+        .await?
+        .into_iter()
+        .map(|task| (task.id, task))
+        .collect();
+    steps
+        .into_iter()
+        .map(|step| {
+            let task = tasks
+                .get(&step.item_id)
+                .cloned()
+                .ok_or_else(|| StoreError::corrupt(TABLE, &id_to_db(step.id.as_uuid()), "its item is missing"))?;
+            Ok((step, task))
+        })
+        .collect()
 }
 
 /// The title of each step of `item_ids`, by item and step number, in one query per [`IN_LIST_CHUNK`] items. Only the
@@ -209,6 +247,7 @@ fn to_row(step: &Step) -> Result<item_steps::ActiveModel, StoreError> {
         title: Set(step.title.as_str().to_owned()),
         context: Set(step.context.as_ref().map(|context| context.as_str().to_owned())),
         state: Set(step.state.code().to_owned()),
+        origin_id: Set(step.origin_id.map(|origin| id_to_db(origin.as_uuid()))),
         created_at: Set(step.created_at.as_millis()),
     })
 }
@@ -238,6 +277,11 @@ fn to_step(row: item_steps::Model) -> Result<Step, StoreError> {
         title: Title::parse(&row.title).map_err(|e| read.corrupt(e.to_string()))?,
         context,
         state,
+        origin_id: row
+            .origin_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(ItemId::from_uuid))
+            .transpose()?,
         created_at: read.timestamp(row.created_at)?,
         version: read.version(row.version)?,
     })

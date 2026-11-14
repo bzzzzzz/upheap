@@ -2,7 +2,7 @@
 
 use api_types::common::{HeapSummaryDto, ItemDto, ItemRefDto};
 use api_types::items::{
-    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemPatchDto, RankedListDto, RankedQuery,
+    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemPatchDto, ItemToStepDto, RankedListDto, RankedQuery,
     RankingPreviewDto, RankingPreviewItemDto, RankingPreviewRequestDto,
 };
 use axum::Json;
@@ -33,6 +33,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(reopen_item))
         .routes(routes!(move_item))
         .routes(routes!(became_item))
+        .routes(routes!(note_to_step))
 }
 
 /// The heap's non-closed items, ranked, with the reasons for each position. Ranking runs over every non-closed
@@ -314,6 +315,36 @@ async fn became_item(
     ClientTimeZone(tz): ClientTimeZone,
 ) -> Result<Json<ItemDto>, ApiError> {
     let view = state.services.became_item(path.principal, path.item_id).await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Makes a note a step of an open task in the same heap, at the end of the task's steps, with the note's title and
+/// description as the step's title and context. The step keeps the note as its origin, and the note closes as became.
+/// Not declarative: a note that already became is refused (`item_closed`), as a repeat would add a second step. Open
+/// questions are withdrawn, as on any close, and a person's request takes back the note's open turn.
+///
+/// From inside a run the note must be the run's item, and it is refused with `not_reached` while it has an open
+/// question. Otherwise the run and the turn end as reached, with no turn on the task. `POST /work/runs/{run}/reached`
+/// after it succeeds and does nothing.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/to-step", tag = "items", security(("session" = [])),
+    params(ItemParams, TimeZoneHeader), request_body = ItemToStepDto,
+    responses(
+        (status = 200, description = "The note, closed as became, with `became_steps` naming the step", body = ItemDto),
+        (status = 403, description = "From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`)", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`became_needs_note` (a task or a reminder), `item_closed` (the note or the task is done, won't do, or the note already became), `steps_need_task` (the target is a note), `too_many_steps`, `heap_archived`, or from inside a run `run_over`", body = Problem),
+        (status = 422, description = "`step_task_not_in_heap` (`task_id` is no item of the note's heap), or from inside a run `not_reached`, naming the open question", body = Problem),
+    ))]
+async fn note_to_step(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiJson(body): ApiJson<ItemToStepDto>,
+) -> Result<Json<ItemDto>, ApiError> {
+    let view = state
+        .services
+        .note_to_step(path.principal, path.item_id, ItemId::from_uuid(body.task_id))
+        .await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 

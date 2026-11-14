@@ -52,6 +52,8 @@ The usual order of work
    (keep counts from the note's age, new from now):
    `upheap item add "<title>" --task --from k3x9a --need expected --age keep`
    and chain them with `--blocked-by <task>`. Then close the note with `upheap item became k3x9a`.
+   A note that belongs to a task that exists becomes a step of it: `upheap item to-step k3x9a --task m2p4q`; it
+   closes the note as became.
    `upheap item show` lists what a note became, and where a task came from.
    Mark how far it's prepared with --stage on `upheap item edit`: with_context once it has its context and no
    open question, defined once a task also has its steps. In a run, `upheap work reached` moves the stage instead;

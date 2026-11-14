@@ -27,6 +27,9 @@ ask on the note (`upheap question ask <key>`) and stop.
 4. Then `upheap item became <key>`. It closes the note as became and reaches the turn. There is nothing more to do
    after it. If the note was sent all the way, each open task split from it gets a turn of its own then; don't start
    them in this run.
+If the note is a part of an open task in this heap, make it a step of that task instead:
+`upheap item to-step <key> --task <task>`. It closes the note and reaches the turn; there is nothing more to do
+after it.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).
 
 Don't do the work and don't tick steps.

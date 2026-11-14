@@ -33,6 +33,7 @@ mod m20261130_000027_item_origin;
 mod m20261201_000028_blocked_reason;
 mod m20261201_000029_item_split;
 mod m20261202_000030_run_tool_times;
+mod m20261203_000031_step_origin;
 
 pub struct Migrator;
 
@@ -70,6 +71,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261201_000028_blocked_reason::Migration),
             Box::new(m20261201_000029_item_split::Migration),
             Box::new(m20261202_000030_run_tool_times::Migration),
+            Box::new(m20261203_000031_step_origin::Migration),
         ]
     }
 }
